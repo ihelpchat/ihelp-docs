@@ -1,0 +1,35 @@
+/**
+ * Tema iHelp — paleta verde da marca.
+ * Infima é o framework de CSS do Docusaurus.
+ */
+
+:root {
+  --ifm-color-primary: #1ca05c;
+  --ifm-color-primary-dark: #199152;
+  --ifm-color-primary-darker: #18894d;
+  --ifm-color-primary-darkest: #137140;
+  --ifm-color-primary-light: #28b56c;
+  --ifm-color-primary-lighter: #34bd75;
+  --ifm-color-primary-lightest: #59cb8f;
+
+  --ifm-code-font-size: 95%;
+  --ifm-font-family-base: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+}
+
+/* Modo escuro */
+[data-theme='dark'] {
+  --ifm-color-primary: #34bd75;
+  --ifm-color-primary-dark: #2bab68;
+  --ifm-color-primary-darker: #28a162;
+  --ifm-color-primary-darkest: #218551;
+  --ifm-color-primary-light: #47c684;
+  --ifm-color-primary-lighter: #53cb8d;
+  --ifm-color-primary-lightest: #76d6a5;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+/* Navbar com leve destaque da marca */
+.navbar {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}

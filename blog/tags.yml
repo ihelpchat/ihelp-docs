@@ -1,0 +1,29 @@
+atualizacao:
+  label: Atualização
+  permalink: /atualizacao
+  description: Novidades e melhorias da plataforma iHelp
+
+atendimento:
+  label: Atendimento
+  permalink: /atendimento
+  description: Recursos relacionados ao atendimento
+
+mensagens:
+  label: Mensagens
+  permalink: /mensagens
+  description: Envio e gestão de mensagens
+
+whatsapp:
+  label: WhatsApp
+  permalink: /whatsapp
+  description: Recursos do WhatsApp e API oficial
+
+seguranca:
+  label: Segurança
+  permalink: /seguranca
+  description: Acesso, senha e segurança da conta
+
+agendamento:
+  label: Agendamento
+  permalink: /agendamento
+  description: Agendamento e calendário de mensagens

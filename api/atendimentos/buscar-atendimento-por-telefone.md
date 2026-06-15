@@ -1,0 +1,94 @@
+---
+title: "Buscar atendimento pelo telefone"
+sidebar_position: 1
+---
+
+Retorna o último atendimento criado para o número de telefone.
+
+GET
+```http
+https://apiv3.ihelpchat.com/api/v2/customers/search?searchText=<numero>&quantidade=20&skip=0
+```
+ex: 
+```
+https://apiv3.ihelpchat.com/api/v2/customers/search?searchText=17936189969&quantidade=20&skip=0
+```
+response:
+
+```json
+{
+   "dados":[
+      {
+         "id":20922413,
+         "ativo":true,
+         "atendimentoTransferido":false,
+         "chatIdExterno":"5517936189969",
+         "chatImagemPerfil":"https://images.ihelpchat.com/medias/fa075ed8-2c2e-4e5b-87a7-8d05c7cc4484.jpg",
+         "chatNome":"Gian",
+         "chatUltimaMensagem":"gfgf",
+         "chatUltimaMensagemTipoMensagem":0,
+         "chatUltimaMensagemData":"2026-04-24T19:37:40Z",
+         "chatUltimaMensagemDirecao":1,
+         "chatUltimaMensagemStatus":4,
+         "chatNotificacoes":0,
+         "canalId":2,
+         "departamentoId":10,
+         "statusId":0,
+         "chatId":"696fcae1594bdd140221c31f",
+         "contatoId":4752052,
+         "idRef":"69ea67a0ab43821f9dcb3976",
+         "tipoAtendimento":1,
+         "customerMood":0,
+         "createdDate":"2026-04-23T18:40:35Z",
+         "priority":false,
+         "customizedFilterId":0,
+         "channelTitle":"17 99261-0896 | iHelp Comercial | Geral",
+         "channelNumber":"5517992610896",
+         "channelType":1,
+         "channelProvider":0,
+         "cloudApi":false,
+         "departmentTitle":"Suporte",
+         "contato":{
+            "id":4752052,
+            "nome":"Gian - Automação",
+            "empresaId":1,
+            "idRef":"696fcae1594bdd140221c328",
+            "tags":[
+               {
+                  "id":279,
+                  "nome":"FECHAMENTO",
+                  "empresaId":1,
+                  "idRef":"647f93f3a91a19b37f5caf09"
+               }
+            ],
+            "saved":true
+         },
+         "atendimentoUsuarios":[
+            {
+               "id":16089801,
+               "atendimentoId":20922413,
+               "userId":10783,
+               "idRef":"69ea67a3ab43821f9dcb3bee",
+               "usuario":{
+                  "status":true,
+                  "imagem":"https://images.ihelpchat.com/medias/17758509946984906b7c3462bdfd16f3e746A874705939452FA051E0508E606CCF.jpg",
+                  "usuarioPerfil":1,
+                  "ocultarAbaDepartamento":false,
+                  "ocultarAbaFinalizados":false,
+                  "ocultarMenuMarketing":false,
+                  "ocultarMenuRelatorio":false,
+                  "ocultarAbaRobo":false,
+                  "notificacoes":true,
+                  "audioNotificacao":"sound3.mp3",
+                  "hideContactMenu":false,
+                  "canReopen":false,
+                  "id":10783,
+                  "nome":"Gian",
+                  "idRef":"6984906b7c3462bdfd16f3e7"
+               }
+            }
+         ]
+      }
+   ]
+}
+```
