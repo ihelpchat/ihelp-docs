@@ -8,10 +8,11 @@ slug: citacoes-status-catalogo
 
 ### Citações de Status e Catalogo no WhatsApp
 
- 
-Agora o iHelp exibe **citações de Status e Catálogo feitas pelo cliente final no WhatsApp**.
+![](/img/help/LRXUNOy5iyHOgAk3aI6G.png) ![](/img/help/czyIkU6fBA1Mlg6UfAFZ.png)
 
 {/* truncate */}
+
+Agora o iHelp exibe **citações de Status e Catálogo feitas pelo cliente final no WhatsApp**.
 
 Antes, quando o cliente mencionava um **status** ou compartilhava um **item do catálogo** da sua empresa, essa informação **não aparecia** no histórico da conversa dentro do iHelp.
 

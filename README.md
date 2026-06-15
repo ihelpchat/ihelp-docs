@@ -119,4 +119,5 @@ o proxy. Fica registrado aqui para ativar quando quiserem.
 ## Pendências
 
 Veja **[LIMPEZAS-PENDENTES.md](./LIMPEZAS-PENDENTES.md)** para a lista de itens manuais
-(imagens do FAQ antigo a recapturar, logo/favicon oficiais, etc.).
+(logo/favicon oficiais, 2 âncoras legadas, etc.). As 76 imagens do FAQ antigo já foram
+recuperadas do site ao vivo e self-hospedadas em `static/img/help/`.

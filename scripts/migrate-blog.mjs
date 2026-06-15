@@ -8,6 +8,14 @@ import path from 'node:path';
 const SRC = 'C:/Users/Gian Peres/Documents/ihelp-docs-export/ihelp-docs-md/novidades-e-atualizacoes.md';
 const OUT = path.resolve('blog');
 
+// Imagens recuperadas do site ao vivo (scripts/harvest-faq-images.mjs)
+let IMG_MAP = {};
+try {
+  IMG_MAP = JSON.parse(fs.readFileSync(path.resolve('scripts/faq-image-map.json'), 'utf8'));
+} catch {
+  console.warn('AVISO: scripts/faq-image-map.json nao encontrado; imagens serao removidas.');
+}
+
 // Metadados por data (DD/MM/YYYY)
 const POSTS = {
   '24/04/2026': {slug: 'nova-tela-de-senha', title: 'Nova tela de alteração de senha', tags: ['atualizacao', 'seguranca']},
@@ -41,11 +49,19 @@ function transform(src) {
   s = s.replace(/<\/?figure>/g, '');
   s = s.replace(/<\/?div[^>]*>/g, '');
 
-  // imagens mortas do FAQ antigo -> remove
-  s = s.replace(/!\[[^\]]*\]\((?:https?:\/\/faq\.ihelpchat\.com)?\/?(?:ihelp-docs\/)?files\/[^)]*\)\n?/g, (m) => {
-    report.push('IMG REMOVIDA (404): ' + m.trim());
-    return '';
-  });
+  // imagens do FAQ antigo: recuperadas do site ao vivo (id no mapa -> arquivo local; senao remove)
+  s = s.replace(
+    /!\[([^\]]*)\]\((?:https?:\/\/faq\.ihelpchat\.com)?\/?(?:ihelp-docs\/)?files\/([A-Za-z0-9]+)[^)]*\)/g,
+    (m, alt, id) => {
+      const local = IMG_MAP[id];
+      if (local) {
+        report.push('IMG RECUPERADA: ' + id + ' -> ' + local);
+        return `![${alt}](${local})`;
+      }
+      report.push('IMG REMOVIDA (sem versao no site): ' + m.trim());
+      return '';
+    },
+  );
 
   s = s.replace(/<mark[^>]*>(.*?)<\/mark>/gs, '$1');
   s = s.replace(/<a\b[^>]*>\s*<\/a>/g, '');

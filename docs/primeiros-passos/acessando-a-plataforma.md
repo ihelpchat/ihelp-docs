@@ -8,11 +8,15 @@ title: "Acessando a Plataforma"
 
 Utilize as credenciais de acesso que você recebeu via WhatsApp para fazer login na plataforma. O link de acesso é enviado junto com seus dados de login, conforme o exemplo abaixo:
 
+![](/img/help/Qg2XWu60AIr4xHPD9V8W.png)
+
 ## 2º Passo - Alterando a senha
 
 Alterar sua senha é fácil! Basta seguir o passo a passo abaixo.
 
 1º Passo - Realizar o login na plataforma
+
+![](/img/help/alKEUxUVele4qYlu13Fv.png)
 
 Para acessar o sistema, siga os passos abaixo:
 

@@ -20,9 +20,14 @@ title: "Android"
 
 ·       Acesse Google Contatos no navegador do computador. (https://contacts.google.com/)
 
- 
+ ![](/img/help/yCIFY3fQNwGAnZEDQM36.png)
+
 ·       Faça login com a mesma conta Google usada no Android.
 
 ·       Clique no ícone ao lado do símbolo da impressora > Exportar.
 
+![](/img/help/qVtYFt2cxrPvHIHqEZP6.png)
+
 ·       Escolha a opção Google CSV (compatível com Excel) e faça o download.
+
+![](/img/help/uHK6SXxil3EobrPGzbZq.png)

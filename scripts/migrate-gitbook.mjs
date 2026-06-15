@@ -13,6 +13,15 @@ const SRC = 'C:/Users/Gian Peres/Documents/ihelp-docs-export/ihelp-docs-md';
 const OUT = path.resolve('docs');
 const IMG_OUT = path.resolve('static/img/help');
 
+// Mapa id->arquivo local das imagens recuperadas do site ao vivo
+// (gerado por scripts/harvest-faq-images.mjs). Sem o arquivo, cai no comportamento antigo (remove).
+let IMG_MAP = {};
+try {
+  IMG_MAP = JSON.parse(fs.readFileSync(path.resolve('scripts/faq-image-map.json'), 'utf8'));
+} catch {
+  console.warn('AVISO: scripts/faq-image-map.json nao encontrado; imagens serao removidas.');
+}
+
 // Arquivos do export que NAO viram paginas
 const SKIP = new Set(['README.md', 'MEDIA.md', 'novidades-e-atualizacoes.md']);
 
@@ -93,11 +102,17 @@ function transform(src) {
   s = s.replace(/<\/?figure>/g, '');
   s = s.replace(/<\/?div[^>]*>/g, '');
 
-  // imagens mortas do FAQ antigo (todas retornam 404, em qualquer forma de URL) -> remove
+  // imagens do FAQ antigo: recuperadas do site ao vivo (scripts/faq-image-map.json).
+  // id no mapa -> aponta para o arquivo local em /img/help; senao -> remove (link morto).
   s = s.replace(
-    /!\[[^\]]*\]\((?:https?:\/\/faq\.ihelpchat\.com)?\/?(?:ihelp-docs\/)?files\/[^)]*\)\n?/g,
-    (m) => {
-      report.push('IMG REMOVIDA (404): ' + m.trim());
+    /!\[([^\]]*)\]\((?:https?:\/\/faq\.ihelpchat\.com)?\/?(?:ihelp-docs\/)?files\/([A-Za-z0-9]+)[^)]*\)/g,
+    (m, alt, id) => {
+      const local = IMG_MAP[id];
+      if (local) {
+        report.push('IMG RECUPERADA: ' + id + ' -> ' + local);
+        return `![${alt}](${local})`;
+      }
+      report.push('IMG REMOVIDA (sem versao no site): ' + m.trim());
       return '';
     },
   );

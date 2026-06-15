@@ -1,8 +1,8 @@
-IMG REMOVIDA (404): ![](https://faq.ihelpchat.com/files/f38mHVPtRejfPf5R3kAO)
-IMG REMOVIDA (404): ![](https://faq.ihelpchat.com/files/ku0HJRsBFedSfM5IQbu3)
-IMG REMOVIDA (404): ![](https://faq.ihelpchat.com/files/LRXUNOy5iyHOgAk3aI6G)
-IMG REMOVIDA (404): ![](https://faq.ihelpchat.com/files/czyIkU6fBA1Mlg6UfAFZ)
-IMG REMOVIDA (404): ![](https://faq.ihelpchat.com/files/1GcB9AAo1ACYVewg5l8m)
-IMG REMOVIDA (404): ![](https://faq.ihelpchat.com/files/Oyl2zG5GvpnPtYOdJYk8)
-IMG REMOVIDA (404): ![](https://faq.ihelpchat.com/files/YfJ8VXIvNuZXLRx2Gv28)
-IMG REMOVIDA (404): ![](https://faq.ihelpchat.com/files/KrKNNy9RpetuCwRqqRy9)
+IMG RECUPERADA: f38mHVPtRejfPf5R3kAO -> /img/help/f38mHVPtRejfPf5R3kAO.png
+IMG RECUPERADA: ku0HJRsBFedSfM5IQbu3 -> /img/help/ku0HJRsBFedSfM5IQbu3.png
+IMG RECUPERADA: LRXUNOy5iyHOgAk3aI6G -> /img/help/LRXUNOy5iyHOgAk3aI6G.png
+IMG RECUPERADA: czyIkU6fBA1Mlg6UfAFZ -> /img/help/czyIkU6fBA1Mlg6UfAFZ.png
+IMG RECUPERADA: 1GcB9AAo1ACYVewg5l8m -> /img/help/1GcB9AAo1ACYVewg5l8m.png
+IMG RECUPERADA: Oyl2zG5GvpnPtYOdJYk8 -> /img/help/Oyl2zG5GvpnPtYOdJYk8.png
+IMG RECUPERADA: YfJ8VXIvNuZXLRx2Gv28 -> /img/help/YfJ8VXIvNuZXLRx2Gv28.png
+IMG RECUPERADA: KrKNNy9RpetuCwRqqRy9 -> /img/help/KrKNNy9RpetuCwRqqRy9.png

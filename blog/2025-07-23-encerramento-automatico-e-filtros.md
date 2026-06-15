@@ -8,15 +8,19 @@ slug: encerramento-automatico-e-filtros
 
 ### Encerramento automático pela aba "Meus"
 
- A funcionalidade de encerramento automático foi atualizada! Agora é possível configurar para que apenas os atendimentos da aba “Meus” sejam encerrados automaticamente, excluindo os que estão na aba “Novos”. Ou seja, somente os atendimentos já atribuídos a algum usuário serão finalizados.
+![](/img/help/f38mHVPtRejfPf5R3kAO.png)
 
 {/* truncate */}
+
+ A funcionalidade de encerramento automático foi atualizada! Agora é possível configurar para que apenas os atendimentos da aba “Meus” sejam encerrados automaticamente, excluindo os que estão na aba “Novos”. Ou seja, somente os atendimentos já atribuídos a algum usuário serão finalizados.
 
 Para acessar Clique em Configurações → Geral → Finalizar Atendimento Automaticamente.
 
 ***
 
 ### Novos Filtros Disponíveis (Por respondidos e Ordenação)
+
+![](/img/help/ku0HJRsBFedSfM5IQbu3.png)
 
 Agora você pode utilizar o filtro **"Por respondidos"** para visualizar apenas os atendimentos que já foram respondidos ou os que ainda aguardam resposta — facilitando a organização do seu painel.
 

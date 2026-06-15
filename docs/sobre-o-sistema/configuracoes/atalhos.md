@@ -8,17 +8,23 @@ title: "Atalhos"
 
 Acesse as configurações:
 
+![](/img/help/glu6YF23zAZVAcd0vn7W.png)
+
 Vá para as configurações do iHelp e busque a opção “Atalhos”.
 
  
 
 Crie um novo atalho:
 
+![](/img/help/wsbjgpUjp5s1jn2fM1Ml.png)
+
 Defina o texto que você usa frequentemente e que deseja salvar como atalho.
 
  
 
 Escolha uma palavra-chave:
+
+![](/img/help/x0SVJrl0yzEnmPBIvyxM.png)
 
 Associe uma palavra-chave ao atalho para facilitar a inserção rápida.
 

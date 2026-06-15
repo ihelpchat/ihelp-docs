@@ -2,19 +2,22 @@
 
 Itens que ficaram em aberto após a migração automática. Nenhum impede o site de funcionar.
 
-## 1. Imagens do FAQ antigo (recapturar) — prioridade média
+## 1. Imagens do FAQ antigo — RESOLVIDO ✅
 
-As ~67 imagens/screenshots da Central de Ajuda apontavam para
-`https://faq.ihelpchat.com/files/<id>`. **Todas essas URLs estão mortas (HTTP 404)** e o
-export do GitBook **não** trouxe os arquivos. Por isso as referências de imagem foram
-**removidas** das páginas (o texto está completo; faltam só os prints).
+As imagens/screenshots da Central de Ajuda apontavam para `https://faq.ihelpchat.com/files/<id>`
+(URLs mortas, HTTP 404) e o export do GitBook **não** trouxe os arquivos. **Foram recuperadas
+do site GitBook ao vivo**: cada página renderizada serve as imagens pelo proxy do GitBook, com
+URLs assinadas válidas. O script `scripts/harvest-faq-images.mjs` baixou as **76 imagens**
+(68 na Central de Ajuda + 8 nas Novidades) para `static/img/help/` e a migração foi reexecutada
+para reinserir as referências nas posições corretas (casadas por ordem com o `MEDIA.md`).
 
-- Lista completa das imagens removidas: `scripts/migration-report-faq.txt`.
-- Para repor: tirar novos screenshots na plataforma e colocá-los em `static/img/help/`,
-  referenciando com `![](/img/help/arquivo.png)` na página correspondente.
+- Mapa id → arquivo local: `scripts/faq-image-map.json`.
+- Relatórios: `scripts/harvest-report.txt`, `scripts/migration-report-faq.txt` (todas como
+  `IMG RECUPERADA`), `scripts/migration-report-blog.txt`.
+- Todas as 76 contagens por página bateram exatamente com o catálogo `MEDIA.md` do export.
 
-> Os **15 vídeos** de tutorial (o conteúdo visual principal) **foram self-hospedados** com
-> sucesso em `static/videos/` e estão embutidos nas páginas.
+> Os **15 vídeos** de tutorial também estão self-hospedados em `static/videos/`. Não há GIFs
+> no acervo — todas as mídias de imagem do FAQ eram PNG.
 
 ## 2. Logo e favicon oficiais — prioridade baixa
 

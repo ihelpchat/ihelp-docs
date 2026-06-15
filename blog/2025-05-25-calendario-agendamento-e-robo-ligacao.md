@@ -16,6 +16,8 @@ O calendário de agendamentos do iHelp é uma ferramenta visual e interativa que
 
 **Onde encontro o calendário de agendamentos no iHelp?** Você pode acessar o calendário clicando no menu lateral, na opção **"Agendamentos"** (ícone novo que foi adicionado).
 
+![](/img/help/1GcB9AAo1ACYVewg5l8m.png)
+
 **O que eu vejo dentro do calendário?** Você verá todas as datas do mês. Ao clicar em uma data, terá acesso a todos os agendamentos feitos para aquele dia, incluindo:
 
 * Data e horário;
@@ -24,10 +26,14 @@ O calendário de agendamentos do iHelp é uma ferramenta visual e interativa que
 * Anexos (caso existam);
 * Texto da mensagem.
 
+![](/img/help/Oyl2zG5GvpnPtYOdJYk8.png)
+
 **Como faço um novo agendamento?** Você pode agendar de duas formas:
 
 * **Pelo calendário**: clique em uma data e depois em “+ Agendar”.
 * **Durante uma conversa**: clique na **seta para baixo** e selecione **“Agendar mensagem”**.
+
+![](/img/help/YfJ8VXIvNuZXLRx2Gv28.png)
 
 **O que preciso preencher para agendar uma mensagem?** No formulário de agendamento, você deve:
 
@@ -42,6 +48,8 @@ O calendário de agendamentos do iHelp é uma ferramenta visual e interativa que
 **Posso ver agendamentos antigos?** Sim! É possível acessar dias passados para verificar se a mensagem foi ou não enviada.
 
 ### Robô com gatilho por ligação perdida
+
+![](/img/help/KrKNNy9RpetuCwRqqRy9.png)
 
 🤖 Novidade no iHelp: Robô com gatilho por ligação
 

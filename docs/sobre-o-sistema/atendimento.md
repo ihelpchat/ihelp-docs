@@ -6,6 +6,8 @@ title: "Atendimento"
 
 ### Como iniciar um atendimento ativo?
 
+![](/img/help/5jxvPIKutoOsueJHUiCG.png)
+
 Para iniciar um atendimento ativo:
 
 1. Clique em **"Iniciar novo atendimento"**.
@@ -18,6 +20,8 @@ Para iniciar um atendimento ativo:
 
 ### Posso enviar áudios e anexos?
 
+![](/img/help/GfhFEXvIay0CqgN2dth6.png)
+
 Sim! Durante o atendimento:
 
 * Áudios funcionam como no WhatsApp.
@@ -28,6 +32,8 @@ Sim! Durante o atendimento:
 
 ### O que são os atalhos?
 
+![](/img/help/puipoNgL1FQpqAWNV1PR.png)
+
 Os **atalhos** são mensagens rápidas.
 
 * Estão disponíveis na parte inferior da tela de atendimento.
@@ -37,7 +43,11 @@ Os **atalhos** são mensagens rápidas.
 
 ### Como agendar uma mensagem?
 
+![](/img/help/Yw7CicJyEWhG2QqW85cx.png)
+
 1. Clique na **setinha virada para baixo**.
+
+![](/img/help/ViqSUpnauwb8jHKjbIDT.png)
 
 2. Escolha o número, data e horário.
 3. Agende a mensagem.
@@ -46,12 +56,16 @@ Os **atalhos** são mensagens rápidas.
 
 ### O que é o resumo de IA?
 
+![](/img/help/rKwuHxMs9SU8RBejoaMD.png)
+
 * O **resumo** aparece após várias mensagens trocadas.
 * Clique em **Resumo** para ver um resumo automático gerado por IA.
 
 ***
 
 ### Onde anoto informações importantes sobre o atendimento?
+
+![](/img/help/QSonKOrEoUqlkY7zKbZO.png)
 
 Use a aba de **Observações**:
 
@@ -61,6 +75,8 @@ Use a aba de **Observações**:
 
 ### Como funcionam as tags?
 
+![](/img/help/Ab7Vi462H8ocktccXrlH.png)
+
 * As **tags** são vinculadas ao **contato** (não ao atendimento).
 * Adicione tags diretamente no atendimento.
 
@@ -68,8 +84,12 @@ Use a aba de **Observações**:
 
 ### Como transferir um atendimento?
 
+![](/img/help/TF6MYvmZ3HfuYCFQsx4v.png)
+
 1. Clique em **Transferir**.
 2. Escolha o departamento e o usuário.
+
+![](/img/help/Vw9Pi1CqobhOictppZOJ.png)
 
 3. Escreva uma **observação interna**.
 4. Clique em transferir.
@@ -80,6 +100,8 @@ Use a aba de **Observações**:
 
 ### Como encerrar um atendimento?
 
+![](/img/help/dmUQEuBHo24EmsXO6pAx.png)
+
 1. Clique em **Encerrar**.
 2. Selecione o atendimento.
 3. Confirme o encerramento.
@@ -89,6 +111,8 @@ O atendimento será movido para a aba **"Finalizados"**.
 ***
 
 ### Como reabrir um atendimento finalizado?
+
+![](/img/help/UA0HqOYxmDjtuomTdS8B.png)
 
 * Vá até **"Finalizados"**, clique em **Reabrir**.
 * Mande uma mensagem normalmente.
@@ -105,6 +129,8 @@ Não. **Nenhuma mensagem é apagada** do iHelp:
 ***
 
 ### O que são marcadores?
+
+![](/img/help/Tvqij1b8XsR89Q23jAmZ.png)
 
 * São etiquetas coloridas que ajudam na organização.
 * **Valem apenas para o atendimento atual**.
