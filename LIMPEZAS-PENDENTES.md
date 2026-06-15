@@ -31,9 +31,9 @@ Arte oficial do iHelp aplicada:
   (180). Tags no `<head>`: `.ico` (compatibilidade), ícone SVG nítido (`logo-icon.svg`) e
   apple-touch-icon (iOS).
 
-> Falta só o **social/OG card** (`themeConfig.image` aponta para `img/ihelp-social-card.jpg`,
-> que ainda não existe — a prévia ao compartilhar links fica sem imagem). É uma arte
-> 1200×630 separada; não é favicon nem logo.
+> **Social/OG card** também resolvido: `static/img/ihelp-social-card.jpg` (1200×630) gerado
+> por `scripts/gen-social-card.mjs` (wordmark + "Documentação" + cores da marca). É o que
+> `themeConfig.image` referencia para a prévia ao compartilhar links.
 
 ## 3. Âncoras legadas quebradas (2) — prioridade baixa
 
