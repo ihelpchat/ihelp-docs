@@ -71,7 +71,7 @@ response:
                "idRef":"69ea67a3ab43821f9dcb3bee",
                "usuario":{
                   "status":true,
-                  "imagem":"https://images.ihelpchat.com/medias/17758509946984906b7c3462bdfd16f3e746A874705939452FA051E0508E606CCF.jpg",
+                  "imagem":"https://images.ihelpchat.com/medias/17111111111111111111111111111E606CCF.jpg",
                   "usuarioPerfil":1,
                   "ocultarAbaDepartamento":false,
                   "ocultarAbaFinalizados":false,
