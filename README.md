@@ -6,7 +6,7 @@ Site único de documentação do **iHelp**, feito com [Docusaurus 3](https://doc
 - **Documentação de API** (`/api`) — referência para desenvolvedores.
 - **Novidades** (`/blog`) — atualizações de produto.
 
-Publicado via **GitHub Pages** em `https://ihelpchat.github.io/ihelp-docs/`.
+Publicado via **GitHub Pages** em [https://ihelpchat.github.io/ihelp-docs/](https://ihelpchat.github.io/ihelp-docs/)
 
 ---
 
