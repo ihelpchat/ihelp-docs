@@ -9,6 +9,19 @@ const config: Config = {
   tagline: 'Central de Ajuda, API e Novidades do iHelp',
   favicon: 'img/favicon.ico',
 
+  // Ícone SVG nítido para navegadores modernos + apple-touch-icon (iOS).
+  // O favicon.ico (multi-resolução) acima cobre Safari/legados.
+  headTags: [
+    {
+      tagName: 'link',
+      attributes: {rel: 'icon', type: 'image/svg+xml', href: '/ihelp-docs/img/logo-icon.svg'},
+    },
+    {
+      tagName: 'link',
+      attributes: {rel: 'apple-touch-icon', href: '/ihelp-docs/img/apple-touch-icon.png'},
+    },
+  ],
+
   future: {
     v4: true,
   },
@@ -110,8 +123,13 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'iHelp Docs',
-      // logo: substituir pela arte oficial depois (ver LIMPEZAS-PENDENTES.md)
+      // wordmark oficial do iHelp (já contém o nome, por isso sem title)
+      title: '',
+      logo: {
+        alt: 'iHelp',
+        src: 'img/logo.svg',
+        srcDark: 'img/logo-dark.svg',
+      },
       items: [
         {
           type: 'docSidebar',

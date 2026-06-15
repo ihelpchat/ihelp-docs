@@ -19,12 +19,21 @@ para reinserir as referências nas posições corretas (casadas por ordem com o 
 > Os **15 vídeos** de tutorial também estão self-hospedados em `static/videos/`. Não há GIFs
 > no acervo — todas as mídias de imagem do FAQ eram PNG.
 
-## 2. Logo e favicon oficiais — prioridade baixa
+## 2. Logo e favicon oficiais — RESOLVIDO ✅
 
-- A navbar usa só o texto **"iHelp Docs"** (o logo padrão do Docusaurus foi removido).
-- O favicon ainda é o placeholder padrão do Docusaurus (`static/img/favicon.ico`).
-- Trocar pela arte oficial: substituir `static/img/favicon.ico` e, se quiser logo,
-  adicionar `static/img/logo.svg` e reativar o bloco `navbar.logo` em `docusaurus.config.ts`.
+Arte oficial do iHelp aplicada:
+
+- **Navbar**: wordmark oficial (`static/img/logo.svg`) com variante de texto branco para o
+  modo escuro (`static/img/logo-dark.svg`). O texto "iHelp Docs" foi removido (o wordmark já
+  traz a marca).
+- **Favicon**: gerado a partir do ícone oficial (`scripts/gen-favicon.mjs`, via `sharp`):
+  `favicon.ico` multi-resolução (16/32/48/64), `favicon.png` (256) e `apple-touch-icon.png`
+  (180). Tags no `<head>`: `.ico` (compatibilidade), ícone SVG nítido (`logo-icon.svg`) e
+  apple-touch-icon (iOS).
+
+> Falta só o **social/OG card** (`themeConfig.image` aponta para `img/ihelp-social-card.jpg`,
+> que ainda não existe — a prévia ao compartilhar links fica sem imagem). É uma arte
+> 1200×630 separada; não é favicon nem logo.
 
 ## 3. Âncoras legadas quebradas (2) — prioridade baixa
 
