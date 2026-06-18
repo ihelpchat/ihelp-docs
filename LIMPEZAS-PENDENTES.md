@@ -39,12 +39,15 @@ Arte oficial do iHelp aplicada:
 
 Os dois links internos herdados do site antigo foram corrigidos:
 
-- `docs/principais-duvidas.md` → agora aponta para `.../acessando-a-plataforma#alterando-a-senha`
-  (âncora explícita `{#alterando-a-senha}` adicionada ao heading de destino).
+- `docs/principais-duvidas.md` → agora aponta para a própria página
+  `.../primeiros-passos/acessando-a-plataforma` (sem âncora). A sintaxe de âncora
+  explícita `{#id}` quebra a compilação MDX (é interpretada como expressão JSX), então
+  o link aponta para a página — que é curta e toda sobre alterar a senha.
 - `docs/sobre-o-sistema/atendimento.md` → agora aponta para o post `/blog/listas-personalizadas`
   (o conteúdo "Listas personalizadas" virou um post do blog).
 
-Com isso, `onBrokenAnchors` voltou para `throw` no `docusaurus.config.ts`.
+Com isso, `onBrokenAnchors` voltou para `throw` no `docusaurus.config.ts` (não há mais
+nenhum link com fragmento `#` interno para validar).
 
 ## 4. Vídeos tella.tv sem versão local (2 páginas) — informativo
 
