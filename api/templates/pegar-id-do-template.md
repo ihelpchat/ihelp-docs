@@ -24,7 +24,7 @@ No painel da Gupshup, o `cloudApiTemplateName` é o **ID do template** (um códi
 
 ![cURL da Gupshup com o ID do template destacado entre os %22](/img/api/gupshup-curl-id.webp)
 
-:::warning Não inclua os `%22`
+:::warning[Não inclua os %22]
 Os `%22` são apenas as aspas codificadas (`"`) que delimitam o valor. Copie **somente o ID** que está entre eles — sem os `%22`.
 
 ```
