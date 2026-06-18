@@ -10,7 +10,7 @@ Utilize as credenciais de acesso que você recebeu via WhatsApp para fazer login
 
 ![](/img/help/Qg2XWu60AIr4xHPD9V8W.png)
 
-## 2º Passo - Alterando a senha
+## 2º Passo - Alterando a senha {#alterando-a-senha}
 
 Alterar sua senha é fácil! Basta seguir o passo a passo abaixo.
 

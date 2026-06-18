@@ -153,4 +153,4 @@ Não. **Nenhuma mensagem é apagada** do iHelp:
 3. As conversas filtradas aparecerão na lista criada.
 4. Para mais sobre listas consulte:
 
-[https://faq.ihelpchat.com/ihelp-docs/#listas-personalizadas](/docs/#listas-personalizadas)
+[Listas personalizadas](/blog/listas-personalizadas)

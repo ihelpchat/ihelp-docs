@@ -37,7 +37,7 @@ const config: Config = {
   // Durante a migração usamos 'warn' para conseguir builds iterativos;
   // a Fase 7 (verificação final) volta para 'throw'.
   onBrokenLinks: 'throw',
-  onBrokenAnchors: 'warn', // 2 âncoras legadas do site antigo (ver LIMPEZAS-PENDENTES.md)
+  onBrokenAnchors: 'throw',
 
   markdown: {
     hooks: {

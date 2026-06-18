@@ -35,16 +35,16 @@ Arte oficial do iHelp aplicada:
 > por `scripts/gen-social-card.mjs` (wordmark + "Documentação" + cores da marca). É o que
 > `themeConfig.image` referencia para a prévia ao compartilhar links.
 
-## 3. Âncoras legadas quebradas (2) — prioridade baixa
+## 3. Âncoras legadas quebradas (2) — RESOLVIDO ✅
 
-Dois links internos herdados do site antigo apontam para âncoras que não existem mais
-(o navegador apenas abre o topo da página):
+Os dois links internos herdados do site antigo foram corrigidos:
 
-- `docs/principais-duvidas.md` → `.../acessando-a-plataforma#id-2o-passo-alterando-a-senha`
-- `docs/sobre-o-sistema/atendimento.md` → `/docs#listas-personalizadas`
-  (o conteúdo "Listas personalizadas" virou um post do blog: `/blog/listas-personalizadas`)
+- `docs/principais-duvidas.md` → agora aponta para `.../acessando-a-plataforma#alterando-a-senha`
+  (âncora explícita `{#alterando-a-senha}` adicionada ao heading de destino).
+- `docs/sobre-o-sistema/atendimento.md` → agora aponta para o post `/blog/listas-personalizadas`
+  (o conteúdo "Listas personalizadas" virou um post do blog).
 
-`onBrokenAnchors` está em `warn` por causa disso. Corrigir apontando para o destino certo.
+Com isso, `onBrokenAnchors` voltou para `throw` no `docusaurus.config.ts`.
 
 ## 4. Vídeos tella.tv sem versão local (2 páginas) — informativo
 

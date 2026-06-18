@@ -18,7 +18,7 @@ O novo atendente só verá a conversa se estiver disponível e com permissão pa
 
  Se você esqueceu sua senha, entre em contato com nosso suporte pelo número (17) 3042-2307, informe o e-mail vinculado à sua conta e solicite a redefinição da senha.
 
-[Clique aqui e saiba mais sobre como alterar sua senha](/docs/primeiros-passos/acessando-a-plataforma#id-2o-passo-alterando-a-senha)
+[Clique aqui e saiba mais sobre como alterar sua senha](/docs/primeiros-passos/acessando-a-plataforma#alterando-a-senha)
 
 ***
 
