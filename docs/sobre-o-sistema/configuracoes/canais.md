@@ -4,10 +4,8 @@ title: "Canais"
 
 <VideoEmbed url="/videos/canais.mp4" />
 
-:::warning
-
+:::warning[Atenção]
 Antes de conectar seu número ao iHelp, certifique-se de que todas as configurações estejam corretas, principalmente as mensagens automáticas, o tempo de reabertura e o departamento padrão. Essas definições impactam diretamente na experiência do cliente e na organização dos atendimentos.
-
 :::
 
 ### 🔹 Por que a configuração dos canais é importante?
@@ -45,4 +43,6 @@ No menu **Configurações**, a **primeira opção** já é a de **Canais**.
 5. **Leia o QR Code** com o WhatsApp.
 6. Pronto! O número está conectado ao iHelp.
 
-> 🔁 Mesmo que já tenha um canal conectado anteriormente, ao conectar um novo número o sistema **atualiza automaticamente**.
+:::info[Observação]
+🔁 Mesmo que já tenha um canal conectado anteriormente, ao conectar um novo número o sistema **atualiza automaticamente**.
+:::

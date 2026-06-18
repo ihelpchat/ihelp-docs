@@ -17,6 +17,6 @@ respostas e vídeos sobre como usar a plataforma no dia a dia.
 - 📱 **[WhatsApp Business API](/docs/whatsapp-business-api)** — tudo sobre a API oficial do WhatsApp.
 - 💡 **[Dúvidas e Dicas](/docs/duvidas-e-dicas)** — perguntas frequentes e truques úteis.
 
-:::tip
+:::tip[Dica]
 Use a **busca** no topo do site para encontrar rapidamente qualquer assunto.
 :::

@@ -14,7 +14,9 @@ Quando um número migra para a API Oficial, ele deixa de existir como conta no a
 
 O backup do WhatsApp (salvo no Google Drive ou iCloud) continua existindo, mas só pode ser restaurado no mesmo número via aplicativo. Como o número agora é uma API e não funciona mais no app, esse backup fica inacessível na prática.
 
-> **Já usava o iHelpChat antes da migração?** Nesse caso, todo o histórico de conversas que já estava registrado dentro da plataforma é preservado normalmente. O que se perde é apenas o histórico que existia dentro do aplicativo do WhatsApp — o iHelpChat não é afetado.
+:::info[Já usava o iHelpChat antes da migração?]
+Nesse caso, todo o histórico de conversas que já estava registrado dentro da plataforma é preservado normalmente. O que se perde é apenas o histórico que existia dentro do aplicativo do WhatsApp — o iHelpChat não é afetado.
+:::
 
 ***
 
@@ -26,7 +28,9 @@ O backup do WhatsApp (salvo no Google Drive ou iCloud) continua existindo, mas s
 
 **Registrar informações críticas** Se houver dados importantes dentro de conversas — contratos combinados, dados de clientes, registros de atendimento —, o ideal é documentá-los antes da migração, seja exportando as conversas ou transferindo as informações para outro sistema.
 
-**Não entrar em contato com clientes no dia da criação da API** - Evite chamar os seus clientes no dia que agendarmos a criação da API Oficial, de preferencia, faça um aviso aos seus clientes informando que estarão fora do ar no horário determinado, mas que retornam no mesmo dia.
+:::warning[Não entre em contato com clientes no dia da criação da API]
+Evite chamar os seus clientes no dia em que agendarmos a criação da API Oficial. De preferência, avise os seus clientes que estarão fora do ar no horário determinado, mas que retornam no mesmo dia.
+:::
 
 ***
 

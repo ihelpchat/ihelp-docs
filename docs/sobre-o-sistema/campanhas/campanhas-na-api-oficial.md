@@ -27,17 +27,18 @@ A principal diferença está na **estrutura da planilha**.
 * Em campanhas comuns, a lista pode conter várias colunas/variáveis extras.
 * Já na **API Oficial**, a lista **precisa ser exatamente igual ao template**.
 
-📌 Exemplo:\
+:::info[Exemplo]
 Se o template possui **2 variáveis**, a planilha deve conter:
 
 * Número de telefone
 * Variável 1
 * Variável 2
+:::
 
-⚠️ Não pode ter:
-
+:::warning[Não pode ter]
 * Colunas a mais
 * Colunas a menos
+:::
 
 Caso contrário, a campanha retornará erro.
 
@@ -97,10 +98,10 @@ Sim.
 
 Nesse momento, **não totalmente**.
 
-📌 Isso acontece porque:
-
+:::info[Por que isso acontece?]
 * A API Oficial dispara **todas as mensagens de uma vez**
 * Diferente da campanha comum, que dispara em lotes
+:::
 
 Por isso, a previsão exibida pode não refletir o tempo real de envio.
 

@@ -20,7 +20,9 @@ O número que se tornará API não pode estar em uso no WhatsApp no momento da m
 
 Essa exclusão é permanente: o número sai do aplicativo e passa a existir apenas como API. Por isso, recomendamos exportar conversas importantes antes de dar esse passo.
 
-> Após a migração, o número só pode voltar a ser usado no aplicativo convencional após 30 dias sem envios ativos de templates.
+:::warning[Atenção]
+A exclusão da conta é permanente. Após a migração, o número só pode voltar a ser usado no aplicativo convencional após 30 dias sem envios ativos de templates.
+:::
 
 ***
 

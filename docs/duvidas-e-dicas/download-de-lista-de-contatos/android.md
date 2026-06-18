@@ -2,32 +2,25 @@
 title: "Android"
 ---
 
-1\. Como acessar os contatos do Android para exportação, pelo celular: (VALIDAR EM UM CELULAR ANDROID)
+## Pelo celular
 
-·       Abra o app Contatos no seu celular Android.
+1. Abra o app **Contatos** no seu celular Android.
+2. Acesse o menu (ícone de três pontos ou linhas, dependendo do modelo).
+3. Selecione a opção **Configurações** ou **Gerenciar Contatos**.
+4. Escolha **Exportar Contatos**.
+5. Salve o arquivo no formato `.vcf` (vCard) no armazenamento do celular.
 
-·       Acesse o menu (ícone de três pontos ou linhas, dependendo do modelo).
+## Pelo Google Contatos (recomendado)
 
-·       Selecione a opção Configurações ou Gerenciar Contatos.
+1. Acesse o [Google Contatos](https://contacts.google.com/) no navegador do computador.
 
-·       Escolha Exportar Contatos.
+   ![](/img/help/yCIFY3fQNwGAnZEDQM36.png)
 
-·       Salve o arquivo no formato .vcf (vCard) no armazenamento do celular.
+2. Faça login com a mesma conta Google usada no Android.
+3. Clique no ícone ao lado do símbolo da impressora > **Exportar**.
 
- 
+   ![](/img/help/qVtYFt2cxrPvHIHqEZP6.png)
 
-2\. Como acessar os contatos do Android para exportação, pelo google contatos (recomendado).
+4. Escolha a opção **Google CSV** (compatível com Excel) e faça o download.
 
-·       Acesse Google Contatos no navegador do computador. (https://contacts.google.com/)
-
- ![](/img/help/yCIFY3fQNwGAnZEDQM36.png)
-
-·       Faça login com a mesma conta Google usada no Android.
-
-·       Clique no ícone ao lado do símbolo da impressora > Exportar.
-
-![](/img/help/qVtYFt2cxrPvHIHqEZP6.png)
-
-·       Escolha a opção Google CSV (compatível com Excel) e faça o download.
-
-![](/img/help/uHK6SXxil3EobrPGzbZq.png)
+   ![](/img/help/uHK6SXxil3EobrPGzbZq.png)

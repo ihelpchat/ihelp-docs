@@ -6,10 +6,8 @@ title: "Principais dúvidas"
 
 Você pode transferir um atendimento ativo clicando no ícone de **“Transferir”** no painel lateral. Em seguida, selecione o **departamento ou atendente desejado**.
 
-:::warning
-
-Obs.: O novo atendente só verá a conversa se estiver disponível e com permissão para acessar o departamento de destino.
-
+:::warning[Atenção]
+O novo atendente só verá a conversa se estiver disponível e com permissão para acessar o departamento de destino.
 :::
 
 [Clique aqui e saiba mais sobre atendimentos](/docs/sobre-o-sistema/atendimento)
@@ -33,10 +31,8 @@ Você pode:
 * Definir horários e frequência
 * Automatizar respostas com fluxos de robô
 
-:::tip
-
-Dica: Na aba de Campanhas, você pode acessar o Card da campanha para pausar, reiniciar ou visualizar o status.
-
+:::tip[Dica]
+Na aba de Campanhas, você pode acessar o Card da campanha para pausar, reiniciar ou visualizar o status.
 :::
 
 [Clique aqui e saiba mais sobre Campanhas](/docs/sobre-o-sistema/campanhas)

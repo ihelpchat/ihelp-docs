@@ -36,7 +36,9 @@ A Meta classifica cada template em uma das quatro categorias abaixo. A categoria
 
 **Utilidade** Para mensagens ligadas a uma transação já existente: confirmação de pedido, lembrete de consulta, aviso de vencimento de fatura, atualização de entrega. Exige que haja um gatilho claro — o cliente fez algo que justifica aquela mensagem.
 
-> **Atenção:** classificar uma mensagem de prospecção como Utilidade para pagar menos é o erro mais comum — e um dos principais motivos de suspensão de WABA. Se não há uma transação real por trás da mensagem, a categoria correta é Marketing.
+:::danger[Cuidado]
+Classificar uma mensagem de prospecção como Utilidade para pagar menos é o erro mais comum — e um dos principais motivos de suspensão de WABA. Se não há uma transação real por trás da mensagem, a categoria correta é Marketing.
+:::
 
 **Autenticação** Exclusivo para envio de códigos de verificação (OTP). Usado em fluxos de login, confirmação de identidade ou validação de cadastro.
 

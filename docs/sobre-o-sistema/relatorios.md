@@ -28,18 +28,18 @@ Você pode gerar relatórios com filtros por:
 
 ### Quais informações estão disponíveis no relatório?
 
-O relatório gerado inclui:
+O relatório gerado inclui as seguintes informações:
 
-* Nome do **departamento**
-* **Nome ou número** do contato (se não estiver salvo, aparece só o número)
-* Tipo de atendimento:
-  * **Ativo**: quando o atendimento foi iniciado pela equipe
-  * **Receptivo**: quando o cliente procurou a empresa
-* **Data do primeiro contato**
-* **Data e hora de abertura** do atendimento
-* **Usuário responsável** pela abertura
-* **Duração do atendimento**
-* **Data e hora de encerramento**
+| Informação | Descrição |
+| --- | --- |
+| **Departamento** | Nome do departamento responsável. |
+| **Contato** | Nome ou número do contato (se não estiver salvo, aparece só o número). |
+| **Tipo de atendimento** | **Ativo** (iniciado pela equipe) ou **Receptivo** (o cliente procurou a empresa). |
+| **Data do primeiro contato** | Quando o contato falou com a empresa pela primeira vez. |
+| **Abertura** | Data e hora de abertura do atendimento. |
+| **Usuário responsável** | Atendente que abriu o atendimento. |
+| **Duração** | Tempo total do atendimento. |
+| **Encerramento** | Data e hora de encerramento. |
 
 ***
 

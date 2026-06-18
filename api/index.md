@@ -17,7 +17,7 @@ envio de mensagens e uso de templates.
 - ✉️ **[Mensagens](/api/category/mensagens)** — envio de mensagens comuns e em grupo.
 - 📄 **[Templates](/api/category/templates)** — envio via templates da Meta.
 
-:::info
+:::info[Observação]
 Todas as requisições exigem o header `Authorization: Bearer <token>`. Veja
 **[Autenticação](/api/conceitos/autenticacao)** para detalhes.
 :::

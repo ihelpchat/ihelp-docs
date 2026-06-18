@@ -22,7 +22,7 @@ Antes, uma vez enviada, a mensagem não podia ser alterada. Com a nova atualiza�
 * Faça a alteração necessária
 * A mensagem será atualizada com a nova versão
 
-:::tip
+:::tip[Precisa de ajuda?]
 
 Fim das atualizações de 27/06/2025 ✅\
 \

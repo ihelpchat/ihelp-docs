@@ -14,7 +14,7 @@ Utilize as credenciais de acesso que você recebeu via WhatsApp para fazer login
 
 Alterar sua senha é fácil! Basta seguir o passo a passo abaixo.
 
-1º Passo - Realizar o login na plataforma
+### Realizar o login na plataforma
 
 ![](/img/help/alKEUxUVele4qYlu13Fv.png)
 
@@ -25,30 +25,24 @@ Para acessar o sistema, siga os passos abaixo:
 
 Após o primeiro acesso, recomendamos que você altere sua senha para garantir mais segurança.
 
-2º Passo - Alterando a senha do iHelp
+### Por que devo trocar minha senha de acesso?
 
- 1\. Por que devo trocar minha senha de acesso?
+A troca da senha é uma medida importante de segurança para garantir que somente você tenha acesso às suas informações e possa responder às conversas dentro do iHelp. A senha inicial é padrão, por isso, é fundamental alterá-la.
 
-·         A troca da senha é uma medida importante de segurança para garantir que somente você tenha acesso às suas informações e possa responder às conversas dentro do iHelp. A senha inicial é padrão, por isso, é fundamental alterá-la.
-
-**2. Como faço para trocar minha senha de acesso no iHelp?**
+### Como faço para trocar minha senha de acesso no iHelp?
 
 Siga os passos abaixo para trocar sua senha:
 
-·         No ambiente de atendimento, abra o menu lateral esquerdo (ele é retrátil).
+1. No ambiente de atendimento, abra o menu lateral esquerdo (ele é retrátil).
+2. Role a barra até encontrar o seu nome e clique sobre ele para acessar o seu perfil.
+3. Na tela do seu perfil, digite a nova senha e confirme-a.
+4. Insira seu e-mail de acesso nos campos correspondentes.
+5. Clique em **Salvar** para concluir a troca da senha.
 
-·         Role a barra até encontrar o seu nome e clique sobre ele para acessar o seu perfil.
+### Como sei que minha senha foi trocada com sucesso?
 
-·         Na tela do seu perfil, digite a nova senha e confirme-a.
+Após salvar as alterações, você verá a mensagem informando que sua senha foi editada com sucesso. Agora, você pode voltar para a área de atendimento clicando em **Atendimento**.
 
-·         Insira seu e-mail de acesso nos campos correspondentes.
+### O que faço se esquecer minha senha?
 
-·         Clique em Salvar para concluir a troca da senha.
-
- **3. Como sei que minha senha foi trocada com sucesso?**
-
-·         Após salvar as alterações, você verá a mensagem informando que sua senha foi editada com sucesso. Agora, você pode voltar para a área de atendimento clicando em Atendimento.
-
- **4. O que faço se esquecer minha senha?**
-
-·         Caso tenha esquecido sua senha, entre em contato com o suporte do iHelp para receber assistência sobre como recuperar ou redefinir sua senha de acesso.
+Caso tenha esquecido sua senha, entre em contato com o suporte do iHelp para receber assistência sobre como recuperar ou redefinir sua senha de acesso.

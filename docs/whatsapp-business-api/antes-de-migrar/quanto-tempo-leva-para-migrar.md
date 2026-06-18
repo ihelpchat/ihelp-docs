@@ -33,4 +33,6 @@ Mesmo com o número ativo e funcionando pela API, a Meta leva até **48 horas** 
 
 Isso é completamente normal e se resolve sozinho dentro das 48 horas, sem nenhuma ação necessária.
 
-> **Dica:** se possível, evite grandes disparos em massa nas primeiras 48 horas após a ativação. Aguardar a propagação completa garante que os destinatários vejam corretamente o nome e as informações da empresa antes de receber suas mensagens.
+:::tip[Dica]
+Se possível, evite grandes disparos em massa nas primeiras 48 horas após a ativação. Aguardar a propagação completa garante que os destinatários vejam corretamente o nome e as informações da empresa antes de receber suas mensagens.
+:::

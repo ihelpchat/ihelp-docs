@@ -4,7 +4,10 @@ sidebar_position: 5
 ---
 
 Busca mensagens por um **chatId**. Pode paginar usando skip e quantidade.
-*OBS: chatId não é o idRef ou atendimentoId. É o campo 'chatId' nos metadados do atendimento.*
+
+:::warning[Atenção]
+`chatId` não é o `idRef` ou `atendimentoId`. É o campo `chatId` nos metadados do atendimento.
+:::
 
 GET
 ```http

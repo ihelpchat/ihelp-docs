@@ -19,10 +19,8 @@ Na área de usuários, é possível definir:
 * Departamentos que o usuário faz parte
 * Permissões específicas (explicadas abaixo)
 
-:::warning
-
- **Importante:** A parte do e-mail não pode ser alterada por você. Essa configuração é feita pela equipe do iHelp.
-
+:::warning[Importante]
+A parte do e-mail não pode ser alterada por você. Essa configuração é feita pela equipe do iHelp.
 :::
 
 ***
@@ -90,8 +88,6 @@ Se sua empresa usa o **modelo de canal por usuário**, você pode vincular um ca
 * Desmarque o que não for permitido.
 * Clique em **Salvar** para aplicar.
 
-:::warning
-
-⚠️ O que for liberado aparecerá no menu do usuário. O que não for, **não ficará visível para ele**.
-
+:::warning[Atenção]
+O que for liberado aparecerá no menu do usuário. O que não for, **não ficará visível para ele**.
 :::

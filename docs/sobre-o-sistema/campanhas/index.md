@@ -6,12 +6,8 @@ title: "Campanhas"
 
 ## Visão Geral
 
-:::info
-
-#### ⚠️ **Aviso Importante: Respeite as Diretrizes do WhatsApp**
-
+:::warning[⚠️ Aviso Importante: Respeite as Diretrizes do WhatsApp]
 Para garantir que suas mensagens sejam entregues com segurança e sua conta permaneça ativa, é essencial seguir as **Políticas de Uso do WhatsApp**. O envio de mensagens em massa fora dos padrões pode resultar em **bloqueios temporários ou permanentes** da linha.
-
 :::
 
 No iHelp, o módulo de **Campanhas** foi criado para facilitar o envio de mensagens em massa de maneira **inteligente, organizada e personalizada**. É a ferramenta ideal para quem deseja manter contato com seus clientes, divulgar promoções, novidades ou apenas fortalecer o relacionamento.
@@ -39,7 +35,9 @@ Antes de tudo, organize seus contatos em uma planilha do Excel (.xlsx):
 * **Coluna C (var3)**: Nome do cliente (opcional).
 * **Coluna D+**: Variações de mensagens, para reduzir bloqueios e tornar o conteúdo mais dinâmico.
 
-> 💡 Dica: Sempre termine a mensagem com uma pergunta para estimular a resposta.
+:::tip[Dica]
+Sempre termine a mensagem com uma pergunta para estimular a resposta.
+:::
 
 ***
 

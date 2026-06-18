@@ -1,9 +1,11 @@
 ---
-title: "Template: criar novo chat"
-sidebar_position: 3
+title: "Criar novo chat"
+sidebar_position: 4
 ---
 
->  API iHelp - Body compatível com conta conectada na Gupshup
+:::info[Compatibilidade]
+API iHelp — Body compatível com conta conectada na Gupshup.
+:::
 
  `POST`
 ```http
@@ -87,10 +89,11 @@ https://apiv3.ihelpchat.com/api/v2/customers/add-new-call
 
 ---
 
-> ⚠️ **Notas**
-> - 📞 Números devem estar no formato E.164: `55DD9XXXXXXXX`
-> - 🔗 Links só funcionam em botões do tipo **URL Button**
-> - 🧪 Sempre teste templates no **Meta Template Manager** antes de usar em produção
+:::warning[Atenção]
+- 📞 Números devem estar no formato E.164: `55DD9XXXXXXXX`
+- 🔗 Links só funcionam em botões do tipo **URL Button**
+- 🧪 Sempre teste templates no **Meta Template Manager** antes de usar em produção
+:::
 
 ---
 

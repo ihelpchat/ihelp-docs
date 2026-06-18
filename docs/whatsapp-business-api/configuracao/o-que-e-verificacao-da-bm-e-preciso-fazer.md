@@ -42,4 +42,6 @@ Durante esse período, o número já funciona normalmente — apenas com os limi
 
 A causa mais comum de rejeição na verificação da BM é a **divergência entre os dados cadastrados e os documentos enviados**. Nome da empresa diferente da razão social, telefone desatualizado, endereço divergente do contrato social — qualquer inconsistência pode travar o processo.
 
-> Antes da sessão de ativação, confira se os dados da sua BM estão exatamente iguais aos do contrato social. Esse cuidado simples evita atrasos e a necessidade de reabrir o processo de verificação.
+:::tip[Dica]
+Antes da sessão de ativação, confira se os dados da sua BM estão exatamente iguais aos do contrato social. Esse cuidado simples evita atrasos e a necessidade de reabrir o processo de verificação.
+:::

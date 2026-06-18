@@ -24,7 +24,7 @@ Com essa atualização, essas **citações agora são visíveis** para a equipe 
 * Mais contexto na conversa
 * Respostas mais rápidas e personalizadas
 
-:::tip
+:::tip[Precisa de ajuda?]
 
 Fim das atualizações de 10/06/2025 ✅\
 \

@@ -25,7 +25,12 @@ Esses são problemas estruturais do WhatsApp Business convencional — e eles af
 
 Não é exagero. No Reclame Aqui, o WhatsApp acumula **mais de 33 mil reclamações registradas**, com reputação classificada como **"Não Recomendada"**. Nos últimos 6 meses, a empresa respondeu **0% das reclamações** recebidas. As mais recorrentes? Exatamente as que você já conhece:
 
-> *"Bloqueio recorrente do WhatsApp Business prejudicando atividade profissional"* *"Conta banida sem motivo e suporte inacessível"* *"WhatsApp Business bloqueado repetidamente devido a alto fluxo de mensagens"* *"Restrição no uso do WhatsApp Web e suspensão da conta"*
+:::danger[Reclamações reais]
+- *"Bloqueio recorrente do WhatsApp Business prejudicando atividade profissional"*
+- *"Conta banida sem motivo e suporte inacessível"*
+- *"WhatsApp Business bloqueado repetidamente devido a alto fluxo de mensagens"*
+- *"Restrição no uso do WhatsApp Web e suspensão da conta"*
+:::
 
 E quando isso acontece com o WhatsApp convencional, a resposta da Meta é silêncio. Não há suporte, não há canal de contestação ágil, não há garantia de retorno.
 

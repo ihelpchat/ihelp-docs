@@ -1,5 +1,5 @@
 ---
-title: "Template: JSON Body pronto"
+title: "JSON Body pronto"
 sidebar_position: 1
 ---
 

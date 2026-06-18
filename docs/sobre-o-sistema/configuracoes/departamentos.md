@@ -39,9 +39,11 @@ title: "Departamentos"
    * Data: 23 a 26 de fevereiro de 2026
    * Horário: 08h às 17h
 3. Adicione uma mensagem personalizada:\
-   \&#xNAN;*"Devido ao feriado de Carnaval, não estaremos em atendimento. Retornaremos assim que possível."*
+   *"Devido ao feriado de Carnaval, não estaremos em atendimento. Retornaremos assim que possível."*
 
-📌 A mensagem será enviada automaticamente durante o período definido.
+:::info[Observação]
+A mensagem será enviada automaticamente durante o período definido.
+:::
 
 ***
 
@@ -57,11 +59,9 @@ title: "Departamentos"
 
 ### **E a mensagem após seleção de departamento?**
 
-:::info
-
-⚠️ Essa mensagem **não é mais usada** quando o robô está ativo.\
+:::warning[Atenção]
+Essa mensagem **não é mais usada** quando o robô está ativo.\
 Caso **não use o robô**, é possível configurar uma mensagem automática que será enviada após o cliente escolher o departamento.
-
 :::
 
 ***

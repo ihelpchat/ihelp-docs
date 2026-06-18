@@ -31,7 +31,9 @@ Alguns pontos importantes sobre a cobrança da Meta:
 * Templates de **Utilidade e Autenticação** têm **desconto por volume**: quanto mais mensagens enviadas no mês, menor o custo unitário
 * Leads vindos de anúncios **click-to-WhatsApp** geram uma janela de 72 horas em que a Meta não cobra por categoria de template
 
-> Os valores da Meta são atualizados periodicamente. Consulte sempre a tabela oficial em [whatsappbusiness.com/pt-br/products/platform-pricing](https://whatsappbusiness.com/pt-br/products/platform-pricing/) para confirmar os valores mais recentes.
+:::info[Observação]
+Os valores da Meta são atualizados periodicamente. Consulte sempre a tabela oficial em [whatsappbusiness.com/pt-br/products/platform-pricing](https://whatsappbusiness.com/pt-br/products/platform-pricing/) para confirmar os valores mais recentes.
+:::
 
 ***
 

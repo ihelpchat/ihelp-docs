@@ -35,9 +35,13 @@ Na tela de login, clique em **"Esqueci minha senha"** e escolha como receber o c
 3. Insira o código recebido
 4. Crie e confirme sua nova senha
 
-💡 **Dica:** Prefira o WhatsApp se não tiver acesso imediato ao seu e-mail.
+:::tip[Dica]
+Prefira o WhatsApp se não tiver acesso imediato ao seu e-mail.
+:::
 
-⚠️ **Atenção:** O código tem prazo de validade. Se expirar, repita o processo.
+:::warning[Atenção]
+O código tem prazo de validade. Se expirar, repita o processo.
+:::
 
 ***
 

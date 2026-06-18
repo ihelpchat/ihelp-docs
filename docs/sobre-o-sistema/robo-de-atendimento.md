@@ -14,9 +14,7 @@ O fluxo do chatbot começa com uma mensagem do cliente, ativando o atendimento. 
 
 ### Como criar um novo robô
 
-1\.       Para criar um novo fluxo de robô siga os próximos passos...
-
-Clique em “Criar novo robô”
+1. Para criar um novo fluxo de robô, clique em **“Criar novo robô”**.
 
 ![](/img/help/q4tBz2R7cevwT94eUQKB.png)
 

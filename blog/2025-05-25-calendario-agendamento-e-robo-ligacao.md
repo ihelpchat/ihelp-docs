@@ -64,7 +64,7 @@ Quando o robô é ativado por ligação, você tem duas opções:
 
 Essa atualização garante mais agilidade no primeiro contato e melhora a experiência do cliente, mesmo quando ele opta por ligar.
 
-:::tip
+:::tip[Precisa de ajuda?]
 
 Fim das atualizações de 25/06/2025 ✅
 

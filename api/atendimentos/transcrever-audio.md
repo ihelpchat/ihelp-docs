@@ -16,7 +16,11 @@ Body:
 }
 ```
 Response:
-_Nota; A resposta virá vazia. Após gerar a transcrição, é necessário fazer o fetch de mensagens_
+
+:::warning[A resposta virá vazia]
+Após gerar a transcrição, é necessário fazer o fetch de mensagens (Etapa 2 abaixo).
+:::
+
 ```
 {}
 ```

@@ -1,14 +1,20 @@
 ---
-title: "Template: enviar em chat existente"
-sidebar_position: 2
+title: "Enviar em chat existente"
+sidebar_position: 3
 ---
 
->  API iHelp - Body compatível com conta conectada na Gupshup
+:::info[Compatibilidade]
+API iHelp — Body compatível com conta conectada na Gupshup.
+:::
 
  `POST`
 ```http
 https://apiv3.ihelpchat.com/api/v2/customers/send-template
 ```
+
+:::info[Observação]
+Informe o `atendimentoId` do atendimento em que o template será enviado. Para **iniciar um novo atendimento**, use [Criar novo chat](./template-criar-novo-chat.md) (`add-new-call`).
+:::
 
 ### Com Botões
 ```json

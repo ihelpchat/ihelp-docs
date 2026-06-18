@@ -21,8 +21,9 @@ sidebar_position: 4
 
 5. Com os dois ids de filtro, você já pode buscar e paginar todos os atendimentos com 'skip' e 'limit' - eles são retornados por data de 'ultima mensagem' no chat
 
-> [!info] Rate limits
-> Para buscar dados massivos, respeite o rate limit de 30 requests por minuto para as requisições.
+:::info[Rate limits]
+Para buscar dados massivos, respeite o rate limit de 30 requests por minuto para as requisições.
+:::
 
 ### Busca: Conversas Abertas
 

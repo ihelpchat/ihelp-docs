@@ -61,7 +61,7 @@ Sim! Você pode criar diversas listas para diferentes objetivos:
 * Organizar melhor o fluxo de trabalho da equipe.
 * Acompanhar canais, usuários ou situações temporárias com mais foco.
 
-:::tip
+:::tip[Precisa de ajuda?]
 
 Fim das atualizações de 30/06/2025 ✅\
 \

@@ -40,4 +40,6 @@ Para empresas que investem em tráfego pago, isso representa uma vantagem releva
 | Janela fechada                                   | Somente templates aprovados       | Varia por categoria |
 | Lead de anúncio click-to-WhatsApp                | Qualquer tipo de mensagem por 72h | Gratuito            |
 
-> Em todos os casos, o custo de U$ 0,001 por mensagem trafegada (enviada ou recebida) cobrado pela GupShup se aplica normalmente — independentemente de a janela estar aberta ou fechada.
+:::info[Observação]
+Em todos os casos, o custo de U$ 0,001 por mensagem trafegada (enviada ou recebida) cobrado pela GupShup se aplica normalmente — independentemente de a janela estar aberta ou fechada.
+:::

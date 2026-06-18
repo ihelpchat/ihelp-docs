@@ -19,16 +19,17 @@ https://apiv3.ihelpchat.com/api/v2/Groups/sendGroupMessage
 {"texto":"aaaaaaaaaaa\n","canalId":"66da164b9a7a7e3f33969195","contato":"5517996573343","messageType":0}
 ```
 
-> **Texto**: Sua mensagem
-> **CanalId**: id do canal whatsapp que enviará a mensagem
-> **Contato**: número de telefone que está enviando a mensagem
-> messageType: 0 = texto
+- **texto**: sua mensagem
+- **canalId**: id do canal WhatsApp que enviará a mensagem
+- **contato**: número de telefone que está enviando a mensagem
+- **messageType**: `0` = texto
 
-> **GroupId** Deve ser pego na página do grupo: 
-> 1. Abra o grupo no ihelp 2. 
-> 2. **aperte F12** no navegador 
-> 3. envie uma mensagem
-> 4. Copie o grupoId do iHelp
+**groupId** — deve ser pego na página do grupo:
+
+1. Abra o grupo no iHelp
+2. **Aperte F12** no navegador
+3. Envie uma mensagem
+4. Copie o `groupId` do iHelp
 
 ![](/img/api/zen_Lr5FVdcZNv.png)
 
