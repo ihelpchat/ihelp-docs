@@ -27,10 +27,6 @@ No painel da Gupshup, o `cloudApiTemplateName` é o **ID do template** (um códi
 :::warning[Não inclua os %22]
 Os `%22` são apenas as aspas codificadas (`"`) que delimitam o valor. Copie **somente o ID** que está entre eles — sem os `%22`.
 
-```
-...template=%7B%22id%22:%222267be99...9ee22e4841f8%22,%22params%22...
-                         └──────────── ID do template ────────────┘
-```
 :::
 
 ---
