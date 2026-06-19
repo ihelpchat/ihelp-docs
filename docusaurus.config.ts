@@ -103,12 +103,23 @@ const config: Config = {
       },
     ],
     [
+      '@docusaurus/plugin-content-docs',
+      {
+        // Terceira instância de docs: Tutoriais Guiados
+        id: 'tutoriais',
+        path: 'tutoriais',
+        routeBasePath: 'tutoriais',
+        sidebarPath: './sidebarsTutoriais.ts',
+        editUrl: 'https://github.com/ihelpchat/ihelp-docs/tree/main/',
+      },
+    ],
+    [
       // Busca local (offline, funciona no GitHub Pages, suporta pt)
       require.resolve('@easyops-cn/docusaurus-search-local'),
       {
         hashed: true,
         language: ['pt', 'en'],
-        docsRouteBasePath: ['docs', 'api'],
+        docsRouteBasePath: ['docs', 'api', 'tutoriais'],
         indexBlog: true,
         highlightSearchTermsOnTargetPage: true,
         searchResultLimits: 8,
@@ -144,6 +155,13 @@ const config: Config = {
           position: 'left',
           label: 'API',
         },
+        {
+          type: 'docSidebar',
+          sidebarId: 'tutoriaisSidebar',
+          docsPluginId: 'tutoriais',
+          position: 'left',
+          label: 'Tutoriais Guiados',
+        },
         {to: '/blog', label: 'Novidades', position: 'left'},
         {
           href: 'https://github.com/ihelpchat/ihelp-docs',
@@ -160,6 +178,7 @@ const config: Config = {
           items: [
             {label: 'Central de Ajuda', to: '/docs'},
             {label: 'API', to: '/api'},
+            {label: 'Tutoriais Guiados', to: '/tutoriais'},
             {label: 'Novidades', to: '/blog'},
           ],
         },
