@@ -64,7 +64,6 @@ const config: Config = {
           path: 'docs',
           routeBasePath: 'docs',
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/ihelpchat/ihelp-docs/tree/main/',
         },
         blog: {
           // Novidades e Atualizações
@@ -82,7 +81,6 @@ const config: Config = {
             copyright: `Copyright © ${new Date().getFullYear()} iHelp.`,
             xslt: true,
           },
-          editUrl: 'https://github.com/ihelpchat/ihelp-docs/tree/main/',
           onInlineTags: 'warn',
           onInlineAuthors: 'warn',
           onUntruncatedBlogPosts: 'warn',
@@ -103,7 +101,6 @@ const config: Config = {
         path: 'api',
         routeBasePath: 'api',
         sidebarPath: './sidebarsApi.ts',
-        editUrl: 'https://github.com/ihelpchat/ihelp-docs/tree/main/',
       },
     ],
     [
@@ -114,7 +111,6 @@ const config: Config = {
         path: 'tutoriais',
         routeBasePath: 'tutoriais',
         sidebarPath: './sidebarsTutoriais.ts',
-        editUrl: 'https://github.com/ihelpchat/ihelp-docs/tree/main/',
       },
     ],
     [
