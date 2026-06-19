@@ -25,12 +25,12 @@ const CARDS: CardItem[] = [
     cta: 'Acessar ajuda',
   },
   {
-    title: 'Documentação de API',
-    emoji: '🔌',
+    title: 'Tutoriais Guiados',
+    emoji: '🎓',
     description:
-      'Endpoints, autenticação e exemplos para integrar sistemas com a API do iHelp.',
-    to: '/api',
-    cta: 'Ver API',
+      'Guias passo a passo para configurar, usar e aproveitar ao máximo o iHelp.',
+    to: '/tutoriais',
+    cta: 'Ver tutoriais',
   },
   {
     title: 'Novidades',
@@ -39,6 +39,14 @@ const CARDS: CardItem[] = [
       'Acompanhe as últimas atualizações, melhorias e recursos lançados no iHelp.',
     to: '/blog',
     cta: 'Ver novidades',
+  },
+  {
+    title: 'Documentação de API',
+    emoji: '🔌',
+    description:
+      'Endpoints, autenticação e exemplos para integrar sistemas com a API do iHelp.',
+    to: '/api',
+    cta: 'Ver API',
   },
 ];
 
@@ -62,7 +70,7 @@ function Cards() {
       <div className="container">
         <div className="row">
           {CARDS.map((card) => (
-            <div key={card.title} className="col col--4">
+            <div key={card.title} className="col col--3">
               <Link to={card.to} className={styles.card}>
                 <span className={styles.cardEmoji}>{card.emoji}</span>
                 <Heading as="h2" className={styles.cardTitle}>

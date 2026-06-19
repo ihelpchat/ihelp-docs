@@ -26,6 +26,10 @@ const config: Config = {
     v4: true,
   },
 
+  customFields: {
+    claudeApiKey: process.env.CLAUDE_API_KEY ?? '',
+  },
+
   // Produção: GitHub Pages do projeto
   url: 'https://ihelpchat.github.io',
   baseUrl: '/ihelp-docs/',

@@ -1,0 +1,128 @@
+.wrapper {
+  background: linear-gradient(135deg, var(--ifm-color-primary-darkest) 0%, var(--ifm-color-primary) 100%);
+  border-radius: 14px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.inputRow {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.input {
+  flex: 1;
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  border: none;
+  font-size: 1rem;
+  outline: none;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--ifm-font-color-base);
+}
+
+.input::placeholder {
+  color: var(--ifm-color-emphasis-500);
+}
+
+.button {
+  padding: 0.7rem 1.25rem;
+  border-radius: 8px;
+  border: none;
+  background: #fff;
+  color: var(--ifm-color-primary-darkest);
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 150px;
+  justify-content: center;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.button:not(:disabled):hover {
+  opacity: 0.9;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid var(--ifm-color-primary);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to {transform: rotate(360deg);}
+}
+
+.result {
+  margin-top: 1rem;
+}
+
+.explanation {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.97);
+  text-decoration: none;
+  color: inherit;
+  transition: opacity 0.15s ease;
+}
+
+.card:hover {
+  opacity: 0.92;
+  text-decoration: none;
+  color: inherit;
+}
+
+.cardIcon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.cardTitle {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.975rem;
+}
+
+.cardCta {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--ifm-color-primary-darkest);
+  white-space: nowrap;
+}
+
+.error {
+  color: rgba(255, 200, 200, 0.95);
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 600px) {
+  .inputRow {
+    flex-direction: column;
+  }
+  .button {
+    min-width: unset;
+  }
+}
