@@ -150,17 +150,17 @@ const config: Config = {
         },
         {
           type: 'docSidebar',
-          sidebarId: 'apiSidebar',
-          docsPluginId: 'api',
-          position: 'left',
-          label: 'API',
-        },
-        {
-          type: 'docSidebar',
           sidebarId: 'tutoriaisSidebar',
           docsPluginId: 'tutoriais',
           position: 'left',
           label: 'Tutoriais Guiados',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'apiSidebar',
+          docsPluginId: 'api',
+          position: 'left',
+          label: 'API',
         },
         {to: '/blog', label: 'Novidades', position: 'left'},
         {

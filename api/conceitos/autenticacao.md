@@ -7,7 +7,7 @@ Todas as requisições devem incluir:
 
 | Header | Valor |
 |--------|-------|
-| `Authorization` | `Bearer &lt;token&gt;` |
+| `Authorization` | `Bearer <token>` |
 
 **Exemplo:**
 ```
