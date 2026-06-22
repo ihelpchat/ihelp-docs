@@ -177,8 +177,8 @@ const config: Config = {
           title: 'Documentação',
           items: [
             {label: 'Central de Ajuda', to: '/docs'},
-            {label: 'API', to: '/api'},
             {label: 'Tutoriais Guiados', to: '/tutoriais'},
+            {label: 'API', to: '/api'},
             {label: 'Novidades', to: '/blog'},
           ],
         },
