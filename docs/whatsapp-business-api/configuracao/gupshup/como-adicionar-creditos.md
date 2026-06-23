@@ -87,3 +87,10 @@ Para evitar interrupções no envio de mensagens, configure um alerta antes de f
 :::tip
 Se você costuma adicionar créditos em valores maiores, configure o alerta proporcionalmente mais alto.
 :::
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo?
+[Acesse o Tutorial Guiado →](https://app.tango.us/app/workflow/Como-adicionar-cr-ditos-na-Gupshup-ddb6d6557ae04d0d9b83f6d8f173a188)
