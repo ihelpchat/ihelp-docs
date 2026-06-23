@@ -32,7 +32,6 @@ export default function TutorialCard({ title, url, description, embedUrl }: Prop
                 sandbox="allow-scripts allow-top-navigation-by-user-activation allow-popups allow-same-origin"
                 title={title}
                 width="100%"
-                height="100%"
                 referrerPolicy="strict-origin-when-cross-origin"
                 frameBorder="0"
                 allowFullScreen
