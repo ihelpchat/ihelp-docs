@@ -31,8 +31,6 @@ Para verificar por que o envio de templates está falhando, deve **adicionar nos
 https://webhook.ihelpchat.com/webhook/gup-logger-1mZ8DtHm0PDnLfNy6zltnLz3jQlvT5mz
 ```
 > ✅ Adicione na aba **WEBHOOK** no painel Gupshup e tente enviar templates para verificarmos erros/avisos.
->
-> 🚩 Não é necessário pedir pro usuário remover o link depois, podemos apenas rolar o id da url quando encerrarmos o suporte e então iremos parar de receber logs dos usuários que cadastraram o webhook antigo.
 
 ### 1.1 Solicite análise dos logs
 
