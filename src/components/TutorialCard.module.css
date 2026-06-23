@@ -73,8 +73,8 @@
   background: var(--ifm-background-surface-color);
   border-radius: 12px;
   width: 100%;
-  max-width: 960px;
-  max-height: 90vh;
+  max-width: 864px;
+  max-height: 81vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
