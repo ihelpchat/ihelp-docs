@@ -85,6 +85,8 @@
   flex: 1;
   border: none;
   display: block;
+  min-height: 0;
+  height: 100%;
 }
 
 .close {

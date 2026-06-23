@@ -29,7 +29,6 @@ export default function TutorialCard({ title, url, description, embedUrl }: Prop
               <button className={styles.close} onClick={() => setOpen(false)}>✕</button>
               <iframe
                 src={embedUrl}
-                style={{ minHeight: '640px' }}
                 sandbox="allow-scripts allow-top-navigation-by-user-activation allow-popups allow-same-origin"
                 title={title}
                 width="100%"
