@@ -39,3 +39,10 @@ Além de texto, a API permite enviar templates com botões clicáveis, listas de
 **Operação homologada junto à Meta**
 
 Ao ativar a API Oficial, sua empresa passa a ter um cadastro formal no Gerenciador de Negócios da Meta. Isso confere maior credibilidade à operação, abre caminho para a solicitação do selo de empresa verificada e garante que o número está operando dentro do ecossistema oficial — não em uma zona cinzenta de automações não autorizadas.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

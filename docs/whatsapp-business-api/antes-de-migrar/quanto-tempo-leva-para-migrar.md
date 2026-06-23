@@ -36,3 +36,10 @@ Isso é completamente normal e se resolve sozinho dentro das 48 horas, sem nenhu
 :::tip[Dica]
 Se possível, evite grandes disparos em massa nas primeiras 48 horas após a ativação. Aguardar a propagação completa garante que os destinatários vejam corretamente o nome e as informações da empresa antes de receber suas mensagens.
 :::
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

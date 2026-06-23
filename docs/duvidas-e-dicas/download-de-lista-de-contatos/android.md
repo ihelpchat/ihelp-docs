@@ -24,3 +24,10 @@ title: "Android"
 4. Escolha a opção **Google CSV** (compatível com Excel) e faça o download.
 
    ![](/img/help/uHK6SXxil3EobrPGzbZq.png)
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

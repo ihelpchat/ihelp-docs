@@ -8,3 +8,10 @@ title: "Configurações"
 - [Gerenciamento de Usuários](/docs/sobre-o-sistema/configuracoes/gerenciamento-de-usuarios): Aprenda como gerenciar usuários no iHelp: perfis, departamentos e permissões. Guia prático para configurar acessos com clareza e segurança.
 - [Atalhos](/docs/sobre-o-sistema/configuracoes/atalhos): Gerencie mensagens prontas em diversos formatos para agilizar seu atendimento. Crie, edite e envie atalhos com apenas alguns cliques.
 - [Configurações Gerais](/docs/sobre-o-sistema/configuracoes/configuracoes-gerais): Nesta seção, você encontra configurações que automatizam e controlam o fluxo de atendimento, como prioridade por tempo, restrição de mensagens entre setores e encerramento automático.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

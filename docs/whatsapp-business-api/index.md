@@ -13,3 +13,10 @@ A migração tem limitações conhecidas: sem acesso pelo app, sem chamadas, sem
 Utilize os botões abaixo para navegar e tirar suas dúvidas
 
 <a href="https://faq.ihelpchat.com/pages/hY1TXtzdyrx65eJK6z4a" class="button primary">Básico</a> <a href="https://faq.ihelpchat.com/pages/iOEf9wnh4deFap6nDxj1" class="button primary">Antes de Migrar</a> <a href="https://faq.ihelpchat.com/pages/AycWOHhhZbfUaQXqqxm1" class="button primary">Funcionamento</a> <a href="https://faq.ihelpchat.com/pages/WvwwOhlW42efLlDR04Pb" class="button primary">Quanto custa?</a> <a href="https://faq.ihelpchat.com/pages/pyWojakNopST8Z5CDrpD" class="button primary">Configuração</a>
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

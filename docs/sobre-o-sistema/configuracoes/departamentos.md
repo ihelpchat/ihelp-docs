@@ -69,3 +69,10 @@ Caso **não use o robô**, é possível configurar uma mensagem automática que 
 #### 💾 **Não se esqueça de salvar!**
 
 Após realizar as configurações desejadas, clique em **Salvar** para garantir que tudo esteja aplicado corretamente.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

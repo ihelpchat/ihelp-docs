@@ -39,3 +39,10 @@ Salve o atalho: Clique em “Salvar” para garantir que o atalho esteja dispon�
 | **Documento** | Arquivos como PDF, Word ou Excel podem ser cadastrados como atalho. Útil para enviar orçamentos, contratos, termos de uso ou apresentações. |
 | **Vídeo** | Vídeos prontos que podem ser enviados com um clique. Muito utilizado para demonstrações, tutoriais ou vídeos institucionais. |
 | **Áudio** | Áudios gravados diretamente pelo sistema, que são enviados como se tivessem sido gravados no momento (não aparecem como "encaminhados"). Perfeito para manter um atendimento mais humanizado e natural. |
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

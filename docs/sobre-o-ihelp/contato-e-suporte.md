@@ -39,3 +39,10 @@ Responderemos dentro de nosso horário de atendimento.
 ***
 
 Agradecemos sua confiança em nossos serviços e estamos à disposição para ajudar!
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

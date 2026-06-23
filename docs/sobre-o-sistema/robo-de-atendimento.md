@@ -103,3 +103,10 @@ Aqui você irá definir algumas opções importantes:
 Sempre lembre de salvar ou publicar seu robô.
 
 ![](/img/help/PJa3jnEjfcR7uSX0naA2.png)
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

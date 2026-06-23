@@ -112,3 +112,10 @@ Com as tags, você pode:
 ### Por que a Agenda é uma ferramenta estratégica no iHelp?
 
 Porque ela concentra todas as informações essenciais dos seus clientes, permite automatizar o fluxo de atendimento com carteirização, facilita o agendamento de mensagens e proporciona uma gestão organizada com tags e filtros. Com ela, você ganha eficiência, personalização e agilidade no seu dia a dia.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

@@ -11,3 +11,10 @@ title: "Antes de Migrar"
 <a href="https://faq.ihelpchat.com/pages/5RbMvr7eqj72dDo1hSSJ" class="button primary">Deixarei de ter acesso a algo?</a>
 
 <a href="https://faq.ihelpchat.com/pages/bBvTUhypR3SKCjkKsKix" class="button primary">Quanto tempo leva para migrar?</a>
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

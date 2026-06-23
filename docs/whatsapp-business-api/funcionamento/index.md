@@ -7,3 +7,10 @@ title: "Funcionamento"
 <a href="https://faq.ihelpchat.com/pages/ULKnm3WZeESMRyRpecPf" class="button primary">O que são Templates e para o que servem?</a>
 
 <a href="https://faq.ihelpchat.com/pages/15sclYbBQN66hNSvkUiI" class="button primary">O que é a janela de 24 horas?</a>
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

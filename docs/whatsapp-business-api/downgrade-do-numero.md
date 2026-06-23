@@ -51,3 +51,10 @@ Se o objetivo não é fazer downgrade, mas sim migrar para outro provedor manten
 :::warning[Atenção]
 Não recomendamos o retorno do número ao modelo comum (QR Code). Ao fazer o downgrade, a operação volta a ficar exposta aos riscos típicos do WhatsApp convencional — bloqueios, restrições e até perda definitiva do número, sem aviso prévio e sem suporte da Meta para contestação. Avalie essa decisão com cautela e converse com o suporte do iHelpChat antes de prosseguir.
 :::
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

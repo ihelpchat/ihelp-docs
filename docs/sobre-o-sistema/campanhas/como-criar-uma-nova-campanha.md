@@ -129,3 +129,10 @@ Na última tela, revise todas as configurações da campanha. Se desejar, envie 
 Clicando no card da campanha, você poderá acompanhar os dados de envio em tempo real, verificando quantas mensagens foram enviadas e o status de cada envio.
 
 ![](/img/help/zAl9bSeyFyRn4BgPLLvz.png)
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

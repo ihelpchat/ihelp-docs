@@ -33,3 +33,10 @@ Para operações comerciais, sim — na grande maioria dos casos.
 As limitações acima afetam principalmente funcionalidades de uso pessoal. O que a API entrega em troca — estabilidade, escala, múltiplos atendentes, automação e segurança operacional — supera com folga o que se abre mão, especialmente para empresas que usam o WhatsApp como canal principal de vendas ou atendimento.
 
 A pergunta certa não é "o que vou perder?", mas sim "o que o meu negócio precisa para crescer?". Se a resposta envolve volume, organização e continuidade, a API é o caminho.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

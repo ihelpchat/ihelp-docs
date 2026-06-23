@@ -57,3 +57,10 @@ A migração para a API Oficial não é uma tendência passageira — é uma mud
 A API transforma o WhatsApp de um aplicativo pessoal adaptado para uso comercial em uma **infraestrutura profissional de comunicação**, com a confiabilidade que uma operação em crescimento exige.
 
 Se o seu volume de conversas já se tornou difícil de gerenciar no celular, esse é o sinal de que chegou a hora de dar esse passo.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

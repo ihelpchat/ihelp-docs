@@ -7,3 +7,10 @@ title: "O Básico"
 <a href="https://faq.ihelpchat.com/pages/E5RZjQznbuV71sbkWyOt" class="button primary">O que é a API Oficial do Whatsapp?</a>
 
 <a href="https://faq.ihelpchat.com/pages/yRBRNj8oMKFleo4fF0EE" class="button primary">Quais os Benefícios?</a>
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

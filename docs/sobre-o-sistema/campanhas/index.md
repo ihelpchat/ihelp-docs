@@ -82,3 +82,10 @@ Após o disparo:
 ### 🚀 Resultado: mais controle, mais conversões
 
 Com o iHelp, suas campanhas ganham **alcance, personalização e eficiência**. Tudo isso com a segurança e a estrutura necessária para manter o relacionamento com seus clientes ativo, respeitoso e profissional.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

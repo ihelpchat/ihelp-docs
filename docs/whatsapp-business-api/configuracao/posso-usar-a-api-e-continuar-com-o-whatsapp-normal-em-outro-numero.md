@@ -22,3 +22,10 @@ Na prática, muitas empresas adotam essa divisão de forma natural:
 **Um ponto de atenção**
 
 Manter dois números exige clareza na operação para que o cliente não fique confuso sobre qual canal usar. O ideal é que o número da API seja o canal oficial e público da empresa — divulgado no site, nas redes sociais e nos materiais de comunicação — enquanto o número convencional, se existir, seja de uso interno.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

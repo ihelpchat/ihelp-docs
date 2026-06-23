@@ -91,3 +91,10 @@ Se sua empresa usa o **modelo de canal por usuário**, você pode vincular um ca
 :::warning[Atenção]
 O que for liberado aparecerá no menu do usuário. O que não for, **não ficará visível para ele**.
 :::
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

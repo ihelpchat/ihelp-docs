@@ -52,3 +52,10 @@ Você pode aplicar os seguintes filtros para visualizar os dados desejados:
 
 * **Dashboard**: Visualização **direta e dinâmica** dos dados dentro da plataforma.
 * **Relatório**: Permite **exportar dados em Excel** para análise mais detalhada e personalizada.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

@@ -31,3 +31,10 @@ title: "Preparando a planilha de campanhas"
    * Sempre termine a mensagem com uma **pergunta**, para estimular o cliente a responder.
    * Verifique se as mensagens fazem sentido quando combinadas *(saudação + nome + texto)*.
    * Salve a planilha em formato **`.xlsx`** e suba na sua campanha.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

@@ -45,3 +45,10 @@ A sessão de ativação é feita em conjunto com um analista do iHelpChat, por a
 A Meta exige que a empresa tenha uma presença digital verificável. O site precisa estar **no ar, atualizado e com protocolo de segurança HTTPS** ativo. Sites em construção, inativos ou sem o certificado SSL não atendem ao requisito.
 
 ***
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

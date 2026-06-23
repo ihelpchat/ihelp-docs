@@ -45,3 +45,10 @@ A causa mais comum de rejeição na verificação da BM é a **divergência entr
 :::tip[Dica]
 Antes da sessão de ativação, confira se os dados da sua BM estão exatamente iguais aos do contrato social. Esse cuidado simples evita atrasos e a necessidade de reabrir o processo de verificação.
 :::
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

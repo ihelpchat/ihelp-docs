@@ -13,3 +13,10 @@ A campanha vai além de um simples "envio em massa". Ela permite que você:
 **Monitore o desempenho**, acompanhando quantas mensagens foram enviadas, recebidas e respondidas.
 
 Com o módulo de campanhas do iHelp, você tem controle total sobre suas interações, garantindo que cada mensagem seja enviada no momento certo, para as pessoas certas, de forma eficiente e profissional.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

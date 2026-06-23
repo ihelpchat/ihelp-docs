@@ -9,3 +9,10 @@ title: "Configuração"
 <a href="https://faq.ihelpchat.com/pages/oWVJR5kqLbcOemhKfRhZ" class="button primary">Gupshup</a>
 
 <a href="https://faq.ihelpchat.com/pages/KphZ52rwCfgL7q5drtb9" class="button primary">Posso usar a API e continuar com o Whatsapp normal em outro número?</a>
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

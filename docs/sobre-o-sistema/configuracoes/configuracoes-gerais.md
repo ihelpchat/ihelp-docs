@@ -19,3 +19,10 @@ Ela impede que usuários de setores diferentes vejam conversas que não são de 
 ### **O que faz a função "Finalizar Atendimento Automaticamente"?**
 
 Finaliza automaticamente o atendimento após um tempo sem interação (de 1 a 168 horas). Você pode escolher enviar ou não uma mensagem de encerramento e personalizá-la. Também há a opção de ignorar finais de semana, evitando encerramentos indevidos fora do expediente.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

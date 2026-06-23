@@ -39,3 +39,10 @@ Evite chamar os seus clientes no dia em que agendarmos a criação da API Oficia
 Para a maioria das operações, o histórico do aplicativo perde relevância rapidamente após a migração. A partir do momento em que o número começa a funcionar pela API, todas as novas conversas ficam registradas e organizadas dentro do iHelpChat — com histórico completo, por atendente, com data e hora.
 
 O que se perde é o passado no app. O que se ganha é uma operação estruturada daqui para frente.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

@@ -74,3 +74,10 @@ Siga estas etapas no Outlook:
 8. Finalize clicando em **Concluir**.
 
    ![](/img/help/1rTrjeK7Hao5oKmIWF4f.png)
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

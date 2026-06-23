@@ -154,3 +154,10 @@ Não. **Nenhuma mensagem é apagada** do iHelp:
 4. Para mais sobre listas consulte:
 
 [Listas personalizadas](/blog/listas-personalizadas)
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

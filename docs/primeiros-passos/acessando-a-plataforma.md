@@ -46,3 +46,10 @@ Após salvar as alterações, você verá a mensagem informando que sua senha fo
 ### O que faço se esquecer minha senha?
 
 Caso tenha esquecido sua senha, entre em contato com o suporte do iHelp para receber assistência sobre como recuperar ou redefinir sua senha de acesso.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

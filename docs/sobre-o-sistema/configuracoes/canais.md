@@ -46,3 +46,10 @@ No menu **Configurações**, a **primeira opção** já é a de **Canais**.
 :::info[Observação]
 🔁 Mesmo que já tenha um canal conectado anteriormente, ao conectar um novo número o sistema **atualiza automaticamente**.
 :::
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

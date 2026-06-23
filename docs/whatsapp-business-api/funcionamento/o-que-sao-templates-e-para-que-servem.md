@@ -57,3 +57,10 @@ Se um template for reprovado, é possível ajustar o conteúdo e resubmeter. A M
 **Um detalhe importante sobre categorização**
 
 A Meta pode reclassificar um template após a aprovação, caso entenda que a categoria declarada não corresponde ao conteúdo real. Se um template aprovado como Utilidade for reclassificado como Marketing, o custo por envio muda automaticamente — e sem aviso prévio. Por isso, classificar corretamente desde o início é a melhor prática, tanto para evitar custos inesperados quanto para proteger a saúde da conta.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

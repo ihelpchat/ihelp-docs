@@ -44,3 +44,10 @@ Para ter uma estimativa realista, considere duas variáveis:
 **Volume de templates enviados** — quantas mensagens ativas sua empresa dispara por mês e em qual categoria. Um envio de 1.000 templates de Marketing, por exemplo, gera U$ 62,50 de custo Meta.
 
 **Volume de mensagens trafegadas** — a soma de tudo que entra e sai pelo número. Uma operação com 10.000 mensagens trocadas no mês gera U$ 10 na GupShup. Acima de 75.000 mensagens, o teto de U$ 75 já está atingido.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

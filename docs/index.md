@@ -20,3 +20,10 @@ respostas e vídeos sobre como usar a plataforma no dia a dia.
 :::tip[Dica]
 Use a **busca** no topo do site para encontrar rapidamente qualquer assunto.
 :::
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

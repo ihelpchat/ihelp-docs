@@ -76,3 +76,10 @@ Na coluna **Notificações**, você poderá conferir se foi registrada **alguma 
 ### Posso exportar os dados?
 
 Sim! É possível exportar todos os dados do relatório em formato **Excel (.xlsx)** para análises mais detalhadas.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

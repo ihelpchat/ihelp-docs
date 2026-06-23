@@ -48,3 +48,10 @@ O código tem prazo de validade. Se expirar, repita o processo.
 ### Ainda com problemas?
 
 Entre em contato com o suporte do iHelp para obter ajuda personalizada.
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

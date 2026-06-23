@@ -92,5 +92,4 @@ Se você costuma adicionar créditos em valores maiores, configure o alerta prop
 
 ## Tutorial Guiado
 
-Prefere seguir o passo a passo interativo?
-[Acesse o Tutorial Guiado →](https://app.tango.us/app/workflow/Como-adicionar-cr-ditos-na-Gupshup-ddb6d6557ae04d0d9b83f6d8f173a188)
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

@@ -43,3 +43,10 @@ Para empresas que investem em tráfego pago, isso representa uma vantagem releva
 :::info[Observação]
 Em todos os casos, o custo de U$ 0,001 por mensagem trafegada (enviada ou recebida) cobrado pela GupShup se aplica normalmente — independentemente de a janela estar aberta ou fechada.
 :::
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)

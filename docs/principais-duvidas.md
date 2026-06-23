@@ -62,3 +62,10 @@ Acesse o menu **Contatos → Importar/Editar**:
   Certifique-se de que o número está no formato internacional (ex: +55 para Brasil).
 
 [Clique aqui e saiba mais sobre a Agenda de Contatos](/docs/sobre-o-sistema/agenda-de-contatos)
+
+
+---
+
+## Tutorial Guiado
+
+Prefere seguir o passo a passo interativo? [Acesse a sessão de tutoriais guiados.](https://ihelpchat.github.io/ihelp-docs/tutoriais)
