@@ -8,6 +8,8 @@ title: "Funcionamento"
 
 <a href="https://faq.ihelpchat.com/pages/15sclYbBQN66hNSvkUiI" class="button primary">O que é a janela de 24 horas?</a>
 
+<a href="/ihelp-docs/docs/whatsapp-business-api/funcionamento/mensagens-nao-entregues" class="button primary">Mensagens não entregues</a>
+
 
 ---
 
