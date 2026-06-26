@@ -24,10 +24,8 @@ function keywordSearch(query: string, pages: ContentPage[]): SearchResult[] {
   const scored = pages.map(page => {
     let score = 0;
     const titleNorm = normalize(page.title);
-    const excerptNorm = normalize(page.excerpt);
     for (const word of words) {
-      if (titleNorm.includes(word)) score += 4;
-      if (excerptNorm.includes(word)) score += 1;
+      if (titleNorm.includes(word)) score += 1;
     }
     return {page, score};
   });
