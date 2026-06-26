@@ -30,6 +30,16 @@ function extractExcerpt(content) {
   return plain.slice(0, 250);
 }
 
+function extractHeadings(content) {
+  const body = content.replace(/^---[\s\S]*?---\r?\n/, '');
+  const headings = [];
+  for (const line of body.split(/\r?\n/)) {
+    const m = line.match(/^#{2,6}\s+(.+)$/);
+    if (m) headings.push(m[1].trim());
+  }
+  return headings;
+}
+
 function scanDocs(dir, base, section, pages) {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
@@ -57,6 +67,7 @@ function scanDocs(dir, base, section, pages) {
         url: urlPath,
         section,
         excerpt: extractExcerpt(content),
+        headings: extractHeadings(content),
       });
     }
   }
@@ -84,6 +95,7 @@ function scanBlog(dir, pages) {
       url: urlPath,
       section: 'Novidades',
       excerpt: extractExcerpt(content),
+      headings: extractHeadings(content),
     });
   }
 }

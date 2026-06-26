@@ -9,6 +9,7 @@ type ContentPage = {
   url: string;
   section: string;
   excerpt: string;
+  headings: string[];
 };
 
 type SearchResult = {
@@ -24,8 +25,10 @@ function keywordSearch(query: string, pages: ContentPage[]): SearchResult[] {
   const scored = pages.map(page => {
     let score = 0;
     const titleNorm = normalize(page.title);
+    const headingsNorm = (page.headings ?? []).map(normalize).join(' ');
     for (const word of words) {
-      if (titleNorm.includes(word)) score += 1;
+      if (titleNorm.includes(word)) score += 2;
+      if (headingsNorm.includes(word)) score += 1;
     }
     return {page, score};
   });
