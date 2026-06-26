@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
-import SearchBar from '@theme/SearchBar';
+import AITutorialSearch from '../components/AITutorialSearch';
 
 import styles from './index.module.css';
 
@@ -56,12 +56,6 @@ function HomeHeader() {
     <header className={clsx('hero', styles.heroBanner)}>
       <div className="container">
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
-        <div className={styles.heroSearch}>
-          <SearchBar />
-        </div>
-        <p className={styles.heroHint}>
-          Pesquise em Central de Ajuda, Tutoriais Guiados e Novidades
-        </p>
       </div>
     </header>
   );
@@ -96,6 +90,11 @@ export default function Home(): JSX.Element {
       description="Central de Ajuda, Documentação de API e Novidades do iHelp.">
       <HomeHeader />
       <main>
+        <section className={styles.searchSection}>
+          <div className="container">
+            <AITutorialSearch />
+          </div>
+        </section>
         <Cards />
       </main>
     </Layout>
