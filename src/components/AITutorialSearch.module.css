@@ -273,6 +273,34 @@
   opacity: 0.85;
 }
 
+/* ── Support link ─────────────────────────────────────────────────────────── */
+
+.supportLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #25d366;
+  text-decoration: none;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+  padding-top: 0.6rem;
+  width: 100%;
+  transition: opacity 0.15s ease;
+}
+
+.supportLink:hover {
+  opacity: 0.8;
+  text-decoration: none;
+  color: #25d366;
+}
+
+.supportIcon {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 
 @media (max-width: 600px) {

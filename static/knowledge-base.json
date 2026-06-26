@@ -1,0 +1,210 @@
+[
+  {
+    "id": "conectar-canal",
+    "keywords": ["canal", "canais", "conectar", "qrcode", "qr", "code", "whatsapp", "numero", "numero", "ligar", "vincular", "adicionar canal", "novo canal"],
+    "question": "Como conectar um canal no iHelp?",
+    "answer": "Para conectar um canal no iHelp, acesse **Configurações → Canais** e clique em **Novo Canal**.\n\nAntes de escanear o QR Code, configure as mensagens automáticas, o tempo de reabertura e o departamento padrão — essas configurações impactam diretamente no atendimento.\n\n• Escolha o tipo de canal (WhatsApp, API Oficial etc.)\n• Dê um nome ao canal\n• Escaneie o QR Code com o celular (WhatsApp → Dispositivos conectados → Conectar dispositivo)\n\nApós conectar, o número estará ativo e pronto para receber atendimentos.",
+    "url": "/docs/sobre-o-sistema/configuracoes/canais",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "alterar-senha",
+    "keywords": ["senha", "alterar senha", "mudar senha", "trocar senha", "redefinir senha", "minha senha"],
+    "question": "Como alterar minha senha?",
+    "answer": "Para alterar sua senha no iHelp, siga estes passos:\n\n• Clique nos **três pontinhos** (⋯) ao lado do seu nome\n• Selecione **Meu perfil**\n• Digite sua **senha atual**\n• Digite a **nova senha** e confirme\n• Clique em **Alterar senha**\n\nPronto! Sua senha será atualizada imediatamente.",
+    "url": "/docs/sobre-o-sistema/configuracoes/alterar-senha",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "recuperar-senha",
+    "keywords": ["esqueci", "esqueceu", "recuperar senha", "perdi senha", "acesso", "login", "entrar", "nao consigo entrar", "nao lembro"],
+    "question": "Esqueci minha senha. Como recupero o acesso?",
+    "answer": "Não se preocupe! Para recuperar sua senha:\n\n• Na tela de login, clique em **Esqueci minha senha**\n• Escolha como receber o código: por **e-mail** ou por **WhatsApp**\n• Insira o código recebido\n• Crie e confirme sua nova senha\n\n💡 Dica: prefira o WhatsApp se não tiver acesso imediato ao seu e-mail. O código tem prazo de validade — se expirar, basta repetir o processo.",
+    "url": "/docs/primeiros-passos/acessando-a-plataforma",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "api-oficial",
+    "keywords": ["api", "api oficial", "whatsapp business", "waba", "business api", "o que e api", "api do whatsapp"],
+    "question": "O que é a API Oficial do WhatsApp?",
+    "answer": "A API Oficial do WhatsApp (também chamada de WhatsApp Business API ou WABA) é a versão avançada do WhatsApp para empresas, desenvolvida pela Meta.\n\nCom ela você consegue:\n• Ter **múltiplos atendentes** usando o mesmo número simultaneamente\n• Configurar **robôs e automações** sem risco de banimento\n• Fazer **campanhas em massa** usando templates aprovados\n• Integrar com outros sistemas via API\n• Obter o **selo verde** de empresa verificada\n\nAo contrário do WhatsApp normal ou Business, a API é conectada à plataforma iHelp, e o número não pode ser usado no celular de forma convencional.",
+    "url": "/docs/whatsapp-business-api/o-basico/o-que-e-a-api-oficial-do-whatsapp",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "migrar-api",
+    "keywords": ["migrar", "migracao", "migração", "o que preciso", "requisitos api", "criar api", "como ter api", "quero api"],
+    "question": "O que preciso para migrar para a API Oficial?",
+    "answer": "Para criar uma conta na API Oficial do WhatsApp você vai precisar de:\n\n• Uma conta no **Facebook Business Manager** verificada\n• Um **número de telefone exclusivo** — ele não pode estar ativo no WhatsApp normal\n• O **CNPJ** da sua empresa\n\nO processo de migração leva de **1 a 3 dias úteis** após o envio de todos os documentos.\n\n⚠️ Importante: o histórico de conversas do WhatsApp normal **não é transferido** para a API. E após migrar, o número não poderá ser usado no celular de forma convencional.",
+    "url": "/docs/whatsapp-business-api/antes-de-migrar/o-que-preciso-para-criar-uma-api",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "janela-24h",
+    "keywords": ["janela", "24 horas", "24h", "nao consigo enviar", "nao consegue enviar", "mensagem bloqueada", "fora da janela", "prazo", "limite"],
+    "question": "O que é a janela de 24 horas?",
+    "answer": "A janela de 24 horas é uma regra da Meta para a API Oficial do WhatsApp.\n\nFunciona assim:\n• Quando um cliente te envia uma mensagem, uma **janela de 24 horas** se abre\n• Durante esse período, você pode enviar qualquer tipo de mensagem livremente\n• Se o cliente **não responder por mais de 24 horas**, a janela fecha\n• Após o fechamento, só é possível enviar **templates aprovados pela Meta**\n• A janela reabre automaticamente quando o cliente responder\n\nPor isso é importante responder os clientes rapidamente e usar templates para reativações.",
+    "url": "/docs/whatsapp-business-api/funcionamento/o-que-e-a-janela-de-24-horas",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "templates",
+    "keywords": ["template", "templates", "mensagem aprovada", "fora da janela", "criar template", "aprovar template", "modelo mensagem"],
+    "question": "O que são templates e como criar um?",
+    "answer": "Templates são mensagens pré-aprovadas pela Meta, usadas para entrar em contato com clientes quando a janela de 24 horas está fechada.\n\nPara criar um template:\n• Acesse **Configurações → Templates → Criar template**\n• Defina o nome, idioma e categoria (marketing, utilidade, autenticação)\n• Escreva o texto da mensagem\n• Submeta para aprovação da Meta\n\nA aprovação pode levar algumas horas a alguns dias. Após aprovado, o template fica disponível para uso em campanhas e reativações.\n\n💡 Templates de marketing são cobrados por conversa; os de utilidade têm custo diferente.",
+    "url": "/docs/whatsapp-business-api/funcionamento/o-que-sao-templates-e-para-que-servem",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "custo-api",
+    "keywords": ["custo", "preco", "valor", "quanto custa", "cobrança", "cobranca", "pagar", "plano", "mensalidade"],
+    "question": "Quanto custa a API Oficial do WhatsApp?",
+    "answer": "A cobrança da API Oficial do WhatsApp funciona por **conversa**, e é feita pela Meta.\n\n• **Conversas de serviço** (quando o cliente inicia): gratuitas até um determinado volume mensal\n• **Conversas de marketing** (quando a empresa inicia com template): cobradas por conversa\n• **Conversas de utilidade**: têm custo próprio definido pela Meta\n\nAlém disso, há o custo da plataforma iHelp, que é separado. Para saber os valores exatos do plano da sua empresa, entre em contato com o suporte iHelp.",
+    "url": "/docs/whatsapp-business-api/quanto-custa",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "campanha",
+    "keywords": ["campanha", "campanhas", "disparo", "envio em massa", "mensagem em massa", "lista de contatos", "broadcast"],
+    "question": "Como criar uma campanha de mensagens?",
+    "answer": "Para criar uma campanha no iHelp:\n\n• Acesse **Campanhas → Nova Campanha**\n• Defina o nome da campanha\n• Escolha o canal de envio\n• Faça upload da planilha de contatos (.xlsx ou .csv)\n• Escreva a mensagem (pode usar {{nome}} para personalizar)\n• Escolha enviar imediatamente ou agendar\n\n📋 A planilha precisa ter pelo menos as colunas: **número** (com DDD) e **nome**.\n\n⚠️ Para campanhas pela API Oficial, é necessário usar um **template aprovado pela Meta**. Respeite sempre as políticas do WhatsApp para evitar bloqueios.",
+    "url": "/docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "robo-atendimento",
+    "keywords": ["robo", "robô", "bot", "automacao", "automatico", "fluxo", "menu", "atendimento automatico", "configurar robo"],
+    "question": "Como configurar o robô de atendimento?",
+    "answer": "O robô de atendimento do iHelp permite automatizar o primeiro contato com o cliente.\n\nPara configurar:\n• Acesse **Configurações → Robô de Atendimento**\n• Crie um novo fluxo e defina o **gatilho**: mensagem do cliente ou ligação recebida\n• Monte o menu interativo com as opções desejadas\n• Configure os horários de funcionamento do robô\n\nO robô pode enviar uma mensagem automática ou iniciar um menu com opções. Quando o robô está ativo, os atendimentos são direcionados conforme as respostas do cliente.",
+    "url": "/docs/sobre-o-sistema/robo-de-atendimento",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "departamentos",
+    "keywords": ["departamento", "departamentos", "setor", "equipe", "criar departamento", "configurar departamento"],
+    "question": "Como criar e configurar departamentos?",
+    "answer": "Os departamentos organizam os atendimentos por área (ex: Vendas, Suporte, Financeiro).\n\nPara criar um departamento:\n• Acesse **Configurações → Departamentos**\n• Clique em **Novo Departamento**\n• Defina o nome\n• Associe os usuários que fazem parte desse departamento\n• Defina se ele será o departamento padrão para novos atendimentos\n\nCada canal pode ter um departamento padrão diferente. Os atendimentos podem ser transferidos entre departamentos durante a conversa.",
+    "url": "/docs/sobre-o-sistema/configuracoes/departamentos",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "usuarios",
+    "keywords": ["usuario", "usuarios", "atendente", "atendentes", "criar usuario", "adicionar usuario", "novo usuario", "permissao", "perfil"],
+    "question": "Como criar e gerenciar usuários?",
+    "answer": "Para adicionar um novo usuário no iHelp:\n\n• Acesse **Configurações → Usuários → Novo Usuário**\n• Preencha nome, e-mail e defina uma senha\n• Escolha o perfil: **Administrador**, **Supervisor** ou **Agente**\n• Associe o usuário a um departamento\n• Salve\n\nO usuário receberá as credenciais e poderá acessar a plataforma. Administradores têm acesso total; Agentes têm acesso limitado ao atendimento.",
+    "url": "/docs/sobre-o-sistema/configuracoes/gerenciamento-de-usuarios",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "carteirizar",
+    "keywords": ["carteirizar", "carteira", "dono", "responsavel", "contato fixo", "meus contatos", "fixar contato"],
+    "question": "Como carteirizar um contato?",
+    "answer": "Carteirizar um contato significa definir um responsável fixo por ele. Após carteirizar, esse contato vai diretamente para a aba **Meus** do atendente responsável, sem passar pela fila de Novos ou pelo robô.\n\nPara carteirizar:\n• Abra o contato na agenda ou durante um atendimento\n• Procure a opção **Carteirizar** ou **Definir responsável**\n• Selecione o usuário responsável\n• Confirme\n\nIsso garante que aquele cliente sempre seja atendido pela mesma pessoa.",
+    "url": "/tutoriais",
+    "section": "Tutoriais Guiados"
+  },
+  {
+    "id": "pipeline-crm",
+    "keywords": ["pipeline", "crm", "oportunidade", "funil", "estagio", "estágio", "kanban", "negocio", "negócio", "criar pipeline"],
+    "question": "Como criar uma Pipeline no CRM?",
+    "answer": "A Pipeline no CRM do iHelp é um quadro visual que organiza suas oportunidades em estágios, do primeiro contato ao fechamento.\n\nPara criar uma Pipeline:\n• Acesse o módulo **CRM**\n• Clique em **Nova Pipeline**\n• Defina o nome da pipeline\n• Crie os estágios (ex: Prospecção, Negociação, Fechado)\n• Adicione cards/oportunidades em cada estágio\n• Vincule contatos e atendimentos aos cards\n\nVocê pode mover os cards entre estágios conforme o avanço do negócio.",
+    "url": "/docs/sobre-o-sistema/crm/como-criar-uma-nova-pipeline",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "atendimento-abas",
+    "keywords": ["atendimento", "atendimentos", "novos", "meus", "aceitar", "encerrar", "transferir", "fila", "aba", "como atender"],
+    "question": "Como funciona o atendimento no iHelp?",
+    "answer": "A tela de atendimento no iHelp tem quatro abas principais:\n\n• **Novos**: atendimentos que chegaram e ainda não foram aceitos por ninguém\n• **Meus**: atendimentos que você aceitou e está responsável\n• **Departamento**: atendimentos do seu departamento\n• **Todas**: todos os atendimentos da empresa (disponível para supervisores/admins)\n\nPara aceitar um atendimento, clique nele na aba Novos e depois em **Aceitar**. Para encerrar, clique em **Encerrar atendimento** e informe o motivo se solicitado. Para transferir, use a opção **Transferir** e escolha o departamento ou usuário.",
+    "url": "/docs/sobre-o-sistema/atendimento",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "atalhos",
+    "keywords": ["atalho", "atalhos", "resposta rapida", "resposta rápida", "mensagem pronta", "barra", "slash"],
+    "question": "Como usar os atalhos de respostas rápidas?",
+    "answer": "Os atalhos permitem enviar mensagens pré-configuradas rapidamente durante o atendimento.\n\nPara usar:\n• Durante uma conversa, digite **/** no campo de mensagem\n• Uma lista de atalhos disponíveis aparecerá\n• Selecione o atalho desejado ou continue digitando para filtrar\n\nPara criar atalhos:\n• Acesse **Configurações → Atalhos**\n• Clique em **Novo Atalho**\n• Defina o texto-gatilho e a mensagem completa\n• Salve\n\nIsso agiliza muito o atendimento para perguntas frequentes!",
+    "url": "/docs/sobre-o-sistema/configuracoes/atalhos",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "encerramento-automatico",
+    "keywords": ["encerramento automatico", "fechar automatico", "encerrar automaticamente", "tempo encerrar", "inatividade"],
+    "question": "Como configurar o encerramento automático de atendimentos?",
+    "answer": "O encerramento automático fecha atendimentos sem resposta após um período definido.\n\nPara configurar:\n• Acesse **Configurações → Geral → Finalizar Atendimento Automaticamente**\n• Defina o tempo de inatividade para encerramento\n• Escolha o escopo: apenas atendimentos da aba **Meus** (já atribuídos) ou todos\n\n💡 A opção de limitar ao **Meus** é útil para não encerrar atendimentos que estão na fila de Novos aguardando um atendente.",
+    "url": "/docs/sobre-o-sistema/configuracoes/configuracoes-gerais",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "listas-personalizadas",
+    "keywords": ["lista", "listas", "lista personalizada", "filtro lista", "criar lista", "agrupar atendimentos"],
+    "question": "Como criar listas personalizadas de atendimentos?",
+    "answer": "As listas personalizadas permitem criar agrupamentos de atendimentos com filtros específicos, além das abas padrão.\n\nPara criar uma lista:\n• Clique em **Adicionar Lista**\n• Dê um nome à lista\n• Clique em **Adicionar Filtro** e escolha os critérios:\n  - Status (abertos ou encerrados)\n  - Departamento\n  - Usuário\n  - Canal\n  - Tag\n• Salve e a lista aparecerá no menu lateral\n\nVocê pode criar várias listas diferentes para organizar o fluxo da equipe por canal, usuário ou situação específica.",
+    "url": "/blog/listas-personalizadas",
+    "section": "Novidades"
+  },
+  {
+    "id": "editar-mensagem",
+    "keywords": ["editar", "editar mensagem", "corrigir mensagem", "alterar mensagem", "mensagem errada", "erro digitacao"],
+    "question": "Como editar uma mensagem já enviada?",
+    "answer": "Agora é possível editar mensagens enviadas diretamente pelo iHelp!\n\nPara editar:\n• Localize a mensagem que deseja corrigir na conversa\n• Clique no ícone de **editar** (lápis) ao lado da mensagem\n• Faça a alteração necessária\n• Confirme\n\nA mensagem será atualizada com o novo conteúdo. Isso é útil para corrigir erros de digitação ou atualizar informações sem precisar reenviar.",
+    "url": "/blog/edicao-de-mensagens",
+    "section": "Novidades"
+  },
+  {
+    "id": "agendar-mensagem",
+    "keywords": ["agendar", "agendamento", "agendar mensagem", "programar mensagem", "enviar depois", "calendario"],
+    "question": "Como agendar o envio de uma mensagem?",
+    "answer": "Você pode agendar mensagens de duas formas no iHelp:\n\n**Pelo calendário:**\n• Acesse o calendário de agendamentos\n• Clique em uma data e depois em **+ Agendar**\n\n**Durante uma conversa:**\n• Clique na **seta para baixo** no campo de mensagem\n• Selecione **Agendar mensagem**\n\nNo formulário você define: o contato, data e horário, número de envio, se deve abrir o atendimento automaticamente ou aguardar resposta, e a mensagem.\n\nVocê pode consultar agendamentos passados para verificar se a mensagem foi enviada.",
+    "url": "/blog/calendario-agendamento-e-robo-ligacao",
+    "section": "Novidades"
+  },
+  {
+    "id": "dashboard-relatorios",
+    "keywords": ["dashboard", "relatorio", "relatório", "grafico", "gráfico", "metricas", "métricas", "tma", "tme", "estatisticas"],
+    "question": "Como acessar relatórios e o dashboard?",
+    "answer": "O iHelp oferece duas formas de acompanhar os dados:\n\n**Dashboard** (tempo real):\n• Acesse a aba **Dashboard**\n• Visualize atendimentos em andamento, por canal e por usuário\n• Métricas disponíveis: TMA (tempo médio de atendimento) e TME (tempo médio de espera)\n\n**Relatórios** (histórico):\n• Acesse a aba **Relatórios**\n• Filtre por período, usuário, departamento, canal ou tag\n• Exporte os dados em planilha\n\nOs relatórios ajudam a identificar gargalos e avaliar a performance da equipe.",
+    "url": "/docs/sobre-o-sistema/relatorios",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "mensagens-nao-entregues",
+    "keywords": ["nao entregue", "não entregue", "mensagem nao chegou", "falha envio", "erro envio", "nao enviou"],
+    "question": "Por que minha mensagem não foi entregue?",
+    "answer": "Há algumas causas comuns para mensagens não entregues:\n\n• **Número inválido ou inexistente**: verifique se o número está correto com o DDD\n• **Cliente bloqueou o número**: nesse caso não há como enviar mensagem\n• **Janela de 24h fechada**: se o cliente não responde há mais de 24h e você não usou um template aprovado, a mensagem não será entregue\n• **Limite de envio atingido**: contas novas na API têm limites iniciais de envio por dia\n\nPara recontatar clientes fora da janela, use sempre um **template aprovado pela Meta**.",
+    "url": "/docs/whatsapp-business-api/funcionamento/mensagens-nao-entregues",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "gupshup-creditos",
+    "keywords": ["gupshup", "credito", "crédito", "saldo", "recarregar", "adicionar credito", "pagar gupshup"],
+    "question": "Como adicionar créditos na Gupshup?",
+    "answer": "Para adicionar créditos na sua conta Gupshup:\n\n• Acesse o painel da Gupshup\n• Vá em **Billing → Add Credits**\n• Escolha o valor desejado\n• Realize o pagamento por cartão de crédito internacional ou boleto\n\nOs créditos são descontados conforme o consumo de mensagens via API. Você pode configurar alertas para ser notificado quando o saldo estiver baixo.",
+    "url": "/docs/whatsapp-business-api/configuracao/gupshup/como-adicionar-creditos",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "filtros-atendimento",
+    "keywords": ["filtro", "filtros", "ordenar", "ordenação", "respondidos", "organizar atendimentos"],
+    "question": "Como usar os filtros de atendimento?",
+    "answer": "O iHelp disponibiliza filtros para organizar melhor a visualização dos atendimentos:\n\n• **Por respondidos**: mostra apenas os atendimentos que já foram respondidos ou os que ainda aguardam resposta\n• **Ordenação**: organiza os atendimentos pelos mais recentes ou mais antigos\n\nPara acessar, procure o ícone de filtro na tela de atendimentos. Esses filtros ajudam a priorizar o que precisa de atenção imediata.",
+    "url": "/blog/encerramento-automatico-e-filtros",
+    "section": "Novidades"
+  },
+  {
+    "id": "historico-conversas",
+    "keywords": ["historico", "histórico", "conversa antiga", "ver historico", "buscar conversa", "mensagens antigas"],
+    "question": "Como acessar o histórico de conversas?",
+    "answer": "Para acessar o histórico de um cliente no iHelp:\n\n• Abra o atendimento ou localize o contato na agenda\n• O histórico completo de conversas ficará visível na tela\n• Você pode rolar para cima para ver mensagens mais antigas\n\nSe precisar de um atendimento específico, use a busca por contato. Todos os atendimentos anteriores ficam registrados no sistema.",
+    "url": "/docs/sobre-o-sistema/atendimento",
+    "section": "Central de Ajuda"
+  },
+  {
+    "id": "download-contatos",
+    "keywords": ["baixar", "baixar contatos", "download", "contatos", "iphone", "android", "exportar", "exportar contatos", "lista contatos", "salvar contatos"],
+    "question": "Como baixar ou exportar minha lista de contatos?",
+    "answer": "O processo de exportar contatos varia de acordo com o celular:\n\n**No iPhone:**\n• Acesse o aplicativo **Contatos** do iOS\n• Toque em **Listas** no canto superior esquerdo\n• Selecione **Todos os contatos**\n• Você pode usar o iCloud para exportar em formato .vcf\n\n**No Android:**\n• Abra o aplicativo **Contatos**\n• Toque no menu (três pontinhos)\n• Selecione **Importar/Exportar → Exportar para arquivo .vcf**\n• Escolha onde salvar o arquivo\n\nApós exportar, o arquivo pode ser importado diretamente na **Agenda de Contatos** do iHelp.",
+    "url": "/docs/duvidas-e-dicas/download-de-lista-de-contatos",
+    "section": "Central de Ajuda"
+  }
+]

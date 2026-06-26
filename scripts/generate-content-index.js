@@ -1,4 +1,4 @@
-// Gera static/content-index.json com título, URL e trecho de todas as páginas
+// Gera static/content-index.json com título, URL, trecho e conteúdo completo
 // de docs/, tutoriais/ e blog/ para uso pelo AITutorialSearch.
 
 const fs = require('fs');
@@ -18,16 +18,27 @@ function parseFrontmatter(content) {
   return obj;
 }
 
-function extractExcerpt(content) {
+function cleanText(content) {
   const body = content.replace(/^---[\s\S]*?---\r?\n/, '');
-  const plain = body
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/[*_`[\]]/g, '')
-    .replace(/\{[^}]+\}/g, '')
-    .replace(/\n+/g, ' ')
+  return body
+    .replace(/<[^>]+>/g, ' ')        // remove tags JSX/HTML
+    .replace(/```[\s\S]*?```/g, ' ') // remove blocos de código
+    .replace(/`[^`]+`/g, ' ')        // remove inline code
+    .replace(/^#{1,6}\s+/gm, '')     // remove # de headings
+    .replace(/[*_[\]]/g, '')         // remove markdown bold/italic/links
+    .replace(/\{[^}]+\}/g, ' ')      // remove expressões JSX
+    .replace(/!?\[.*?\]\(.*?\)/g, '') // remove links markdown
+    .replace(/\n{3,}/g, '\n\n')      // normaliza espaços em branco
     .trim();
-  return plain.slice(0, 250);
+}
+
+function extractExcerpt(content) {
+  return cleanText(content).replace(/\n+/g, ' ').slice(0, 600);
+}
+
+function extractContent(content) {
+  // Texto completo limpo, preservando quebras de linha para leitura estruturada
+  return cleanText(content).slice(0, 8000);
 }
 
 function extractHeadings(content) {
@@ -47,27 +58,25 @@ function scanDocs(dir, base, section, pages) {
     if (entry.isDirectory()) {
       scanDocs(full, base, section, pages);
     } else if (/\.mdx?$/.test(entry.name)) {
-      const content = fs.readFileSync(full, 'utf8');
-      const fm = parseFrontmatter(content);
+      const raw = fs.readFileSync(full, 'utf8');
+      const fm = parseFrontmatter(raw);
       if (!fm.title) continue;
 
       const rel = path.relative(path.join(ROOT, base), full)
         .replace(/\\/g, '/')
         .replace(/\.mdx?$/, '');
 
-      let urlPath;
-      if (fm.slug) {
-        urlPath = `/${base}/${fm.slug}`;
-      } else {
-        urlPath = `/${base}/${rel.replace(/\/index$/, '') || ''}`.replace(/\/$/, '') || `/${base}`;
-      }
+      const urlPath = fm.slug
+        ? `/${base}/${fm.slug}`
+        : `/${base}/${rel.replace(/\/index$/, '') || ''}`.replace(/\/$/, '') || `/${base}`;
 
       pages.push({
         title: fm.title,
         url: urlPath,
         section,
-        excerpt: extractExcerpt(content),
-        headings: extractHeadings(content),
+        excerpt: extractExcerpt(raw),
+        content: extractContent(raw),
+        headings: extractHeadings(raw),
       });
     }
   }
@@ -77,15 +86,14 @@ function scanBlog(dir, pages) {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
     if (!entry.isFile() || !/\.mdx?$/.test(entry.name)) continue;
-    const content = fs.readFileSync(path.join(dir, entry.name), 'utf8');
-    const fm = parseFrontmatter(content);
+    const raw = fs.readFileSync(path.join(dir, entry.name), 'utf8');
+    const fm = parseFrontmatter(raw);
     if (!fm.title) continue;
 
     let urlPath;
     if (fm.slug) {
       urlPath = `/blog/${fm.slug}`;
     } else {
-      // YYYY-MM-DD-slug.md → /blog/YYYY/MM/DD/slug
       const m = entry.name.match(/^(\d{4})-(\d{2})-(\d{2})-(.+)\.mdx?$/);
       urlPath = m ? `/blog/${m[1]}/${m[2]}/${m[3]}/${m[4]}` : `/blog/${entry.name.replace(/\.mdx?$/, '')}`;
     }
@@ -94,8 +102,9 @@ function scanBlog(dir, pages) {
       title: fm.title,
       url: urlPath,
       section: 'Novidades',
-      excerpt: extractExcerpt(content),
-      headings: extractHeadings(content),
+      excerpt: extractExcerpt(raw),
+      content: extractContent(raw),
+      headings: extractHeadings(raw),
     });
   }
 }
@@ -106,4 +115,6 @@ scanDocs(path.join(ROOT, 'tutoriais'), 'tutoriais', 'Tutoriais Guiados', pages);
 scanBlog(path.join(ROOT, 'blog'), pages);
 
 fs.writeFileSync(OUTPUT, JSON.stringify(pages, null, 2));
-console.log(`✅ content-index.json: ${pages.length} páginas indexadas`);
+
+const totalChars = pages.reduce((s, p) => s + p.content.length, 0);
+console.log(`✅ content-index.json: ${pages.length} páginas indexadas (${Math.round(totalChars / 1024)}KB de conteúdo)`);

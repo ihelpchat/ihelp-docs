@@ -9,7 +9,17 @@ type ContentPage = {
   url: string;
   section: string;
   excerpt: string;
+  content: string;
   headings: string[];
+};
+
+type KnowledgeEntry = {
+  id: string;
+  keywords: string[];
+  question: string;
+  answer: string;
+  url: string;
+  section: string;
 };
 
 type SearchResult = {page: ContentPage};
@@ -59,20 +69,75 @@ function wordsMatch(a: string, b: string): boolean {
   return false;
 }
 
+function queryWords(query: string): string[] {
+  return normalize(query).split(/\s+/).filter(w => w.length >= 3).map(stem);
+}
+
 function keywordSearch(query: string, pages: ContentPage[]): SearchResult[] {
-  const words = normalize(query).split(/\s+/).filter(w => w.length >= 3).map(stem);
+  // Filtra stop words para não pontuar palavras como "como", "que", "para"
+  const words = queryWords(query).filter(w => !STOP_WORDS.has(w));
   if (words.length === 0) return [];
   const scored = pages.map(page => {
     let score = 0;
-    const titleStems = normalize(page.title).split(/\s+/).map(stem);
-    const headingStems = (page.headings ?? []).join(' ').split(/\s+/).map(w => stem(normalize(w)));
+    const titleStems = normalize(page.title).split(/\s+/).map(stem).filter(w => !STOP_WORDS.has(w));
+    const headingStems = (page.headings ?? []).join(' ').split(/\s+/)
+      .map(w => stem(normalize(w))).filter(w => !STOP_WORDS.has(w));
     for (const word of words) {
       if (titleStems.some(t => wordsMatch(t, word))) score += 2;
       if (headingStems.some(h => wordsMatch(h, word))) score += 1;
     }
     return {page, score};
   });
-  return scored.filter(r => r.score > 0).sort((a, b) => b.score - a.score).slice(0, 5).map(r => ({page: r.page}));
+  return scored.filter(r => r.score > 0).sort((a, b) => b.score - a.score).slice(0, 3).map(r => ({page: r.page}));
+}
+
+// Palavras genéricas que não pontuam na busca — comuns demais para distinguir tópicos
+const STOP_WORDS = new Set([
+  'com', 'como', 'que', 'nao', 'para', 'uma', 'um', 'uns', 'meu', 'minha', 'seu', 'sua',
+  'ter', 'tem', 'por', 'nos', 'ele', 'ela', 'dos', 'das', 'isso', 'est',
+  'foi', 'ser', 'mas', 'mais', 'qual', 'qua', 'ver', 'get', 'low', 'baixo',
+  'faz', 'faz', 'pod', 'conseg', 'precis',
+]);
+
+function kbSearch(query: string, kb: KnowledgeEntry[]): {entry: KnowledgeEntry; score: number} | null {
+  const words = queryWords(query).filter(w => !STOP_WORDS.has(w));
+  if (words.length === 0) return null;
+
+  // Para ter match, ao menos 2 palavras devem coincidir (ou 1 se query tiver só 1 palavra significativa)
+  const minScore = words.length >= 2 ? 2 : 1;
+
+  let best: KnowledgeEntry | null = null;
+  let bestScore = 0;
+
+  for (const entry of kb) {
+    // Explode cada keyword em palavras individuais para evitar false positives com frases
+    const kbWordSet = new Set<string>();
+    for (const kw of entry.keywords) {
+      for (const w of normalize(kw).split(/\s+/)) {
+        const s = stem(w);
+        if (s.length >= 3 && !STOP_WORDS.has(s)) kbWordSet.add(s);
+      }
+    }
+
+    let score = 0;
+    for (const word of words) {
+      if ([...kbWordSet].some(k => wordsMatch(k, word))) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = entry;
+    }
+  }
+
+  return best && bestScore >= minScore ? {entry: best, score: bestScore} : null;
+}
+
+// Renders inline **bold** markers as <strong>
+function renderInline(text: string): React.ReactNode {
+  const parts = text.split(/\*\*(.+?)\*\*/g);
+  return parts.map((part, i) =>
+    i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+  );
 }
 
 async function callClaude(apiKey: string, messages: ClaudeMsg[], system: string): Promise<string | null> {
@@ -84,7 +149,7 @@ async function callClaude(apiKey: string, messages: ClaudeMsg[], system: string)
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
     },
-    body: JSON.stringify({model: 'claude-haiku-4-5-20251001', max_tokens: 500, system, messages}),
+    body: JSON.stringify({model: 'claude-haiku-4-5-20251001', max_tokens: 900, system, messages}),
   });
   if (!res.ok) return null;
   const data = await res.json();
@@ -95,6 +160,21 @@ let _id = 0;
 const uid = () => String(++_id);
 
 const GREETING = 'Olá! Como posso te ajudar hoje?';
+const SUPPORT_URL = 'https://wa.me/551730422307';
+
+function SupportLink(): JSX.Element {
+  return (
+    <a
+      href={SUPPORT_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={styles.supportLink}
+    >
+      <span className={styles.supportIcon}>💬</span>
+      Falar com o suporte iHelp
+    </a>
+  );
+}
 
 const SECTION_ICON: Record<string, string> = {
   'Central de Ajuda': '💬',
@@ -108,6 +188,7 @@ export default function AITutorialSearch(): JSX.Element {
   const {siteConfig} = useDocusaurusContext();
   const apiKey = (siteConfig.customFields?.claudeApiKey as string) || '';
   const indexUrl = useBaseUrl('/content-index.json');
+  const kbUrl = useBaseUrl('/knowledge-base.json');
 
   const [messages, setMessages] = useState<Message[]>([
     {id: uid(), role: 'bot', kind: 'text', text: GREETING},
@@ -117,6 +198,7 @@ export default function AITutorialSearch(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const pagesRef = useRef<ContentPage[]>([]);
   const pageListRef = useRef('');
+  const kbRef = useRef<KnowledgeEntry[]>([]);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -128,7 +210,12 @@ export default function AITutorialSearch(): JSX.Element {
         pageListRef.current = data.map((p, i) => `${i}. [${p.section}] ${p.title}`).join('\n');
       })
       .catch(() => {});
-  }, [indexUrl]);
+
+    fetch(kbUrl)
+      .then(r => r.json())
+      .then((data: KnowledgeEntry[]) => { kbRef.current = data; })
+      .catch(() => {});
+  }, [indexUrl, kbUrl]);
 
   useEffect(() => {
     const el = messagesContainerRef.current;
@@ -137,7 +224,6 @@ export default function AITutorialSearch(): JSX.Element {
 
   function addMessage(msg: Message) {
     setMessages(prev => {
-      // Remove loading bubble before adding real response
       const filtered = prev.filter(m => !(m.role === 'bot' && (m as BotMessage).kind === 'loading'));
       return [...filtered, msg];
     });
@@ -160,47 +246,89 @@ export default function AITutorialSearch(): JSX.Element {
     addLoading();
 
     const pages = pagesRef.current;
+    const kb = kbRef.current;
 
     try {
+      // ── Caminho 1: Claude API disponível ──────────────────────────────────
       if (apiKey && pages.length > 0) {
-        const system = `Você é um assistente simpático e prestativo da documentação iHelp. Analise a dúvida do usuário e tome UMA decisão:
+        const candidates = keywordSearch(q, pages).slice(0, 5);
+        const contextPages = candidates.length > 0 ? candidates : pages.slice(0, 5).map(p => ({page: p}));
 
-1. Se a dúvida for clara: explique de forma conversacional e humana O QUE o usuário deve fazer — como se você fosse uma pessoa ajudando, com passos práticos se necessário. Indique também as páginas mais relevantes.
-2. Se for vaga ou ambígua: faça UMA pergunta curta e objetiva para qualificar melhor.
+        const contextBlock = contextPages.map(r => {
+          const p = r.page;
+          return `=== [${p.section}] ${p.title} ===\n${p.content}`;
+        }).join('\n\n');
 
-Responda APENAS em JSON, sem texto extra:
-- Para qualificar: {"type":"question","question":"<pergunta curta e amigável em português>"}
-- Com resposta: {"type":"results","indices":[n,n,n],"answer":"<explicação conversacional em 2-5 frases, como uma pessoa falaria, descrevendo o que o usuário deve fazer. Use linguagem simples e amigável. Pode usar bullet points com \\n• se houver passos.>"}
+        const system = `Você é um assistente simpático e prestativo da documentação iHelp. Responda SEMPRE em JSON válido.
 
-Páginas disponíveis:
+Analise a dúvida e tome UMA decisão:
+1. Dúvida clara → leia o conteúdo das páginas abaixo e escreva uma resposta detalhada e conversacional, como uma pessoa explicaria. Use as informações reais do conteúdo. O campo "answer" é OBRIGATÓRIO e nunca pode ser vazio.
+2. Dúvida vaga → faça UMA pergunta curta para qualificar.
+
+Formato obrigatório:
+- Para qualificar: {"type":"question","question":"<pergunta curta em português>"}
+- Com resposta: {"type":"results","indices":[n,n,n],"answer":"<resposta baseada no conteúdo real, 3-8 frases conversacionais, linguagem simples e amigável, use \\n• para listar passos, use **texto** para destacar>"}
+
+IMPORTANTE: Baseie a resposta EXCLUSIVAMENTE no conteúdo das páginas abaixo. Nunca invente.
+
+Conteúdo das páginas:
+
+${contextBlock}
+
+Índice completo (use os números em "indices"):
 ${pageListRef.current}`;
 
         const text = await callClaude(apiKey, newClaudeHistory, system);
 
         if (text) {
-          const parsed = JSON.parse(text);
+          try {
+            const parsed = JSON.parse(text);
 
-          if (parsed.type === 'question') {
-            const assistantContent = parsed.question as string;
-            setClaudeHistory([...newClaudeHistory, {role: 'assistant', content: assistantContent}]);
-            addMessage({id: uid(), role: 'bot', kind: 'text', text: assistantContent});
-            return;
-          }
+            if (parsed.type === 'question') {
+              const question = parsed.question as string;
+              setClaudeHistory([...newClaudeHistory, {role: 'assistant', content: question}]);
+              addMessage({id: uid(), role: 'bot', kind: 'text', text: question});
+              return;
+            }
 
-          if (parsed.type === 'results') {
-            const results: SearchResult[] = (parsed.indices as number[])
-              .filter((i: number) => i >= 0 && i < pages.length)
-              .slice(0, 3)
-              .map((i: number) => ({page: pages[i]}));
-            const answer = parsed.answer || '';
-            setClaudeHistory([...newClaudeHistory, {role: 'assistant', content: answer}]);
-            addMessage({id: uid(), role: 'bot', kind: 'results', answer, results});
-            return;
+            if (parsed.type === 'results') {
+              const results: SearchResult[] = ((parsed.indices as number[]) || [])
+                .filter((i: number) => i >= 0 && i < pages.length)
+                .slice(0, 3)
+                .map((i: number) => ({page: pages[i]}));
+              const answer = parsed.answer || '';
+              setClaudeHistory([...newClaudeHistory, {role: 'assistant', content: answer}]);
+              addMessage({id: uid(), role: 'bot', kind: 'results', answer, results});
+              return;
+            }
+          } catch {
+            // JSON parse falhou — cai para KB
           }
         }
       }
 
-      // Fallback: busca por palavras-chave
+      // ── Caminho 2: Knowledge base pré-gerada ─────────────────────────────
+      const kbMatch = kb.length > 0 ? kbSearch(q, kb) : null;
+
+      if (kbMatch) {
+        const {entry} = kbMatch;
+        // Links: página canônica do KB + busca por palavras-chave
+        const canonicalPage = pages.find(p => p.url === entry.url);
+        const kwResults = keywordSearch(q, pages);
+        const seen = new Set<string>();
+        const results: SearchResult[] = [];
+        if (canonicalPage) { results.push({page: canonicalPage}); seen.add(canonicalPage.url); }
+        for (const r of kwResults) {
+          if (!seen.has(r.page.url)) { results.push(r); seen.add(r.page.url); }
+          if (results.length >= 3) break;
+        }
+
+        setClaudeHistory(newClaudeHistory);
+        addMessage({id: uid(), role: 'bot', kind: 'results', answer: entry.answer, results});
+        return;
+      }
+
+      // ── Caminho 3: Busca por palavras-chave (fallback) ───────────────────
       setClaudeHistory(newClaudeHistory);
       const results = pages.length > 0 ? keywordSearch(q, pages) : [];
       if (results.length === 0) {
@@ -251,10 +379,14 @@ ${pageListRef.current}`;
           }
 
           if (bot.kind === 'text') {
+            const isGreeting = bot.text === GREETING;
             return (
               <div key={bot.id} className={styles.msgRowBot}>
                 <span className={styles.botAvatar}>🤖</span>
-                <div className={styles.bubbleBot}>{bot.text}</div>
+                <div className={styles.bubbleBot}>
+                  {bot.text}
+                  {!isGreeting && <SupportLink />}
+                </div>
               </div>
             );
           }
@@ -267,7 +399,7 @@ ${pageListRef.current}`;
                 {bot.answer && (
                   <div className={styles.resultsAnswer}>
                     {bot.answer.split('\n').map((line, i) => (
-                      <p key={i} className={styles.answerLine}>{line}</p>
+                      <p key={i} className={styles.answerLine}>{renderInline(line)}</p>
                     ))}
                   </div>
                 )}
@@ -288,6 +420,7 @@ ${pageListRef.current}`;
                     </div>
                   </>
                 )}
+                <SupportLink />
               </div>
             </div>
           );

@@ -1,16 +1,16 @@
 /**
- * Tema iHelp — paleta verde da marca.
+ * Tema iHelp — paleta #2d2a4d · #eb5f3e · #ffffff
  * Infima é o framework de CSS do Docusaurus.
  */
 
 :root {
-  --ifm-color-primary: #1ca05c;
-  --ifm-color-primary-dark: #199152;
-  --ifm-color-primary-darker: #18894d;
-  --ifm-color-primary-darkest: #137140;
-  --ifm-color-primary-light: #28b56c;
-  --ifm-color-primary-lighter: #34bd75;
-  --ifm-color-primary-lightest: #59cb8f;
+  --ifm-color-primary: #eb5f3e;
+  --ifm-color-primary-dark: #e74a26;
+  --ifm-color-primary-darker: #dc451f;
+  --ifm-color-primary-darkest: #2d2a4d;
+  --ifm-color-primary-light: #ee7457;
+  --ifm-color-primary-lighter: #f08368;
+  --ifm-color-primary-lightest: #f4a891;
 
   --ifm-code-font-size: 95%;
   --ifm-font-family-base: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -19,13 +19,13 @@
 
 /* Modo escuro */
 [data-theme='dark'] {
-  --ifm-color-primary: #34bd75;
-  --ifm-color-primary-dark: #2bab68;
-  --ifm-color-primary-darker: #28a162;
-  --ifm-color-primary-darkest: #218551;
-  --ifm-color-primary-light: #47c684;
-  --ifm-color-primary-lighter: #53cb8d;
-  --ifm-color-primary-lightest: #76d6a5;
+  --ifm-color-primary: #f08368;
+  --ifm-color-primary-dark: #ee7457;
+  --ifm-color-primary-darker: #eb5f3e;
+  --ifm-color-primary-darkest: #c44122;
+  --ifm-color-primary-light: #f4a891;
+  --ifm-color-primary-lighter: #f6b7a4;
+  --ifm-color-primary-lightest: #f9ccbf;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
 
