@@ -16,7 +16,7 @@ type SearchResult = {page: ContentPage};
 
 type BotMessage =
   | {id: string; role: 'bot'; kind: 'text'; text: string}
-  | {id: string; role: 'bot'; kind: 'results'; explanation: string; results: SearchResult[]}
+  | {id: string; role: 'bot'; kind: 'results'; answer: string; results: SearchResult[]}
   | {id: string; role: 'bot'; kind: 'loading'};
 
 type UserMessage = {id: string; role: 'user'; text: string};
@@ -163,14 +163,14 @@ export default function AITutorialSearch(): JSX.Element {
 
     try {
       if (apiKey && pages.length > 0) {
-        const system = `Você é um assistente simpático da documentação iHelp. Analise a dúvida do usuário e tome UMA decisão:
+        const system = `Você é um assistente simpático e prestativo da documentação iHelp. Analise a dúvida do usuário e tome UMA decisão:
 
-1. Se a dúvida for clara: retorne os melhores resultados da lista.
+1. Se a dúvida for clara: explique de forma conversacional e humana O QUE o usuário deve fazer — como se você fosse uma pessoa ajudando, com passos práticos se necessário. Indique também as páginas mais relevantes.
 2. Se for vaga ou ambígua: faça UMA pergunta curta e objetiva para qualificar melhor.
 
 Responda APENAS em JSON, sem texto extra:
 - Para qualificar: {"type":"question","question":"<pergunta curta e amigável em português>"}
-- Com resultados: {"type":"results","indices":[n,n,n],"explanation":"<frase curta e amigável>"}
+- Com resposta: {"type":"results","indices":[n,n,n],"answer":"<explicação conversacional em 2-5 frases, como uma pessoa falaria, descrevendo o que o usuário deve fazer. Use linguagem simples e amigável. Pode usar bullet points com \\n• se houver passos.>"}
 
 Páginas disponíveis:
 ${pageListRef.current}`;
@@ -192,8 +192,9 @@ ${pageListRef.current}`;
               .filter((i: number) => i >= 0 && i < pages.length)
               .slice(0, 3)
               .map((i: number) => ({page: pages[i]}));
-            setClaudeHistory([...newClaudeHistory, {role: 'assistant', content: parsed.explanation || ''}]);
-            addMessage({id: uid(), role: 'bot', kind: 'results', explanation: parsed.explanation || '', results});
+            const answer = parsed.answer || '';
+            setClaudeHistory([...newClaudeHistory, {role: 'assistant', content: answer}]);
+            addMessage({id: uid(), role: 'bot', kind: 'results', answer, results});
             return;
           }
         }
@@ -205,7 +206,7 @@ ${pageListRef.current}`;
       if (results.length === 0) {
         addMessage({id: uid(), role: 'bot', kind: 'text', text: 'Não encontrei resultados para essa busca. Pode tentar outros termos?'});
       } else {
-        addMessage({id: uid(), role: 'bot', kind: 'results', explanation: 'Encontrei estas páginas que podem te ajudar:', results});
+        addMessage({id: uid(), role: 'bot', kind: 'results', answer: 'Encontrei estas páginas que podem te ajudar:', results});
       }
     } catch {
       addMessage({id: uid(), role: 'bot', kind: 'text', text: 'Ocorreu um erro ao processar sua busca. Tente novamente.'});
@@ -263,19 +264,30 @@ ${pageListRef.current}`;
             <div key={bot.id} className={styles.msgRowBot}>
               <span className={styles.botAvatar}>🤖</span>
               <div className={styles.bubbleBotResults}>
-                {bot.explanation && <p className={styles.resultsExplanation}>💡 {bot.explanation}</p>}
-                <div className={styles.resultCards}>
-                  {bot.results.map((r, i) => (
-                    <Link key={i} to={r.page.url} className={styles.resultCard}>
-                      <span className={styles.resultIcon}>{SECTION_ICON[r.page.section] ?? '📄'}</span>
-                      <span className={styles.resultBody}>
-                        <span className={styles.resultSection}>{r.page.section}</span>
-                        <span className={styles.resultTitle}>{r.page.title}</span>
-                      </span>
-                      <span className={styles.resultCta}>Abrir →</span>
-                    </Link>
-                  ))}
-                </div>
+                {bot.answer && (
+                  <div className={styles.resultsAnswer}>
+                    {bot.answer.split('\n').map((line, i) => (
+                      <p key={i} className={styles.answerLine}>{line}</p>
+                    ))}
+                  </div>
+                )}
+                {bot.results.length > 0 && (
+                  <>
+                    <p className={styles.linksLabel}>📎 Saiba mais:</p>
+                    <div className={styles.resultCards}>
+                      {bot.results.map((r, i) => (
+                        <Link key={i} to={r.page.url} className={styles.resultCard}>
+                          <span className={styles.resultIcon}>{SECTION_ICON[r.page.section] ?? '📄'}</span>
+                          <span className={styles.resultBody}>
+                            <span className={styles.resultSection}>{r.page.section}</span>
+                            <span className={styles.resultTitle}>{r.page.title}</span>
+                          </span>
+                          <span className={styles.resultCta}>Abrir →</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           );

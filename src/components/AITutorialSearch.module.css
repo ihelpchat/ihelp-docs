@@ -123,10 +123,31 @@
   gap: 0.5rem;
 }
 
-.resultsExplanation {
-  font-size: 0.88rem;
-  color: var(--ifm-color-emphasis-700);
-  margin: 0 0 0.25rem;
+.resultsAnswer {
+  background: var(--ifm-color-emphasis-100);
+  border-radius: 0 12px 12px 12px;
+  padding: 0.65rem 0.9rem;
+  margin-bottom: 0.6rem;
+}
+
+.answerLine {
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin: 0;
+  color: var(--ifm-font-color-base);
+}
+
+.answerLine:not(:last-child) {
+  margin-bottom: 0.35rem;
+}
+
+.linksLabel {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ifm-color-emphasis-600);
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .resultCards {
