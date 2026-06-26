@@ -1,5 +1,6 @@
 ---
 title: "Departamentos"
+sidebar_position: 1
 ---
 
 <VideoEmbed url="/videos/departamentos.mp4" />
@@ -16,7 +17,7 @@ title: "Departamentos"
 ### **O que posso configurar em um departamento?**
 
 * **Nome do Departamento:**\
-  Defina o título, como “Vendas”, “Comercial” ou outro.
+  Defina o título, como "Vendas", "Comercial" ou outro.
 * **Canal Vinculado:**\
   Associe um canal de atendimento ao departamento.
 * **Horário de Trabalho:**\
