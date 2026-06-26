@@ -117,7 +117,7 @@ export default function AITutorialSearch(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const pagesRef = useRef<ContentPage[]>([]);
   const pageListRef = useRef('');
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -131,7 +131,8 @@ export default function AITutorialSearch(): JSX.Element {
   }, [indexUrl]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({behavior: 'smooth'});
+    const el = messagesContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   function addMessage(msg: Message) {
@@ -223,7 +224,7 @@ ${pageListRef.current}`;
       </div>
 
       {/* Messages */}
-      <div className={styles.chatMessages}>
+      <div className={styles.chatMessages} ref={messagesContainerRef}>
         {messages.map(msg => {
           if (msg.role === 'user') {
             return (
@@ -279,7 +280,6 @@ ${pageListRef.current}`;
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
 
       {/* Input */}
