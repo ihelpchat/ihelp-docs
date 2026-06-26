@@ -7,6 +7,8 @@ sidebar_position: 2
 
 Configure feriados e eventos pontuais definindo um horário de início e fim. Durante esse período, o cliente que chegar ao departamento escolhido recebe automaticamente uma mensagem avisando que o atendimento está fora do ar.
 
+<iframe src="https://app.tango.us/app/embed/f8054ec3-46a9-4371-9c49-816cea71b977" style={{minHeight: "640px"}} sandbox="allow-scripts allow-top-navigation-by-user-activation allow-popups allow-same-origin" security="restricted" title="Criar Feriados e eventos pontuais" width="100%" height="100%" referrerPolicy="strict-origin-when-cross-origin" frameBorder="0" webkitallowfullscreen="true" mozallowfullscreen="true" allowFullScreen={true}></iframe>
+
 ---
 
 ## Passo a passo
@@ -41,8 +43,3 @@ Configure feriados e eventos pontuais definindo um horário de início e fim. Du
 
 💡 Você pode criar vários eventos para o mesmo departamento, repetindo os passos a partir do **Novo Evento**.
 
----
-
-## Tutorial Guiado
-
-<iframe src="https://app.tango.us/app/embed/f8054ec3-46a9-4371-9c49-816cea71b977" style={{minHeight: "640px"}} sandbox="allow-scripts allow-top-navigation-by-user-activation allow-popups allow-same-origin" security="restricted" title="Criar Feriados e eventos pontuais" width="100%" height="100%" referrerPolicy="strict-origin-when-cross-origin" frameBorder="0" webkitallowfullscreen="true" mozallowfullscreen="true" allowFullScreen={true}></iframe>
