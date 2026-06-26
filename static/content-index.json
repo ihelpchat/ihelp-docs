@@ -1,0 +1,332 @@
+[
+  {
+    "title": "Android",
+    "url": "/docs/duvidas-e-dicas/download-de-lista-de-contatos/android",
+    "section": "Central de Ajuda",
+    "excerpt": "Pelo celular\r \r 1. Abra o app Contatos no seu celular Android.\r 2. Acesse o menu (ícone de três pontos ou linhas, dependendo do modelo).\r 3. Selecione a opção Configurações ou Gerenciar Contatos.\r 4. Escolha Exportar Contatos.\r 5. Salve o arquivo no "
+  },
+  {
+    "title": "Download de lista de contatos",
+    "url": "/docs/duvidas-e-dicas/download-de-lista-de-contatos",
+    "section": "Central de Ajuda",
+    "excerpt": "Aqui você pode exportar sua base de contatos com facilidade.\\\r Baixe a lista completa dos números cadastrados no seu celular e tenha mais controle para organizar, analisar ou importar os dados onde precisar.\r --- Tutorial Guiado Prefere seguir o pass"
+  },
+  {
+    "title": "iPhone",
+    "url": "/docs/duvidas-e-dicas/download-de-lista-de-contatos/iphone",
+    "section": "Central de Ajuda",
+    "excerpt": "Instale o iCloud no desktop\r \r 1. Faça o download e instale o aplicativo iCloud(https://apps.microsoft.com/detail/9pktq5699m62?rtc=1&hl=pt-BR&gl=BR) no seu computador.\r \r    !(/img/help/jDlwsHBsNYQVYmKcMcmA.png)\r \r 2. Inicie sua sessão com a mesma co"
+  },
+  {
+    "title": "Central de Ajuda",
+    "url": "/docs//",
+    "section": "Central de Ajuda",
+    "excerpt": "Central de Ajuda iHelp\r \r Bem-vindo(a) à Central de Ajuda do iHelp. Aqui você encontra tutoriais,\r respostas e vídeos sobre como usar a plataforma no dia a dia.\r \r Por onde começar\r \r - 🚀 Primeiros Passos(/docs/primeiros-passos) — acesse a plataform"
+  },
+  {
+    "title": "Acessando a Plataforma",
+    "url": "/docs/primeiros-passos/acessando-a-plataforma",
+    "section": "Central de Ajuda",
+    "excerpt": "1º Passo - Acessar a plataforma\r \r Utilize as credenciais de acesso que você recebeu via WhatsApp para fazer login na plataforma. O link de acesso é enviado junto com seus dados de login, conforme o exemplo abaixo:\r \r !(/img/help/Qg2XWu60AIr4xHPD9V8W"
+  },
+  {
+    "title": "Principais dúvidas",
+    "url": "/docs/principais-duvidas",
+    "section": "Central de Ajuda",
+    "excerpt": "1. Como transferir um atendimento para outro departamento ou atendente?\r \r Você pode transferir um atendimento ativo clicando no ícone de “Transferir” no painel lateral. Em seguida, selecione o departamento ou atendente desejado.\r \r :::warningAtenção"
+  },
+  {
+    "title": "Contato e Suporte",
+    "url": "/docs/sobre-o-ihelp/contato-e-suporte",
+    "section": "Central de Ajuda",
+    "excerpt": "Horário de Suporte\r \r  Dias: Segunda a Sexta-feira\r  Horário: Das 8h às 18h\r \r Durante este período, nossa equipe estará disponível para resolver dúvidas, dar instruções e fornecer suporte técnico.\r \r \r \r Formas de Contato\r \r WhatsApp\r \r Nosso princi"
+  },
+  {
+    "title": "Agenda de Contatos",
+    "url": "/docs/sobre-o-sistema/agenda-de-contatos",
+    "section": "Central de Ajuda",
+    "excerpt": "O que é a Agenda de Contatos no iHelp?\r \r A Agenda de Contatos é uma funcionalidade que centraliza o gerenciamento dos clientes cadastrados no sistema. Nela, é possível buscar, adicionar, editar, organizar e segmentar contatos, além de agendar mensag"
+  },
+  {
+    "title": "Atendimento",
+    "url": "/docs/sobre-o-sistema/atendimento",
+    "section": "Central de Ajuda",
+    "excerpt": "Como iniciar um atendimento ativo?\r \r !(/img/help/5jxvPIKutoOsueJHUiCG.png)\r \r Para iniciar um atendimento ativo:\r \r 1. Clique em \"Iniciar novo atendimento\".\r 2. Digite o número desejado (não precisa estar salvo).\r 3. Selecione o departamento.\r 4. O "
+  },
+  {
+    "title": "Campanhas na API Oficial",
+    "url": "/docs/sobre-o-sistema/campanhas/campanhas-na-api-oficial",
+    "section": "Central de Ajuda",
+    "excerpt": "FAQ – Como montar uma campanha pela API Oficial\r \r ❓ O que é uma campanha via API Oficial?\r \r A campanha via API Oficial é muito parecida com a campanha comum, porém possui algumas regras específicas — e até mais simples — principalmente em relação à"
+  },
+  {
+    "title": "Como criar uma nova campanha?",
+    "url": "/docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha",
+    "section": "Central de Ajuda",
+    "excerpt": "Preparando a lista de clientes\r \r Antes de iniciar a campanha, crie sua lista de contatos em um arquivo Excel no formato .xlsx.\r \r                   Numero          Saudação          Contato            551730422307          Olá           iHelp Atendi"
+  },
+  {
+    "title": "Campanhas",
+    "url": "/docs/sobre-o-sistema/campanhas",
+    "section": "Central de Ajuda",
+    "excerpt": "Visão Geral\r \r :::warning⚠️ Aviso Importante: Respeite as Diretrizes do WhatsApp\r Para garantir que suas mensagens sejam entregues com segurança e sua conta permaneça ativa, é essencial seguir as Políticas de Uso do WhatsApp. O envio de mensagens em "
+  },
+  {
+    "title": "O que é uma campanha?",
+    "url": "/docs/sobre-o-sistema/campanhas/o-que-e-uma-campanha",
+    "section": "Central de Ajuda",
+    "excerpt": "No iHelp, uma campanha é uma forma eficiente de enviar mensagens em massa para uma lista de contatos de forma personalizada e organizada. Com as campanhas, você pode alcançar muitos clientes simultaneamente, seja para promover produtos, serviços, env"
+  },
+  {
+    "title": "Preparando a planilha de campanhas",
+    "url": "/docs/sobre-o-sistema/campanhas/preparando-a-planilha-de-campanhas",
+    "section": "Central de Ajuda",
+    "excerpt": "📝 Passo a passo: Como montar a planilha para sua campanha no iHelp\r \r 1. Crie uma nova campanha\r     No painel do iHelp, clique em “Nova Campanha”.\r     Dê um nome para sua campanha (ex: “Salão – Corte Junho”).\r 2. Baixe o modelo de planilha\r     As"
+  },
+  {
+    "title": "Alterar senha",
+    "url": "/docs/sobre-o-sistema/configuracoes/alterar-senha",
+    "section": "Central de Ajuda",
+    "excerpt": "Como alterar minha senha?\r \r Acesse seu perfil clicando nos três pontinhos ao lado do seu nome.\r \r Passo a passo:\r \r 1. Clique nos três pontinhos (⋯) ao lado do seu nome\r 2. Selecione \"Meu perfil\"\r 3. Digite sua senha atual\r 4. Digite a nova senha e "
+  },
+  {
+    "title": "Atalhos",
+    "url": "/docs/sobre-o-sistema/configuracoes/atalhos",
+    "section": "Central de Ajuda",
+    "excerpt": "Como criar um novo Atalho\r \r Acesse as configurações:\r \r !(/img/help/glu6YF23zAZVAcd0vn7W.png)\r \r Vá para as configurações do iHelp e busque a opção “Atalhos”.\r \r  \r \r Crie um novo atalho:\r \r !(/img/help/wsbjgpUjp5s1jn2fM1Ml.png)\r \r Defina o texto qu"
+  },
+  {
+    "title": "Canais",
+    "url": "/docs/sobre-o-sistema/configuracoes/canais",
+    "section": "Central de Ajuda",
+    "excerpt": ":::warningAtenção\r Antes de conectar seu número ao iHelp, certifique-se de que todas as configurações estejam corretas, principalmente as mensagens automáticas, o tempo de reabertura e o departamento padrão. Essas definições impactam diretamente na e"
+  },
+  {
+    "title": "Configurações Gerais",
+    "url": "/docs/sobre-o-sistema/configuracoes/configuracoes-gerais",
+    "section": "Central de Ajuda",
+    "excerpt": "O que é a automação \"Adicionar Prioridade\"?\r \r Essa função permite definir um tempo (de 5 a 720 minutos) para que, se uma conversa não for respondida, ela seja destacada no topo da lista com um triângulo vermelho. Também é possível ativar a prioridad"
+  },
+  {
+    "title": "Departamentos",
+    "url": "/docs/sobre-o-sistema/configuracoes/departamentos",
+    "section": "Central de Ajuda",
+    "excerpt": "Como acessar os departamentos no iHelp?\r \r 1. Acesse a tela inicial do iHelp.\r 2. Vá em Configurações.\r 3. Clique na segunda opção: Departamentos.\r 4. Escolha o departamento que deseja editar ou criar.\r \r \r \r O que posso configurar em um departamento"
+  },
+  {
+    "title": "Gerenciamento de Usuários",
+    "url": "/docs/sobre-o-sistema/configuracoes/gerenciamento-de-usuarios",
+    "section": "Central de Ajuda",
+    "excerpt": "🔹 Onde encontro a tela de gerenciamento de usuários no iHelp?\r \r Você pode acessar pela tela inicial do iHelp, clicando em Configurações e, em seguida, na terceira opção: Usuários.\r \r \r \r 🔹 O que posso configurar dentro dos usuários?\r \r Na área de "
+  },
+  {
+    "title": "Configurações",
+    "url": "/docs/sobre-o-sistema/configuracoes",
+    "section": "Central de Ajuda",
+    "excerpt": "- Alterar senha(/docs/sobre-o-sistema/configuracoes/alterar-senha): Este artigo mostra como alterar a senha da sua conta no iHelp de forma rápida e segura, e como recuperar o acesso caso você tenha esquecido a senha atual.\r - Canais(/docs/sobre-o-sis"
+  },
+  {
+    "title": "Como criar uma nova Pipeline",
+    "url": "/docs/sobre-o-sistema/crm/como-criar-uma-nova-pipeline",
+    "section": "Central de Ajuda",
+    "excerpt": "Como criar uma nova Pipeline\r \r Uma Pipeline é um quadro visual que organiza suas oportunidades em estágios — do primeiro contato ao fechamento. Ela centraliza o acompanhamento de cards, metas e automações do seu processo comercial ou operacional.\r \r"
+  },
+  {
+    "title": "CRM iHelp",
+    "url": "/docs/sobre-o-sistema/crm",
+    "section": "Central de Ajuda",
+    "excerpt": "FAQ — CRM iHelp: Pipeline --- 📋 Índice 1. Pipelines — Visão Geral(#1-pipelines--visão-geral) 2. Criar e Configurar uma Pipeline(#2-criar-e-configurar-uma-pipeline) 3. Estágios da Pipeline(#3-estágios-da-pipeline) 4. Automações(#4-automações) 5. Card"
+  },
+  {
+    "title": "Dashboard",
+    "url": "/docs/sobre-o-sistema/dashboard",
+    "section": "Central de Ajuda",
+    "excerpt": "O que é o dashboard?\r \r O dashboard é uma área visual que mostra informações resumidas e atualizadas da conta. Ele fica disponível na lateral do sistema e fornece uma visão geral dos atendimentos, usuários, departamentos e indicadores de desempenho.\r"
+  },
+  {
+    "title": "Relatórios",
+    "url": "/docs/sobre-o-sistema/relatorios",
+    "section": "Central de Ajuda",
+    "excerpt": "Quais tipos de relatórios posso gerar?\r \r Você pode gerar relatórios com filtros por:\r \r  Canal: mostra os canais de atendimento disponíveis.\r  Departamento: separa os atendimentos por setor.\r  Usuário: exibe os atendimentos feitos por cada atendente"
+  },
+  {
+    "title": "Robô de Atendimento",
+    "url": "/docs/sobre-o-sistema/robo-de-atendimento",
+    "section": "Central de Ajuda",
+    "excerpt": "O que é o chatbot de pré-atendimento no iHelp?\r \r O chatbot de pré-atendimento tem como principal função fazer o atendimento inicial, orientando o cliente sobre qual departamento ou atendente ele deseja conversar, antes de ser encaminhado para um ate"
+  },
+  {
+    "title": "Deixarei de ter acesso a algo?",
+    "url": "/docs/whatsapp-business-api/antes-de-migrar/deixarei-de-ter-acesso-a-algo",
+    "section": "Central de Ajuda",
+    "excerpt": "Sim. A API Oficial é uma infraestrutura pensada para operações comerciais em escala — e por isso funciona de forma diferente do aplicativo convencional. Algumas funcionalidades do WhatsApp que estamos acostumados no dia a dia simplesmente não existem"
+  },
+  {
+    "title": "Antes de Migrar",
+    "url": "/docs/whatsapp-business-api/antes-de-migrar",
+    "section": "Central de Ajuda",
+    "excerpt": "Migrar para a API Oficial envolve algumas etapas técnicas e decisões que precisam ser tomadas com antecedência. Conhecer os pré-requisitos, entender o que acontece com o histórico de conversas e saber o que será diferente no dia a dia evita imprevist"
+  },
+  {
+    "title": "Meu histórico de conversas será perdido?",
+    "url": "/docs/whatsapp-business-api/antes-de-migrar/meu-historico-de-conversas-sera-perdido",
+    "section": "Central de Ajuda",
+    "excerpt": "Meu histórico de conversas será perdido?\r \r Sim — e é importante entender exatamente o que isso significa antes da migração para não ter surpresas.\r \r \r \r O que acontece com as conversas\r \r Quando um número migra para a API Oficial, ele deixa de exis"
+  },
+  {
+    "title": "O que preciso para criar uma API?",
+    "url": "/docs/whatsapp-business-api/antes-de-migrar/o-que-preciso-para-criar-uma-api",
+    "section": "Central de Ajuda",
+    "excerpt": "Antes de agendar a sessão de ativação com o iHelpChat, cinco pré-requisitos precisam estar atendidos. Nenhum deles é burocracia desnecessária — cada um existe por uma razão técnica específica.\r \r \r \r 1. Business Manager do Facebook com acesso de admi"
+  },
+  {
+    "title": "Quanto tempo leva para migrar?",
+    "url": "/docs/whatsapp-business-api/antes-de-migrar/quanto-tempo-leva-para-migrar",
+    "section": "Central de Ajuda",
+    "excerpt": "O processo de migração envolve duas etapas principais, e entender cada uma delas ajuda a planejar melhor a transição.\r \r \r \r Sessão de ativação do número\r \r Tudo começa com a sessão de ativação, feita em conjunto com um analista do iHelpChat por aces"
+  },
+  {
+    "title": "Como adicionar créditos",
+    "url": "/docs/whatsapp-business-api/configuracao/gupshup/como-adicionar-creditos",
+    "section": "Central de Ajuda",
+    "excerpt": "Como Adicionar Créditos na GupShup Gerencie os créditos da sua conta GupShup de forma simples e sem surpresas. Veja como adicionar saldo, escolher a melhor forma de pagamento e configurar alertas para nunca ficar sem crédito. --- Passo 1 — Acesse Min"
+  },
+  {
+    "title": "Como criar conta",
+    "url": "/docs/whatsapp-business-api/configuracao/gupshup/como-criar-conta",
+    "section": "Central de Ajuda",
+    "excerpt": "--- Tutorial Guiado Prefere seguir o passo a passo interativo? Acesse a sessão de tutoriais guiados.(https://ihelpchat.github.io/ihelp-docs/tutoriais)"
+  },
+  {
+    "title": "Gupshup",
+    "url": "/docs/whatsapp-business-api/configuracao/gupshup",
+    "section": "Central de Ajuda",
+    "excerpt": "- Como criar conta(/docs/whatsapp-business-api/configuracao/gupshup/como-criar-conta)\r - Como adicionar créditos(/docs/whatsapp-business-api/configuracao/gupshup/como-adicionar-creditos)\r - Relatórios de consumo(/docs/whatsapp-business-api/configurac"
+  },
+  {
+    "title": "Relatórios de consumo",
+    "url": "/docs/whatsapp-business-api/configuracao/gupshup/relatorios-de-consumo",
+    "section": "Central de Ajuda",
+    "excerpt": "--- Tutorial Guiado Prefere seguir o passo a passo interativo? Acesse a sessão de tutoriais guiados.(https://ihelpchat.github.io/ihelp-docs/tutoriais)"
+  },
+  {
+    "title": "Configuração",
+    "url": "/docs/whatsapp-business-api/configuracao",
+    "section": "Central de Ajuda",
+    "excerpt": "Alguns processos técnicos acontecem nos bastidores da API Oficial e impactam diretamente o funcionamento e os limites da operação. Entender o que é a verificação da BM, como ela afeta o volume de envios e como a conta fica registrada junto à Meta aju"
+  },
+  {
+    "title": "O que é verificação da BM e preciso fazer?",
+    "url": "/docs/whatsapp-business-api/configuracao/o-que-e-verificacao-da-bm-e-preciso-fazer",
+    "section": "Central de Ajuda",
+    "excerpt": "A BM — Business Manager, ou Gerenciador de Negócios da Meta — é a conta corporativa do Facebook que vincula sua empresa ao ecossistema da Meta. É por ela que o número WABA fica registrado, gerenciado e associado à sua empresa de forma oficial.\r \r Ter"
+  },
+  {
+    "title": "Posso usar a API e continuar com o WhatsApp normal em outro número?",
+    "url": "/docs/whatsapp-business-api/configuracao/posso-usar-a-api-e-continuar-com-o-whatsapp-normal-em-outro-numero",
+    "section": "Central de Ajuda",
+    "excerpt": "Não. A API Oficial não funciona no aplicativo nativo do WhatsApp — nem no WhatsApp Business, nem no WhatsApp Messenger, nem pelo WhatsApp Web. Após a migração, o número opera exclusivamente pela plataforma iHelpChat e não pode ser acessado por nenhum"
+  },
+  {
+    "title": "Downgrade do Número",
+    "url": "/docs/whatsapp-business-api/downgrade-do-numero",
+    "section": "Central de Ajuda",
+    "excerpt": "Como fazer o downgrade do número da API para o WhatsApp convencional\r \r Se a empresa decidir deixar de usar a API Oficial e voltar a operar o número pelo aplicativo WhatsApp Business ou Messenger, esse processo é chamado de downgrade.\r \r :::dangerCui"
+  },
+  {
+    "title": "Funcionamento",
+    "url": "/docs/whatsapp-business-api/funcionamento",
+    "section": "Central de Ajuda",
+    "excerpt": "Entender como a API funciona na prática é o que separa uma operação eficiente de uma cheia de surpresas. Templates, janelas de atendimento e categorias de mensagem seguem uma lógica própria — diferente do WhatsApp convencional — e dominá-la é essenci"
+  },
+  {
+    "title": "Mensagens não entregues",
+    "url": "/docs/whatsapp-business-api/funcionamento/mensagens-nao-entregues",
+    "section": "Central de Ajuda",
+    "excerpt": "❓ FAQ — Por que minha mensagem não foi entregue mesmo estando tudo certo? > Contexto: Esta situação ocorre na API Oficial do WhatsApp (Cloud API / WhatsApp Business Platform). O número está correto, o template foi aprovado, o envio foi realizado — ma"
+  },
+  {
+    "title": "O que é a janela de 24 horas?",
+    "url": "/docs/whatsapp-business-api/funcionamento/o-que-e-a-janela-de-24-horas",
+    "section": "Central de Ajuda",
+    "excerpt": "Quem migra para a API Oficial precisa entender uma mudança fundamental na forma de se comunicar com os clientes: você não pode mais mandar uma mensagem para alguém a qualquer hora, do jeito que faria no aplicativo convencional. Existe uma lógica de j"
+  },
+  {
+    "title": "O que são templates e para que servem?",
+    "url": "/docs/whatsapp-business-api/funcionamento/o-que-sao-templates-e-para-que-servem",
+    "section": "Central de Ajuda",
+    "excerpt": "Se a janela de 24 horas é a regra que define quando você pode falar com um cliente, o template é a ferramenta que permite iniciar essa conversa quando a janela está fechada.\r \r \r \r A lógica por trás dos templates\r \r No WhatsApp convencional, você pod"
+  },
+  {
+    "title": "WhatsApp Business API",
+    "url": "/docs/whatsapp-business-api",
+    "section": "Central de Ajuda",
+    "excerpt": "A API Oficial do WhatsApp é a solução da Meta para empresas que precisam de comunicação profissional em escala — estável, sem depender de celular, acessível por toda a equipe e com menor risco de banimento. Para ativá-la, é preciso ter uma Business M"
+  },
+  {
+    "title": "O Básico",
+    "url": "/docs/whatsapp-business-api/o-basico",
+    "section": "Central de Ajuda",
+    "excerpt": "A API Oficial do WhatsApp é uma mudança de estrutura, não apenas de ferramenta. Antes de entrar nos detalhes de cada funcionalidade, custo e processo, vale entender o que ela é, o que resolve e por que empresas de todos os tamanhos estão migrando par"
+  },
+  {
+    "title": "O que é a API Oficial do WhatsApp?",
+    "url": "/docs/whatsapp-business-api/o-basico/o-que-e-a-api-oficial-do-whatsapp",
+    "section": "Central de Ajuda",
+    "excerpt": "Imagine que o seu WhatsApp Business atual é como um funcionário que trabalha sozinho, no celular, e some do mapa toda vez que a bateria acaba, o Wi-Fi cai ou alguém esquece o aparelho em casa. Toda a operação da sua empresa depende de um único dispos"
+  },
+  {
+    "title": "Quais os benefícios?",
+    "url": "/docs/whatsapp-business-api/o-basico/quais-os-beneficios",
+    "section": "Central de Ajuda",
+    "excerpt": "A API Oficial não é apenas uma versão \"melhorada\" do WhatsApp Business — é uma mudança de patamar. Cada benefício abaixo resolve um problema real que empresas enfrentam ao tentar escalar o atendimento pelo aplicativo convencional.\r \r \r \r Estabilidade"
+  },
+  {
+    "title": "Quanto custa?",
+    "url": "/docs/whatsapp-business-api/quanto-custa",
+    "section": "Central de Ajuda",
+    "excerpt": "Essa é uma das perguntas mais importantes antes de migrar — e também uma das que mais gera confusão. O custo da API Oficial não é uma cobrança única: ele é composto por duas camadas independentes, cobradas por entidades diferentes. Entender cada uma "
+  },
+  {
+    "title": "Tutoriais Guiados",
+    "url": "/tutoriais/index",
+    "section": "Tutoriais Guiados",
+    "excerpt": "Tutoriais Guiados\r \r  \r \r \r iHelp\r \r  \r \r CRM\r \r  \r \r API Oficial (Meta)\r \r Gupshup"
+  },
+  {
+    "title": "Calendário de agendamento e robô por ligação",
+    "url": "/blog/calendario-agendamento-e-robo-ligacao",
+    "section": "Novidades",
+    "excerpt": "Calendário de agendamento de mensagens\r \r O calendário de agendamentos do iHelp é uma ferramenta visual e interativa que permite visualizar, organizar e gerenciar todas as mensagens programadas para envio via WhatsApp.\r \r \r \r  \r \r Onde encontro o cal"
+  },
+  {
+    "title": "Citações de Status e Catálogo no WhatsApp",
+    "url": "/blog/citacoes-status-catalogo",
+    "section": "Novidades",
+    "excerpt": "Citações de Status e Catalogo no WhatsApp !(/img/help/LRXUNOy5iyHOgAk3aI6G.png) !(/img/help/czyIkU6fBA1Mlg6UfAFZ.png) Agora o iHelp exibe citações de Status e Catálogo feitas pelo cliente final no WhatsApp. Antes, quando o cliente mencionava um statu"
+  },
+  {
+    "title": "Edição de mensagens",
+    "url": "/blog/edicao-de-mensagens",
+    "section": "Novidades",
+    "excerpt": "Edição de mensagens no iHelp   Agora é possível editar mensagens enviadas diretamente pela plataforma iHelp! Antes, uma vez enviada, a mensagem não podia ser alterada. Com a nova atualização, você pode corrigir erros de digitação, ajustar informações"
+  },
+  {
+    "title": "Listas personalizadas",
+    "url": "/blog/listas-personalizadas",
+    "section": "Novidades",
+    "excerpt": "Listas Personalizadas   O que são listas personalizadas? As listas personalizadas são uma nova funcionalidade que permite criar agrupamentos personalizados de atendimentos no iHelp, além das listas padrão como Meus, Departamento e Novos. ➕ Como criar"
+  },
+  {
+    "title": "Encerramento automático e novos filtros",
+    "url": "/blog/encerramento-automatico-e-filtros",
+    "section": "Novidades",
+    "excerpt": "Encerramento automático pela aba \"Meus\"\r \r !(/img/help/f38mHVPtRejfPf5R3kAO.png)\r \r \r \r  A funcionalidade de encerramento automático foi atualizada! Agora é possível configurar para que apenas os atendimentos da aba “Meus” sejam encerrados automatica"
+  },
+  {
+    "title": "Nova tela de alteração de senha",
+    "url": "/blog/nova-tela-de-senha",
+    "section": "Novidades",
+    "excerpt": "Nova tela de Alteração de senha\r \r  \r \r Como alterar minha senha?\r \r Acesse seu perfil clicando nos três pontinhos ao lado do seu nome.\r \r \r \r Passo a passo:\r \r 1. Clique nos três pontinhos (⋯) ao lado do seu nome\r 2. Selecione \"Meu perfil\"\r 3. Digit"
+  }
+]

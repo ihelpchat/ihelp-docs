@@ -1,87 +1,85 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import useBaseUrl from '@docusaurus/useBaseUrl';
+import Link from '@docusaurus/Link';
 import styles from './AITutorialSearch.module.css';
 
-type Tutorial = {
+type ContentPage = {
   title: string;
   url: string;
-  keywords: string[];
+  section: string;
+  excerpt: string;
 };
 
-export const TUTORIALS: Tutorial[] = [
-  {
-    title: 'Como conectar um canal via QRCode',
-    url: 'https://app.tango.us/app/workflow/Como-conectar-um-canal-via-QRCode-16971f80d1924934b5f9b8029d987770',
-    keywords: ['canal', 'qrcode', 'qr', 'conectar', 'whatsapp', 'codigo', 'escanear'],
-  },
-  {
-    title: 'Adicionar Motivo de encerramento',
-    url: 'https://app.tango.us/app/workflow/Adicionar-Motivo-de-encerramento-d851dc72e94b47138d9716aed1f85a66',
-    keywords: ['motivo', 'encerramento', 'fechar', 'finalizar', 'atendimento', 'encerrar', 'razao'],
-  },
-  {
-    title: 'Criar template para API Oficial',
-    url: 'https://app.tango.us/app/workflow/Criar-template-para-API-Oficial-7206c279d8c54f2da8be910096dc1fbb',
-    keywords: ['template', 'api', 'oficial', 'mensagem', 'modelo', 'criar', 'business', 'waba'],
-  },
-];
+type SearchResult = {
+  page: ContentPage;
+};
 
 function normalize(text: string): string {
   return text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
-function findBestMatch(query: string): {tutorial: Tutorial; score: number} {
-  const words = normalize(query).split(/\s+/).filter(w => w.length >= 3);
-  let best = TUTORIALS[0];
-  let bestScore = 0;
-
-  for (const tutorial of TUTORIALS) {
+function keywordSearch(query: string, pages: ContentPage[]): SearchResult[] {
+  const words = normalize(query).split(/\s+/).filter(w => w.length >= 2);
+  const scored = pages.map(page => {
     let score = 0;
-    const titleWords = normalize(tutorial.title).split(/\s+/);
+    const titleNorm = normalize(page.title);
+    const excerptNorm = normalize(page.excerpt);
     for (const word of words) {
-      for (const kw of tutorial.keywords) {
-        if (normalize(kw).includes(word) || word.includes(normalize(kw))) score += 2;
-      }
-      for (const tw of titleWords) {
-        if (tw.includes(word) || word.includes(tw)) score += 1;
-      }
+      if (titleNorm.includes(word)) score += 4;
+      if (excerptNorm.includes(word)) score += 1;
     }
-    if (score > bestScore) {
-      bestScore = score;
-      best = tutorial;
-    }
-  }
-
-  return {tutorial: best, score: bestScore};
+    return {page, score};
+  });
+  return scored
+    .filter(r => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
+    .map(r => ({page: r.page}));
 }
 
-type Result = {
-  tutorial: Tutorial;
-  explanation: string;
+const SECTION_ICON: Record<string, string> = {
+  'Central de Ajuda': '💬',
+  'Tutoriais Guiados': '🎓',
+  'Novidades': '✨',
 };
 
 export default function AITutorialSearch(): JSX.Element {
   const {siteConfig} = useDocusaurusContext();
   const apiKey = (siteConfig.customFields?.claudeApiKey as string) || '';
+  const indexUrl = useBaseUrl('/content-index.json');
 
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<Result | null>(null);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [explanation, setExplanation] = useState('');
   const [error, setError] = useState('');
+  const pagesRef = useRef<ContentPage[]>([]);
+
+  useEffect(() => {
+    fetch(indexUrl)
+      .then(r => r.json())
+      .then((data: ContentPage[]) => {
+        pagesRef.current = data;
+      })
+      .catch(() => {});
+  }, [indexUrl]);
 
   async function search() {
     const q = query.trim();
     if (!q) return;
     setLoading(true);
-    setResult(null);
+    setResults([]);
+    setExplanation('');
     setError('');
 
-    try {
-      if (apiKey) {
-        const systemPrompt = `Você é um assistente da documentação iHelp. Com base na dúvida do usuário, indique o tutorial mais adequado da lista abaixo e explique em 1-2 frases curtas por que ele é o mais indicado. Responda SOMENTE em JSON, sem texto extra: {"index": <índice do tutorial, começando em 0>, "explanation": "<explicação curta em português>"}
+    const pages = pagesRef.current;
 
-Tutoriais disponíveis:
-${TUTORIALS.map((t, i) => `${i}. ${t.title}`).join('\n')}`;
+    try {
+      if (apiKey && pages.length > 0) {
+        const pageList = pages
+          .map((p, i) => `${i}. [${p.section}] ${p.title}`)
+          .join('\n');
 
         const res = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -93,8 +91,11 @@ ${TUTORIALS.map((t, i) => `${i}. ${t.title}`).join('\n')}`;
           },
           body: JSON.stringify({
             model: 'claude-haiku-4-5-20251001',
-            max_tokens: 200,
-            system: systemPrompt,
+            max_tokens: 400,
+            system: `Você é um assistente da documentação iHelp. Com base na dúvida do usuário, selecione os índices dos até 3 melhores resultados da lista abaixo e forneça uma explicação curta de 1 frase. Responda APENAS em JSON sem texto extra: {"indices": [n, n, n], "explanation": "<frase curta em português>"}
+
+Páginas disponíveis:
+${pageList}`,
             messages: [{role: 'user', content: q}],
           }),
         });
@@ -102,19 +103,24 @@ ${TUTORIALS.map((t, i) => `${i}. ${t.title}`).join('\n')}`;
         if (res.ok) {
           const data = await res.json();
           const parsed = JSON.parse(data.content[0].text);
-          const tutorial = TUTORIALS[parsed.index] ?? TUTORIALS[0];
-          setResult({tutorial, explanation: parsed.explanation});
+          const matched: SearchResult[] = (parsed.indices as number[])
+            .filter((i: number) => i >= 0 && i < pages.length)
+            .slice(0, 3)
+            .map((i: number) => ({page: pages[i]}));
+          setResults(matched);
+          setExplanation(parsed.explanation || '');
           return;
         }
       }
 
-      // Fallback: keyword matching
-      await new Promise(r => setTimeout(r, 500));
-      const {tutorial} = findBestMatch(q);
-      setResult({
-        tutorial,
-        explanation: `Com base na sua dúvida, este é o tutorial mais indicado para você.`,
-      });
+      // Fallback: busca por palavras-chave
+      await new Promise(r => setTimeout(r, 250));
+      const matched = pages.length > 0 ? keywordSearch(q, pages) : [];
+      if (matched.length === 0) {
+        setError('Nenhum resultado encontrado. Tente outros termos.');
+      } else {
+        setResults(matched);
+      }
     } catch {
       setError('Não foi possível processar sua busca. Tente novamente.');
     } finally {
@@ -143,19 +149,22 @@ ${TUTORIALS.map((t, i) => `${i}. ${t.title}`).join('\n')}`;
         </button>
       </div>
 
-      {result && (
-        <div className={styles.result}>
-          <p className={styles.explanation}>💡 {result.explanation}</p>
-          <a
-            href={result.tutorial.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.card}
-          >
-            <span className={styles.cardIcon}>🎓</span>
-            <span className={styles.cardTitle}>{result.tutorial.title}</span>
-            <span className={styles.cardCta}>Abrir tutorial →</span>
-          </a>
+      {explanation && <p className={styles.explanation}>💡 {explanation}</p>}
+
+      {results.length > 0 && (
+        <div className={styles.results}>
+          {results.map((r, i) => (
+            <Link key={i} to={r.page.url} className={styles.card}>
+              <span className={styles.cardIcon}>
+                {SECTION_ICON[r.page.section] ?? '📄'}
+              </span>
+              <span className={styles.cardBody}>
+                <span className={styles.cardSection}>{r.page.section}</span>
+                <span className={styles.cardTitle}>{r.page.title}</span>
+              </span>
+              <span className={styles.cardCta}>Abrir →</span>
+            </Link>
+          ))}
         </div>
       )}
 
