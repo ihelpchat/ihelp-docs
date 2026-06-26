@@ -66,6 +66,82 @@
   to {transform: rotate(360deg);}
 }
 
+.buttonSecondary {
+  padding: 1rem 1.25rem;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  background: transparent;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.buttonSecondary:hover {
+  opacity: 0.8;
+}
+
+.clarifyBlock {
+  margin-top: 1rem;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+}
+
+.clarifyQuestion {
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 500;
+  margin: 0 0 0.75rem;
+}
+
+.clarifyRow {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.clarifyInput {
+  flex: 1;
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.975rem;
+  outline: none;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--ifm-font-color-base);
+}
+
+.clarifyInput::placeholder {
+  color: var(--ifm-color-emphasis-500);
+}
+
+.clarifyButton {
+  padding: 0.7rem 1.1rem;
+  border-radius: 8px;
+  border: none;
+  background: #fff;
+  color: var(--ifm-color-primary-darkest);
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+  display: flex;
+  align-items: center;
+}
+
+.clarifyButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.clarifyButton:not(:disabled):hover {
+  opacity: 0.9;
+}
+
 .explanation {
   color: rgba(255, 255, 255, 0.92);
   font-size: 0.95rem;
