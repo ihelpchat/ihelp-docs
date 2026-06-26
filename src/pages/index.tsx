@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
-import Heading from '@theme/Heading';
+import SearchBar from '@theme/SearchBar';
 
 import styles from './index.module.css';
 
@@ -55,10 +55,13 @@ function HomeHeader() {
   return (
     <header className={clsx('hero', styles.heroBanner)}>
       <div className="container">
-        <Heading as="h1" className={styles.heroTitle}>
-          {siteConfig.title}
-        </Heading>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
+        <div className={styles.heroSearch}>
+          <SearchBar />
+        </div>
+        <p className={styles.heroHint}>
+          Pesquise em Central de Ajuda, Tutoriais Guiados e Novidades
+        </p>
       </div>
     </header>
   );
@@ -73,9 +76,7 @@ function Cards() {
             <div key={card.title} className="col col--3">
               <Link to={card.to} className={styles.card}>
                 <span className={styles.cardEmoji}>{card.emoji}</span>
-                <Heading as="h2" className={styles.cardTitle}>
-                  {card.title}
-                </Heading>
+                <span className={styles.cardTitle}>{card.title}</span>
                 <p className={styles.cardDescription}>{card.description}</p>
                 <span className={styles.cardCta}>{card.cta} →</span>
               </Link>
