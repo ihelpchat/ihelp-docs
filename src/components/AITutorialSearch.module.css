@@ -1,7 +1,7 @@
 .wrapper {
   background: linear-gradient(135deg, var(--ifm-color-primary-darkest) 0%, var(--ifm-color-primary) 100%);
-  border-radius: 14px;
-  padding: 1.5rem;
+  border-radius: 16px;
+  padding: 2.25rem 2rem;
   margin-bottom: 2rem;
 }
 
@@ -12,10 +12,10 @@
 
 .input {
   flex: 1;
-  padding: 0.7rem 1rem;
-  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  border-radius: 10px;
   border: none;
-  font-size: 1rem;
+  font-size: 1.05rem;
   outline: none;
   background: rgba(255, 255, 255, 0.95);
   color: var(--ifm-font-color-base);
@@ -26,20 +26,20 @@
 }
 
 .button {
-  padding: 0.7rem 1.25rem;
-  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  border-radius: 10px;
   border: none;
   background: #fff;
   color: var(--ifm-color-primary-darkest);
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 1rem;
   cursor: pointer;
   white-space: nowrap;
   transition: opacity 0.15s ease;
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  min-width: 150px;
+  min-width: 160px;
   justify-content: center;
 }
 
