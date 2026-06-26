@@ -20,15 +20,51 @@ function normalize(text: string): string {
   return text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
+// Stemmer simples para português: normaliza plurais e conjugações comuns
+function stem(word: string): string {
+  if (word.length <= 3) return word;
+  if (word.endsWith('coes')) return word.slice(0, -4) + 'c';   // configurações→configurac
+  if (word.endsWith('oes')) return word.slice(0, -3);           // operações→operas
+  if (word.endsWith('ens')) return word.slice(0, -3) + 'em';   // mensagens→mensagem
+  if (word.endsWith('ais')) return word.slice(0, -3) + 'al';   // canais→canal
+  if (word.endsWith('eis')) return word.slice(0, -3) + 'el';   // papéis→papel
+  if (word.endsWith('ando')) return word.slice(0, -4);          // conectando→conect
+  if (word.endsWith('endo')) return word.slice(0, -4);
+  if (word.endsWith('indo')) return word.slice(0, -4);
+  if (word.endsWith('mente')) return word.slice(0, -5);
+  if (word.endsWith('ar') && word.length > 4) return word.slice(0, -2); // conectar→conect
+  if (word.endsWith('er') && word.length > 4) return word.slice(0, -2);
+  if (word.endsWith('ir') && word.length > 4) return word.slice(0, -2);
+  if (word.endsWith('os') && word.length > 4) return word.slice(0, -1); // arquivos→arquivo
+  if (word.endsWith('as') && word.length > 4) return word.slice(0, -1);
+  if (word.endsWith('es') && word.length > 4) return word.slice(0, -2); // departamentos→departament
+  if (word.endsWith('s') && word.length > 4) return word.slice(0, -1);
+  return word;
+}
+
+function wordsMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  const minLen = Math.min(a.length, b.length);
+  // prefixo comum de ao menos 4 chars cobre raízes distintas suficientemente
+  if (minLen >= 4 && (a.startsWith(b) || b.startsWith(a))) return true;
+  return false;
+}
+
 function keywordSearch(query: string, pages: ContentPage[]): SearchResult[] {
-  const words = normalize(query).split(/\s+/).filter(w => w.length >= 2);
+  const words = normalize(query).split(/\s+/).filter(w => w.length >= 3).map(stem);
+  if (words.length === 0) return [];
+
   const scored = pages.map(page => {
     let score = 0;
-    const titleNorm = normalize(page.title);
-    const headingsNorm = (page.headings ?? []).map(normalize).join(' ');
+    const titleStems = normalize(page.title).split(/\s+/).map(stem);
+    const headingStems = (page.headings ?? [])
+      .join(' ')
+      .split(/\s+/)
+      .map(w => stem(normalize(w)));
+
     for (const word of words) {
-      if (titleNorm.includes(word)) score += 2;
-      if (headingsNorm.includes(word)) score += 1;
+      if (titleStems.some(t => wordsMatch(t, word))) score += 2;
+      if (headingStems.some(h => wordsMatch(h, word))) score += 1;
     }
     return {page, score};
   });
