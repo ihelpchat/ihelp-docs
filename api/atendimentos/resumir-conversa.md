@@ -21,4 +21,14 @@ Body:
 }
 ```
 
+Response example:
+```json
+{
+  "dados": {
+    "summary": "Durante o atendimento, o cliente relatou uma dúvida sobre o funcionamento do sistema. O atendente explicou o comportamento esperado, esclareceu o ponto levantado e se comprometeu a verificar os ajustes necessários. Ao final, foi oferecido suporte adicional para que o cliente concluísse a configuração de acordo com as preferências dele.",
+    "mood": "3"
+  }
+}
+```
+
 ----
