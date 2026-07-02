@@ -1,15 +1,24 @@
 .heroBanner {
   padding: 2.5rem 0 2rem;
   text-align: center;
-  background: linear-gradient(135deg, var(--ifm-color-primary-darkest) 0%, var(--ifm-color-primary) 100%);
+  background-color: var(--ifm-color-primary);
+  background-image: var(--grain);
+  background-blend-mode: overlay;
   color: #fff;
+}
+
+/* Dark mode: mantém o gradiente original */
+[data-theme='dark'] .heroBanner {
+  background-image: var(--grain), linear-gradient(135deg, var(--ifm-color-primary-darkest) 0%, var(--ifm-color-primary) 100%);
+  background-blend-mode: overlay, normal;
 }
 
 .heroSubtitle {
   font-size: 1.3rem;
   opacity: 0.95;
   margin: 0;
-  font-weight: 500;
+  font-weight: 600;
+  font-family: 'Sora', var(--ifm-font-family-base);
 }
 
 .searchSection {

@@ -1,7 +1,9 @@
 /**
- * Tema iHelp — paleta #2d2a4d · #eb5f3e · #ffffff
+ * Tema iHelp - paleta #2d2a4d · #eb5f3e · #ffffff
  * Infima é o framework de CSS do Docusaurus.
  */
+
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@600;700&display=swap');
 
 :root {
   --ifm-color-primary: #eb5f3e;
@@ -15,6 +17,9 @@
   --ifm-code-font-size: 95%;
   --ifm-font-family-base: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+
+  /* Textura granulada dos banners. baseFrequency = tamanho do grão; slope + opacity = intensidade */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='1.5' intercept='-0.25'/%3E%3CfeFuncG type='linear' slope='1.5' intercept='-0.25'/%3E%3CfeFuncB type='linear' slope='1.5' intercept='-0.25'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.5'/%3E%3C/svg%3E");
 }
 
 /* Modo escuro */

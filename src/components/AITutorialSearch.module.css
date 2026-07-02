@@ -14,11 +14,19 @@
 /* ── Header ───────────────────────────────────────────────────────────────── */
 
 .chatHeader {
-  background: linear-gradient(135deg, var(--ifm-color-primary-darkest) 0%, var(--ifm-color-primary) 100%);
+  background-color: #1b2a52;
+  background-image: var(--grain);
+  background-blend-mode: overlay;
   padding: 0.9rem 1.25rem;
   display: flex;
   align-items: center;
   gap: 0.6rem;
+}
+
+/* Dark mode: mantém o gradiente original */
+[data-theme='dark'] .chatHeader {
+  background-image: var(--grain), linear-gradient(135deg, var(--ifm-color-primary-darkest) 0%, var(--ifm-color-primary) 100%);
+  background-blend-mode: overlay, normal;
 }
 
 .chatHeaderIcon {
