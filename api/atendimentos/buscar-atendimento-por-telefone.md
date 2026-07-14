@@ -13,6 +13,10 @@ ex:
 ```
 https://apiv3.ihelpchat.com/api/v2/customers/search?searchText=17936189969&quantidade=20&skip=0
 ```
+:::warning[ID para enviar mensagem]
+O ID do atendimento usado para enviar mensagem é o `idRef` (ex: `69ea67a0ab43821f9dcb3976`), **não** o `id` curto numérico (ex: `20922413`).
+:::
+
 response:
 
 ```json
