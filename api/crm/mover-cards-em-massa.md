@@ -1,0 +1,98 @@
+---
+title: "Mover em massa"
+sidebar_position: 4
+---
+
+Move **vários cards de uma vez** para a mesma etapa de destino.
+
+### `POST`
+```http
+https://apiv3.ihelpchat.com/api/v2/crm/card/bulk/move
+```
+
+**Body (JSON):**
+```json
+{
+  "cardIds": [8821, 8822, 8823],
+  "targetStageId": 102,
+  "force": false
+}
+```
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `cardIds` | int[] | sim | De 1 a 2000 IDs. Duplicados são ignorados. |
+| `targetStageId` | int | sim | Etapa de destino. |
+| `force` | bool | não | `true` confirma mesmo com pendências obrigatórias. Padrão `false`. |
+
+**Resposta `200 OK`:**
+```json
+{
+  "movedCards": [ { "id": 8821, "title": "Proposta ACME", "stageId": 102 } ],
+  "skippedCardIds": [8822],
+  "failedCardIds": [],
+  "stages": [
+    { "id": 101, "totalItems": 9,  "totalCardValue": 21000.00 },
+    { "id": 102, "totalItems": 10, "totalCardValue": 46500.00 }
+  ]
+}
+```
+
+| Campo | Significado |
+|---|---|
+| `movedCards` | Cards efetivamente movidos, já atualizados |
+| `skippedCardIds` | **Ignorados de propósito**: card fechado, já no destino, de outro funil, ou fora da sua empresa. Não vale repetir. |
+| `failedCardIds` | **Falharam na gravação**: vale repetir a chamada apenas com estes IDs |
+| `stages` | Totais atualizados de cada etapa de origem envolvida, mais a de destino |
+
+:::info[Skipped não é o mesmo que failed]
+`skippedCardIds` é decisão de negócio, `failedCardIds` é falha técnica e admite retry.
+:::
+
+## `409` - pendências obrigatórias
+
+Com `force: false` e ao menos um card com pendências, **nada é movido**:
+
+```json
+{
+  "blockedCards": [
+    {
+      "cardId": 8821,
+      "title": "Proposta ACME",
+      "missingFields": [ { "key": "email", "label": "E-mail" } ],
+      "pendingTasks":  [ { "id": 55, "title": "Ligar para o cliente" } ]
+    }
+  ],
+  "validCardIds": [8822, 8823]
+}
+```
+
+Dois caminhos a partir daqui:
+
+1. Repetir com `"force": true`, que move todos, inclusive os pendentes.
+2. Repetir enviando apenas os `validCardIds`, que move só os completos.
+
+## Demais erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | `cardIds` vazio ou acima de 2000 itens; `targetStageId` ausente ou menor/igual a zero |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil de destino |
+| 409 | `stage_inactive` | Etapa de destino excluída, bloqueia o lote inteiro |
+
+## Obter os IDs de uma etapa inteira
+
+Para o equivalente a "selecionar tudo" em uma coluna, sem paginar o board:
+
+### `POST`
+```http
+https://apiv3.ihelpchat.com/api/v2/crm/card/stage/{stageId}/ids
+```
+
+Aceita no corpo o mesmo filtro usado na listagem do funil e retorna até 2000 IDs de cards **abertos** daquela etapa. Alimente o resultado direto em `cardIds`.
+
+## Boas práticas
+
+- Cards que estejam em um funil diferente do da etapa de destino saem como `skipped`. Para mudar de funil, use [Trocar de funil](./trocar-de-funil.md), um card por vez.
+- Para volumes grandes, prefira blocos de algumas centenas de IDs em vez de usar o limite máximo de uma só vez.

@@ -12,11 +12,12 @@ envio de mensagens e uso de templates.
 
 ## Categorias
 
-- 🔐 **[Conceitos](/api/conceitos/autenticacao)** — autenticação e obtenção de token.
-- 💬 **[Atendimentos](/api/category/atendimentos)** — buscar atendimentos, metadados, histórico e mais.
-- ✉️ **[Mensagens](/api/category/mensagens)** — envio de mensagens comuns e em grupo.
-- 📄 **[Templates](/api/category/templates)** — envio via templates da Meta.
+- 🔐 **[Conceitos](/api/conceitos/autenticacao)** - autenticação e obtenção de token.
+- 💬 **[Atendimentos](/api/category/atendimentos)** - buscar atendimentos, metadados, histórico e mais.
+- ✉️ **[Mensagens](/api/category/mensagens)** - envio de mensagens comuns e em grupo.
+- 📄 **[Templates](/api/category/templates)** - envio via templates da Meta.
 - 📋 **[Menus de Lista](/api/menus-de-lista)** - mensagens interativas com lista de opções.
+- 🗂️ **[CRM](/api/crm/visao-geral)** - funis, etapas e movimentação de cards.
 
 :::info[Observação]
 Todas as requisições exigem o header `Authorization: Bearer <token>`. Veja

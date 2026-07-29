@@ -1,0 +1,89 @@
+---
+title: "Cards"
+sidebar_position: 1
+---
+
+Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/card`
+
+:::info[Profundidade desta página]
+Aqui estão listados todos os endpoints de card com verbo, rota e o que fazem. Os corpos de requisição e resposta **não** estão documentados campo a campo. Para o fluxo de movimentação, que tem contrato detalhado, veja [Mover card](../mover-card.md), [Mover em massa](../mover-cards-em-massa.md), [Trocar de funil](../trocar-de-funil.md) e [Mover por telefone](../mover-por-telefone.md). Para os demais, fale com o time de tecnologia.
+:::
+
+## Criação, leitura e edição
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `POST` | `/card` | body `CardRequest` | Cria um novo card |
+| `GET` | `/card/{id}` | rota `id` | Obtém um card por ID |
+| `GET` | `/card/by-idref/{idRef}` | rota `idRef` | Busca o card pelo `IdRef` (UUID opaco usado em URLs públicas). Mesmo payload do `GET /card/{id}` |
+| `GET` | `/card/{id}/full` | rota `id` | Obtém o card junto com histórico e anotações |
+| `PUT` | `/card/{id}` | rota `id`, body | Atualiza um card existente. Campos não informados preservam o valor atual |
+| `DELETE` | `/card/{id}` | rota `id` | Soft delete: marca como inativo e registra auditoria do usuário |
+
+## Movimentação
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `POST` | `/card/{id}/validate-move` | rota `id`, query `targetStageId` | Pre-check de movimentação, não altera estado. Ver [Mover card](../mover-card.md) |
+| `PUT` | `/card/{id}/stage/{stageId}` | rota `id`, `stageId`, query `force` | Move o card para outra etapa do mesmo funil. Ver [Mover card](../mover-card.md) |
+| `POST` | `/card/{id}/move-funnel` | rota `id`, body | Move um card aberto para outro funil. Ver [Trocar de funil](../trocar-de-funil.md) |
+| `POST` | `/card/move-by-phone` | body | Move os cards de um contato identificado pelo telefone. Ver [Mover por telefone](../mover-por-telefone.md) |
+| `POST` | `/card/bulk/move` | body | Move vários cards de uma vez. Ver [Mover em massa](../mover-cards-em-massa.md) |
+| `POST` | `/card/stage/{stageId}/ids` | rota `stageId`, body filtro | IDs dos cards abertos de uma etapa honrando os mesmos filtros do board (select-all server-side, limite 2000) |
+
+## Fechamento e restauração
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `POST` | `/card/{id}/close-won` | rota `id` | Marca o card como ganho |
+| `POST` | `/card/{id}/close-lost` | rota `id`, body opcional | Marca o card como perdido. Com `reasonId` no corpo, registra o motivo da perda |
+| `POST` | `/card/{id}/close-cancelled` | rota `id` | Marca o card como cancelado |
+| `POST` | `/card/{id}/restore` | rota `id` | Restaura um card ganho ou perdido de volta ao board (status volta para aberto) |
+| `PUT` | `/card/{id}/status/{status}` | rota `id`, `status` | Atualiza o status do card diretamente |
+| `POST` | `/card/{id}/apply-rules` | rota `id` | Aplica as regras do funil ao card |
+
+## Ações em massa
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `POST` | `/card/bulk/close-won` | body `cardIds` | Marca vários cards como ganhos. Cards inelegíveis são reportados como ignorados |
+| `POST` | `/card/bulk/close-lost` | body `cardIds`, `description` | Marca vários cards como perdidos. Não coleta motivo de perda |
+| `POST` | `/card/bulk/delete` | body `cardIds` | Soft delete em massa. Aceita abertos, ganhos e perdidos; cancelados ficam de fora |
+| `POST` | `/card/bulk/restore` | body `cardIds` | Restaura em massa cards ganhos ou perdidos. Se a etapa original foi excluída, cai na primeira etapa ativa do funil |
+
+Todas as ações em massa exigem permissão de edição em cada funil distinto tocado pelo lote.
+
+## Listagem e filtro
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `POST` | `/card/funnel/{funnelId}/filter` | rota `funnelId`, body filtro | Filtro avançado de cards do funil: busca textual, status, etapa, responsável, datas, tags e paginação |
+| `GET` | `/card/funnel/{funnelId}/initial` | rota `funnelId`, query filtro | Primeira página de cards de cada etapa do funil |
+| `POST` | `/card/funnel/{funnelId}/initial` | rota `funnelId`, body filtro | Mesma coisa, mas aceita o filtro avançado aninhado (AND/OR) que não cabe na query string |
+| `GET` | `/card/business/{businessId}` | rota `businessId` | Todos os cards ativos da empresa |
+| `GET` | `/card/stage/{stageId}` | rota `stageId` | Todos os cards ativos de uma etapa |
+| `GET` | `/card/responsible/{responsibleId}` | rota `responsibleId` | Todos os cards ativos de um responsável |
+| `GET` | `/card/contact/{contactId}` | rota `contactId` | Todos os cards ativos de um contato |
+| `GET` | `/api/v2/crm/contacts/{contactId}/cards` | rota `contactId` | Lista compacta de cards **abertos** do contato, usada na sidebar de CRM da tela de Atendimento |
+| `GET` | `/card/by-owner/ranking` | - | Ranking agregado por responsável: total de cards, ganhos, abertos, valores e atrasados |
+| `GET` | `/card/overdue-list` | - | Cards atrasados da empresa (critério: tarefa vinculada com prazo vencido) |
+| `GET` | `/card/monthly-forecast` | - | Previsão mensal de ganhos, abertos e gap dos últimos 12 meses |
+| `GET` | `/card/latest-contact-call/{cardId}` | rota `cardId` | Último atendimento do contato vinculado ao card |
+
+## Notas, histórico e atividades
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `GET` | `/card/{id}/notes` | rota `id`, query `page`, `pageSize` | Lista as anotações do card |
+| `GET` | `/card/{id}/notes/public` | rota `id` | Lista apenas as anotações públicas |
+| `POST` | `/card/{id}/notes` | rota `id`, body | Adiciona uma anotação |
+| `PUT` | `/card/{id}/notes/{noteId}` | rota `id`, `noteId`, body | Atualiza uma anotação |
+| `DELETE` | `/card/{id}/notes/{noteId}` | rota `id`, `noteId` | Remove uma anotação |
+| `GET` | `/card/{id}/history` | rota `id`, query `page`, `pageSize` | Histórico do card. Sem os params de paginação, retorna a lista completa |
+| `POST` | `/card/{id}/history` | rota `id`, body | Adiciona um item ao histórico |
+| `GET` | `/card/{id}/activities` | rota `id`, query `page`, `pageSize` | Histórico e tarefas vinculadas mesclados, ordenados por data decrescente |
+| `GET` | `/card/{id}/popover-summary` | rota `id` | Resumo do card para popover: última nota e contagem de atendimentos |
+
+:::info[Endpoints de sincronização]
+`CardController` também expõe rotas terminadas em `/sync` e `/sync/batch`. São infraestrutura de sincronização incremental do próprio app iHelp e não fazem parte da API de integração.
+:::
