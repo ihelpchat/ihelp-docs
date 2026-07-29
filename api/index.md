@@ -16,6 +16,7 @@ envio de mensagens e uso de templates.
 - 💬 **[Atendimentos](/api/category/atendimentos)** — buscar atendimentos, metadados, histórico e mais.
 - ✉️ **[Mensagens](/api/category/mensagens)** — envio de mensagens comuns e em grupo.
 - 📄 **[Templates](/api/category/templates)** — envio via templates da Meta.
+- 📋 **[Menus de Lista](/api/menus-de-lista)** - mensagens interativas com lista de opções.
 
 :::info[Observação]
 Todas as requisições exigem o header `Authorization: Bearer <token>`. Veja

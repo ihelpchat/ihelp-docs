@@ -1,0 +1,54 @@
+---
+title: "Menus de Lista"
+sidebar_position: 5
+---
+
+:::tip[Compatibilidade]
+Disponível **apenas em canais de API oficial**.
+:::
+
+Menu de lista é uma mensagem interativa: o cliente toca em um botão e o WhatsApp abre uma lista de opções para ele escolher. Usa o mesmo endpoint da [Mensagem comum](./mensagens/mensagem-comum.md), com `messageType: 21` e o objeto `interactiveMetaMessage`.
+
+Como o cliente vê no WhatsApp:
+
+![Mensagem com botão Ver opções](/img/help/menu-lista-mensagem.png)
+
+![Lista de opções aberta](/img/help/menu-lista-opcoes.png)
+
+:::warning[Janela de 24 horas]
+Só é possível enviar dentro de um atendimento em que o cliente enviou alguma mensagem nas **últimas 24 horas**. Fora dessa janela, use um [template](/api/category/templates).
+:::
+
+### `POST`
+```http
+https://apiv3.ihelpchat.com/api/v2/customers/send-message
+```
+
+**Body (JSON):**
+```json
+{
+    "canalId": "5e7e84d85c7f025d027baa46",
+    "contato": "5517981259808",
+    "messageType": 21,
+    "texto": "conteudo da mensagem 123",
+    "interactiveMetaMessage": {
+        "button": "Ver opções",
+        "sections": [
+            {
+                "rows": [
+                    { "id": "pagar_boleto",  "title": "💳 Pagar Boleto",   "description": "Gerar 2ª via do boleto" },
+                    { "id": "nota_fiscal",   "title": "📄 2ª Via da Nota", "description": "Reenviar nota fiscal" },
+                    { "id": "falar_humano",  "title": "🙋 Falar com atendente 3" }
+                ]
+            }
+        ]
+    }
+}
+```
+
+- **texto**: corpo da mensagem exibido acima do botão
+- **interactiveMetaMessage.button**: texto do botão que abre a lista
+- **interactiveMetaMessage.sections**: lista de seções, cada uma com suas `rows`
+- **rows[].id**: identificador da opção, devolvido na resposta do cliente
+- **rows[].title**: texto da opção
+- **rows[].description**: descrição da opção (opcional)
