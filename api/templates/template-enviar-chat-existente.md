@@ -3,50 +3,326 @@ title: "Enviar em chat existente"
 sidebar_position: 3
 ---
 
-:::info[Compatibilidade]
-API iHelp — Body compatível com conta conectada na Gupshup.
-:::
-
  `POST`
 ```http
 https://apiv3.ihelpchat.com/api/v2/customers/send-template
 ```
 
 :::info[Observação]
-Informe o `atendimentoId` do atendimento em que o template será enviado. Para **iniciar um novo atendimento**, use [Criar novo chat](./template-criar-novo-chat.md) (`add-new-call`).
+Informe o `atendimentoId` do atendimento em que o template será enviado. Para descobrir esse valor, use [Buscar atendimento pelo telefone](../atendimentos/buscar-atendimento-por-telefone.md) - o `atendimentoId` é o campo **`idRef`** da resposta (ex.: `69ea67a0ab43821f9dcb3976`), **não** o `id` curto numérico.
+
+Para **iniciar um novo atendimento**, use [Criar novo chat](./template-criar-novo-chat.md) (`add-new-call`).
+
+Fora o `atendimentoId`, o body é o mesmo nos dois endpoints. O que muda é o **painel usado** para gerenciar os templates: **Gupshup** ou **Meta**.
 :::
 
-### Com Botões
+:::danger[A janela de 24h precisa estar aberta]
+Para enviar template em um chat existente, a **janela de 24 horas da Meta** precisa estar ativa: o cliente tem que ter enviado alguma mensagem nas últimas 24h. Veja a [documentação oficial da Meta sobre a janela de atendimento ao cliente](https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-messages).
+
+Se a janela já fechou, o request retorna erro de **sessão expirada**. Nesse caso, use o [Criar novo chat](./template-criar-novo-chat.md) (`add-new-call`) para abrir um novo atendimento com o template.
+:::
+
+## Onde vão os parâmetros
+
+| Painel | `cloudApiTemplateName` | Variáveis de texto | Botões de URL |
+|---|---|---|---|
+| **Gupshup** | ID do template (UUID) | `params` | `params`, **sempre por último** |
+| **Meta** | Nome do template | `params` | `urlParams` (campo separado) |
+
+Os valores seguem a **ordem em que aparecem no template**: primeiro as variáveis de texto, depois os botões de URL (da esquerda para a direita).
+
+Veja [Pegar ID do template](./pegar-id-do-template.md) para descobrir o valor de `cloudApiTemplateName`.
+
+---
+
+## Painel Gupshup
+
+Todos os parâmetros - de texto e de URL - vão dentro de `params`. Os de URL sempre no final da lista.
+
+### 1. Texto simples, sem variáveis
+
+Template sem variável nenhuma: não precisa de `params`.
+
 ```json
 {
     "contactList": ["551788889999"],
     "departamentoId": 6668,
-    "canalId": 8181, 
+    "canalId": 8181,
     "mensagemInicial": {
-        "texto": "Oi Nome da pessoa, tudo bem? Só confirmando: você vai conseguir participar da nossa reunião online hoje às 15? Me responde aqui com um 'sim' pra eu garantir seu lugar! | [Sim] | [Reagendar]",
+        "texto": "Olá, seguindo com seu atendimento no ihelp",
         "tipoMensagem": 9,
-        "cloudApiTemplateName": "b0x0x0xee-f546-4519-abb7-40x0x0x0b",
-        "params": ["Nome da pessoa", "15"]
+        "cloudApiTemplateName": "2267be99-0000-4c2f-9a1b-9ee22e4841f8"
     },
     "nome": null,
     "atendimentoId": "69b44de8975fa5e96de10bc6"
 }
 ```
 
-### Sem Botões
+### 2. Texto com variáveis
+
+Template com 2 variáveis de texto (`{{1}}` = nome, `{{2}}` = horário).
+
 ```json
 {
     "contactList": ["551788889999"],
     "departamentoId": 6668,
-    "canalId": 8181, 
+    "canalId": 8181,
     "mensagemInicial": {
-        "texto": "Oi Nome da pessoa, tudo bem? Só confirmando: você vai conseguir participar da nossa reunião online hoje às 15? Me responde aqui com um 'sim' pra eu garantir seu lugar!",
+        "texto": "Oi Gian, tudo bem? Confirmando nossa reunião de hoje às 15. Me responde com um 'sim' pra eu garantir seu lugar!",
         "tipoMensagem": 9,
-        "cloudApiTemplateName": "b0x0x0xee-f546-4519-abb7-40x0x0x0b",
-        "params": ["Nome da pessoa", "15"]
+        "cloudApiTemplateName": "2267be99-0000-4c2f-9a1b-9ee22e4841f8",
+        "params": ["Gian", "15"]
     },
     "nome": null,
-    "atendimentoId": null
+    "atendimentoId": "69b44de8975fa5e96de10bc6"
+}
+```
+
+### 3. Com botões de resposta rápida
+
+Botão de resposta rápida **não tem parâmetro**. Só as 2 variáveis de texto entram em `params`.
+
+```json
+{
+    "contactList": ["551788889999"],
+    "departamentoId": 6668,
+    "canalId": 8181,
+    "mensagemInicial": {
+        "texto": "Oi Gian, tudo bem? Confirmando nossa reunião de hoje às 15. | [Sim] | [Reagendar]",
+        "tipoMensagem": 9,
+        "cloudApiTemplateName": "2267be99-0000-4c2f-9a1b-9ee22e4841f8",
+        "params": ["Gian", "15"]
+    },
+    "nome": null,
+    "atendimentoId": "69b44de8975fa5e96de10bc6"
+}
+```
+
+### 4. Só 1 botão de link dinâmico, sem variáveis de texto
+
+:::tip[O botão de URL não recebe o link inteiro]
+Quando o template é criado no **painel da Gupshup**, o começo da URL é **fixo** e fica salvo no próprio template. Só o **final** da URL é variável - e é só esse pedaço que você envia no request.
+
+| | |
+|---|---|
+| Início fixo, definido no painel ao criar o template | `https://google.com/maps/` |
+| Trecho variável, enviado no request | `@-20.8175629,-49.3518848,14z` |
+| Link que o cliente recebe | `https://google.com/maps/@-20.8175629,-49.3518848,14z` |
+
+Mandar a URL completa duplica o prefixo e quebra o link.
+:::
+
+Template sem variável de texto e com 1 botão de URL: `params` leva **só** o trecho variável da URL.
+
+```json
+{
+    "contactList": ["551788889999"],
+    "departamentoId": 6668,
+    "canalId": 8181,
+    "mensagemInicial": {
+        "texto": "Seu pedido saiu para entrega. Acompanhe o trajeto pelo botão abaixo. | [Ver rota]",
+        "tipoMensagem": 9,
+        "cloudApiTemplateName": "a86fd979-dc78-4f34-8931-fdb73f953cab",
+        "params": ["@-20.8175629,-49.3518848,14z"]
+    },
+    "nome": null,
+    "atendimentoId": "69b44de8975fa5e96de10bc6"
+}
+```
+
+### 5. Variáveis de texto + 1 botão de link dinâmico
+
+Template com 3 variáveis de texto + 1 botão de URL. As 3 de texto vêm primeiro, o trecho da URL é o **último item** de `params`.
+
+```json
+{
+    "contactList": ["551788889999"],
+    "departamentoId": 6668,
+    "canalId": 8181,
+    "mensagemInicial": {
+        "texto": "⚠️ INFORMACAO DE VIAGEM\n\nCarga liberada\n\nPontos da Rota: Rio Preto / Mirassol\n\nRota: RT-4417\n\n[Navegação]",
+        "tipoMensagem": 9,
+        "cloudApiTemplateName": "a86fd979-dc78-4f34-8931-fdb73f953cab",
+        "params": [
+            "Carga liberada",
+            "Rio Preto / Mirassol",
+            "RT-4417",
+            "@-20.8175629,-49.3518848,14z"
+        ]
+    },
+    "nome": null,
+    "atendimentoId": "69b44de8975fa5e96de10bc6"
+}
+```
+
+### 6. Variáveis de texto + 2 botões de link dinâmico
+
+Template com 2 variáveis de texto + 2 botões de URL. Os dois trechos de URL vão **no final** de `params`, na ordem dos botões.
+
+```json
+{
+    "contactList": ["551788889999"],
+    "departamentoId": 6668,
+    "canalId": 8181,
+    "mensagemInicial": {
+        "texto": "Olá Gian, sua entrega RT-4417 está a caminho. | [Ver rota] | [Local de retirada]",
+        "tipoMensagem": 9,
+        "cloudApiTemplateName": "a86fd979-dc78-4f34-8931-fdb73f953cab",
+        "params": [
+            "Gian",
+            "RT-4417",
+            "@-20.8175629,-49.3518848,14z",
+            "@-20.8123456,-49.3499999,17z"
+        ]
+    },
+    "nome": null,
+    "atendimentoId": "69b44de8975fa5e96de10bc6"
+}
+```
+
+---
+
+## Painel Meta
+
+As variáveis de texto ficam em `params` e os trechos de URL em `urlParams`, cada um na ordem dos botões. O `cloudApiTemplateName` é o **nome** do template.
+
+### 1. Texto simples, sem variáveis
+
+Template sem variável nenhuma: não precisa de `params`.
+
+```json
+{
+    "contactList": ["551788889999"],
+    "departamentoId": 6668,
+    "canalId": 8181,
+    "mensagemInicial": {
+        "texto": "Olá, seguindo com seu atendimento no ihelp",
+        "tipoMensagem": 9,
+        "cloudApiTemplateName": "new_call"
+    },
+    "nome": null,
+    "atendimentoId": "69b44de8975fa5e96de10bc6"
+}
+```
+
+### 2. Texto com variáveis
+
+Template com 2 variáveis de texto (`{{1}}` = nome, `{{2}}` = horário).
+
+```json
+{
+    "contactList": ["551788889999"],
+    "departamentoId": 6668,
+    "canalId": 8181,
+    "mensagemInicial": {
+        "texto": "Oi Gian, tudo bem? Confirmando nossa reunião de hoje às 15. Me responde com um 'sim' pra eu garantir seu lugar!",
+        "tipoMensagem": 9,
+        "cloudApiTemplateName": "lembrete_reuniao",
+        "params": ["Gian", "15"]
+    },
+    "nome": null,
+    "atendimentoId": "69b44de8975fa5e96de10bc6"
+}
+```
+
+### 3. Com botões de resposta rápida
+
+Botão de resposta rápida **não tem parâmetro**. Só as 2 variáveis de texto entram em `params`.
+
+```json
+{
+    "contactList": ["551788889999"],
+    "departamentoId": 6668,
+    "canalId": 8181,
+    "mensagemInicial": {
+        "texto": "Oi Gian, tudo bem? Confirmando nossa reunião de hoje às 15. | [Sim] | [Reagendar]",
+        "tipoMensagem": 9,
+        "cloudApiTemplateName": "lembrete_reuniao",
+        "params": ["Gian", "15"]
+    },
+    "nome": null,
+    "atendimentoId": "69b44de8975fa5e96de10bc6"
+}
+```
+
+### 4. Só 1 botão de link dinâmico, sem variáveis de texto
+
+:::tip[O botão de URL não recebe o link inteiro]
+Quando o template é criado no **painel da Meta**, o começo da URL é **fixo** e fica salvo no próprio template. Só o **final** da URL é variável - e é só esse pedaço que você envia no request.
+
+| | |
+|---|---|
+| Início fixo, definido no painel ao criar o template | `https://google.com/maps/` |
+| Trecho variável, enviado no request | `@-20.8175629,-49.3518848,14z` |
+| Link que o cliente recebe | `https://google.com/maps/@-20.8175629,-49.3518848,14z` |
+
+Mandar a URL completa duplica o prefixo e quebra o link.
+:::
+
+Template sem variável de texto e com 1 botão de URL: mande só `urlParams` e **omita o `params`**.
+
+```json
+{
+    "contactList": ["551788889999"],
+    "departamentoId": 6668,
+    "canalId": 8181,
+    "mensagemInicial": {
+        "texto": "Seu pedido saiu para entrega. Acompanhe o trajeto pelo botão abaixo. | [Ver rota]",
+        "tipoMensagem": 9,
+        "cloudApiTemplateName": "pedido_a_caminho",
+        "urlParams": ["@-20.8175629,-49.3518848,14z"]
+    },
+    "nome": null,
+    "atendimentoId": "69b44de8975fa5e96de10bc6"
+}
+```
+
+### 5. Variáveis de texto + 1 botão de link dinâmico
+
+Template com 3 variáveis de texto + 1 botão de URL: as de texto em `params`, a da URL em `urlParams`.
+
+```json
+{
+    "contactList": ["551788889999"],
+    "departamentoId": 6668,
+    "canalId": 8181,
+    "mensagemInicial": {
+        "texto": "⚠️ INFORMACAO DE VIAGEM\n\nCarga liberada\n\nPontos da Rota: Rio Preto / Mirassol\n\nRota: RT-4417\n\n[Navegação]",
+        "tipoMensagem": 9,
+        "cloudApiTemplateName": "informacao_viagem",
+        "params": [
+            "Carga liberada",
+            "Rio Preto / Mirassol",
+            "RT-4417"
+        ],
+        "urlParams": ["@-20.8175629,-49.3518848,14z"]
+    },
+    "nome": null,
+    "atendimentoId": "69b44de8975fa5e96de10bc6"
+}
+```
+
+### 6. Variáveis de texto + 2 botões de link dinâmico
+
+Template com 2 variáveis de texto + 2 botões de URL: `urlParams` leva um trecho por botão, na ordem em que aparecem no template.
+
+```json
+{
+    "contactList": ["551788889999"],
+    "departamentoId": 6668,
+    "canalId": 8181,
+    "mensagemInicial": {
+        "texto": "Olá Gian, sua entrega RT-4417 está a caminho. | [Ver rota] | [Local de retirada]",
+        "tipoMensagem": 9,
+        "cloudApiTemplateName": "entrega_a_caminho",
+        "params": ["Gian", "RT-4417"],
+        "urlParams": [
+            "@-20.8175629,-49.3518848,14z",
+            "@-20.8123456,-49.3499999,17z"
+        ]
+    },
+    "nome": null,
+    "atendimentoId": "69b44de8975fa5e96de10bc6"
 }
 ```
 
