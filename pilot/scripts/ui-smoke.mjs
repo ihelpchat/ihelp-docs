@@ -27,10 +27,16 @@ const queries = [
   ['pipeline CRM', 'Tutoriais Guiados'],
 ];
 
+// Erros do iframe do Tango (terceiro) não são do nosso site.
+const thirdParty = /tango\.us|tango\.ai/i;
+
 function trackErrors(page, errors) {
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
   page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(`console: ${message.text()}`);
+    const location = message.location()?.url ?? '';
+    if (message.type() === 'error' && !thirdParty.test(location) && !thirdParty.test(message.text())) {
+      errors.push(`console: ${message.text()} (${location})`);
+    }
   });
 }
 
@@ -56,8 +62,9 @@ try {
   await page.screenshot({ path: '/tmp/ihelp-fumadocs-home-desktop.png', fullPage: true });
 
   await page.locator('.home-search').click();
-  const searchInput = page.locator('[data-fd-search-dialog-input]');
-  const searchDialog = page.locator('#fd-search-dialog-content');
+  const searchInput = page.locator('[data-search-input]');
+  const searchDialog = page.locator('#ih-search-dialog');
+  await searchDialog.waitFor();
 
   for (const [query, expected] of queries) {
     await searchInput.fill(query);
@@ -67,20 +74,52 @@ try {
     );
   }
 
+  // Enter abre o primeiro resultado.
+  await searchInput.fill('transferir atendimento');
+  const firstResult = searchDialog.locator('.ih-search-result').first();
+  await firstResult.waitFor();
+  const firstHref = (await firstResult.getAttribute('href')).split('#')[0].replace(/\/$/, '');
+  // O href já inclui o basePath quando existe.
+  await page.keyboard.press('Enter');
+  await page.waitForURL((url) => url.pathname.replace(/\/$/, '') === firstHref);
+  await searchDialog.waitFor({ state: 'detached' });
+
+  // Chips da home abrem a busca já preenchida.
+  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.locator('.search-suggestions button').first().click();
+  assert.match(await page.locator('[data-search-input]').inputValue(), /transferir um atendimento/i);
   await page.keyboard.press('Escape');
+
   await page.goto(`${baseUrl}/docs/sobre-o-sistema/atendimento/`, { waitUntil: 'networkidle' });
   await page.getByRole('heading', { name: 'Atendimento', exact: true }).waitFor();
   assert.equal(await page.locator('video').count(), 1, 'Artigo de Atendimento sem vídeo');
+  assert.ok(await page.locator('.ih-sidebar .ih-side-link[data-active]').count(), 'Menu lateral sem item ativo');
+  assert.ok(await page.locator('.ih-toc-link').count() > 3, 'Artigo sem índice “Nesta página”');
   await assertNoHorizontalOverflow(page, 'artigo desktop');
   await page.screenshot({ path: '/tmp/ihelp-fumadocs-atendimento.png', fullPage: true });
 
+  await page.goto(`${baseUrl}/docs/principais-duvidas/`, { waitUntil: 'networkidle' });
+  const faqItems = page.locator('.ih-faq-item');
+  assert.ok(await faqItems.count() >= 5, 'FAQ sem perguntas');
+  await page.locator('.ih-faq-filter input').fill('senha');
+  assert.equal(await faqItems.count(), 1, 'Filtro do FAQ não filtrou');
+  await faqItems.first().locator('button').click();
+  await faqItems.first().locator('.ih-faq-answer').waitFor();
+
+  await page.goto(`${baseUrl}/api/atendimentos/buscar-atendimento-por-telefone/`, { waitUntil: 'networkidle' });
+  assert.equal(await page.locator('.ih-header-dark').count(), 1, 'API sem cabeçalho escuro');
+  assert.match(await page.locator('.ih-url-bar code').textContent(), /customers\/search/);
+  assert.ok(await page.locator('.ih-sidebar-api .ih-method[data-method="POST"]').count() > 3, 'Menu da API sem métodos');
+  assert.equal(await page.locator('.ih-prose').getByText(':::').count(), 0, 'Aviso Docusaurus sem conversão');
+
+  await page.goto(`${baseUrl}/blog/`, { waitUntil: 'networkidle' });
+  assert.ok(await page.locator('.ih-timeline > li').count() >= 6, 'Novidades incompletas');
+
   await page.goto(`${baseUrl}/tutoriais/`, { waitUntil: 'networkidle' });
-  const openTutorial = page.getByRole('button', { name: /Ver passo a passo/ }).first();
-  await openTutorial.evaluate((element) => element.click());
-  const tutorialDialog = page.locator('dialog.tutorial-dialog[open]');
-  await tutorialDialog.waitFor();
-  await tutorialDialog.locator('iframe[src*="tango.us"]').waitFor();
-  await tutorialDialog.getByRole('button', { name: 'Fechar tutorial' }).click();
+  assert.ok(await page.locator('.ih-guide').count() >= 4, 'Lista de tutoriais incompleta');
+  await page.locator('.ih-guide').nth(2).click();
+  await page.locator('.ih-player-poster').click();
+  await page.locator('.ih-player iframe[src*="tango.us"]').waitFor();
 
   assert.deepEqual(errors, [], `Erros no navegador:\n${errors.join('\n')}`);
   await desktop.close();
@@ -93,10 +132,24 @@ try {
   await mobilePage.getByRole('heading', { name: 'Tire sua dúvida sobre o iHelp em uma pergunta.' }).waitFor();
   await assertNoHorizontalOverflow(mobilePage, 'home mobile');
   await mobilePage.screenshot({ path: '/tmp/ihelp-fumadocs-home-mobile.png', fullPage: true });
+
+  for (const path of ['/docs/sobre-o-sistema/atendimento/', '/docs/principais-duvidas/', '/api/', '/api/atendimentos/buscar-atendimento-por-telefone/', '/tutoriais/', '/blog/']) {
+    await mobilePage.goto(`${baseUrl}${path}`, { waitUntil: 'networkidle' });
+    await assertNoHorizontalOverflow(mobilePage, `mobile ${path}`);
+  }
+
+  // Menu do celular abre, mostra a navegação e fecha ao navegar.
+  await mobilePage.goto(`${baseUrl}/docs/sobre-o-sistema/atendimento/`, { waitUntil: 'networkidle' });
+  await mobilePage.locator('.ih-menu-button').click();
+  const drawer = mobilePage.locator('.ih-sidebar-wrap[data-open]');
+  await drawer.waitFor();
+  await drawer.getByRole('link', { name: 'Relatórios', exact: true }).click();
+  await mobilePage.waitForURL(/relatorios/);
+  await mobilePage.locator('.ih-sidebar-wrap[data-open]').waitFor({ state: 'detached' });
   assert.deepEqual(mobileErrors, [], `Erros no navegador mobile:\n${mobileErrors.join('\n')}`);
   await mobile.close();
 
-  console.log(`UI smoke passou: ${queries.length} buscas, desktop, artigo, Tango e mobile.`);
+  console.log(`UI smoke passou: ${queries.length} buscas, navegação por teclado, artigo, FAQ, API, novidades, Tango e mobile.`);
 } finally {
   await browser.close();
 }

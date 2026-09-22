@@ -24,9 +24,9 @@ Todos os endpoints exigem um JWT no header `Authorization`, como no restante da 
 Authorization: Bearer <TOKEN>
 ```
 
-:::warning[A empresa vem sempre do token]
+<Callout type="warn" title="A empresa vem sempre do token">
 Nenhum endpoint de CRM aceita `businessId` no corpo ou na query. Você só enxerga e movimenta dados da sua própria empresa.
-:::
+</Callout>
 
 ## Ordem recomendada de uso
 
@@ -77,6 +77,6 @@ Os erros de negócio seguem o formato `{ "error": "...", "message": "..." }`.
 | 409 | `stage_concurrency_conflict` | Conflito de concorrência. Vem com header `Retry-After: 1`, tente novamente |
 | 409 | *(sem `error`)* | Corpo `{ canMove: false, missingFields, pendingTasks }`, pendências obrigatórias |
 
-:::info[Além da movimentação]
+<Callout type="info" title="Além da movimentação">
 Esta seção detalha o fluxo de movimentação de cards. Os demais endpoints de CRM (CRUD de cards, funis, etapas, automações, filtros e pipelines) estão listados em [Referência completa](/api/crm/referencia).
-:::
+</Callout>

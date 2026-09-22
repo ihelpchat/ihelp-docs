@@ -1,6 +1,6 @@
 'use client';
 
-import { ExternalLink, Play, X } from 'lucide-react';
+import { ArrowRight, ExternalLink, Play, X } from 'lucide-react';
 import { useRef } from 'react';
 
 type TutorialCardProps = {
@@ -11,29 +11,21 @@ type TutorialCardProps = {
   compact?: boolean;
 };
 
-export function TutorialCard({ title, description, embedUrl, url, compact = false }: TutorialCardProps) {
+export function TutorialCard({ title, description, embedUrl, url }: TutorialCardProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   return (
     <>
-      <article className={`tutorial-card${compact ? ' tutorial-card-compact' : ''}`}>
-        <span className="tutorial-icon"><Play aria-hidden="true" /></span>
-        <div>
-          <span className="tutorial-label">Tutorial guiado</span>
-          {compact ? null : <h3>{title}</h3>}
-          {compact ? null : <p>{description}</p>}
-          <div className="tutorial-actions">
-            <button type="button" onClick={() => dialogRef.current?.showModal()}>
-              Ver passo a passo <Play aria-hidden="true" />
-            </button>
-            {url ? (
-              <a href={url} target="_blank" rel="noreferrer noopener">
-                Abrir no Tango <ExternalLink aria-hidden="true" />
-              </a>
-            ) : null}
-          </div>
+      <div className="ih-tango-banner">
+        <span className="ih-tango-icon"><Play aria-hidden="true" /></span>
+        <div className="ih-tango-copy">
+          <strong>Tutorial guiado: {title}</strong>
+          <span>{description}</span>
         </div>
-      </article>
+        <button type="button" className="ih-button ih-button-primary" onClick={() => dialogRef.current?.showModal()}>
+          Ver passo a passo <ArrowRight aria-hidden="true" />
+        </button>
+      </div>
 
       <dialog ref={dialogRef} className="tutorial-dialog" aria-label={title}>
         <div className="tutorial-dialog-header">
@@ -41,6 +33,11 @@ export function TutorialCard({ title, description, embedUrl, url, compact = fals
             <span>Tutorial guiado</span>
             <strong>{title}</strong>
           </div>
+          {url ? (
+            <a href={url} target="_blank" rel="noreferrer noopener">
+              Abrir no Tango <ExternalLink aria-hidden="true" />
+            </a>
+          ) : null}
           <button type="button" aria-label="Fechar tutorial" onClick={() => dialogRef.current?.close()}>
             <X aria-hidden="true" />
           </button>

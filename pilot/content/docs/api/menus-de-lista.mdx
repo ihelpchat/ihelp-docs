@@ -4,11 +4,13 @@ sidebar_position: 5
 description: "Referência técnica da API do iHelp para menus de lista."
 source: api
 contentType: referencia
+method: POST
+endpoint: "/customers/send-message"
 ---
 
-:::tip[Compatibilidade]
+<Callout type="idea" title="Compatibilidade">
 Disponível **apenas em canais de API oficial**.
-:::
+</Callout>
 
 Menu de lista é uma mensagem interativa: o cliente toca em um botão e o WhatsApp abre uma lista de opções para ele escolher. Usa o mesmo endpoint da [Mensagem comum](./mensagens/mensagem-comum), com `messageType: 21` e o objeto `interactiveMetaMessage`.
 
@@ -18,9 +20,9 @@ Como o cliente vê no WhatsApp:
 
 ![Lista de opções aberta](/img/help/menu-lista-opcoes.png)
 
-:::warning[Janela de 24 horas]
+<Callout type="warn" title="Janela de 24 horas">
 Só é possível enviar dentro de um atendimento em que o cliente enviou alguma mensagem nas **últimas 24 horas**. Fora dessa janela, use um [template](/api/category/templates).
-:::
+</Callout>
 
 ### `POST`
 ```http

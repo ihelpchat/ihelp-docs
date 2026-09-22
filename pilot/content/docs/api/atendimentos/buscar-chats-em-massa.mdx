@@ -4,6 +4,8 @@ sidebar_position: 4
 description: "Referência técnica da API do iHelp para buscar chats em massa."
 source: api
 contentType: referencia
+method: GET
+endpoint: "/customers/filtered-calls/{id}"
 ---
 
 1. Criar um filtro no topo da aba de atendimento:
@@ -24,9 +26,9 @@ contentType: referencia
 
 5. Com os dois ids de filtro, você já pode buscar e paginar todos os atendimentos com 'skip' e 'limit' - eles são retornados por data de 'ultima mensagem' no chat
 
-:::info[Rate limits]
+<Callout type="info" title="Rate limits">
 Para buscar dados massivos, respeite o rate limit de 30 requests por minuto para as requisições.
-:::
+</Callout>
 
 ### Busca: Conversas Abertas
 

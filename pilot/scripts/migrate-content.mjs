@@ -29,13 +29,13 @@ function descriptionFor(title, area) {
   return `Entenda ${title} e veja como usar esse recurso no iHelp.`;
 }
 
-function normalizeCallouts(body) {
+export function normalizeCallouts(body) {
   const lines = body.split('\n');
   const output = [];
   let open = false;
 
   for (const line of lines) {
-    const start = line.match(/^::::(tip|warning|danger|info)(?:\[([^\]]+)\])?\s*$/);
+    const start = line.match(/^:{3,}(tip|warning|danger|info)(?:\[([^\]]+)\])?\s*$/);
     if (start) {
       const type = { tip: 'idea', warning: 'warn', danger: 'error', info: 'info' }[start[1]];
       const title = start[2] ? ` title=${JSON.stringify(start[2])}` : '';
@@ -43,7 +43,7 @@ function normalizeCallouts(body) {
       open = true;
       continue;
     }
-    if (open && /^::::\s*$/.test(line)) {
+    if (open && /^:{3,}\s*$/.test(line)) {
       output.push('</Callout>');
       open = false;
       continue;
@@ -133,6 +133,7 @@ async function createMetaFiles(root, area) {
   await writeFile(existingMeta, `${JSON.stringify({ title, pages }, null, 2)}\n`);
 }
 
+if (import.meta.url === `file://${process.argv[1]}`) {
 for (const area of ['docs', 'api', 'blog']) {
   await migrateArea(area);
   await createMetaFiles(join(contentRoot, area), area);
@@ -144,3 +145,4 @@ await cp(join(projectRoot, 'static/videos'), join(pilotRoot, 'public/videos'), {
 await writeFile(join(contentRoot, 'meta.json'), `${JSON.stringify({ pages: ['docs', 'tutoriais', 'api', 'blog'] }, null, 2)}\n`);
 
 console.log('Conteúdo legado migrado para MDX, com metadados e assets preservados.');
+}

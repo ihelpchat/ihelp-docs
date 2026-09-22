@@ -4,13 +4,15 @@ sidebar_position: 5
 description: "Referência técnica da API do iHelp para buscar histórico de mensagens."
 source: api
 contentType: referencia
+method: GET
+endpoint: "/customers/chat/{chatId}"
 ---
 
 Busca mensagens por um **chatId**. Pode paginar usando skip e quantidade.
 
-:::warning[Atenção]
+<Callout type="warn" title="Atenção">
 `chatId` não é o `idRef` ou `atendimentoId`. É o campo `chatId` nos metadados do atendimento.
-:::
+</Callout>
 
 GET
 ```http

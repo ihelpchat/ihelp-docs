@@ -4,6 +4,8 @@ sidebar_position: 6
 description: "Referência técnica da API do iHelp para transcrever áudio."
 source: api
 contentType: referencia
+method: POST
+endpoint: "/customers/transcribe-audio"
 ---
 
 POST
@@ -20,9 +22,9 @@ Body:
 ```
 Response:
 
-:::warning[A resposta virá vazia]
+<Callout type="warn" title="A resposta virá vazia">
 Após gerar a transcrição, é necessário fazer o fetch de mensagens (Etapa 2 abaixo).
-:::
+</Callout>
 
 ```
 {}

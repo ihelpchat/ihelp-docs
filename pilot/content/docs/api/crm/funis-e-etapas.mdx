@@ -4,6 +4,8 @@ sidebar_position: 2
 description: "Referência técnica da API do iHelp para funis e etapas."
 source: api
 contentType: referencia
+method: GET
+endpoint: "/crm/funnel"
 ---
 
 Comece por aqui. Estes dois endpoints devolvem os IDs de funis e etapas que os endpoints de movimentação exigem.
@@ -44,11 +46,11 @@ Sem parâmetros.
 | `isActive` | Sempre `true` nesta listagem |
 | `contactLock` | Quando `true`, o mesmo contato não pode ter dois cards ativos neste funil |
 
-:::info[Observação]
+<Callout type="info" title="Observação">
 O campo `stages` **não** vem preenchido aqui. Para as etapas, use o endpoint abaixo.
 
 O retorno respeita as permissões do usuário dono do token: administradores veem todos os funis da empresa, demais usuários veem apenas aqueles a que têm acesso. Funis excluídos ou inativos não aparecem.
-:::
+</Callout>
 
 ## Todos os estágios do funil
 
@@ -90,9 +92,9 @@ https://apiv3.ihelpchat.com/api/v2/crm/funnel/{id}/with-stages
 | `funnelId` | Funil a que a etapa pertence |
 | `isActive` | Ver alerta abaixo |
 
-:::warning[A lista `stages` inclui etapas inativas]
+<Callout type="warn" title="A lista `stages` inclui etapas inativas">
 Filtre por `isActive === true` antes de exibir ou usar como destino. Mover para uma etapa inativa retorna `409 stage_inactive`.
-:::
+</Callout>
 
 O objeto também traz `rules` (regras de automação do funil) e `funnelUsers` (permissões). Ignore se não for utilizá-los.
 

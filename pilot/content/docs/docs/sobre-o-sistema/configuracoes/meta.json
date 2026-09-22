@@ -1,4 +1,4 @@
 {
   "title": "Configurações",
-  "pages": ["canais", "gerenciamento-de-usuarios"]
+  "pages": ["index", "canais", "gerenciamento-de-usuarios", "departamentos", "configuracoes-gerais", "atalhos", "alterar-senha"]
 }

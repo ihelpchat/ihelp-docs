@@ -4,11 +4,13 @@ sidebar_position: 3
 description: "Referência técnica da API do iHelp para enviar mídia."
 source: api
 contentType: referencia
+method: POST
+endpoint: "/customers/send-message"
 ---
 
-:::tip[Compatibilidade]
+<Callout type="idea" title="Compatibilidade">
 Compatível com API oficial e não oficial.
-:::
+</Callout>
 
 Há duas formas de enviar mídia (imagem, vídeo, áudio ou documento):
 
@@ -47,7 +49,7 @@ https://apiv3.ihelpchat.com/api/v2/customers/send-message
 - **tipoMensagem**: MIME do arquivo
 - **caption**: legenda (opcional)
 
-:::info[Documentos]
+<Callout type="info" title="Documentos">
 Para `messageType: 5` (documento), envie também `fileName` com o nome do arquivo:
 ```json
 {
@@ -60,7 +62,7 @@ Para `messageType: 5` (documento), envie também `fileName` com o nome do arquiv
     "caption": "Segue o contrato"
 }
 ```
-:::
+</Callout>
 
 ## Enviar mídia binária
 
@@ -89,9 +91,9 @@ curl -X POST \
   -F "myFile=@/caminho/contrato.pdf"
 ```
 
-:::warning[Limites por canal]
+<Callout type="warn" title="Limites por canal">
 Em canais que **não** são Baileys (ex.: API oficial), arquivos acima do limite são reenviados como **documento**:
 
 - Imagem acima de **5 MB**
 - Áudio ou vídeo acima de **16 MB**
-:::
+</Callout>

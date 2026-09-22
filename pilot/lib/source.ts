@@ -11,6 +11,11 @@ const docs = defineDocs({
       description: z.string().min(20),
       source: z.enum(['produto', 'suporte', 'api']),
       contentType: z.enum(['faq', 'tutorial', 'guia', 'referencia']),
+      method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).optional(),
+      endpoint: z.string().optional(),
+      date: z.coerce.date().optional(),
+      authors: z.array(z.string()).optional(),
+      tags: z.array(z.string()).optional(),
     }),
     postprocess: {
       includeProcessedMarkdown: true,

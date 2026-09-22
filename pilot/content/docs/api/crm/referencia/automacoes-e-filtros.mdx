@@ -6,9 +6,9 @@ source: api
 contentType: referencia
 ---
 
-:::info[Profundidade desta página]
+<Callout type="info" title="Profundidade desta página">
 Verbo, rota e o que cada endpoint faz. Os corpos de requisição não estão documentados campo a campo.
-:::
+</Callout>
 
 ## Automações
 
@@ -90,6 +90,6 @@ Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/dashboard`
 |---|---|---|---|
 | `GET` | `/dashboard` | query `funnelId`, `start`, `end` | Visão executiva agregada da pipeline. `funnelId` aceita um ID numérico ou `all` |
 
-:::warning[Limite de período]
+<Callout type="warn" title="Limite de período">
 O intervalo entre `start` e `end` não pode passar de 3 meses. Acima disso a resposta é `400`.
-:::
+</Callout>

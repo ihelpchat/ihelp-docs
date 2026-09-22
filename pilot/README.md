@@ -22,7 +22,9 @@ npm run qa:ui
 npm run qa:visual
 ```
 
-`qa:ui` valida busca, páginas, vídeo, Tango e responsividade. `qa:visual` exige pelo menos 90% de aderência ao desenho aprovado.
+`qa:ui` valida busca, páginas, FAQ, API, vídeo, Tango, menu do celular e responsividade.
+
+`qa:visual` compara o site com o protótipo do Claude Design (projeto “Estrutura de docs ihelp”) em desktop (1440×1000) e mobile (390×844) e exige pelo menos 90% em duas medidas: pontos de controle (posição, tamanho e estilo de ~90 elementos) e grade de cor da tela visível. A referência fica em `scripts/fixtures/design-baseline.json` e contém só medidas; o protótipo não é versionado. Para atualizar a referência, baixe o protótipo pelo MCP `claude-design` para uma pasta fora do repositório, sirva essa pasta e rode `DESIGN_URL=http://127.0.0.1:4190/index.html npm run qa:visual:baseline`.
 
 ## Conteúdo
 

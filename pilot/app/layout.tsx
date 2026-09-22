@@ -1,5 +1,7 @@
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import { Provider } from '@/components/provider';
+import { SiteShell } from '@/components/site/shell';
+import { getNavGroups, getSiteCounts } from '@/lib/site';
 import type { Metadata } from 'next';
 import './global.css';
 
@@ -25,8 +27,10 @@ export const metadata: Metadata = {
 export default function Layout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="pt-BR" className={`${inter.variable} ${jetBrainsMono.variable}`} suppressHydrationWarning>
-      <body className="flex flex-col min-h-screen">
-        <Provider>{children}</Provider>
+      <body>
+        <Provider counts={getSiteCounts()}>
+          <SiteShell docs={getNavGroups('docs')} api={getNavGroups('api')}>{children}</SiteShell>
+        </Provider>
       </body>
     </html>
   );

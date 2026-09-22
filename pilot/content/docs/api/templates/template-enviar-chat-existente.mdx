@@ -4,6 +4,8 @@ sidebar_position: 3
 description: "Referência técnica da API do iHelp para enviar em chat existente."
 source: api
 contentType: referencia
+method: POST
+endpoint: "/customers/send-template"
 ---
 
 `POST`
@@ -11,19 +13,19 @@ contentType: referencia
 https://apiv3.ihelpchat.com/api/v2/customers/send-template
 ```
 
-:::info[Observação]
+<Callout type="info" title="Observação">
 Informe o `atendimentoId` do atendimento em que o template será enviado. Para descobrir esse valor, use [Buscar atendimento pelo telefone](../atendimentos/buscar-atendimento-por-telefone) - o `atendimentoId` é o campo **`idRef`** da resposta (ex.: `69ea67a0ab43821f9dcb3976`), **não** o `id` curto numérico.
 
 Para **iniciar um novo atendimento**, use [Criar novo chat](./template-criar-novo-chat) (`add-new-call`).
 
 Fora o `atendimentoId`, o body é o mesmo nos dois endpoints. O que muda é o **painel usado** para gerenciar os templates: **Gupshup** ou **Meta**.
-:::
+</Callout>
 
-:::danger[A janela de 24h precisa estar aberta]
+<Callout type="error" title="A janela de 24h precisa estar aberta">
 Para enviar template em um chat existente, a **janela de 24 horas da Meta** precisa estar ativa: o cliente tem que ter enviado alguma mensagem nas últimas 24h. Veja a [documentação oficial da Meta sobre a janela de atendimento ao cliente](https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-messages).
 
 Se a janela já fechou, o request retorna erro de **sessão expirada**. Nesse caso, use o [Criar novo chat](./template-criar-novo-chat) (`add-new-call`) para abrir um novo atendimento com o template.
-:::
+</Callout>
 
 ## Onde vão os parâmetros
 
@@ -103,7 +105,7 @@ Botão de resposta rápida **não tem parâmetro**. Só as 2 variáveis de texto
 
 ### 4. Só 1 botão de link dinâmico, sem variáveis de texto
 
-:::tip[O botão de URL não recebe o link inteiro]
+<Callout type="idea" title="O botão de URL não recebe o link inteiro">
 Quando o template é criado no **painel da Gupshup**, o começo da URL é **fixo** e fica salvo no próprio template. Só o **final** da URL é variável - e é só esse pedaço que você envia no request.
 
 | | |
@@ -113,7 +115,7 @@ Quando o template é criado no **painel da Gupshup**, o começo da URL é **fixo
 | Link que o cliente recebe | `https://google.com/maps/@-20.8175629,-49.3518848,14z` |
 
 Mandar a URL completa duplica o prefixo e quebra o link.
-:::
+</Callout>
 
 Template sem variável de texto e com 1 botão de URL: `params` leva **só** o trecho variável da URL.
 
@@ -250,7 +252,7 @@ Botão de resposta rápida **não tem parâmetro**. Só as 2 variáveis de texto
 
 ### 4. Só 1 botão de link dinâmico, sem variáveis de texto
 
-:::tip[O botão de URL não recebe o link inteiro]
+<Callout type="idea" title="O botão de URL não recebe o link inteiro">
 Quando o template é criado no **painel da Meta**, o começo da URL é **fixo** e fica salvo no próprio template. Só o **final** da URL é variável - e é só esse pedaço que você envia no request.
 
 | | |
@@ -260,7 +262,7 @@ Quando o template é criado no **painel da Meta**, o começo da URL é **fixo** 
 | Link que o cliente recebe | `https://google.com/maps/@-20.8175629,-49.3518848,14z` |
 
 Mandar a URL completa duplica o prefixo e quebra o link.
-:::
+</Callout>
 
 Template sem variável de texto e com 1 botão de URL: mande só `urlParams` e **omita o `params`**.
 

@@ -4,6 +4,8 @@ sidebar_position: 4
 description: "Referência técnica da API do iHelp para criar novo chat."
 source: api
 contentType: referencia
+method: POST
+endpoint: "/customers/add-new-call"
 ---
 
 `POST`
@@ -11,9 +13,9 @@ contentType: referencia
 https://apiv3.ihelpchat.com/api/v2/customers/add-new-call
 ```
 
-:::info[O body é igual ao de `send-template`]
+<Callout type="info" title="O body é igual ao de `send-template`">
 O corpo do request é o mesmo nos dois endpoints. O que muda é o **painel usado** para gerenciar os templates: **Gupshup** ou **Meta**.
-:::
+</Callout>
 
 ## Onde vão os parâmetros
 
@@ -93,7 +95,7 @@ Botão de resposta rápida **não tem parâmetro**. Só as 2 variáveis de texto
 
 ### 4. Só 1 botão de link dinâmico, sem variáveis de texto
 
-:::tip[O botão de URL não recebe o link inteiro]
+<Callout type="idea" title="O botão de URL não recebe o link inteiro">
 Quando o template é criado no **painel da Gupshup**, o começo da URL é **fixo** e fica salvo no próprio template. Só o **final** da URL é variável - e é só esse pedaço que você envia no request.
 
 | | |
@@ -103,7 +105,7 @@ Quando o template é criado no **painel da Gupshup**, o começo da URL é **fixo
 | Link que o cliente recebe | `https://google.com/maps/@-20.8175629,-49.3518848,14z` |
 
 Mandar a URL completa duplica o prefixo e quebra o link.
-:::
+</Callout>
 
 Template sem variável de texto e com 1 botão de URL: `params` leva **só** o trecho variável da URL.
 
@@ -240,7 +242,7 @@ Botão de resposta rápida **não tem parâmetro**. Só as 2 variáveis de texto
 
 ### 4. Só 1 botão de link dinâmico, sem variáveis de texto
 
-:::tip[O botão de URL não recebe o link inteiro]
+<Callout type="idea" title="O botão de URL não recebe o link inteiro">
 Quando o template é criado no **painel da Meta**, o começo da URL é **fixo** e fica salvo no próprio template. Só o **final** da URL é variável - e é só esse pedaço que você envia no request.
 
 | | |
@@ -250,7 +252,7 @@ Quando o template é criado no **painel da Meta**, o começo da URL é **fixo** 
 | Link que o cliente recebe | `https://google.com/maps/@-20.8175629,-49.3518848,14z` |
 
 Mandar a URL completa duplica o prefixo e quebra o link.
-:::
+</Callout>
 
 Template sem variável de texto e com 1 botão de URL: mande só `urlParams` e **omita o `params`**.
 
@@ -321,11 +323,11 @@ Template com 2 variáveis de texto + 2 botões de URL: `urlParams` leva um trech
 
 ---
 
-:::warning[Atenção]
+<Callout type="warn" title="Atenção">
 - 📞 Números devem estar no formato E.164: `55DD9XXXXXXXX`
 - 🔗 Links só funcionam em botões do tipo **URL Button**
 - 🧪 Sempre teste templates no **Meta Template Manager** antes de usar em produção
-:::
+</Callout>
 
 ---
 

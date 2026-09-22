@@ -4,6 +4,8 @@ sidebar_position: 4
 description: "Referência técnica da API do iHelp para mover em massa."
 source: api
 contentType: referencia
+method: POST
+endpoint: "/crm/card/bulk/move"
 ---
 
 Move **vários cards de uma vez** para a mesma etapa de destino.
@@ -48,9 +50,9 @@ https://apiv3.ihelpchat.com/api/v2/crm/card/bulk/move
 | `failedCardIds` | **Falharam na gravação**: vale repetir a chamada apenas com estes IDs |
 | `stages` | Totais atualizados de cada etapa de origem envolvida, mais a de destino |
 
-:::info[Skipped não é o mesmo que failed]
+<Callout type="info" title="Skipped não é o mesmo que failed">
 `skippedCardIds` é decisão de negócio, `failedCardIds` é falha técnica e admite retry.
-:::
+</Callout>
 
 ## `409` - pendências obrigatórias
 

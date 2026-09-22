@@ -8,9 +8,9 @@ contentType: referencia
 
 Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/card`
 
-:::info[Profundidade desta página]
+<Callout type="info" title="Profundidade desta página">
 Aqui estão listados todos os endpoints de card com verbo, rota e o que fazem. Os corpos de requisição e resposta **não** estão documentados campo a campo. Para o fluxo de movimentação, que tem contrato detalhado, veja [Mover card](../mover-card), [Mover em massa](../mover-cards-em-massa), [Trocar de funil](../trocar-de-funil) e [Mover por telefone](../mover-por-telefone). Para os demais, fale com o time de tecnologia.
-:::
+</Callout>
 
 ## Criação, leitura e edição
 
@@ -87,6 +87,6 @@ Todas as ações em massa exigem permissão de edição em cada funil distinto t
 | `GET` | `/card/{id}/activities` | rota `id`, query `page`, `pageSize` | Histórico e tarefas vinculadas mesclados, ordenados por data decrescente |
 | `GET` | `/card/{id}/popover-summary` | rota `id` | Resumo do card para popover: última nota e contagem de atendimentos |
 
-:::info[Endpoints de sincronização]
+<Callout type="info" title="Endpoints de sincronização">
 `CardController` também expõe rotas terminadas em `/sync` e `/sync/batch`. São infraestrutura de sincronização incremental do próprio app iHelp e não fazem parte da API de integração.
-:::
+</Callout>

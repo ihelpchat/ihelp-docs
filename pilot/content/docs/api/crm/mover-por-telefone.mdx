@@ -4,11 +4,13 @@ sidebar_position: 6
 description: "Referência técnica da API do iHelp para mover por telefone."
 source: api
 contentType: referencia
+method: POST
+endpoint: "/crm/card/move-by-phone"
 ---
 
-:::tip[Endpoint de integração]
+<Callout type="idea" title="Endpoint de integração">
 Move os cards de um contato **sem precisar conhecer o `cardId`**. É o caminho mais direto para automações que só têm o número de telefone em mãos.
-:::
+</Callout>
 
 ### `POST`
 ```http
@@ -67,9 +69,9 @@ Array com uma entrada por card avaliado.
 | `message` | Motivo quando `moved: false` |
 | `previousStageId` / `currentStageId` | Etapa antes e depois. Iguais quando o card não se moveu. |
 
-:::warning[Verifique `moved` em cada item]
+<Callout type="warn" title="Verifique `moved` em cada item">
 O status `200` só indica que a chamada foi processada. Cards individuais podem não ter se movido, sempre percorra o array conferindo `moved`.
-:::
+</Callout>
 
 ## Erros
 
@@ -79,6 +81,6 @@ O status `200` só indica que a chamada foi processada. Cards individuais podem 
 | 401 | Token ausente, inválido ou expirado |
 | 409 | Conflito de concorrência. Vem com header `Retry-After: 1`, repita a chamada |
 
-:::info[Contrato de erro diferente]
+<Callout type="info" title="Contrato de erro diferente">
 Ao contrário de [Mover card](./mover-card), este endpoint responde `400` com a mensagem de erro em texto quando a etapa de destino está inativa, sem o corpo `{ "error": "stage_inactive" }`.
-:::
+</Callout>

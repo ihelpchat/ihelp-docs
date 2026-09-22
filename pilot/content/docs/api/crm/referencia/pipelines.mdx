@@ -10,9 +10,9 @@ Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/pipelines`
 
 "Pipeline" e "funil" são o mesmo objeto. A diferença é o caminho: os endpoints de `/funnel` (ver [Funis e etapas](./funis-e-etapas)) são o CRUD simples, enquanto os de `/pipelines` cobrem criação em cascata e gestão (arquivar, duplicar, permissões, exportar).
 
-:::info[Profundidade desta página]
+<Callout type="info" title="Profundidade desta página">
 Verbo, rota e o que cada endpoint faz. Os corpos de requisição não estão documentados campo a campo.
-:::
+</Callout>
 
 ## Criação e edição
 
@@ -36,9 +36,9 @@ Verbo, rota e o que cada endpoint faz. Os corpos de requisição não estão doc
 | `POST` | `/pipelines/reorder` | body | Persiste a ordem das pipelines da empresa. **Apenas administradores da empresa** |
 | `GET` | `/pipelines/{id}/export` | rota `id`, query `format=csv\|xlsx` | Exporta a pipeline. O `xlsx` traz múltiplas abas com KPIs, cards e etapas. Padrão: `xlsx` |
 
-:::warning[`clear-cards` é destrutivo]
+<Callout type="warn" title="`clear-cards` é destrutivo">
 Remove todos os cards da pipeline de uma vez, sem seleção. A resposta traz `deletedCount` para conferência.
-:::
+</Callout>
 
 ## Permissões
 

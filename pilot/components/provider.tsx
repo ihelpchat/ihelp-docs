@@ -1,20 +1,15 @@
 'use client';
-import SearchDialog from '@/components/search';
+import SearchDialog, { type SiteCounts } from '@/components/search';
 import { RootProvider } from 'fumadocs-ui/provider/next';
-import { type ReactNode } from 'react';
+import { useCallback, type ReactNode } from 'react';
+import type { SharedProps } from 'fumadocs-ui/contexts/search';
 
-export function Provider({ children }: { children: ReactNode }) {
+export function Provider({ children, counts }: { children: ReactNode; counts: SiteCounts }) {
+  const Dialog = useCallback((props: SharedProps) => <SearchDialog {...props} counts={counts} />, [counts]);
   return (
     <RootProvider
       theme={{ enabled: false }}
-      search={{
-        SearchDialog,
-        links: [
-          ['Central de ajuda', '/docs'],
-          ['Tutoriais', '/tutoriais'],
-          ['Referência da API', '/api'],
-        ],
-      }}
+      search={{ SearchDialog: Dialog }}
       i18n={{
         locale: 'pt-BR',
         defaultLanguage: 'pt-BR',

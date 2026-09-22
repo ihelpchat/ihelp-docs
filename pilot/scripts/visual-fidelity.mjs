@@ -1,75 +1,115 @@
+/**
+ * Compara o app com o protótipo do Claude Design (projeto “Estrutura de docs ihelp”).
+ *
+ * Duas medidas, por viewport (desktop 1440×1000 e mobile 390×844):
+ * - pontos de controle: posição, tamanho e estilo de ~90 elementos, contra `fixtures/design-baseline.json`;
+ * - grade de cor: a tela visível dividida em blocos, comparando a cor média de cada bloco.
+ *
+ * No mobile, as telas internas do protótipo não se adaptam (a barra lateral fixa empurra o conteúdo
+ * para fora da tela), então ali comparamos só tipografia e cores; posição e grade de cor valem para a home.
+ */
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright-core';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { checksFor, colorGrid, gridBlock, launch, measureInPage, openAppScreen, screens } from './visual/measure.mjs';
+import { tolerance } from './visual/probes.mjs';
 
 const baseUrl = process.env.BASE_URL ?? 'http://127.0.0.1:4173';
-const executablePath = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const checks = [];
+const minimum = Number(process.env.VISUAL_MIN ?? 90);
+const reportDir = process.env.VISUAL_REPORT_DIR;
+const baseline = JSON.parse(await readFile(new URL('./fixtures/design-baseline.json', import.meta.url), 'utf8'));
 
-function near(name, actual, expected, tolerance) {
-  checks.push({ name, pass: Math.abs(actual - expected) <= tolerance, actual, expected, tolerance });
+const styleProps = new Set(['fontSize', 'fontWeight', 'lineHeight', 'color', 'background', 'borderColor', 'borderRadius']);
+
+function colorDistance(a, b) {
+  if (!a || !b) return a === b ? 0 : Infinity;
+  // Fundo transparente conta como igual ao fundo da página.
+  const flatten = (c) => (c[3] === 0 ? [248, 250, 252] : c.slice(0, 3).map((v) => Math.round(v * c[3] + 248 * (1 - c[3]))));
+  const [x, y] = [flatten(a), flatten(b)];
+  return Math.max(...x.map((v, i) => Math.abs(v - y[i])));
 }
 
-function exact(name, pass, actual) {
-  checks.push({ name, pass, actual });
+function compare(prop, expected, actual) {
+  if (actual === undefined || actual === null) return { pass: false, delta: 'ausente' };
+  if (['color', 'background', 'borderColor'].includes(prop)) {
+    const delta = colorDistance(expected, actual);
+    return { pass: delta <= tolerance.color, delta };
+  }
+  if (prop === 'fontWeight') return { pass: Math.abs(expected - actual) < 100, delta: actual - expected };
+  const delta = Math.round((actual - expected) * 10) / 10;
+  return { pass: Math.abs(delta) <= (tolerance[prop] ?? 8), delta };
 }
 
-async function rect(page, selector) {
-  return page.locator(selector).first().evaluate((element) => {
-    const value = element.getBoundingClientRect();
-    return { left: value.left, top: value.top, width: value.width, height: value.height, bottom: value.bottom };
-  });
+function gridSimilarity(expected, actual) {
+  const blocks = Math.min(expected.hex.length, actual.hex.length) / 6;
+  let same = 0;
+  for (let i = 0; i < blocks; i += 1) {
+    const a = expected.hex.slice(i * 6, i * 6 + 6).match(/../g).map((h) => parseInt(h, 16));
+    const b = actual.hex.slice(i * 6, i * 6 + 6).match(/../g).map((h) => parseInt(h, 16));
+    if (Math.max(...a.map((v, j) => Math.abs(v - b[j]))) <= 24) same += 1;
+  }
+  return Math.round((same / blocks) * 1000) / 10;
 }
 
-const browser = await chromium.launch({ executablePath, headless: true });
+const results = { desktop: [], mobile: [] };
+const grids = { desktop: [], mobile: [] };
+const failures = [];
+
+const browser = await launch();
 try {
-  const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-  await desktop.goto(baseUrl, { waitUntil: 'networkidle' });
-  const desktopHero = await rect(desktop, '.design-hero');
-  const desktopBadge = await rect(desktop, '.design-badge');
-  const desktopTitle = await rect(desktop, '.design-hero h1');
-  const desktopSearch = await rect(desktop, '.design-home .home-search');
-  const desktopPortal = await rect(desktop, '.design-portal-card');
-  near('desktop hero top', desktopHero.top, 60, 5);
-  near('desktop hero bottom', desktopHero.bottom, 598, 12);
-  near('desktop badge left', desktopBadge.left, 158, 8);
-  near('desktop badge top', desktopBadge.top, 130, 8);
-  near('desktop title left', desktopTitle.left, 158, 8);
-  near('desktop title top', desktopTitle.top, 191, 10);
-  near('desktop search left', desktopSearch.left, 158, 8);
-  near('desktop search width', desktopSearch.width, 660, 12);
-  near('desktop portals top', desktopPortal.top, 638, 14);
-  near('desktop portal width', desktopPortal.width, 554, 14);
-  exact('desktop two portals', await desktop.locator('.design-portal-card').count() === 2, await desktop.locator('.design-portal-card').count());
-  exact('desktop exact headline', await desktop.locator('.design-hero h1').textContent() === 'Tire sua dúvida sobre o iHelp em uma pergunta.', await desktop.locator('.design-hero h1').textContent());
-  await desktop.close();
+  for (const screen of screens) {
+    for (const viewport of screen.viewports) {
+      const key = `${screen.name}:${viewport}`;
+      const reference = baseline.screens[key];
+      assert.ok(reference, `Sem referência para ${key}; rode qa:visual:baseline`);
+      const page = await openAppScreen(browser, baseUrl, screen, viewport);
+      const layoutComparable = viewport === 'desktop' || screen.name === 'home';
 
-  const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true });
-  await mobile.goto(baseUrl, { waitUntil: 'networkidle' });
-  const mobileHero = await rect(mobile, '.design-hero');
-  const mobileBadge = await rect(mobile, '.design-badge');
-  const mobileTitle = await rect(mobile, '.design-hero h1');
-  const mobileSearch = await rect(mobile, '.design-home .home-search');
-  const mobilePortal = await rect(mobile, '.design-portal-card');
-  near('mobile hero top', mobileHero.top, 60, 6);
-  near('mobile hero bottom', mobileHero.bottom, 598, 14);
-  near('mobile badge left', mobileBadge.left, 20, 5);
-  near('mobile badge top', mobileBadge.top, 101, 8);
-  near('mobile title left', mobileTitle.left, 20, 5);
-  near('mobile title top', mobileTitle.top, 161, 10);
-  near('mobile search left', mobileSearch.left, 20, 5);
-  near('mobile search top', mobileSearch.top, 331, 12);
-  near('mobile portal left', mobilePortal.left, 28, 5);
-  near('mobile portal width', mobilePortal.width, 334, 10);
-  exact('mobile four suggestions', await mobile.locator('.search-suggestions button').count() === 4, await mobile.locator('.search-suggestions button').count());
-  const overflow = await mobile.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  exact('mobile without horizontal overflow', overflow <= 0, overflow);
-  await mobile.close();
+      for (const check of checksFor(screen, viewport)) {
+        const measured = await page.evaluate(
+          ({ selector, fn }) => new Function('el', `return (${fn})(el)`)(document.querySelector(selector)),
+          { selector: check.app, fn: measureInPage.toString() },
+        );
+        for (const prop of check.props) {
+          if (!layoutComparable && !styleProps.has(prop) && !(check.id === 'header' && prop === 'height')) continue;
+          const expected = reference.checks[check.id]?.[prop];
+          const outcome = measured ? compare(prop, expected, measured[prop]) : { pass: false, delta: 'elemento ausente' };
+          results[viewport].push(outcome.pass);
+          if (!outcome.pass) failures.push({ tela: key, ponto: check.id, medida: prop, esperado: expected, obtido: measured?.[prop], diferenca: outcome.delta });
+        }
+      }
+
+      if (layoutComparable) {
+        const grid = await colorGrid(page, gridBlock[viewport]);
+        const similarity = gridSimilarity(reference.grid, grid);
+        grids[viewport].push({ tela: screen.name, similaridade: similarity });
+      }
+      if (reportDir) {
+        await mkdir(reportDir, { recursive: true });
+        await page.screenshot({ path: `${reportDir}/${screen.name}-${viewport}.png` });
+      }
+      await page.close();
+    }
+  }
 } finally {
   await browser.close();
 }
 
-const passed = checks.filter((check) => check.pass).length;
-const score = Math.round((passed / checks.length) * 100);
-for (const check of checks.filter((item) => !item.pass)) console.error('FALHOU', check);
-console.log(`Fidelidade visual: ${score}% (${passed}/${checks.length} checkpoints).`);
-assert.ok(score >= 90, `Fidelidade visual abaixo de 90%: ${score}%`);
+const summary = {};
+for (const viewport of ['desktop', 'mobile']) {
+  const passed = results[viewport].filter(Boolean).length;
+  const points = Math.round((passed / results[viewport].length) * 1000) / 10;
+  const gridAverage = Math.round((grids[viewport].reduce((sum, item) => sum + item.similaridade, 0) / grids[viewport].length) * 10) / 10;
+  summary[viewport] = { pontos: `${points}% (${passed}/${results[viewport].length})`, pontosPct: points, gradeMedia: gridAverage, grade: grids[viewport] };
+}
+
+for (const failure of failures) console.error('DIFERENTE', JSON.stringify(failure));
+for (const [viewport, item] of Object.entries(summary)) {
+  console.log(`${viewport}: pontos de controle ${item.pontos}; grade de cor média ${item.gradeMedia}% (${item.grade.map((g) => `${g.tela} ${g.similaridade}%`).join(', ')})`);
+}
+if (reportDir) await writeFile(`${reportDir}/visual-summary.json`, JSON.stringify({ summary, failures }, null, 2));
+
+for (const [viewport, item] of Object.entries(summary)) {
+  assert.ok(item.pontosPct >= minimum, `${viewport}: pontos de controle abaixo de ${minimum}% (${item.pontos})`);
+  assert.ok(item.gradeMedia >= minimum, `${viewport}: grade de cor abaixo de ${minimum}% (${item.gradeMedia}%)`);
+}
+console.log(`Fidelidade visual aprovada: mínimo de ${minimum}% em desktop e mobile.`);

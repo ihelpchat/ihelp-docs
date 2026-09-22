@@ -4,6 +4,8 @@ sidebar_position: 3
 description: "Referência técnica da API do iHelp para mover card."
 source: api
 contentType: referencia
+method: PUT
+endpoint: "/crm/card/{id}/stage/{stageId}"
 ---
 
 Move **um card** para outra etapa **do mesmo funil**. Equivale a arrastar o card entre colunas do kanban.
@@ -89,9 +91,9 @@ Nada foi movido. Para prosseguir, repita a chamada com `?force=true`.
 { "error": "stage_inactive", "message": "Não é possível mover para um estágio excluído." }
 ```
 
-:::warning[Não contornável]
+<Callout type="warn" title="Não contornável">
 Este caso **não** é contornável por `force`.
-:::
+</Callout>
 
 ## Demais erros
 
