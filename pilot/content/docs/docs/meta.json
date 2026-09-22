@@ -1,0 +1,6 @@
+{
+  "title": "Central de ajuda",
+  "description": "Respostas e orientações para usar o iHelp",
+  "root": true,
+  "pages": ["index", "principais-duvidas", "sobre-o-sistema"]
+}

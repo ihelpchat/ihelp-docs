@@ -1,0 +1,28 @@
+---
+title: "Mensagem comum"
+description: Envie uma mensagem de texto para um contato usando a API do iHelp.
+source: api
+contentType: referencia
+---
+
+<Callout type="idea" title="Compatibilidade">
+Compatível com API oficial e não oficial.
+</Callout>
+
+### `POST`
+```http
+https://apiv3.ihelpchat.com/api/v2/customers/send-message
+```
+
+**Body (JSON):**
+```json
+{
+    "texto": "Mensagem",
+    "canalId": "69bd5219d057b663d5476f5d",
+    "contato": "551788889999",
+    "messageType": 0
+}
+```
+<Callout title="Observação">
+`messageType: 0` = texto
+</Callout>

@@ -1,12 +1,10 @@
 ---
-title: "Obter token de usuário"
+title: "Obter credencial de integração"
 sidebar_position: 2
 ---
 
-1. Aperte F12 na tela de atendimentos
-2. Abra a aba Network
-3. Digite qualquer texto na **Pesquisa de conversa**
-4. Abra o request 'search' e copie seu token de usuário em Authorization (esse token não mudará)
-![](/img/api/Pasted%20image%2020260409105551.png)
+Não copie o token da sessão do navegador pelo DevTools. Ele representa o usuário conectado, pode perder a validade e não deve ser compartilhado.
 
----
+Para integrar com a API, solicite ao suporte do iHelp uma credencial própria para a integração e armazene-a como segredo no servidor. Nunca coloque a credencial em frontend, aplicativo distribuído, screenshot ou repositório.
+
+[Solicitar credencial ao suporte](https://wa.me/551730422307)

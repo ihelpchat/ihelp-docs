@@ -1,0 +1,19 @@
+---
+title: "Autenticação"
+description: Envie uma credencial dedicada no header Authorization em todas as requisições.
+source: api
+contentType: referencia
+---
+
+Todas as requisições devem incluir:
+
+| Header | Valor |
+|--------|-------|
+| `Authorization` | `Bearer <token>` |
+
+**Exemplo:**
+```
+Authorization: Bearer $IHELP_TOKEN
+```
+
+Use uma credencial dedicada à integração, guarde-a como segredo no servidor e nunca exponha esse valor no frontend.

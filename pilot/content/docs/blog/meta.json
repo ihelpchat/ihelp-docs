@@ -1,0 +1,13 @@
+{
+  "title": "Novidades",
+  "root": true,
+  "pages": [
+    "index",
+    "calendario-agendamento-e-robo-ligacao",
+    "citacoes-status-catalogo",
+    "edicao-de-mensagens",
+    "encerramento-automatico-e-filtros",
+    "listas-personalizadas",
+    "nova-tela-de-senha"
+  ]
+}

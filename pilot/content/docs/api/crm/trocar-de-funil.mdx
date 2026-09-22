@@ -1,0 +1,74 @@
+---
+title: "Trocar de funil"
+sidebar_position: 5
+description: "Referência técnica da API do iHelp para trocar de funil."
+source: api
+contentType: referencia
+---
+
+Move um card **aberto** para **outro funil**, posicionando-o em uma etapa ativa do funil de destino.
+
+### `POST`
+```http
+https://apiv3.ihelpchat.com/api/v2/crm/card/{id}/move-funnel
+```
+
+**Parâmetros de rota:**
+
+| Param | Tipo | Descrição |
+|---|---|---|
+| `id` | int | ID do card |
+
+**Body (JSON):**
+```json
+{
+  "targetFunnelId": 15,
+  "targetStageId": 210
+}
+```
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `targetFunnelId` | int | sim | Funil de destino. Precisa ser diferente do funil atual do card. |
+| `targetStageId` | int | sim | Etapa de destino, obrigatoriamente pertencente ao `targetFunnelId`. |
+
+**Resposta `200 OK`:**
+```json
+{
+  "card": {
+    "id": 8821,
+    "title": "Proposta ACME",
+    "stageId": 210
+  }
+}
+```
+
+O card retornado já reflete o funil e a etapa novos.
+
+## Permissões
+
+Diferente dos demais endpoints, aqui são exigidos **dois** níveis de acesso:
+
+- No funil de **origem**: administrador da empresa **ou** Admin/Owner da pipeline.
+- No funil de **destino**: administrador da empresa **ou** permissão de edição.
+
+Se qualquer um dos dois faltar, a resposta é `403` com uma mensagem indicando qual lado bloqueou.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | `invalid_target_funnel` | Funil de destino inexistente, inativo, ou igual ao de origem |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem permissão na pipeline de origem ou na de destino |
+| 404 | - | Card inexistente ou pertencente a outra empresa |
+| 409 | `card_closed` | Cards ganhos, perdidos ou cancelados não mudam de funil |
+| 409 | `stage_inactive` | Etapa de destino não pertence ao funil informado, está inativa ou foi excluída |
+| 409 | `contact_lock_conflict` | O funil de destino tem trava de contato e o contato já possui um card ativo lá |
+| 409 | `stage_concurrency_conflict` | Conflito de concorrência, repita a chamada |
+
+## Boas práticas
+
+- Descubra as etapas válidas com `GET /crm/funnel/{targetFunnelId}/with-stages` (ver [Funis e etapas](./funis-e-etapas)) e filtre por `isActive: true` antes de escolher o `targetStageId`.
+- Somente cards com status aberto ou em andamento são elegíveis. Verifique o status antes de chamar para evitar o `409 card_closed`.
+- Esta operação move **um card por vez**. Não existe versão em massa para troca de funil.

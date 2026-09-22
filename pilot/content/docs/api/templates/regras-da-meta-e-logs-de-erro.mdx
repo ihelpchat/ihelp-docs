@@ -1,0 +1,39 @@
+---
+title: "Regras da Meta e logs de erro"
+sidebar_position: 5
+description: "Referência técnica da API do iHelp para regras da meta e logs de erro."
+source: api
+contentType: referencia
+---
+
+## Regras da Meta
+
+| Restrição | Descrição |
+| --- | --- |
+| Quebra de linha em parâmetros | Não envie `\n` dentro das variáveis de templates. |
+| Link em parâmetros | Envie links somente em parâmetros de botões de URL. |
+
+**Erro comum:**
+
+```text
+message:400 - "Object reference not set to an instance of an object."
+```
+
+Esse erro pode acontecer quando o body JSON está em um formato inválido ou quando o template não pertence ao canal usado no envio.
+
+## Ver logs de erro
+
+Não adicione endpoints internos, tokens ou credenciais de diagnóstico no painel do provedor.
+
+Para investigar uma falha de template:
+
+1. Abra os logs do próprio painel da Meta ou da Gupshup.
+2. Copie o horário da tentativa, o nome do app, o ID do template e a mensagem de erro.
+3. Remova telefone, nome do contato, conteúdo da mensagem e qualquer credencial antes de compartilhar.
+4. Envie essas informações ao suporte do iHelp.
+
+[Solicitar análise ao suporte](https://wa.me/551730422307)
+
+:::warning[Atenção]
+Nunca publique URLs privadas de webhook, tokens ou respostas completas de produção em documentação, screenshots ou repositórios.
+:::

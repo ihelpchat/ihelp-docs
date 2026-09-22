@@ -1,0 +1,82 @@
+---
+title: "Visão geral"
+sidebar_position: 1
+description: "Referência técnica da API do iHelp para visão geral."
+source: api
+contentType: referencia
+---
+
+Endpoints para consultar funis e etapas e movimentar oportunidades (cards) no CRM do iHelp.
+
+## Base URL
+
+```http
+https://apiv3.ihelpchat.com
+```
+
+Todas as rotas de CRM têm o prefixo `/api/v2/crm`.
+
+## Autenticação
+
+Todos os endpoints exigem um JWT no header `Authorization`, como no restante da API. Veja [Autenticação](/api/conceitos/autenticacao) e [Obter token de usuário](/api/conceitos/obter-token).
+
+```
+Authorization: Bearer <TOKEN>
+```
+
+:::warning[A empresa vem sempre do token]
+Nenhum endpoint de CRM aceita `businessId` no corpo ou na query. Você só enxerga e movimenta dados da sua própria empresa.
+:::
+
+## Ordem recomendada de uso
+
+Você precisa dos IDs antes de movimentar. O fluxo natural é:
+
+1. `GET /crm/funnel` - lista os funis, guarde o `id` do funil desejado
+2. `GET /crm/funnel/{id}/with-stages` - lista as etapas daquele funil, guarde o `id` da etapa
+3. Movimente:
+   - [Mover card](./mover-card) - um card entre etapas do mesmo funil
+   - [Mover em massa](./mover-cards-em-massa) - vários cards de uma vez
+   - [Trocar de funil](./trocar-de-funil) - mudar o card de funil
+   - [Mover por telefone](./mover-por-telefone) - sem precisar do `cardId`
+
+Os dois primeiros passos estão em [Funis e etapas](./funis-e-etapas).
+
+## Convenções
+
+- Todos os IDs são **inteiros**.
+- Datas são **UTC**, formato ISO 8601.
+- Não existe exclusão física: registros excluídos ficam com `isActive: false`.
+- Requisições com corpo usam `Content-Type: application/json`.
+
+### Header opcional `X-CRM-Connection-Id`
+
+Usado pelo app web para que quem originou a ação não receba o próprio evento de tempo real. **Integrações externas podem ignorar** este header.
+
+## Regras de movimentação
+
+- Uma etapa pode exigir **campos obrigatórios** e/ou **tarefas obrigatórias** preenchidos antes de o card sair dela. Nesse caso a API responde **409** com a lista de pendências e **nada é movido**.
+- Para confirmar mesmo assim, repita a chamada com `force=true` (individual) ou `"force": true` (em massa). O bypass fica registrado no histórico do card.
+- `force` **nunca** ignora uma etapa de destino excluída ou inativa.
+- Cards **ganhos, perdidos ou cancelados** não podem trocar de funil.
+- Mover um card para a etapa em que ele já está é **idempotente**: responde `200` sem alterar nada. Isso torna o retry seguro.
+
+## Erros comuns
+
+Os erros de negócio seguem o formato `{ "error": "...", "message": "..." }`.
+
+| HTTP | `error` | Significado |
+|---|---|---|
+| 400 | `invalid_target_funnel` | Funil de destino inexistente, inativo ou igual ao de origem |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Você tem permissão apenas de visualização nesta pipeline |
+| 404 | - | Card ou funil inexistente (ou pertencente a outra empresa) |
+| 409 | `stage_inactive` | Etapa de destino excluída. **Não** contornável por `force` |
+| 409 | `card_closed` | Card ganho, perdido ou cancelado não muda de funil |
+| 409 | `contact_lock_conflict` | O contato já possui um card ativo no funil de destino |
+| 409 | `stage_concurrency_conflict` | Conflito de concorrência. Vem com header `Retry-After: 1`, tente novamente |
+| 409 | *(sem `error`)* | Corpo `{ canMove: false, missingFields, pendingTasks }`, pendências obrigatórias |
+
+:::info[Além da movimentação]
+Esta seção detalha o fluxo de movimentação de cards. Os demais endpoints de CRM (CRUD de cards, funis, etapas, automações, filtros e pipelines) estão listados em [Referência completa](/api/crm/referencia).
+:::

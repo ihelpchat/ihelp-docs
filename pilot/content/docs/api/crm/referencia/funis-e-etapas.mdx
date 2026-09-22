@@ -1,0 +1,97 @@
+---
+title: "Funis e etapas"
+sidebar_position: 2
+description: "Referência técnica da API do iHelp para funis e etapas."
+source: api
+contentType: referencia
+---
+
+:::info[Profundidade desta página]
+Verbo, rota e o que cada endpoint faz. Os dois endpoints de descoberta de IDs (`GET /funnel` e `GET /funnel/{id}/with-stages`) estão detalhados em [Funis e etapas](../funis-e-etapas), com corpo de resposta e erros.
+:::
+
+## Funis
+
+Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/funnel`
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `GET` | `/funnel` | - | Todos os funis ativos da empresa. Ver [detalhes](../funis-e-etapas) |
+| `GET` | `/funnel/default` | - | O funil padrão da empresa |
+| `GET` | `/funnel/{id}` | rota `id` | Um funil por ID |
+| `GET` | `/funnel/{id}/with-stages` | rota `id` | O funil com suas etapas. Ver [detalhes](../funis-e-etapas) |
+| `GET` | `/funnel/{id}/with-rules` | rota `id` | O funil com suas regras de automação |
+| `GET` | `/funnel/{id}/with-stages-and-rules` | rota `id` | O funil com etapas e regras |
+| `POST` | `/funnel` | body | Cria um novo funil. O criador entra automaticamente como Admin |
+| `PUT` | `/funnel/{id}` | rota `id`, body | Atualiza um funil existente |
+| `DELETE` | `/funnel/{id}` | rota `id` | Soft delete do funil. `204` se removido, `404` se inexistente ou se for o padrão |
+| `GET` | `/funnel/{funnelId}/cards` | rota `funnelId` | Todos os cards do funil |
+| `GET` | `/funnel/user-funnels` | - | Funis a que o usuário do token tem acesso explícito |
+| `POST` | `/funnel/import-card-contact` | body (lista) | Importa cards e contatos em lote para um funil |
+
+### Métricas e metas
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `GET` | `/funnel/{funnelId}/kpis` | rota `funnelId` | KPIs agregados do funil: valor total, conversão, movimentação e atrasos |
+| `POST` | `/funnel/{funnelId}/kpis/filtered` | rota `funnelId`, body filtro | Os mesmos KPIs aplicando um filtro. Corpo vazio equivale a sem filtro |
+| `GET` | `/funnel/{funnelId}/stages/metrics` | rota `funnelId` | Métricas por etapa: total de cards, ganhos, tempo médio na etapa e taxa de conversão |
+| `POST` | `/funnel/{funnelId}/stages/metrics-filtered` | rota `funnelId`, body filtro | As mesmas métricas respeitando o filtro avançado |
+| `GET` | `/funnel/{funnelId}/loss-reasons/aggregate` | rota `funnelId` | Top motivos de perda do funil (padrão: 5) |
+| `GET` | `/funnel/{funnelId}/goal/current` | rota `funnelId` | Meta do mês corrente (UTC) para o funil |
+| `PUT` | `/funnel/{funnelId}/goal` | rota `funnelId`, body | Cria ou atualiza a meta de um mês. **Apenas administradores** |
+| `GET` | `/funnel/{funnelId}/goal/progress` | rota `funnelId` | Progresso da meta do mês: alvo, realizado e percentual |
+| `GET` | `/funnel/report` | query `funnelId`, `startDate`, `endDate`, `includeStageHistory` | Relatório do funil no período |
+
+## Etapas
+
+Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/funnelstage`
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `GET` | `/funnelstage/funnel/{funnelId}` | rota `funnelId` | Todas as etapas ativas de um funil |
+| `GET` | `/funnelstage/{id}` | rota `id` | Uma etapa por ID |
+| `GET` | `/funnelstage/funnel/{funnelId}/first` | rota `funnelId` | A primeira etapa do funil |
+| `POST` | `/funnelstage` | body | Cria uma nova etapa. Campos obrigatórios: `title`, `color` (`#RRGGBB`) e `funnelId` |
+| `PUT` | `/funnelstage/{id}` | rota `id`, body | Atualiza uma etapa |
+| `PUT` | `/funnelstage/{id}/field` | rota `id`, body | Atualiza um único campo da etapa (`title`, `description`, `color`, `order`, `probability` ou `isactive`) |
+| `PUT` | `/funnelstage/{funnelId}/reorder` | rota `funnelId`, body (lista) | Reordena as etapas do funil |
+| `DELETE` | `/funnelstage/{id}` | rota `id`, query `targetStageId` | Desativa a etapa. Se ela tiver cards, `targetStageId` é obrigatório para migrá-los, senão responde `409` |
+| `GET` | `/funnelstage/{stageId}/cards` | rota `stageId`, query filtro | Cards da etapa com paginação |
+| `POST` | `/funnelstage/{stageId}/cards` | rota `stageId`, body filtro | O mesmo, aceitando o filtro avançado aninhado no corpo. É o caminho do scroll infinito com filtro ativo |
+| `PATCH` | `/funnelstage/funnels/{pipelineId}/stages/{stageId}/required-fields` | rota `pipelineId`, `stageId`, body | Define os campos obrigatórios para sair da etapa. **Apenas administradores** |
+| `PUT` | `/funnelstage/{stageId}/recalculate-value` | rota `stageId` | Recalcula o valor total (`totalCardValue`) da etapa |
+
+Todas as mutações de etapa exigem nível Admin ou Owner no funil, ou administrador da empresa.
+
+Os campos obrigatórios definidos em `required-fields` são exatamente o que o `validate-move` e o `PUT /card/{id}/stage/{stageId}` checam antes de deixar um card sair da etapa.
+
+## Tarefas obrigatórias da etapa
+
+Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/stages/{stageId}/task-templates`
+
+Modelos de tarefa geradas quando um card entra na etapa. Tarefas marcadas como obrigatórias bloqueiam a saída do card até serem concluídas.
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `GET` | `/stages/{stageId}/task-templates` | rota `stageId` | Lista os modelos de tarefa da etapa |
+| `POST` | `/stages/{stageId}/task-templates` | rota `stageId`, body | Cria um modelo de tarefa |
+| `PATCH` | `/stages/{stageId}/task-templates/{templateId}` | rota `stageId`, `templateId`, body | Atualiza parcialmente um modelo |
+| `DELETE` | `/stages/{stageId}/task-templates/{templateId}` | rota `stageId`, `templateId` | Remove um modelo |
+| `POST` | `/stages/{stageId}/task-templates/reorder` | rota `stageId`, body `orderedIds` | Reordena os modelos da etapa |
+
+Leitura é liberada para qualquer usuário autenticado da empresa. Mutações exigem nível admin ou edição no funil da etapa.
+
+## Funil de atendimento
+
+Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/attendancefunnel`
+
+Funil especial usado pelo módulo de Atendimento (kanban de conversas, não de vendas). Todos são `GET` sem corpo.
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `GET` | `/attendancefunnel` | Obtém ou cria o funil de atendimento padrão da empresa |
+| `GET` | `/attendancefunnel/stage/new` | Etapa "Novos" |
+| `GET` | `/attendancefunnel/stage/my` | Etapa "Meus" |
+| `GET` | `/attendancefunnel/stage/department` | Etapa "Departamento" |
+| `GET` | `/attendancefunnel/stage/finished` | Etapa "Finalizados" |

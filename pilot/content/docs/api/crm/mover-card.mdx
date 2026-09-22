@@ -1,0 +1,109 @@
+---
+title: "Mover card"
+sidebar_position: 3
+description: "Referência técnica da API do iHelp para mover card."
+source: api
+contentType: referencia
+---
+
+Move **um card** para outra etapa **do mesmo funil**. Equivale a arrastar o card entre colunas do kanban.
+
+## Validar antes de mover (opcional)
+
+Verifica se o card pode sair da etapa atual **sem alterar nada**. Útil para avisar o usuário antes de confirmar.
+
+### `POST`
+```http
+https://apiv3.ihelpchat.com/api/v2/crm/card/{id}/validate-move?targetStageId=102
+```
+
+| Param | Tipo | Descrição |
+|---|---|---|
+| `id` | int | ID do card (rota) |
+| `targetStageId` | int | ID da etapa de destino (query) |
+
+Sem corpo. Responde `200` com `{ "canMove": true, "missingFields": [], "pendingTasks": [] }` ou `409` com as pendências no mesmo formato descrito abaixo.
+
+## Mover
+
+### `PUT`
+```http
+https://apiv3.ihelpchat.com/api/v2/crm/card/{id}/stage/{stageId}?force=false
+```
+
+**Parâmetros de rota:**
+
+| Param | Tipo | Descrição |
+|---|---|---|
+| `id` | int | ID do card |
+| `stageId` | int | ID da etapa de destino |
+
+**Query:**
+
+| Param | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `force` | bool | `false` | `true` confirma o movimento mesmo com pendências obrigatórias. O bypass fica registrado no histórico do card. |
+
+Sem corpo.
+
+**Resposta `200 OK`:**
+```json
+{
+  "card": {
+    "id": 8821,
+    "title": "Proposta ACME",
+    "stageId": 102,
+    "estimatedValue": 4500.00,
+    "status": 0
+  },
+  "sourceStage":      { "id": 101, "totalItems": 12, "totalCardValue": 38000.00 },
+  "destinationStage": { "id": 102, "totalItems": 7,  "totalCardValue": 29500.00 }
+}
+```
+
+| Campo | Significado |
+|---|---|
+| `card` | O card já com a etapa nova |
+| `sourceStage` | Totais atualizados da coluna de origem |
+| `destinationStage` | Totais atualizados da coluna de destino |
+
+`totalItems` é a quantidade de cards na etapa e `totalCardValue` a soma dos valores. Use-os para atualizar cabeçalhos sem refazer consultas.
+
+## `409` - pendências obrigatórias
+
+Quando a etapa **atual** exige campos ou tarefas ainda não concluídos:
+
+```json
+{
+  "canMove": false,
+  "missingFields": [ { "key": "email", "label": "E-mail" } ],
+  "pendingTasks":  [ { "id": 55, "title": "Ligar para o cliente" } ]
+}
+```
+
+Nada foi movido. Para prosseguir, repita a chamada com `?force=true`.
+
+## `409` - etapa de destino excluída
+
+```json
+{ "error": "stage_inactive", "message": "Não é possível mover para um estágio excluído." }
+```
+
+:::warning[Não contornável]
+Este caso **não** é contornável por `force`.
+:::
+
+## Demais erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Você tem permissão apenas de visualização nesta pipeline |
+| 404 | - | Card inexistente ou pertencente a outra empresa |
+| 409 | `stage_concurrency_conflict` | Conflito de concorrência. Vem com header `Retry-After: 1`, repita a chamada |
+
+## Boas práticas
+
+- **Retry é seguro.** Se o card já estiver na etapa de destino, a API responde `200` sem alterar nada.
+- Fluxo recomendado: chame sem `force`; se vier `409` com `canMove: false`, apresente as pendências ao usuário e só então repita com `force=true`.
+- Este endpoint é para movimentação **dentro do mesmo funil**. Para mudar o card de funil, use [Trocar de funil](./trocar-de-funil).

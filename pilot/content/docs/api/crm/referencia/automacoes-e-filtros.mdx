@@ -1,0 +1,95 @@
+---
+title: "Automações e filtros"
+sidebar_position: 4
+description: "Referência técnica da API do iHelp para automações e filtros."
+source: api
+contentType: referencia
+---
+
+:::info[Profundidade desta página]
+Verbo, rota e o que cada endpoint faz. Os corpos de requisição não estão documentados campo a campo.
+:::
+
+## Automações
+
+Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/automation`
+
+CRUD de automações genéricas (gatilho, condições e ações), com histórico de execuções.
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `GET` | `/automation` | - | Lista as automações da empresa |
+| `GET` | `/automation/{id}` | rota `id` | Obtém uma automação por ID |
+| `POST` | `/automation` | body | Cria uma automação |
+| `PUT` | `/automation/{id}` | rota `id`, body | Atualiza uma automação |
+| `PATCH` | `/automation/{id}/toggle` | rota `id` | Liga ou desliga a automação |
+| `DELETE` | `/automation/{id}` | rota `id` | Desativa a automação (`isActive: false`) |
+| `GET` | `/automation/{id}/executions` | rota `id`, query `take` | Últimas execuções da automação. Padrão: 100 |
+| `GET` | `/automation/executions` | query filtro | Execuções de automações filtradas |
+
+## Regras de funil
+
+Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/funnelrule`
+
+Regras presas a um funil ou etapa, mais antigas e mais restritas que as automações acima. São as `rules` que aparecem em `GET /funnel/{id}/with-rules`.
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `GET` | `/funnelrule/funnel/{funnelId}` | rota `funnelId` | Regras ativas do funil |
+| `GET` | `/funnelrule/stage/{stageId}` | rota `stageId` | Regras ativas da etapa |
+| `GET` | `/funnelrule/funnel/{funnelId}/stage/{stageId}` | rota `funnelId`, `stageId` | Regras ativas do funil e etapa |
+| `GET` | `/funnelrule/{id}` | rota `id` | Uma regra por ID |
+| `POST` | `/funnelrule` | body | Cria uma regra. Ações do tipo "mover card" exigem um `targetStageId` do mesmo funil |
+| `PUT` | `/funnelrule/{id}` | rota `id`, body | Atualiza uma regra |
+| `DELETE` | `/funnelrule/{id}` | rota `id` | Desativa a regra |
+| `POST` | `/funnelrule/evaluate/{ruleId}/opportunity/{cardId}` | rota `ruleId`, `cardId` | Testa a avaliação da regra contra um card específico, sem aplicá-la em produção |
+
+## Filtros salvos
+
+Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/saved-filters`
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `GET` | `/saved-filters` | query `funnelId` | Filtros salvos do usuário para um funil |
+| `GET` | `/saved-filters/{id}` | rota `id` | Um filtro salvo por ID |
+| `POST` | `/saved-filters` | body | Cria um filtro salvo. A configuração é um JSON de até 10 KB |
+| `PUT` | `/saved-filters/{id}` | rota `id`, body | Atualiza um filtro salvo |
+| `DELETE` | `/saved-filters/{id}` | rota `id` | Soft delete do filtro |
+
+## Visões salvas
+
+Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/saved-views`
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `GET` | `/saved-views` | query `pipelineId` | Visões salvas do usuário na pipeline. A primeira entrada é sempre a visão virtual "Todos os cards" (`id: 0`) |
+| `GET` | `/saved-views/{id}` | rota `id` | Uma visão salva por ID |
+| `POST` | `/saved-views` | body | Cria uma visão. O nome precisa ser único por usuário e pipeline |
+| `PATCH` | `/saved-views/{id}` | rota `id`, body | Atualiza parcialmente (nome, fixado, filtros) |
+| `DELETE` | `/saved-views/{id}` | rota `id` | Soft delete da visão. `204` em sucesso, `404` se não existir ou for de outro usuário |
+
+## Opções de filtro
+
+Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/filters`
+
+Alimentam os seletores da tela de CRM. Em todas as buscas, `q` exige no mínimo 2 caracteres e `limit` é limitado ao intervalo de 1 a 100.
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `GET` | `/filters/quick-options` | - | Opções dos filtros rápidos em uma única chamada. Tem cache de 10 minutos e responde `304` em revisitas |
+| `GET` | `/filters/contatos/search` | query `q`, `limit` | Busca contato por nome ou telefone |
+| `GET` | `/filters/tags/search` | query `q`, `limit` | Busca tag pelo nome |
+| `GET` | `/filters/canais/search` | query `q`, `limit` | Busca canal pelo título |
+| `GET` | `/filters/departamentos/search` | query `q`, `limit` | Busca departamento pelo título |
+
+## Dashboard
+
+Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/dashboard`
+
+| Método | Rota | Parâmetros | O que faz |
+|---|---|---|---|
+| `GET` | `/dashboard` | query `funnelId`, `start`, `end` | Visão executiva agregada da pipeline. `funnelId` aceita um ID numérico ou `all` |
+
+:::warning[Limite de período]
+O intervalo entre `start` e `end` não pode passar de 3 meses. Acima disso a resposta é `400`.
+:::
