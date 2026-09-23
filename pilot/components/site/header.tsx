@@ -39,7 +39,7 @@ export function SiteHeader({ menuOpen, onMenu }: { menuOpen?: boolean; onMenu?: 
             <Link
               key={item.href}
               href={item.href}
-              aria-label={item.href === '/assistente' ? 'Assistente de IA' : undefined}
+              aria-label={item.href === '/assistente' ? 'Claricia, assistente de IA do iHelp' : undefined}
               className={`ih-nav-link${item.extra ? ' ih-nav-extra' : ''}`}
               data-active={isActive(pathname, item.href) || undefined}
               aria-current={isActive(pathname, item.href) ? 'page' : undefined}

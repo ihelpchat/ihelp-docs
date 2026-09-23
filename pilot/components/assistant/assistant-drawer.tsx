@@ -84,7 +84,7 @@ export function AssistantDrawer() {
   const ref = page.section === 'home' ? undefined : { path: page.path, title: page.title };
 
   return (
-    <div className="ih-ai-drawer" role="dialog" aria-label="Assistente de IA" ref={panel}>
+    <div className="ih-ai-drawer" role="dialog" aria-label="Claricia, assistente de IA do iHelp" ref={panel}>
       <header className="ih-ai-drawer-head">
         <span className="ih-ai-avatar" aria-hidden="true"><Sparkles /></span>
         <div>

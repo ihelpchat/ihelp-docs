@@ -41,7 +41,7 @@ function mediaOf(raw) {
   if (/^\/videos\/[A-Za-z0-9/_-]+\.mp4$/.test(url)) return { kind: 'video', url, embedUrl: url };
   const youtube = url.match(/^https:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})$/);
   if (youtube) return { kind: 'video', url, embedUrl: `https://www.youtube-nocookie.com/embed/${youtube[1]}` };
-  const tella = url.match(/^https:\/\/www\.tella\.tv\/video\/([A-Za-z0-9_-]+)\/(?:view|embed)\/?$/);
+  const tella = url.match(/^https:\/\/www\.tella\.tv\/video\/([A-Za-z0-9_-]+)(?:\/(?:view|embed))?\/?$/);
   if (tella) return { kind: 'video', url, embedUrl: `https://www.tella.tv/video/${tella[1]}/embed` };
   return undefined;
 }

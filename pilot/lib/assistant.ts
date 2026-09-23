@@ -74,7 +74,8 @@ function safeMedia(value: unknown): AssistantMedia | undefined {
   if (/^\/videos\/[A-Za-z0-9/_-]+\.mp4$/.test(media.url) && media.embedUrl === media.url) return { kind: 'video', url: media.url, embedUrl: media.url };
   if (typeof media.embedUrl !== 'string') return undefined;
   if (/^https:\/\/www\.youtube-nocookie\.com\/embed\/[A-Za-z0-9_-]{11}$/.test(media.embedUrl) && /^https:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[A-Za-z0-9_-]{11}$/.test(media.url)) return { kind: 'video', url: media.url, embedUrl: media.embedUrl };
-  if (/^https:\/\/www\.tella\.tv\/video\/[A-Za-z0-9_-]+\/embed$/.test(media.embedUrl) && /^https:\/\/www\.tella\.tv\/video\/[A-Za-z0-9_-]+\/(?:view|embed)\/?$/.test(media.url)) return { kind: 'video', url: media.url, embedUrl: media.embedUrl };
+  const tella = media.url.match(/^https:\/\/www\.tella\.tv\/video\/([A-Za-z0-9_-]+)(?:\/(?:view|embed))?\/?$/);
+  if (tella && media.embedUrl === `https://www.tella.tv/video/${tella[1]}/embed`) return { kind: 'video', url: media.url, embedUrl: media.embedUrl };
   return undefined;
 }
 
