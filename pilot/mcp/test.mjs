@@ -111,6 +111,7 @@ try {
       create: async (request) => {
         assert.equal(request.text.format.type, 'json_schema');
         assert.match(request.input[0].content, /Esta página|esta página/);
+        assert.match(request.input[0].content, /Nunca diga.*documentação não explica/);
         return {
           model: 'gpt-test',
           output_text: JSON.stringify({
