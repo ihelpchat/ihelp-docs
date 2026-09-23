@@ -1,6 +1,6 @@
-import { lstat, mkdir, open, readFile, readdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, readdir, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { basename, dirname, join, normalize, relative } from 'node:path';
+import { basename, join, normalize, relative } from 'node:path';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -134,7 +134,7 @@ async function githubRequest(path, init = {}) {
   return response.json();
 }
 
-async function createPullRequest(article, rendered) {
+async function createPullRequest(article, rendered, actor, beforePull) {
   const repository = process.env.GITHUB_REPOSITORY ?? 'ihelpchat/ihelp-docs';
   const base = process.env.GITHUB_BASE_BRANCH ?? 'main';
   const [owner, repo] = repository.split('/');
@@ -148,19 +148,21 @@ async function createPullRequest(article, rendered) {
     method: 'PUT',
     body: JSON.stringify({ message: `docs: adiciona ${article.title}`, content: Buffer.from(rendered).toString('base64'), branch }),
   });
+  await beforePull(branch);
+  const submittedAt = new Date().toISOString();
   const pull = await githubRequest(`/repos/${owner}/${repo}/pulls`, {
     method: 'POST',
     body: JSON.stringify({
       title: `docs: ${article.title}`,
       head: branch,
       base,
-      body: 'Conteúdo enviado pelo MCP de documentação. Revise precisão, permissões, privacidade e links antes do merge.',
+      body: `Conteúdo enviado pelo MCP de documentação. Revise precisão, permissões, privacidade e links antes do merge.\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_article; target=${article.path}; mode=pull_request.`,
     }),
   });
   return { status: 'pull_request', url: pull.html_url, branch, filePath };
 }
 
-async function appendAudit(root, actor, mode, target, result) {
+async function appendAudit(root, actor, mode, target, result, reference) {
   const directory = join(root, '.audit');
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const directoryStat = await lstat(directory);
@@ -169,7 +171,7 @@ async function appendAudit(root, actor, mode, target, result) {
   try {
     const stat = await file.stat();
     if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0) throw new Error('arquivo de audit inseguro');
-    const line = `${JSON.stringify({ at: new Date().toISOString(), actor, operation: 'docs_submit_article', mode, target, result })}\n`;
+    const line = `${JSON.stringify({ at: new Date().toISOString(), actor, operation: 'docs_submit_article', mode, target, result, ...(reference ? { reference } : {}) })}\n`;
     const { bytesWritten } = await file.write(line);
     if (bytesWritten !== Buffer.byteLength(line)) throw new Error('registro de audit incompleto');
     await file.sync();
@@ -183,27 +185,58 @@ export async function submitArticle(root, article, mode = 'draft', requestedBy) 
   const target = typeof article.path === 'string' && SAFE_PATH.test(article.path) && !article.path.endsWith('/') ? article.path : null;
   const safeMode = mode === 'draft' || mode === 'pull_request' ? mode : null;
   await appendAudit(root, actor, safeMode, target, 'attempt');
+  let result;
   try {
     if (!actor) throw new Error('requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
-    const result = await submitValidatedArticle(root, article, mode);
-    await appendAudit(root, actor, safeMode, target, 'success');
-    return result;
+    result = await submitValidatedArticle(root, article, mode, actor, (branch) => appendAudit(root, actor, safeMode, target, 'external_request', branch));
   } catch (error) {
     await appendAudit(root, actor, safeMode, target, 'failure');
     throw error;
   }
+  try {
+    await appendAudit(root, actor, safeMode, target, 'success', result.branch);
+  } catch (error) {
+    if (mode === 'pull_request') {
+      const safeUrl = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*$/.test(result.url) ? result.url : '(URL indisponível)';
+      throw new Error(`pull_request criado em ${safeUrl}; audit final indisponível`, { cause: error });
+    }
+    throw error;
+  }
+  return result;
 }
 
-async function submitValidatedArticle(root, article, mode) {
+async function createDraft(root, article, rendered) {
+  const draftRoot = join(root, '.drafts');
+  const parts = article.path.split('/');
+  let directory = draftRoot;
+  for (const part of ['', ...parts.slice(0, -1)]) {
+    if (part) directory = join(directory, part);
+    try {
+      await mkdir(directory, { mode: 0o700 });
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+    const stat = await lstat(directory);
+    if (!stat.isDirectory() || (stat.mode & 0o022) !== 0) throw new Error('diretório de draft inseguro');
+  }
+  const canonicalRoot = await realpath(draftRoot);
+  const canonicalParent = await realpath(directory);
+  if (!canonicalParent.startsWith(`${canonicalRoot}/`)) throw new Error('path de draft fora da base');
+  const target = join(directory, `${parts.at(-1)}.mdx`);
+  const file = await open(target, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+  try {
+    await file.writeFile(rendered);
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+  return { status: 'draft', path: relative(root, target) };
+}
+
+async function submitValidatedArticle(root, article, mode, actor, beforePull) {
   const rendered = renderArticle(article);
   safeContentPath(root, article.path);
-  if (mode === 'pull_request') return createPullRequest(article, rendered);
+  if (mode === 'pull_request') return createPullRequest(article, rendered, actor, beforePull);
   if (mode !== 'draft') throw new Error('mode deve ser draft ou pull_request');
-
-  const draftRoot = join(root, '.drafts');
-  const target = normalize(join(draftRoot, `${article.path}.mdx`));
-  if (!target.startsWith(`${normalize(draftRoot)}/`)) throw new Error('path de draft inválido');
-  await mkdir(dirname(target), { recursive: true });
-  await writeFile(target, rendered, { flag: 'wx' });
-  return { status: 'draft', path: relative(root, target) };
+  return createDraft(root, article, rendered);
 }

@@ -25,6 +25,8 @@ Exemplo seguro de argumentos para escrita (junto dos demais campos obrigatórios
 
 O servidor grava JSONL append-only em `<DOCS_ROOT>/.audit/docs-submissions.jsonl` (`pilot/.audit/` por padrão), fora do Git. O diretório exige permissão `0700` e o arquivo `0600`; se não puder gravar a tentativa, a escrita não começa. Cada tentativa com ator validado gera eventos `attempt` e `success` ou `failure`, com data UTC (`at`), `actor`, `operation`, `mode`, `target` e `result`. Um caminho inválido aparece como `target: null`. O log nunca inclui body, prompt, token, IP, detalhe de erro ou campos livres do artigo. Chamadas rejeitadas pelo schema antes do handler (inclusive sem ator) não chegam ao log.
 
+Antes do POST que cria uma PR, o log grava `external_request` com a branch de correlação. A descrição da própria PR recebe ator opaco, data UTC, operação e alvo: se o audit local ficar indisponível após a criação, o erro devolve a URL da PR criada, e a PR preserva a evidência do resultado externo. O evento prévio não significa sucesso. Drafts são criados somente em diretórios reais sob `.drafts`, sem symlink ou diretório gravável por grupo/outros, e com arquivo exclusivo `0600`.
+
 Retenção operacional: manter os eventos por 90 dias; o operador deve rotacionar/arquivar o arquivo e eliminar cópias vencidas segundo a política interna. Não há limpeza automática. Proteja também os arquivos arquivados com acesso restrito.
 
 ## Execução local
