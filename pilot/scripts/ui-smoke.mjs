@@ -336,6 +336,13 @@ try {
   await mobilePage.getByRole('heading', { name: 'Tire sua dúvida sobre o iHelp em uma pergunta.' }).waitFor();
   await assertNoHorizontalOverflow(mobilePage, 'home mobile');
   await mobilePage.screenshot({ path: '/tmp/ihelp-fumadocs-home-mobile.png', fullPage: true });
+  await mobilePage.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const supportHit = await mobilePage.locator('footer a').filter({ hasText: 'Suporte' }).evaluate((link) => {
+    const rect = link.getBoundingClientRect();
+    const target = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return target === link || link.contains(target);
+  });
+  assert.ok(supportHit, 'Launcher da Claricia cobre o link Suporte no rodapé mobile');
 
   for (const path of ['/docs/sobre-o-sistema/atendimento/', '/docs/principais-duvidas/', '/api/', '/api/atendimentos/buscar-atendimento-por-telefone/', '/tutoriais/', '/blog/', '/assistente/']) {
     await mobilePage.goto(`${baseUrl}${path}`, { waitUntil: 'networkidle' });
