@@ -8,10 +8,10 @@ import { setPendingQuery } from '@/lib/search-query';
 import { useAssistant } from '@/components/assistant/assistant-context';
 
 const suggestions = [
-  'Como transferir um atendimento?',
-  'Onde pego meu token da API?',
-  'Quanto custa a API oficial do WhatsApp?',
-  'Como importar contatos por CSV?',
+  'Como reconectar meu WhatsApp?',
+  'Como criar ou desativar um usuário?',
+  'Como configurar o robô de atendimento?',
+  'API Oficial ou QR Code?',
 ];
 
 /**
@@ -40,7 +40,7 @@ export function HomeSearch() {
     <div className="home-search-block">
       <button type="button" className="home-search" onClick={() => go('')}>
         <Sparkles aria-hidden="true" />
-        <span>Como faço para transferir um atendimento?</span>
+        <span>Meu WhatsApp desconectou. Como reconectar?</span>
         <span className="home-search-action">
           Perguntar <ArrowRight aria-hidden="true" />
         </span>

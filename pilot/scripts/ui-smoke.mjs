@@ -52,6 +52,7 @@ async function assertNoHorizontalOverflow(page, label) {
 // Resposta simulada do serviço de IA (só no teste): o site nunca inventa resposta.
 const mockReply = {
   answer: 'Abra a conversa e use a opção Transferir no painel do contato.\n\nO histórico vai junto.',
+  sections: [{ title: 'Antes de começar', items: ['Confirme o departamento de destino.'] }],
   steps: ['Abra a conversa.', 'Clique em Transferir.', 'Escolha o destino e confirme.'],
   code: { language: 'bash', content: 'curl -H "Authorization: Bearer $IHELP_TOKEN" https://apiv3.ihelpchat.com/api/v2/customers/search' },
   sources: [{ title: 'Atendimento', path: '/docs/sobre-o-sistema/atendimento', excerpt: 'Iniciar, transferir, encerrar e reabrir atendimentos.' }],
@@ -72,6 +73,7 @@ async function mockAssistant(page, { fail = 0 } = {}) {
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mockReply) });
   });
+  await page.route('**/feedback', (route) => route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ saved: true, id: 'ui-smoke' }) }));
   return requests;
 }
 
@@ -106,6 +108,7 @@ async function testAssistant(context, errors) {
   errors.splice(0, errors.length, ...errors.filter((item) => !/502|Failed to load resource/.test(item)));
   await page.getByRole('button', { name: 'Tentar de novo' }).click();
   await page.locator('.ih-ai-steps li').first().waitFor();
+  assert.equal(await page.locator('.ih-ai-sections section').count(), 1);
   assert.equal(await page.locator('.ih-ai-error').count(), 0, 'Erro deveria sumir após tentar de novo');
   assert.equal(await page.locator('.ih-ai-steps li').count(), 3);
   assert.equal(await page.locator('.ih-ai-code pre').count(), 1);
@@ -263,7 +266,7 @@ try {
     await page.route('**/assistant', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mockReply) }));
     await page.locator('.search-suggestions button').first().click();
     await page.waitForURL(/\/assistente\/?$/);
-    await page.locator('.ih-ai-user').getByText('Como transferir um atendimento?').waitFor();
+    await page.locator('.ih-ai-user').getByText('Como reconectar meu WhatsApp?').waitFor();
     await page.getByRole('button', { name: 'Nova conversa' }).click();
     await page.unroute('**/assistant');
   } else {
