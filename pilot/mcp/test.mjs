@@ -155,6 +155,17 @@ try {
   assert.equal(plainReply.sources[0].media, undefined);
   const unsafeReply = await answerQuestion(testRoot, 'Guia Claricia URL Insegura', { client: mediaClient('/docs/teste/claricia-url-insegura') });
   assert.equal(unsafeReply.sources[0].media, undefined);
+  const tellaPath = '/docs/primeiros-passos/acessando-a-plataforma';
+  const tellaReply = await answerQuestion(testRoot, 'Como acessar a plataforma?', {
+    client: mediaClient(tellaPath),
+    page: { path: tellaPath, title: 'Acessando a Plataforma' },
+  });
+  assert.deepEqual(tellaReply.sources.map((source) => source.path), [tellaPath]);
+  assert.deepEqual(tellaReply.sources[0].media, {
+    kind: 'video',
+    url: 'https://www.tella.tv/video/faq-como-alterar-sua-senha-no-ihelp-1-8jwf',
+    embedUrl: 'https://www.tella.tv/video/faq-como-alterar-sua-senha-no-ihelp-1-8jwf/embed',
+  });
   const apiScoped = await retrieveContext(testRoot, 'mensagem', 6, { scope: 'API' });
   assert.ok(apiScoped.length && apiScoped.every((source) => source.path.startsWith('/api')));
 

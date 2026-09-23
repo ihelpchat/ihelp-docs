@@ -55,7 +55,10 @@ const mockReply = {
   sections: [{ title: 'Antes de começar', items: ['Confirme o departamento de destino.'] }],
   steps: ['Abra a conversa.', 'Clique em Transferir.', 'Escolha o destino e confirme.'],
   code: { language: 'bash', content: 'curl -H "Authorization: Bearer $IHELP_TOKEN" https://apiv3.ihelpchat.com/api/v2/customers/search' },
-  sources: [{ title: 'Atendimento', path: '/docs/sobre-o-sistema/atendimento', excerpt: 'Iniciar, transferir, encerrar e reabrir atendimentos.', media: { kind: 'video', url: '/videos/atendimento.mp4', embedUrl: '/videos/atendimento.mp4' } }],
+  sources: [
+    { title: 'Atendimento', path: '/docs/sobre-o-sistema/atendimento', excerpt: 'Iniciar, transferir, encerrar e reabrir atendimentos.', media: { kind: 'video', url: '/videos/atendimento.mp4', embedUrl: '/videos/atendimento.mp4' } },
+    { title: 'Acessando a Plataforma', path: '/docs/primeiros-passos/acessando-a-plataforma', media: { kind: 'video', url: 'https://www.tella.tv/video/faq-como-alterar-sua-senha-no-ihelp-1-8jwf', embedUrl: 'https://www.tella.tv/video/faq-como-alterar-sua-senha-no-ihelp-1-8jwf/embed' } },
+  ],
   suggestions: ['Como reabrir um atendimento finalizado?'],
   resolution: 'partial',
   found: true,
@@ -88,7 +91,7 @@ async function testAssistant(context, errors) {
   const enabled = (await page.locator('.ih-app').getAttribute('data-assistant')) === 'on';
 
   // Entrada pelo menu do topo, sem depender de ⌘K.
-  await page.getByRole('link', { name: 'Assistente de IA' }).first().click();
+  await page.getByRole('link', { name: 'Claricia, assistente de IA do iHelp' }).first().click();
   await page.waitForURL(/\/assistente\/?$/);
   await page.getByRole('heading', { name: 'Pergunte qualquer coisa sobre o iHelp' }).waitFor();
   await page.getByText('Claricia', { exact: false }).first().waitFor();
@@ -115,12 +118,14 @@ async function testAssistant(context, errors) {
   assert.match(await supportCta.getAttribute('href'), /wa\.me\/551730422307\?text=/);
   assert.ok(await page.getByText('Ver resposta completa').count(), 'Fonte sem CTA de artigo');
   assert.ok(await page.getByText('Vídeo').count(), 'Mídia real sem badge');
-  await page.getByRole('button', { name: 'Ver vídeo' }).last().click();
+  await page.getByRole('button', { name: 'Ver vídeo' }).first().click();
   assert.ok(await page.locator('.ih-ai-media video source[src="/videos/atendimento.mp4"]').count(), 'Vídeo não abriu in-page');
+  await page.getByRole('button', { name: 'Ver vídeo' }).last().click();
+  assert.ok(await page.locator('.ih-ai-media iframe[src="https://www.tella.tv/video/faq-como-alterar-sua-senha-no-ihelp-1-8jwf/embed"]').count(), 'Tella real não abriu in-page');
   assert.equal(await page.locator('.ih-ai-error').count(), 0, 'Erro deveria sumir após tentar de novo');
   assert.equal(await page.locator('.ih-ai-steps li').count(), 3);
   assert.equal(await page.locator('.ih-ai-code pre').count(), 1);
-  assert.equal(await page.locator('.ih-ai-panel-list li').count(), 1, 'Painel de fontes vazio');
+  assert.equal(await page.locator('.ih-ai-panel-list li').count(), 2, 'Painel de fontes incompleto');
   assert.equal(requests.at(-1).scope, 'Tudo');
 
   // Escopo “Buscar em” vai no pedido; sugestão de continuação pergunta de novo, com histórico.
@@ -144,7 +149,7 @@ async function testAssistant(context, errors) {
   // Painel lateral numa página: contexto da página vai junto; Esc fecha; tela cheia leva a conversa.
   await page.goto(`${baseUrl}/docs/sobre-o-sistema/atendimento/`, { waitUntil: 'networkidle' });
   await page.locator('.ih-ai-launcher').click();
-  const drawer = page.getByRole('dialog', { name: 'Assistente de IA' });
+  const drawer = page.getByRole('dialog', { name: 'Claricia, assistente de IA do iHelp' });
   await drawer.waitFor();
   assert.match(await drawer.locator('.ih-ai-drawer-context strong').textContent(), /Central de ajuda › Atendimento/);
   await drawer.locator('.ih-ai-drawer-empty button').first().click();
@@ -163,7 +168,7 @@ async function testAssistant(context, errors) {
   await page.locator('.ih-header-search').click();
   await page.locator('[data-search-input]').fill('Como autenticar na API');
   await page.keyboard.press('Enter');
-  await page.getByRole('dialog', { name: 'Assistente de IA' }).waitFor();
+  await page.getByRole('dialog', { name: 'Claricia, assistente de IA do iHelp' }).waitFor();
   await page.locator('.ih-ai-drawer .ih-ai-user').last().getByText('Como autenticar na API').waitFor();
   await page.close();
 }
