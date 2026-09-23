@@ -49,12 +49,12 @@ O processo local lê `pilot/content/docs` e `pilot/architecture`. A tool de envi
 | `docs_validate_article` | Validar metadados, caminho, conteúdo, Tango e possíveis segredos | Leitura; não grava |
 | `docs_submit_article` | Enviar artigo validado com `mode: "draft"` ou `"pull_request"` | Cria arquivo local ou PR |
 
-O `path` de um artigo segue a forma `docs/assunto/slug`, `api/assunto/slug` ou `blog/assunto/slug`, sem `/` inicial e sem `.mdx`. As tools de validação e envio recebem `path`, `title`, `description`, `source` (`produto`, `suporte` ou `api`), `contentType` (`faq`, `tutorial`, `guia` ou `referencia`) e `body` em Markdown sem frontmatter; `tangoUrl` é opcional. O conteúdo precisa seguir o [padrão editorial](https://github.com/ihelpchat/ihelp-docs/blob/bruunofco/fumadocs-pilot/pilot/architecture/editorial-standard.md).
+O `path` aceito por `docs_get_article`, validação e envio segue a forma `docs/assunto/slug`, `api/assunto/slug` ou `blog/assunto/slug`, sem `/` inicial e sem `.mdx`. `docs_search` devolve uma URL pública no campo `path`, com `/` inicial; converta-a antes de chamar `docs_get_article`. As tools de validação e envio recebem `path`, `title`, `description`, `source` (`produto`, `suporte` ou `api`), `contentType` (`faq`, `tutorial`, `guia` ou `referencia`) e `body` em Markdown sem frontmatter; `tangoUrl` é opcional. O conteúdo precisa seguir o [padrão editorial](https://github.com/ihelpchat/ihelp-docs/blob/bruunofco/fumadocs-pilot/pilot/architecture/editorial-standard.md).
 
 ## Fluxo para propor um artigo
 
 1. Use `docs_inventory` para localizar uma lacuna e `docs_search` para verificar se o assunto já existe.
-2. Se for revisar conteúdo existente, use `docs_get_article` com o `path` retornado pela busca e preserve fatos, links e permissões confirmados.
+2. Se for revisar conteúdo existente, retire o `/` inicial do `path` da busca antes de chamar `docs_get_article`: `/docs/sobre-o-sistema/atendimento` vira `docs/sobre-o-sistema/atendimento`. Para uma página de seção armazenada como `index.mdx`, acrescente `/index` após retirar o `/` inicial (por exemplo, `/docs` vira `docs/index`). Preserve fatos, links e permissões confirmados.
 3. Escreva o artigo e chame `docs_validate_article`; corrija os apontamentos antes de enviar. `docs_audit_content` confere a base completa.
 4. Chame `docs_submit_article` com `mode: "draft"` para criar um arquivo em `pilot/.drafts/<path>.mdx`. Revise o arquivo e leve a proposta a um PR. Quem revisa o PR confere precisão, privacidade, links e acesso antes do merge.
 
