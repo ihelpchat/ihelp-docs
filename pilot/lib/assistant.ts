@@ -19,9 +19,11 @@ export type AssistantScope = (typeof assistantScopes)[number];
 export type SourceKind = 'Ajuda' | 'FAQ' | 'API' | 'Tutorial' | 'Novidade';
 
 export type AssistantSource = { title: string; path: string; kind: SourceKind; excerpt?: string };
+export type AssistantSection = { title: string; items: string[] };
 
 export type AssistantReply = {
   answer: string;
+  sections: AssistantSection[];
   steps: string[];
   code: { language: string; content: string } | null;
   sources: AssistantSource[];
@@ -65,6 +67,13 @@ export function normalizeReply(data: unknown): AssistantReply {
   const sources = Array.isArray(raw.sources) ? raw.sources : [];
   return {
     answer,
+    sections: Array.isArray(raw.sections)
+      ? raw.sections
+          .filter((item): item is { title: string; items: unknown } => Boolean(item) && typeof (item as { title?: unknown }).title === 'string')
+          .slice(0, 4)
+          .map((item) => ({ title: item.title.trim(), items: strings(item.items, 5) }))
+          .filter((item) => item.title && item.items.length)
+      : [],
     steps: strings(raw.steps, 12),
     code: code && typeof code.content === 'string' && code.content.trim()
       ? { language: typeof code.language === 'string' && code.language ? code.language : 'código', content: code.content.trim() }

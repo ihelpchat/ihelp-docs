@@ -21,7 +21,12 @@ const startersBySection: Record<string, string[]> = {
   api: ['Resuma esta página da API', 'Mostre um exemplo desta chamada em Node', 'Quais campos da resposta são mais importantes?'],
   tutoriais: ['Qual guia devo seguir primeiro?', 'Como transfiro um atendimento, passo a passo?', 'Tem guia sobre o CRM?'],
   blog: ['O que mudou recentemente no iHelp?', 'Resuma a novidade mais recente', 'Quais novidades envolvem atendimento?'],
-  home: ['Por onde começo no iHelp?', 'Como faço minha primeira chamada na API?', 'Como transferir um atendimento?'],
+  home: [
+    'Meu WhatsApp desconectou. Como reconecto sem perder o histórico?',
+    'Como criar, trocar ou desativar um usuário?',
+    'Como configurar o robô e testar antes de publicar?',
+    'Qual a diferença entre API Oficial e QR Code?',
+  ],
 };
 
 export function usePageRef() {
@@ -127,7 +132,7 @@ export function AssistantDrawer() {
       </div>
       <div className="ih-ai-drawer-foot">
         <AssistantComposer compact autoFocus placeholder="Pergunte sobre esta página ou qualquer outra coisa" page={ref} />
-        <p>Gerado por IA a partir da documentação. Confira as fontes.</p>
+        <p>Gerado por IA a partir da documentação. Confira as fontes. · Uma tecnologia iHelp</p>
       </div>
     </div>
   );

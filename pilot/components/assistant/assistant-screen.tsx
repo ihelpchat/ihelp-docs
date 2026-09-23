@@ -10,10 +10,10 @@ import { assistantScopes, type SourceKind } from '@/lib/assistant';
 import { supportUrl } from '@/lib/links';
 
 const starters: { kind: SourceKind; label: string }[] = [
-  { kind: 'Ajuda', label: 'Como transfiro um atendimento para outro departamento?' },
-  { kind: 'API', label: 'Como envio uma mensagem de texto pela API? Mostra em cURL.' },
-  { kind: 'Tutorial', label: 'Tem algum guia para importar contatos?' },
-  { kind: 'Novidade', label: 'O que mudou no iHelp nos últimos meses?' },
+  { kind: 'Ajuda', label: 'Meu WhatsApp desconectou. Como reconecto sem perder o histórico?' },
+  { kind: 'Ajuda', label: 'Como criar, trocar ou desativar um usuário?' },
+  { kind: 'Tutorial', label: 'Como configurar o robô e testar antes de publicar?' },
+  { kind: 'FAQ', label: 'Qual a diferença entre API Oficial e QR Code?' },
 ];
 
 /** Texto da conversa para mandar ao suporte pelo WhatsApp (limitado ao tamanho que o link aceita). */
@@ -119,7 +119,7 @@ export function AssistantScreen() {
             <AssistantComposer placeholder="Pergunte sobre atendimento, campanhas, API, tutoriais…" autoFocus />
             <div className="ih-ai-hint">
               <span>Respostas geradas por IA a partir da documentação. Confira as fontes antes de agir.</span>
-              <span><kbd>↵</kbd> enviar · <kbd>shift ↵</kbd> nova linha</span>
+              <span><kbd>↵</kbd> enviar · <kbd>shift ↵</kbd> nova linha · Uma tecnologia iHelp</span>
             </div>
           </div>
         </div>

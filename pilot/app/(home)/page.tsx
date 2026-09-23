@@ -2,27 +2,24 @@ import Link from 'next/link';
 import { ChevronRight, CircleHelp, MessageCircle, Terminal, Sparkles } from 'lucide-react';
 import { AskButton, HomeSearch } from '@/components/home-search';
 import { getNews } from '@/lib/news';
-import { nodeText } from '@/lib/react-text';
 import { getSiteCounts } from '@/lib/site';
-import { source } from '@/lib/source';
 import { supportPhone, supportUrl } from '@/lib/links';
 import { withBasePath } from '@/lib/shared';
 
 const startHere = [
-  ['01', 'Acessar a plataforma', 'Primeiro login, senha e permissões', '/docs/primeiros-passos/acessando-a-plataforma'],
-  ['02', 'Montar filas e departamentos', 'Como o atendimento é distribuído', '/docs/sobre-o-sistema/configuracoes/departamentos'],
-  ['03', 'Primeira chamada na API', 'Token, base URL e envio de mensagem', '/api'],
-  ['04', 'Migrar para a API oficial', 'O que muda no número e nos custos', '/docs/whatsapp-business-api/antes-de-migrar'],
+  ['01', 'Reconectar WhatsApp', 'Canal desconectado e leitura do QR Code', '/docs/sobre-o-sistema/configuracoes/canais'],
+  ['02', 'Gerenciar usuários', 'Criar, editar, desativar e ajustar permissões', '/docs/sobre-o-sistema/configuracoes/gerenciamento-de-usuarios'],
+  ['03', 'Configurar o robô', 'Fluxos, menus e encaminhamento do atendimento', '/docs/sobre-o-sistema/robo-de-atendimento'],
+  ['04', 'API Oficial ou QR Code', 'Entenda diferenças, custos e segurança', '/docs/whatsapp-business-api/o-basico/o-que-e-a-api-oficial-do-whatsapp'],
 ] as const;
 
-function topQuestions() {
-  const faq = source.getPage(['docs', 'principais-duvidas']);
-  if (!faq) return [];
-  return faq.data.toc
-    .filter((item) => item.depth === 3)
-    .slice(0, 5)
-    .map((item) => ({ title: nodeText(item.title).replace(/^\s*\d+\.\s*/, ''), href: `${faq.url}${item.url}` }));
-}
+const topQuestions = [
+  { title: 'Meu WhatsApp desconectou. Como reconectar?', href: '/docs/sobre-o-sistema/configuracoes/canais' },
+  { title: 'Como criar ou desativar um usuário?', href: '/docs/sobre-o-sistema/configuracoes/gerenciamento-de-usuarios' },
+  { title: 'Como configurar o robô de atendimento?', href: '/docs/sobre-o-sistema/robo-de-atendimento' },
+  { title: 'Por que minhas mensagens não foram entregues?', href: '/docs/whatsapp-business-api/funcionamento/mensagens-nao-entregues' },
+  { title: 'Qual a diferença entre API Oficial e QR Code?', href: '/docs/whatsapp-business-api/o-basico/o-que-e-a-api-oficial-do-whatsapp' },
+] as const;
 
 export default function HomePage() {
   const counts = getSiteCounts();
@@ -76,7 +73,7 @@ export default function HomePage() {
         <section className="design-info-grid">
           <div className="design-list-card">
             <header><h2>Dúvidas mais buscadas</h2><Link href="/docs/principais-duvidas">Ver FAQ</Link></header>
-            {topQuestions().map(({ title, href }) => (
+            {topQuestions.map(({ title, href }) => (
               <Link href={href} key={href}><CircleHelp aria-hidden="true" /><span>{title}</span><ChevronRight aria-hidden="true" /></Link>
             ))}
           </div>
@@ -105,7 +102,7 @@ export default function HomePage() {
         </section>
 
         <footer className="design-footer">
-          <span>© 2026 iHelp · Documentação</span>
+          <span>© 2026 iHelp · Documentação · Uma tecnologia iHelp</span>
           <nav aria-label="Rodapé">
             <a href="https://ihelpchat.com.br">Site</a>
             <Link href="/blog">Novidades</Link>

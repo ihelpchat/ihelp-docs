@@ -3,6 +3,7 @@ import { createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { buildServer } from './server.mjs';
 import { answerQuestion } from './assistant-service.mjs';
+import { saveFeedback, summarizeFeedback } from './feedback-service.mjs';
 
 const apiKey = process.env.DOCS_MCP_API_KEY;
 if (apiKey && apiKey.length < 24) throw new Error('DOCS_MCP_API_KEY precisa ter ao menos 24 caracteres');
@@ -11,6 +12,8 @@ const mcpHandler = createMcpHandler(() => buildServer());
 const handler = toNodeHandler(mcpHandler);
 const port = Number(process.env.PORT ?? 3100);
 const root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname;
+const feedbackFile = process.env.FEEDBACK_FILE ?? '/tmp/ihelp-docs-feedback.jsonl';
+const feedbackAdminToken = process.env.FEEDBACK_ADMIN_TOKEN;
 const allowedOrigins = new Set((process.env.ASSISTANT_ALLOWED_ORIGINS ?? 'http://127.0.0.1:4173,http://localhost:4173').split(',').map((value) => value.trim()).filter(Boolean));
 const requests = new Map();
 
@@ -20,7 +23,7 @@ function cors(request, response) {
     response.setHeader('Access-Control-Allow-Origin', origin);
     response.setHeader('Vary', 'Origin');
     response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   }
 }
 
@@ -44,11 +47,12 @@ async function readJson(request) {
 
 const httpServer = createServer(async (request, response) => {
   cors(request, response);
+  const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
   if (request.method === 'OPTIONS') {
     response.writeHead(204).end();
     return;
   }
-  if (request.url === '/assistant' && request.method === 'POST') {
+  if (pathname === '/assistant' && request.method === 'POST') {
     if (limited(request)) {
       response.writeHead(429, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Muitas perguntas. Tente novamente em um minuto.' }));
       return;
@@ -73,7 +77,31 @@ const httpServer = createServer(async (request, response) => {
     }
     return;
   }
-  if (request.url !== '/mcp') {
+  if (pathname === '/feedback' && request.method === 'POST') {
+    if (limited(request)) {
+      response.writeHead(429, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Muitas avaliações. Tente novamente em um minuto.' }));
+      return;
+    }
+    try {
+      const body = await readJson(request);
+      const event = await saveFeedback(feedbackFile, body, { userAgent: request.headers['user-agent'] });
+      response.writeHead(201, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ saved: true, id: event.id }));
+    } catch (error) {
+      const invalid = /Feedback|payload|JSON/i.test(error.message);
+      response.writeHead(invalid ? 400 : 500, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: invalid ? error.message : 'Não foi possível salvar a avaliação.' }));
+    }
+    return;
+  }
+  if (pathname === '/feedback/summary' && request.method === 'GET') {
+    if (!feedbackAdminToken || request.headers.authorization !== `Bearer ${feedbackAdminToken}`) {
+      response.writeHead(401, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    const summary = await summarizeFeedback(feedbackFile);
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(summary));
+    return;
+  }
+  if (pathname !== '/mcp') {
     response.writeHead(404).end();
     return;
   }

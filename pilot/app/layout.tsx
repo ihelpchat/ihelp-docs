@@ -17,7 +17,7 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://ajuda.ihelpchat.com'),
+  metadataBase: new URL('https://faq.ihelpchat.com/ihelp-docs/'),
   title: {
     default: 'Central de ajuda iHelp',
     template: '%s | iHelp',

@@ -47,6 +47,16 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
         <div className="ih-ai-text">
           {paragraphs.map((text, index) => <p key={index}>{text}</p>)}
         </div>
+        {reply.sections.length ? (
+          <div className="ih-ai-sections">
+            {reply.sections.map((section) => (
+              <section key={section.title}>
+                <h3>{section.title}</h3>
+                <ul>{section.items.map((item) => <li key={item}>{item}</li>)}</ul>
+              </section>
+            ))}
+          </div>
+        ) : null}
         {reply.steps.length ? (
           <ol className="ih-ai-steps">
             {reply.steps.map((step, index) => <li key={index}><span aria-hidden="true">{index + 1}</span>{step}</li>)}

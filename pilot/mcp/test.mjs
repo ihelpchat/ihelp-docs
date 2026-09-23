@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { answerQuestion, retrieveContext } from './assistant-service.mjs';
+import { normalizeFeedback, saveFeedback, summarizeFeedback } from './feedback-service.mjs';
 import { renderArticle } from './content-service.mjs';
 import { normalizeBody, parseArticle, renderNormalizedArticle } from './editorial-standard.mjs';
 
@@ -114,6 +115,7 @@ try {
           model: 'gpt-test',
           output_text: JSON.stringify({
             answer: 'Abra a conversa e transfira.',
+            sections: [{ title: 'Antes de começar', items: ['Confirme o departamento de destino'] }],
             steps: ['Abra a conversa', 'Clique em Transferir'],
             code: null,
             sources: ['/docs/sobre-o-sistema/atendimento', '/docs/pagina-inventada'],
@@ -130,10 +132,21 @@ try {
     page: { path: '/docs/sobre-o-sistema/atendimento', title: 'Atendimento' },
   });
   assert.deepEqual(structured.steps, ['Abra a conversa', 'Clique em Transferir']);
+  assert.deepEqual(structured.sections, [{ title: 'Antes de começar', items: ['Confirme o departamento de destino'] }]);
   assert.deepEqual(structured.sources.map((source) => source.path), ['/docs/sobre-o-sistema/atendimento']);
   assert.equal(structured.sources[0].kind, 'Ajuda');
   const apiScoped = await retrieveContext(testRoot, 'mensagem', 6, { scope: 'API' });
   assert.ok(apiScoped.length && apiScoped.every((source) => source.path.startsWith('/api')));
+
+  const feedbackFile = join(testRoot, 'feedback', 'events.jsonl');
+  assert.throws(() => normalizeFeedback({ type: 'article', value: 'talvez', path: '/docs' }), /Feedback inválido/);
+  await saveFeedback(feedbackFile, { eventId: 'evt-1', type: 'article', value: 'up', path: '/docs/atendimento' });
+  await saveFeedback(feedbackFile, { eventId: 'evt-2', type: 'assistant', value: 'down', path: '/assistente', question: 'Como reconecto?' });
+  await saveFeedback(feedbackFile, { eventId: 'evt-2', type: 'assistant', value: 'up', path: '/assistente', question: 'Como reconecto?' });
+  const feedbackSummary = await summarizeFeedback(feedbackFile);
+  assert.equal(feedbackSummary.total, 2);
+  assert.equal(feedbackSummary.positiveRate, 100);
+  assert.deepEqual(feedbackSummary.byType.assistant, { up: 1, down: 0 });
 
   // Barra de continuação dentro de bloco de código não pode virar quebra de parágrafo.
   const curlBody = 'Texto\\\nquebra\n\n```bash\ncurl -X POST https://exemplo \\\n  -H "a: b"\n```\n';

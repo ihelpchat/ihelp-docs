@@ -2,6 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "redirects": [
     {
+      "source": "/",
+      "destination": "/ihelp-docs/",
+      "permanent": false
+    },
+    {
       "source": "/ihelp-docs/novidades-e-atualizacoes/",
       "destination": "/ihelp-docs/blog/",
       "permanent": true

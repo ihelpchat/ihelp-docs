@@ -1877,6 +1877,17 @@ button {
   gap: 8px;
 }
 
+.ih-feedback button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.ih-feedback > small {
+  flex-basis: 100%;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
 .ih-feedback .ih-feedback-done {
   display: flex;
   align-items: center;
@@ -4236,6 +4247,53 @@ button {
   text-wrap: pretty;
 }
 
+.ih-ai-sections {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ih-ai-sections section {
+  padding: 12px 14px;
+  border: 1px solid var(--ih-slate-200);
+  border-radius: 10px;
+  background: var(--ih-white);
+}
+
+.ih-ai-sections h3 {
+  margin: 0 0 7px;
+  color: var(--ih-ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.ih-ai-sections ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ih-ai-sections li {
+  position: relative;
+  padding-left: 14px;
+  color: var(--ih-slate-700);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.ih-ai-sections li::before {
+  position: absolute;
+  top: 0.65em;
+  left: 1px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--ih-coral);
+  content: '';
+}
+
 .ih-ai-steps {
   margin: 12px 0 0;
   padding: 6px 14px;
@@ -4565,6 +4623,20 @@ button {
 .ih-ai-thread[data-compact] .ih-ai-text p {
   font-size: 13px;
   line-height: 1.7;
+}
+
+.ih-ai-thread[data-compact] .ih-ai-sections {
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.ih-ai-thread[data-compact] .ih-ai-sections section {
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.ih-ai-thread[data-compact] .ih-ai-sections li {
+  font-size: 12px;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-steps {

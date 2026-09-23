@@ -8,6 +8,7 @@ import {
   type AssistantReply,
   type AssistantScope,
 } from '@/lib/assistant';
+import { submitFeedback } from '@/lib/feedback';
 
 export type ScopeCounts = Record<AssistantScope, number>;
 
@@ -139,7 +140,19 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
     setScope,
     openDrawer: () => setDrawerOpen(true),
     closeDrawer: () => setDrawerOpen(false),
-    rate: (messageId, rating) => setFeedback((current) => ({ ...current, [messageId]: rating })),
+    rate: (messageId, rating) => {
+      const message = state.current.messages.find((item) => item.id === messageId);
+      if (!message || message.role !== 'ai') return;
+      setFeedback((current) => ({ ...current, [messageId]: rating }));
+      void submitFeedback({
+        eventId: message.id,
+        type: 'assistant',
+        value: rating,
+        path: window.location.pathname,
+        question: message.question,
+        sources: message.reply.sources.map((source) => source.path),
+      });
+    },
   }), [messages, busy, scope, drawerOpen, feedback, counts, ask, retry]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
