@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod/v4';
 import { getInventory, searchContent, submitArticle, validateArticle } from './content-service.mjs';
+import { auditContent, readArticle } from './editorial-standard.mjs';
 
 const articleSchema = z.object({
   path: z.string().describe('Caminho sem extensão, começando com docs/, api/ ou blog/'),
@@ -33,6 +34,22 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     description: 'Busca conteúdo existente antes de criar ou duplicar um FAQ.',
     inputSchema: z.object({ query: z.string().min(2), limit: z.number().int().min(1).max(20).default(8) }),
   }, async ({ query, limit }) => textResult({ results: await searchContent(root, query, limit) }));
+
+  server.registerTool('docs_get_article', {
+    description: 'Lê um artigo completo existente para que a IA possa reaproveitar e revisar o conteúdo sem duplicá-lo.',
+    inputSchema: z.object({ path: z.string().describe('Caminho sem extensão, começando com docs/, api/, blog/ ou tutoriais/') }),
+  }, async ({ path }) => {
+    try {
+      return textResult(await readArticle(root, path));
+    } catch (error) {
+      return textResult({ error: error instanceof Error ? error.message : String(error) }, true);
+    }
+  });
+
+  server.registerTool('docs_audit_content', {
+    description: 'Audita todos os artigos contra o padrão editorial do iHelp sem alterar arquivos.',
+    inputSchema: z.object({}),
+  }, async () => textResult(await auditContent(root)));
 
   server.registerTool('docs_validate_article', {
     description: 'Valida metadados, caminho, conteúdo, Tango e vazamento de credenciais sem gravar nada.',

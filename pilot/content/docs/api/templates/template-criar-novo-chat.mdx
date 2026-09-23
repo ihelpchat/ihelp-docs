@@ -1,11 +1,10 @@
 ---
 title: "Criar novo chat"
-sidebar_position: 4
-description: "Referência técnica da API do iHelp para criar novo chat."
+description: "Veja como criar novo chat, com parâmetros e exemplos de requisição e resposta na API do iHelp."
 source: api
 contentType: referencia
 method: POST
-endpoint: "/customers/add-new-call"
+endpoint: /customers/add-new-call
 ---
 
 `POST`
@@ -28,13 +27,11 @@ Os valores seguem a **ordem em que aparecem no template**: primeiro as variávei
 
 Veja [Pegar ID do template](/api/templates/pegar-id-do-template) para descobrir o valor de `cloudApiTemplateName`.
 
----
-
 ## Painel Gupshup
 
 Todos os parâmetros - de texto e de URL - vão dentro de `params`. Os de URL sempre no final da lista.
 
-### 1. Texto simples, sem variáveis
+### Texto simples, sem variáveis
 
 Template sem variável nenhuma: não precisa de `params`.
 
@@ -53,7 +50,7 @@ Template sem variável nenhuma: não precisa de `params`.
 }
 ```
 
-### 2. Texto com variáveis
+### Texto com variáveis
 
 Template com 2 variáveis de texto (`{{1}}` = nome, `{{2}}` = horário).
 
@@ -73,7 +70,7 @@ Template com 2 variáveis de texto (`{{1}}` = nome, `{{2}}` = horário).
 }
 ```
 
-### 3. Com botões de resposta rápida
+### Com botões de resposta rápida
 
 Botão de resposta rápida **não tem parâmetro**. Só as 2 variáveis de texto entram em `params`.
 
@@ -93,7 +90,7 @@ Botão de resposta rápida **não tem parâmetro**. Só as 2 variáveis de texto
 }
 ```
 
-### 4. Só 1 botão de link dinâmico, sem variáveis de texto
+### Só 1 botão de link dinâmico, sem variáveis de texto
 
 <Callout type="idea" title="O botão de URL não recebe o link inteiro">
 Quando o template é criado no **painel da Gupshup**, o começo da URL é **fixo** e fica salvo no próprio template. Só o **final** da URL é variável - e é só esse pedaço que você envia no request.
@@ -125,7 +122,7 @@ Template sem variável de texto e com 1 botão de URL: `params` leva **só** o t
 }
 ```
 
-### 5. Variáveis de texto + 1 botão de link dinâmico
+### Variáveis de texto + 1 botão de link dinâmico
 
 Template com 3 variáveis de texto + 1 botão de URL. As 3 de texto vêm primeiro, o trecho da URL é o **último item** de `params`.
 
@@ -150,7 +147,7 @@ Template com 3 variáveis de texto + 1 botão de URL. As 3 de texto vêm primeir
 }
 ```
 
-### 6. Variáveis de texto + 2 botões de link dinâmico
+### Variáveis de texto + 2 botões de link dinâmico
 
 Template com 2 variáveis de texto + 2 botões de URL. Os dois trechos de URL vão **no final** de `params`, na ordem dos botões.
 
@@ -175,13 +172,11 @@ Template com 2 variáveis de texto + 2 botões de URL. Os dois trechos de URL v�
 }
 ```
 
----
-
 ## Painel Meta
 
 As variáveis de texto ficam em `params` e os trechos de URL em `urlParams`, cada um na ordem dos botões. O `cloudApiTemplateName` é o **nome** do template.
 
-### 1. Texto simples, sem variáveis
+### Texto simples, sem variáveis
 
 Template sem variável nenhuma: não precisa de `params`.
 
@@ -200,7 +195,7 @@ Template sem variável nenhuma: não precisa de `params`.
 }
 ```
 
-### 2. Texto com variáveis
+### Texto com variáveis
 
 Template com 2 variáveis de texto (`{{1}}` = nome, `{{2}}` = horário).
 
@@ -220,7 +215,7 @@ Template com 2 variáveis de texto (`{{1}}` = nome, `{{2}}` = horário).
 }
 ```
 
-### 3. Com botões de resposta rápida
+### Com botões de resposta rápida
 
 Botão de resposta rápida **não tem parâmetro**. Só as 2 variáveis de texto entram em `params`.
 
@@ -240,7 +235,7 @@ Botão de resposta rápida **não tem parâmetro**. Só as 2 variáveis de texto
 }
 ```
 
-### 4. Só 1 botão de link dinâmico, sem variáveis de texto
+### Só 1 botão de link dinâmico, sem variáveis de texto
 
 <Callout type="idea" title="O botão de URL não recebe o link inteiro">
 Quando o template é criado no **painel da Meta**, o começo da URL é **fixo** e fica salvo no próprio template. Só o **final** da URL é variável - e é só esse pedaço que você envia no request.
@@ -272,7 +267,7 @@ Template sem variável de texto e com 1 botão de URL: mande só `urlParams` e *
 }
 ```
 
-### 5. Variáveis de texto + 1 botão de link dinâmico
+### Variáveis de texto + 1 botão de link dinâmico
 
 Template com 3 variáveis de texto + 1 botão de URL: as de texto em `params`, a da URL em `urlParams`.
 
@@ -297,7 +292,7 @@ Template com 3 variáveis de texto + 1 botão de URL: as de texto em `params`, a
 }
 ```
 
-### 6. Variáveis de texto + 2 botões de link dinâmico
+### Variáveis de texto + 2 botões de link dinâmico
 
 Template com 2 variáveis de texto + 2 botões de URL: `urlParams` leva um trecho por botão, na ordem em que aparecem no template.
 
@@ -321,14 +316,10 @@ Template com 2 variáveis de texto + 2 botões de URL: `urlParams` leva um trech
 }
 ```
 
----
-
 <Callout type="warn" title="Atenção">
 - 📞 Números devem estar no formato E.164: `55DD9XXXXXXXX`
 - 🔗 Links só funcionam em botões do tipo **URL Button**
 - 🧪 Sempre teste templates no **Meta Template Manager** antes de usar em produção
 </Callout>
-
----
 
 *Documentação atualizada: 2026-08-05*

@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { answerQuestion, retrieveContext } from './assistant-service.mjs';
 import { renderArticle } from './content-service.mjs';
+import { normalizeBody, parseArticle, renderNormalizedArticle } from './editorial-standard.mjs';
 
 const projectRoot = new URL('../', import.meta.url).pathname;
 const testRoot = await mkdtemp(join(tmpdir(), 'ihelp-docs-mcp-'));
@@ -27,22 +28,59 @@ const article = {
   description: 'Passo a passo seguro para validar o MCP de documentação do iHelp.',
   source: 'produto',
   contentType: 'faq',
-  body: 'Use a ferramenta de validação antes de enviar o conteúdo. Depois, confira o draft e abra um pull request para revisão humana.',
+  body: `Use a ferramenta de validação antes de enviar o conteúdo. Ela confere os metadados, o caminho e as regras básicas de segurança do artigo.
+
+## Como validar
+
+1. Pesquise primeiro se a resposta já existe na documentação.
+2. Carregue o artigo completo quando a intenção for revisar uma página atual.
+3. Escreva a resposta direta antes dos detalhes e preserve somente fatos confirmados.
+4. Adicione texto alternativo a todas as imagens e remova qualquer dado pessoal.
+5. Valide o artigo e corrija todos os apontamentos antes do envio.
+
+O conteúdo aprovado deve seguir para um draft ou pull request. Confira títulos, links, permissões e resultado esperado durante a revisão humana; o MCP nunca faz merge ou deploy automaticamente.`,
 };
 
 try {
   await client.connect(transport);
   const tools = await client.listTools();
-  assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), ['docs_inventory', 'docs_search', 'docs_submit_article', 'docs_validate_article']);
+  assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), ['docs_audit_content', 'docs_get_article', 'docs_inventory', 'docs_search', 'docs_submit_article', 'docs_validate_article']);
 
   const validation = await client.callTool({ name: 'docs_validate_article', arguments: article });
   assert.match(validation.content[0].text, /"valid": true/);
+
+  const weakValidation = await client.callTool({
+    name: 'docs_validate_article',
+    arguments: { ...article, body: 'Resposta curta demais.', description: 'Descrição curta.' },
+  });
+  assert.match(weakValidation.content[0].text, /60 palavras/);
+  assert.match(weakValidation.content[0].text, /40 caracteres/);
+  const normalizedFaq = normalizeBody('## Como acesso o iHelp?\n\nUse suas credenciais.', 'FAQ', 'Respostas para dúvidas frequentes de acesso ao iHelp.', 'docs/principais-duvidas');
+  assert.match(normalizedFaq, /^### Como acesso o iHelp\?/m);
+  assert.doesNotMatch(normalizedFaq, /Respostas para dúvidas frequentes/);
+  const quotedArticle = `---\ntitle: "Benefícios"\ndescription: "Veja uma opção \\"melhorada\\" para organizar o atendimento no iHelp."\nsource: produto\ncontentType: guia\n---\n\nEste conteúdo explica uma opção melhorada para organizar o atendimento sem alterar os fatos do produto. Ele também apresenta as decisões e os cuidados necessários para aplicar a orientação com segurança na rotina da equipe.`;
+  const normalizedQuoted = renderNormalizedArticle(parseArticle(quotedArticle, 'docs/teste/beneficios'));
+  assert.match(normalizedQuoted, /description: "Veja uma opção \\"melhorada\\"/);
+  assert.equal(renderNormalizedArticle(parseArticle(normalizedQuoted, 'docs/teste/beneficios')), normalizedQuoted, 'normalização precisa ser idempotente');
+  assert.doesNotMatch(normalizeBody('## Etapa\r\n\r\nTexto com espaço. \r\n', 'Teste', 'Descrição completa para testar finais de linha legados.'), /[ \t\r]+$/m);
 
   const inventory = await client.callTool({ name: 'docs_inventory', arguments: {} });
   assert.match(inventory.content[0].text, /"modules": 22/);
 
   const search = await client.callTool({ name: 'docs_search', arguments: { query: 'transferir atendimento' } });
   assert.match(search.content[0].text, /Atendimento/);
+
+  const existing = await client.callTool({ name: 'docs_get_article', arguments: { path: 'docs/sobre-o-sistema/atendimento' } });
+  assert.match(existing.content[0].text, /Como transferir um atendimento/);
+
+  const audit = await client.callTool({ name: 'docs_audit_content', arguments: {} });
+  assert.match(audit.content[0].text, /"total": 88/);
+  const faqPath = join(testRoot, 'content/docs/docs/principais-duvidas.mdx');
+  const faqOriginal = await readFile(faqPath, 'utf8');
+  await writeFile(faqPath, `${faqOriginal}\n[Link quebrado](/docs/pagina-inexistente)\n`);
+  const brokenAudit = await client.callTool({ name: 'docs_audit_content', arguments: {} });
+  assert.match(brokenAudit.content[0].text, /link interno inexistente/);
+  await writeFile(faqPath, faqOriginal);
 
   const submission = await client.callTool({ name: 'docs_submit_article', arguments: { ...article, mode: 'draft' } });
   assert.match(submission.content[0].text, /"status": "draft"/);

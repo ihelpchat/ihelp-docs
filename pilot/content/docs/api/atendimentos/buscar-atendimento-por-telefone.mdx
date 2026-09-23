@@ -1,12 +1,13 @@
 ---
 title: "Buscar atendimento pelo telefone"
-sidebar_position: 1
 description: "Retorna o último atendimento criado para um número de telefone, com contato, canal, departamento e atendentes vinculados."
 source: api
 contentType: referencia
 method: GET
-endpoint: "/customers/search"
+endpoint: /customers/search
 ---
+
+Retorna o último atendimento criado para um número de telefone, com contato, canal, departamento e atendentes vinculados.
 
 ## Parâmetros
 
@@ -27,10 +28,14 @@ Quantidade de registros a pular, para paginar. Os exemplos usam `0`.
 <CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
 
 ```bash
-curl -G https://apiv3.ihelpchat.com/api/v2/customers/search \
-  --data-urlencode "searchText=17936189969" \
-  --data-urlencode "quantidade=20" \
-  --data-urlencode "skip=0" \
+curl -G https://apiv3.ihelpchat.com/api/v2/customers/search
+
+  --data-urlencode "searchText=17936189969"
+
+  --data-urlencode "quantidade=20"
+
+  --data-urlencode "skip=0"
+
   -H "Authorization: Bearer $IHELP_TOKEN"
 ```
 

@@ -1,11 +1,10 @@
 ---
 title: "Menus de Lista"
-sidebar_position: 5
-description: "Referência técnica da API do iHelp para menus de lista."
+description: "Consulte menus de lista, com parâmetros e exemplos de requisição e resposta na API do iHelp."
 source: api
 contentType: referencia
 method: POST
-endpoint: "/customers/send-message"
+endpoint: /customers/send-message
 ---
 
 <Callout type="idea" title="Compatibilidade">
@@ -24,7 +23,7 @@ Como o cliente vê no WhatsApp:
 Só é possível enviar dentro de um atendimento em que o cliente enviou alguma mensagem nas **últimas 24 horas**. Fora dessa janela, use um [template](/api/templates/template-enviar-chat-existente).
 </Callout>
 
-### `POST`
+## `POST`
 ```http
 https://apiv3.ihelpchat.com/api/v2/customers/send-message
 ```

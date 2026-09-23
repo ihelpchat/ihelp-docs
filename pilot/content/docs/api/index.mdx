@@ -1,9 +1,11 @@
 ---
-title: API do iHelp
-description: REST sobre HTTPS, JSON em tudo e autenticação por Bearer token. Busque atendimentos, envie mensagens e templates, transcreva áudios e movimente cards do CRM.
+title: "API do iHelp"
+description: "REST sobre HTTPS, JSON em tudo e autenticação por Bearer token. Busque atendimentos, envie mensagens e templates, transcreva áudios e movimente cards do CRM."
 source: api
 contentType: referencia
 ---
+
+REST sobre HTTPS, JSON em tudo e autenticação por Bearer token. Busque atendimentos, envie mensagens e templates, transcreva áudios e movimente cards do CRM.
 
 ## Primeira chamada em 3 passos
 
@@ -22,9 +24,12 @@ Peça ao suporte uma [credencial própria para a integração](/api/conceitos/ob
 </StepCards>
 
 ```bash title="Primeira chamada — enviar uma mensagem de texto"
-curl -X POST https://apiv3.ihelpchat.com/api/v2/customers/send-message \
-  -H "Authorization: Bearer $IHELP_TOKEN" \
-  -H "Content-Type: application/json" \
+curl -X POST https://apiv3.ihelpchat.com/api/v2/customers/send-message
+
+  -H "Authorization: Bearer $IHELP_TOKEN"
+
+  -H "Content-Type: application/json"
+
   -d '{"texto":"Mensagem","canalId":"69bd5219d057b663d5476f5d","contato":"551788889999","messageType":0}'
 ```
 

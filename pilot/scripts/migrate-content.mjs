@@ -4,20 +4,6 @@ import { dirname, extname, join, relative } from 'node:path';
 const projectRoot = new URL('../../', import.meta.url).pathname;
 const pilotRoot = new URL('../', import.meta.url).pathname;
 const contentRoot = join(pilotRoot, 'content/docs');
-const preservedPages = new Set([
-  'docs/index',
-  'docs/principais-duvidas',
-  'docs/sobre-o-sistema/atendimento',
-  'docs/sobre-o-sistema/configuracoes/canais',
-  'docs/sobre-o-sistema/configuracoes/gerenciamento-de-usuarios',
-  'docs/sobre-o-sistema/relatorios',
-  'api/index',
-  'api/conceitos/autenticacao',
-  'api/conceitos/obter-token',
-  'api/mensagens/mensagem-comum',
-  'tutoriais/index',
-]);
-
 function frontmatterValue(block, key) {
   const match = block.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'));
   return match?.[1]?.trim().replace(/^['"]|['"]$/g, '');
@@ -96,10 +82,13 @@ async function migrateArea(area) {
     const raw = await readFile(sourcePath, 'utf8');
     const slug = area === 'blog' ? frontmatterValue(raw.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '', 'slug') : undefined;
     const relativeTarget = slug ? `${slug}.mdx` : sourceRelative.replace(/\.mdx?$/, '.mdx');
-    const routeKey = `${area}/${relativeTarget.replace(/\.mdx$/, '')}`;
-    if (preservedPages.has(routeKey)) continue;
-
     const target = join(contentRoot, area, relativeTarget);
+    // Depois da primeira importação, o MDX do Next.js vira a fonte de verdade.
+    // O importador só acrescenta novas rotas legadas; nunca rebaixa uma página já revisada.
+    try {
+      await readFile(target, 'utf8');
+      continue;
+    } catch {}
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, normalizeMarkdown(raw, area));
   }

@@ -28,13 +28,17 @@ function safeContentPath(root, contentPath) {
 export function validateArticle(article) {
   const issues = [];
   if (!article.title || article.title.trim().length < 4) issues.push('title precisa ter ao menos 4 caracteres');
-  if (!article.description || article.description.trim().length < 20) issues.push('description precisa ter ao menos 20 caracteres');
+  if (!article.description || article.description.trim().length < 40) issues.push('description precisa ter ao menos 40 caracteres');
   if (!SOURCES.has(article.source)) issues.push('source inválido');
   if (!CONTENT_TYPES.has(article.contentType)) issues.push('contentType inválido');
   if (!article.path || !SAFE_PATH.test(article.path) || article.path.includes('..')) issues.push('path inválido');
-  if (!article.body || article.body.trim().length < 80) issues.push('body precisa ter ao menos 80 caracteres');
+  if (!article.body || article.body.trim().split(/\s+/).filter(Boolean).length < 60) issues.push('body precisa ter ao menos 60 palavras');
   if (/<script\b/i.test(article.body ?? '')) issues.push('scripts não são permitidos');
   if (/<iframe\b/i.test(article.body ?? '')) issues.push('iframes devem ser enviados pelo campo tangoUrl');
+  if (/!\[\]\(/.test(article.body ?? '')) issues.push('imagens precisam de texto alternativo');
+  if (/ihelpchat\.github\.io\/ihelp-docs/i.test(article.body ?? '')) issues.push('links legados não são permitidos');
+  if (/^## Tutorial Guiado$/m.test(article.body ?? '')) issues.push('use um Tango público no campo tangoUrl em vez de rodapé genérico');
+  if (/^#{2,6}\s+\*\*/m.test(article.body ?? '')) issues.push('headings não devem usar negrito redundante');
   if (SECRET_PATTERNS.some((pattern) => pattern.test(`${article.body ?? ''}\n${article.description ?? ''}`))) issues.push('possível credencial detectada');
   if (article.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(article.tangoUrl)) {
     issues.push('tangoUrl precisa ser uma URL oficial de embed ou workflow do Tango');

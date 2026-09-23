@@ -1,0 +1,25 @@
+---
+title: "Templates de mensagem"
+description: "Encontre os procedimentos e exemplos para identificar templates e enviá-los em atendimentos novos ou existentes pela API do iHelp."
+source: api
+contentType: referencia
+---
+
+Templates são mensagens previamente aprovadas para iniciar ou retomar conversas quando uma mensagem comum não pode ser usada. Escolha o procedimento conforme o estado do atendimento.
+
+## Envio
+
+- [Criar um novo atendimento com template](/api/templates/template-criar-novo-chat)
+- [Enviar template em um atendimento existente](/api/templates/template-enviar-chat-existente)
+- [Obter um JSON pronto pela interface](/api/templates/template-json-body)
+
+## Identificação e diagnóstico
+
+- [Encontrar o ID ou nome do template](/api/templates/pegar-id-do-template)
+- [Regras da Meta e logs de erro](/api/templates/regras-da-meta-e-logs-de-erro)
+
+<Callout type="warn" title="Não altere o contrato por tentativa">
+Use o identificador e as variáveis do template aprovado. Quando houver erro, registre a resposta da API sem incluir token, telefone real ou dados do cliente.
+</Callout>
+
+Antes de enviar, confira também a [autenticação da API](/api/conceitos/autenticacao) e a regra da [janela de 24 horas](/docs/whatsapp-business-api/funcionamento/o-que-e-a-janela-de-24-horas).

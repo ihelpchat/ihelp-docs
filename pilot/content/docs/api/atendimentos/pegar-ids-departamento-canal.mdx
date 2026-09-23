@@ -1,52 +1,54 @@
 ---
-title: "Pegar IDs: Departamento e Canal"
-sidebar_position: 7
-description: "Referência técnica da API do iHelp para pegar ids: departamento e canal."
+title: "IDs de departamento, canal e cliente"
+description: "Consulte departamentos, canais e clientes para obter os identificadores exigidos por outros endpoints da API do iHelp."
 source: api
 contentType: referencia
 method: GET
-endpoint: "/configurations/departments"
+endpoint: /configurations/departments
 ---
 
-Endpoints
-GET
+Algumas operações da API exigem IDs internos. Consulte cada recurso antes de montar a requisição principal e guarde somente o identificador necessário.
+
+## Listar departamentos
+
 ```http
-https://apiv3.ihelpchat.com/api/v2/configurations/departments
-```
-```http
-https://apiv3.ihelpchat.com/api/v2/configurations/channels
+GET https://apiv3.ihelpchat.com/api/v2/configurations/departments
 ```
 
-### Buscar Cliente por Telefone
-GET
+## Listar canais
+
 ```http
-https://apiv3.ihelpchat.com/api/v2/customers/search?searchText=<telefone>&quantidade=20&skip=0
+GET https://apiv3.ihelpchat.com/api/v2/configurations/channels
 ```
 
-**Exemplo:**
-GET
+## Buscar cliente pelo telefone
+
+Informe o telefone com código do país e DDD, somente com números.
+
 ```http
-https://apiv3.ihelpchat.com/api/v2/customers/search?searchText=5517936189969&quantidade=20&skip=0
+GET https://apiv3.ihelpchat.com/api/v2/customers/search?searchText=551788889999&quantidade=20&skip=0
 ```
 
-### Response (Extrair IDs)
+## Identificadores retornados
+
+O resultado da busca de clientes reúne IDs usados em outras operações:
+
 ```json
 {
-    "dados": [
-        {
-            "id": 20453841,
-            "ativo": true,
-            "canalId": 1,
-            "departamentoId": 5,
-            "chatId": "69bd3b984b63b6add44df458",
-            "contato": {
-                "id": 4752052,
-                "nome": "Gian - Vaga Automação"
-            }
-            // ... demais campos
-        }
-    ]
+  "dados": [
+    {
+      "id": 123456,
+      "ativo": true,
+      "canalId": 1,
+      "departamentoId": 5,
+      "chatId": "000000000000000000000000",
+      "contato": {
+        "id": 654321,
+        "nome": "Contato de exemplo"
+      }
+    }
+  ]
 }
 ```
 
-----
+Use `departamentoId` e `canalId` apenas no mesmo ambiente e conta em que foram consultados. Se a busca não retornar dados, revise o telefone e a paginação antes de concluir que o cliente não existe.

@@ -1,6 +1,6 @@
 ---
 title: "Mensagens não entregues"
-description: "Entenda Mensagens não entregues e veja como usar esse recurso no iHelp."
+description: "Contexto: Esta situação ocorre na API Oficial do WhatsApp (Cloud API / WhatsApp Business Platform)."
 source: produto
 contentType: faq
 ---
@@ -8,8 +8,6 @@ contentType: faq
 # ❓ FAQ — Por que minha mensagem não foi entregue mesmo estando tudo certo?
 
 > **Contexto:** Esta situação ocorre na API Oficial do WhatsApp (Cloud API / WhatsApp Business Platform). O número está correto, o template foi aprovado, o envio foi realizado — mas a mensagem não chegou ao destinatário.
-
----
 
 ## O que significa "enviada" vs. "entregue"?
 
@@ -19,15 +17,11 @@ contentType: faq
 
 ⚠️ **A API pode confirmar o envio e ainda assim a mensagem nunca chegar.** Isso não é um erro da iHelp nem da GupShup — é um comportamento documentado e intencional da Meta.
 
----
-
 ## Por que a mensagem não foi entregue mesmo com tudo certo?
 
 Existem três causas principais. A Meta **não informa qual delas ocorreu** em cada caso — isso é intencional, por razões de privacidade.
 
----
-
-### 1. 🚫 O usuário bloqueou o número
+### O usuário bloqueou o número
 
 Se o destinatário bloqueou o número da empresa (ou qualquer número vinculado ao mesmo Gerenciador de Negócios), o WhatsApp **simula que a mensagem foi enviada** — mas ela nunca chega.
 
@@ -36,9 +30,7 @@ Esse comportamento protege a privacidade de quem bloqueou, impedindo que a empre
 💡 **O que fazer:** Solicite ao cliente, por outro canal (e-mail, SMS, ligação), que verifique se o número está bloqueado em:
 **Configurações → Privacidade → Contatos bloqueados**
 
----
-
-### 2. 📊 Limite global de mensagens de marketing (Frequency Capping)
+### Limite global de mensagens de marketing (Frequency Capping)
 
 O WhatsApp impõe um limite diário de quantas mensagens promocionais um usuário pode receber **no total, de todas as empresas combinadas** — não apenas da sua.
 
@@ -52,9 +44,7 @@ O limite documentado é de aproximadamente **2 templates de marketing por usuár
 - Evite disparos em alta frequência para a mesma base
 - Aguarde pelo menos 24 horas antes de retentar um envio que falhou por esse motivo
 
----
-
-### 2a. 🔇 O usuário não respondeu suas mensagens anteriores
+### O usuário não respondeu suas mensagens anteriores
 
 Este é um mecanismo separado do limite global — e afeta especificamente a **relação entre o seu número e aquele contato**.
 
@@ -74,17 +64,13 @@ Se você enviou um template de marketing para um contato e ele **não respondeu*
 > | Frequency capping global | Usuário ↔ todas as empresas | Limite diário atingido por qualquer remetente |
 > | Inatividade com seu número | Usuário ↔ seu número específico | Usuário não responde suas mensagens de marketing |
 
----
-
-### 3. 📴 O usuário ficou offline por mais de 30 dias
+### O usuário ficou offline por mais de 30 dias
 
 A Meta armazena mensagens nos servidores por até **30 dias** enquanto aguarda o destinatário ficar online.
 
 Se o usuário não acessou o WhatsApp nesse período, a mensagem é **descartada automaticamente pelos servidores da Meta**.
 
 ⚠️ Não há como reenviar retroativamente. A mensagem simplesmente deixa de existir nos servidores.
-
----
 
 ## Por que a Meta não informa o motivo real da falha?
 
@@ -93,8 +79,6 @@ Porque é intencional. A própria documentação oficial da Meta declara:
 > *"For many of these reasons, we will not disclose the underlying cause of the error, because of privacy and policy reasons."*
 > *(Por muitos desses motivos, não divulgaremos a causa subjacente do erro, por razões de privacidade e política.)*
 > — [Documentação oficial Meta/WhatsApp Business Platform](https://developers.facebook.com/documentation/business-messaging/whatsapp/support)
-
----
 
 ## Outros motivos documentados pela Meta
 
@@ -106,8 +90,6 @@ Além dos três principais, a Meta lista situações em que a mensagem pode não
 | País restrito ou sancionado | Números em Cuba, Irã, Coreia do Norte, Síria e regiões sancionadas da Ucrânia não recebem mensagens via API. |
 | Usuário não aceitou os novos Termos de Uso | A Meta bloqueia a entrega até o aceite. |
 | Usuário em grupo de experimento da Meta | Pode haver restrições temporárias de entrega. |
-
----
 
 ## O que eu posso fazer quando isso acontece?
 
@@ -121,15 +103,11 @@ Além dos três principais, a Meta lista situações em que a mensagem pode não
 
 💡 **Importante:** Esses passos devem ser feitos por outro meio de comunicação, já que o WhatsApp pode não estar funcionando para esse contato.
 
----
-
 ## A iHelp ou a GupShup conseguem descobrir o motivo da não entrega?
 
 **Não.** A Meta não expõe essa informação nem para as plataformas (como iHelp), nem para os BSPs (como GupShup). É uma limitação estrutural da própria API Oficial do WhatsApp.
 
 O que a plataforma retorna é apenas o status: `sent` (enviado) ou `failed` (falha com código de erro) — e nem sempre um código de erro é retornado.
-
----
 
 ## Isso significa que a API Oficial é menos confiável?
 
@@ -140,7 +118,5 @@ Não necessariamente. A API Oficial do WhatsApp tem **alta taxa de entrega** qua
 - Use templates com alto índice de leitura e relevância
 - Respeite a frequência de envio por contato
 - Monitore a qualidade do número no Gerenciador do WhatsApp
-
----
 
 *Referência oficial: [Meta WhatsApp Business Platform — Support & Troubleshooting](https://developers.facebook.com/documentation/business-messaging/whatsapp/support)*

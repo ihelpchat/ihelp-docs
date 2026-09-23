@@ -1,30 +1,44 @@
 ---
 title: "Mensagem comum"
-description: Envie uma mensagem de texto para um contato usando a API do iHelp.
+description: "Envie uma mensagem de texto para um contato usando o canal configurado na API do iHelp."
 source: api
 contentType: referencia
 method: POST
-endpoint: "/customers/send-message"
+endpoint: /customers/send-message
 ---
 
-<Callout type="idea" title="Compatibilidade">
-Compatível com API oficial e não oficial.
+Use este endpoint para enviar texto a um contato por um canal já configurado no iHelp. A requisição funciona com canais oficiais e não oficiais.
+
+<Callout type="idea" title="Antes de enviar">
+Obtenha o ID do canal, normalize o telefone com código do país e autentique a requisição com um Bearer token.
 </Callout>
 
-### `POST`
+## Requisição
+
 ```http
-https://apiv3.ihelpchat.com/api/v2/customers/send-message
+POST https://apiv3.ihelpchat.com/api/v2/customers/send-message
+Authorization: Bearer <token>
+Content-Type: application/json
 ```
 
-**Body (JSON):**
 ```json
 {
-    "texto": "Mensagem",
-    "canalId": "69bd5219d057b663d5476f5d",
-    "contato": "551788889999",
-    "messageType": 0
+  "texto": "Mensagem",
+  "canalId": "69bd5219d057b663d5476f5d",
+  "contato": "551788889999",
+  "messageType": 0
 }
 ```
-<Callout title="Observação">
-`messageType: 0` = texto
-</Callout>
+
+## Campos do body
+
+| Campo | Uso |
+| --- | --- |
+| `texto` | Conteúdo que será enviado ao contato. |
+| `canalId` | Identificador do canal responsável pelo envio. |
+| `contato` | Telefone com código do país e DDD, somente com números. |
+| `messageType` | Use `0` para mensagem de texto. |
+
+## Checklist de erro
+
+Se a mensagem não for aceita, confira a autenticação, o `canalId`, o formato do telefone e se o JSON foi enviado com `Content-Type: application/json`. Para outros formatos, consulte [envio de mídia](/api/mensagens/enviar-midia).

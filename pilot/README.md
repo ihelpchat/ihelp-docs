@@ -13,6 +13,7 @@ npm run dev
 
 ```bash
 npm run content:validate
+npm run content:audit
 npm run mcp:test
 npm run types:check
 npm run lint
@@ -37,9 +38,10 @@ npm run qa:visual
 ## Conteúdo
 
 - `content/docs`: artigos MDX publicados.
+- `architecture/editorial-standard.md`: padrão obrigatório para FAQ, tutorial, guia e referência.
 - `architecture/coverage-matrix.json`: módulos reais, permissões e lacunas editoriais.
-- `scripts/migrate-content.mjs`: migração repetível do conteúdo legado.
-- `mcp`: servidor que permite à IA consultar, validar e propor conteúdo.
+- `npm run content:migrate`: importa somente rotas legadas ausentes e aplica a normalização editorial; nunca sobrescreve artigos já revisados.
+- `mcp`: servidor que permite à IA buscar, ler, auditar, validar e propor conteúdo.
 
 O build padrão gera export estático em `out`. Para GitHub Pages, use `NEXT_PUBLIC_BASE_PATH=/ihelp-docs npm run build`.
 

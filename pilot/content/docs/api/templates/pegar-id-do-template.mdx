@@ -1,7 +1,6 @@
 ---
 title: "Pegar ID do template"
-sidebar_position: 2
-description: "Referência técnica da API do iHelp para pegar id do template."
+description: "Veja como pegar id do template, com parâmetros e exemplos de requisição e resposta na API do iHelp."
 source: api
 contentType: referencia
 ---
@@ -9,8 +8,6 @@ contentType: referencia
 Nos requests da API, o template é identificado pelo campo **`cloudApiTemplateName`**.
 
 O valor que vai nesse campo **depende de qual painel você usa** para gerenciar seus templates: o **painel da Gupshup** ou o **painel da Meta (Gerenciador do WhatsApp)**.
-
----
 
 ## Painel Gupshup
 
@@ -32,8 +29,6 @@ Os `%22` são apenas as aspas codificadas (`"`) que delimitam o valor. Copie **s
 
 </Callout>
 
----
-
 ## Painel Meta (Gerenciador do WhatsApp)
 
 No painel da Meta, o `cloudApiTemplateName` é o **próprio nome do template** (ex.: `lembrete_reuniao`, `send_tokenbr`, `new_call`).
@@ -47,8 +42,6 @@ No painel da Meta, o `cloudApiTemplateName` é o **próprio nome do template** (
 - Ou no topo da página de detalhes do template:
 
 ![Detalhe do template no Gerenciador do WhatsApp com o nome destacado](/img/api/meta-template-detalhe.webp)
-
----
 
 <Callout type="idea" title="Resumo">
 - **Gupshup** → `cloudApiTemplateName` = **ID** (UUID) do template

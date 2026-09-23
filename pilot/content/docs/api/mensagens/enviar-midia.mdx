@@ -1,11 +1,10 @@
 ---
 title: "Enviar mídia"
-sidebar_position: 3
-description: "Referência técnica da API do iHelp para enviar mídia."
+description: "Veja como enviar mídia, com parâmetros e exemplos de requisição e resposta na API do iHelp."
 source: api
 contentType: referencia
 method: POST
-endpoint: "/customers/send-message"
+endpoint: /customers/send-message
 ---
 
 <Callout type="idea" title="Compatibilidade">
@@ -85,9 +84,12 @@ https://apiv3.ihelpchat.com/api/v2/customers/upload-files/{IdRef}/{caption?}
 
 **Exemplo (curl):**
 ```bash
-curl -X POST \
-  "https://apiv3.ihelpchat.com/api/v2/customers/upload-files/{IdRef}/Segue%20o%20contrato?targetUserId=123&skipLastAgentMessageTimeUpdate=true" \
-  -H "Authorization: Bearer <TOKEN>" \
+curl -X POST
+
+  "https://apiv3.ihelpchat.com/api/v2/customers/upload-files/{IdRef}/Segue%20o%20contrato?targetUserId=123&skipLastAgentMessageTimeUpdate=true"
+
+  -H "Authorization: Bearer <TOKEN>"
+
   -F "myFile=@/caminho/contrato.pdf"
 ```
 
