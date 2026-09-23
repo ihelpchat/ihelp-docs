@@ -4523,6 +4523,35 @@ button {
   color: var(--ih-coral-600);
 }
 
+.ih-ai-media-action {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 7px 0 0 2px;
+  font-size: 11px;
+}
+
+.ih-ai-media-action button,
+.ih-ai-media-action > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ih-coral-700);
+  font-weight: 600;
+}
+
+.ih-ai-media-action button svg { width: 13px; height: 13px; }
+.ih-ai-media { flex-basis: 100%; }
+.ih-ai-media video,
+.ih-ai-media iframe {
+  width: min(100%, 480px);
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 8px;
+  background: #111;
+}
+
 .ih-ai-support-cta {
   display: flex;
   align-items: center;

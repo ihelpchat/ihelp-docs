@@ -18,7 +18,8 @@ export type AssistantScope = (typeof assistantScopes)[number];
 
 export type SourceKind = 'Ajuda' | 'FAQ' | 'API' | 'Tutorial' | 'Novidade';
 
-export type AssistantSource = { title: string; path: string; kind: SourceKind; excerpt?: string };
+export type AssistantMedia = { kind: 'video' | 'tango'; url: string; embedUrl?: string };
+export type AssistantSource = { title: string; path: string; kind: SourceKind; excerpt?: string; media?: AssistantMedia };
 export type AssistantSection = { title: string; items: string[] };
 export type AssistantResolution = 'complete' | 'partial' | 'not_found';
 
@@ -60,6 +61,23 @@ function strings(value: unknown, max: number) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '').slice(0, max) : [];
 }
 
+function safeMedia(value: unknown): AssistantMedia | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const media = value as Record<string, unknown>;
+  if (typeof media.url !== 'string') return undefined;
+  if (media.kind === 'tango') {
+    if (!/^https:\/\/app\.tango\.us\/app\/workflow\/[A-Za-z0-9-]+\/?$/.test(media.url)) return undefined;
+    const embedUrl = typeof media.embedUrl === 'string' && /^https:\/\/app\.tango\.us\/app\/embed\/[A-Za-z0-9-]+\/?$/.test(media.embedUrl) ? media.embedUrl : undefined;
+    return { kind: 'tango', url: media.url, ...(embedUrl ? { embedUrl } : {}) };
+  }
+  if (media.kind !== 'video') return undefined;
+  if (/^\/videos\/[A-Za-z0-9/_-]+\.mp4$/.test(media.url) && media.embedUrl === media.url) return { kind: 'video', url: media.url, embedUrl: media.url };
+  if (typeof media.embedUrl !== 'string') return undefined;
+  if (/^https:\/\/www\.youtube-nocookie\.com\/embed\/[A-Za-z0-9_-]{11}$/.test(media.embedUrl) && /^https:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[A-Za-z0-9_-]{11}$/.test(media.url)) return { kind: 'video', url: media.url, embedUrl: media.embedUrl };
+  if (/^https:\/\/www\.tella\.tv\/video\/[A-Za-z0-9_-]+\/embed$/.test(media.embedUrl) && /^https:\/\/www\.tella\.tv\/video\/[A-Za-z0-9_-]+\/(?:view|embed)\/?$/.test(media.url)) return { kind: 'video', url: media.url, embedUrl: media.embedUrl };
+  return undefined;
+}
+
 /** Aceita o formato completo e o antigo ({ answer, sources: { title, path }[] }). */
 export function normalizeReply(data: unknown): AssistantReply {
   const raw = (data ?? {}) as Record<string, unknown>;
@@ -84,10 +102,10 @@ export function normalizeReply(data: unknown): AssistantReply {
       ? { language: typeof code.language === 'string' && code.language ? code.language : 'código', content: code.content.trim() }
       : null,
     sources: sources
-      .filter((item): item is { title: string; path: string; kind?: string; excerpt?: string } =>
-        Boolean(item) && typeof (item as { title?: unknown }).title === 'string' && typeof (item as { path?: unknown }).path === 'string' && (item as { path: string }).path.startsWith('/'))
+      .filter((item): item is { title: string; path: string; kind?: string; excerpt?: string; media?: unknown } =>
+        Boolean(item) && typeof (item as { title?: unknown }).title === 'string' && typeof (item as { path?: unknown }).path === 'string' && /^\/(?!\/)[a-z0-9/_-]+$/i.test((item as { path?: string }).path ?? ''))
       .slice(0, 4)
-      .map((item) => ({ title: item.title, path: item.path, kind: kindOf(item.path), excerpt: typeof item.excerpt === 'string' ? item.excerpt : undefined })),
+      .map((item) => ({ title: item.title, path: item.path, kind: kindOf(item.path), excerpt: typeof item.excerpt === 'string' ? item.excerpt : undefined, media: safeMedia(item.media) })),
     suggestions: strings(raw.suggestions, 3),
     resolution,
     found: resolution !== 'not_found' && raw.found !== false,

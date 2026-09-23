@@ -29,6 +29,23 @@ function readableBody(raw) {
     .trim();
 }
 
+function mediaOf(raw) {
+  const tag = raw.match(/<(TutorialCard|VideoEmbed)\b[^>]*\burl="([^"]+)"[^>]*>/s);
+  if (!tag) return undefined;
+  const [, component, url] = tag;
+  if (component === 'TutorialCard') {
+    if (!/^https:\/\/app\.tango\.us\/app\/workflow\/[A-Za-z0-9-]+\/?$/.test(url)) return undefined;
+    const embedUrl = tag[0].match(/\bembedUrl="([^"]+)"/)?.[1];
+    return { kind: 'tango', url, ...(embedUrl && /^https:\/\/app\.tango\.us\/app\/embed\/[A-Za-z0-9-]+\/?$/.test(embedUrl) ? { embedUrl } : {}) };
+  }
+  if (/^\/videos\/[A-Za-z0-9/_-]+\.mp4$/.test(url)) return { kind: 'video', url, embedUrl: url };
+  const youtube = url.match(/^https:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})$/);
+  if (youtube) return { kind: 'video', url, embedUrl: `https://www.youtube-nocookie.com/embed/${youtube[1]}` };
+  const tella = url.match(/^https:\/\/www\.tella\.tv\/video\/([A-Za-z0-9_-]+)\/(?:view|embed)\/?$/);
+  if (tella) return { kind: 'video', url, embedUrl: `https://www.tella.tv/video/${tella[1]}/embed` };
+  return undefined;
+}
+
 async function walk(root) {
   const files = [];
   for (const entry of await readdir(root, { withFileTypes: true })) {
@@ -86,7 +103,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       + sectionBoost
       // Pergunta feita no painel de uma página: essa página entra primeiro no contexto.
       + (onPage ? 100 : 0);
-    ranked.push({ title, description, path, body: body.slice(0, 7_000), score });
+    ranked.push({ title, description, path, body: body.slice(0, 7_000), media: mediaOf(raw), score });
   }
   return ranked.toSorted((left, right) => right.score - left.score).slice(0, limit);
 }
@@ -206,7 +223,7 @@ export async function answerQuestion(root, question, options = {}) {
       {
         role: 'developer',
         content: [
-          'Você é o assistente de suporte do iHelp. Responda em português brasileiro, direto e prático, tratando a pessoa por você. Sem emoji, sem marketing.',
+          'Você é a Claricia, assistente de IA do iHelp. Responda em português brasileiro, direto e prático, tratando a pessoa por você. Sem emoji, sem marketing.',
           'Use somente as fontes fornecidas. Analise cada pedido da pergunta separadamente. Se toda a pergunta estiver documentada, use resolution=complete. Se apenas uma parte estiver documentada, use resolution=partial. Se nada estiver, use resolution=not_found e found=false.',
           'Quando algo não estiver documentado, não invente etapas nem nomes de botões. Diga de forma acolhedora o que a documentação permite afirmar e que o time de atendimento pode concluir ou confirmar o procedimento. A interface mostrará o botão de WhatsApp; não escreva número de telefone nem URL.',
           'Nunca diga “a documentação não explica”, “não descreve”, “não informa” ou frases semelhantes. Em respostas parciais, comece pelo que a pessoa consegue fazer e escreva o item ausente como ação direta: “Para [ação], fale com nosso time de atendimento, que vai orientar você.”',
@@ -237,7 +254,7 @@ export async function answerQuestion(root, question, options = {}) {
     sections: parsed.sections,
     steps: parsed.steps,
     code: parsed.code,
-    sources: used.map(({ title, path, description }) => ({ title, path, kind: kindOf(path), excerpt: description })),
+    sources: used.map(({ title, path, description, media }) => ({ title, path, kind: kindOf(path), excerpt: description, ...(media ? { media } : {}) })),
     suggestions: parsed.suggestions,
     resolution: parsed.resolution,
     found: parsed.found,

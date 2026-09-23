@@ -9,7 +9,7 @@ import { supportUrl } from '@/lib/links';
 
 // `extra`: itens que somem primeiro quando a tela estreita (mesma regra do desenho).
 const nav = [
-  { label: 'Assistente de IA', href: '/assistente', icon: true },
+  { label: 'Claricia', href: '/assistente', icon: true },
   { label: 'Central de ajuda', href: '/docs' },
   { label: 'Tutoriais', href: '/tutoriais', extra: true },
   { label: 'Referência da API', href: '/api' },
@@ -39,6 +39,7 @@ export function SiteHeader({ menuOpen, onMenu }: { menuOpen?: boolean; onMenu?: 
             <Link
               key={item.href}
               href={item.href}
+              aria-label={item.href === '/assistente' ? 'Assistente de IA' : undefined}
               className={`ih-nav-link${item.extra ? ' ih-nav-extra' : ''}`}
               data-active={isActive(pathname, item.href) || undefined}
               aria-current={isActive(pathname, item.href) ? 'page' : undefined}
