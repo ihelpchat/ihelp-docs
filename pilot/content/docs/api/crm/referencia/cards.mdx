@@ -9,7 +9,7 @@ contentType: referencia
 Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/card`
 
 <Callout type="info" title="Profundidade desta página">
-Aqui estão listados todos os endpoints de card com verbo, rota e o que fazem. Os corpos de requisição e resposta **não** estão documentados campo a campo. Para o fluxo de movimentação, que tem contrato detalhado, veja [Mover card](../mover-card), [Mover em massa](../mover-cards-em-massa), [Trocar de funil](../trocar-de-funil) e [Mover por telefone](../mover-por-telefone). Para os demais, fale com o time de tecnologia.
+Aqui estão listados todos os endpoints de card com verbo, rota e o que fazem. Os corpos de requisição e resposta **não** estão documentados campo a campo. Para o fluxo de movimentação, que tem contrato detalhado, veja [Mover card](/api/crm/mover-card), [Mover em massa](/api/crm/mover-cards-em-massa), [Trocar de funil](/api/crm/trocar-de-funil) e [Mover por telefone](/api/crm/mover-por-telefone). Para os demais, fale com o time de tecnologia.
 </Callout>
 
 ## Criação, leitura e edição
@@ -27,11 +27,11 @@ Aqui estão listados todos os endpoints de card com verbo, rota e o que fazem. O
 
 | Método | Rota | Parâmetros | O que faz |
 |---|---|---|---|
-| `POST` | `/card/{id}/validate-move` | rota `id`, query `targetStageId` | Pre-check de movimentação, não altera estado. Ver [Mover card](../mover-card) |
-| `PUT` | `/card/{id}/stage/{stageId}` | rota `id`, `stageId`, query `force` | Move o card para outra etapa do mesmo funil. Ver [Mover card](../mover-card) |
-| `POST` | `/card/{id}/move-funnel` | rota `id`, body | Move um card aberto para outro funil. Ver [Trocar de funil](../trocar-de-funil) |
-| `POST` | `/card/move-by-phone` | body | Move os cards de um contato identificado pelo telefone. Ver [Mover por telefone](../mover-por-telefone) |
-| `POST` | `/card/bulk/move` | body | Move vários cards de uma vez. Ver [Mover em massa](../mover-cards-em-massa) |
+| `POST` | `/card/{id}/validate-move` | rota `id`, query `targetStageId` | Pre-check de movimentação, não altera estado. Ver [Mover card](/api/crm/mover-card) |
+| `PUT` | `/card/{id}/stage/{stageId}` | rota `id`, `stageId`, query `force` | Move o card para outra etapa do mesmo funil. Ver [Mover card](/api/crm/mover-card) |
+| `POST` | `/card/{id}/move-funnel` | rota `id`, body | Move um card aberto para outro funil. Ver [Trocar de funil](/api/crm/trocar-de-funil) |
+| `POST` | `/card/move-by-phone` | body | Move os cards de um contato identificado pelo telefone. Ver [Mover por telefone](/api/crm/mover-por-telefone) |
+| `POST` | `/card/bulk/move` | body | Move vários cards de uma vez. Ver [Mover em massa](/api/crm/mover-cards-em-massa) |
 | `POST` | `/card/stage/{stageId}/ids` | rota `stageId`, body filtro | IDs dos cards abertos de uma etapa honrando os mesmos filtros do board (select-all server-side, limite 2000) |
 
 ## Fechamento e restauração

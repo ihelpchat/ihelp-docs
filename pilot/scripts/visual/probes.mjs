@@ -92,6 +92,9 @@ export const screens = [
   {
     name: 'aviso',
     viewports: ['desktop'],
+    // Compara só o estilo do aviso: no protótipo ele está no artigo, no app a página com aviso é o FAQ.
+    // Por isso a grade de cor (que compara a tela inteira) não se aplica aqui.
+    grid: false,
     app: '/docs/principais-duvidas/',
     design: [{ click: 'Central de ajuda' }],
     checks: [
@@ -192,6 +195,17 @@ export const screens = [
       { id: 'resultado', design: up(t('Transferir um atendimento'), 'r.height >= 50'), app: '.ih-search-result', props: [...layout] },
     ],
   },
+];
+
+/**
+ * Cores do protótipo que não passam em contraste WCAG AA (4,5:1) e foram trocadas pelo tom acessível
+ * mais próximo. O teste aceita o tom acessível, mas lista cada ocorrência no relatório.
+ */
+export const accessibleColors = [
+  { design: [148, 163, 184], app: [100, 116, 139], motivo: 'texto #94a3b8 → #64748b' },
+  { design: [235, 95, 62], app: [197, 72, 43], motivo: 'botão #eb5f3e → #c5482b (texto branco)' },
+  { design: [212, 86, 56], app: [197, 72, 43], motivo: 'link #d45638 → #c5482b' },
+  { design: [100, 116, 139], app: [71, 85, 105], motivo: 'selo sobre cinza #64748b → #475569' },
 ];
 
 /** Tolerâncias por tipo de medida. */

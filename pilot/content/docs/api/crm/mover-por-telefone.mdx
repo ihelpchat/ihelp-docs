@@ -82,5 +82,5 @@ O status `200` só indica que a chamada foi processada. Cards individuais podem 
 | 409 | Conflito de concorrência. Vem com header `Retry-After: 1`, repita a chamada |
 
 <Callout type="info" title="Contrato de erro diferente">
-Ao contrário de [Mover card](./mover-card), este endpoint responde `400` com a mensagem de erro em texto quando a etapa de destino está inativa, sem o corpo `{ "error": "stage_inactive" }`.
+Ao contrário de [Mover card](/api/crm/mover-card), este endpoint responde `400` com a mensagem de erro em texto quando a etapa de destino está inativa, sem o corpo `{ "error": "stage_inactive" }`.
 </Callout>

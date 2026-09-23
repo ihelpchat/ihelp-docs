@@ -10,6 +10,7 @@ import { Feedback } from '@/components/site/feedback';
 import { CopyButton } from '@/components/site/copy-button';
 
 const apiBase = 'https://apiv3.ihelpchat.com/api/v2';
+const updatedFormat = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' });
 
 type Page = NonNullable<ReturnType<typeof source.getPage>>;
 
@@ -81,7 +82,7 @@ export async function ArticleLayout({
 
   return (
     <div className={wide ? 'ih-article-wrap ih-article-wide' : 'ih-article-wrap'}>
-      <article className="ih-article">
+      <article className={page.data.method ? 'ih-article ih-article-endpoint' : 'ih-article'}>
         {intro ?? (
           <>
             {api && page.data.method ? (
@@ -104,6 +105,7 @@ export async function ArticleLayout({
             {meta ? (
               <div className="ih-meta">
                 <span><Clock aria-hidden="true" />{minutes} min de leitura</span>
+                {page.data.lastModified ? <span>Atualizado em {updatedFormat.format(page.data.lastModified)}</span> : null}
                 <span className="ih-meta-pill"><span aria-hidden="true" />{contentLabel[page.data.contentType]}</span>
               </div>
             ) : null}
@@ -113,7 +115,7 @@ export async function ArticleLayout({
         {api ? null : <Feedback />}
         <ContinueReading page={page} />
       </article>
-      {wide ? null : <PageToc toc={toc} />}
+      {wide ? null : <PageToc toc={toc} title={page.data.title} />}
     </div>
   );
 }

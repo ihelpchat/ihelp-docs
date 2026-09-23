@@ -1,28 +1,76 @@
 ---
 title: "Buscar atendimento pelo telefone"
 sidebar_position: 1
-description: "Referência técnica da API do iHelp para buscar atendimento pelo telefone."
+description: "Retorna o último atendimento criado para um número de telefone, com contato, canal, departamento e atendentes vinculados."
 source: api
 contentType: referencia
 method: GET
 endpoint: "/customers/search"
 ---
 
-Retorna o último atendimento criado para o número de telefone.
+## Parâmetros
 
-GET
+<Params>
+<Param name="searchText" type="string" required>
+Número de telefone do contato, sem máscara (ex: `17936189969`).
+</Param>
+<Param name="quantidade" type="number">
+Quantidade de registros por página. Os exemplos usam `20`.
+</Param>
+<Param name="skip" type="number">
+Quantidade de registros a pular, para paginar. Os exemplos usam `0`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl -G https://apiv3.ihelpchat.com/api/v2/customers/search \
+  --data-urlencode "searchText=17936189969" \
+  --data-urlencode "quantidade=20" \
+  --data-urlencode "skip=0" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const params = new URLSearchParams({ searchText: '17936189969', quantidade: '20', skip: '0' });
+
+const res = await fetch(`https://apiv3.ihelpchat.com/api/v2/customers/search?${params}`, {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+const { dados } = await res.json();
+console.log(dados[0].idRef);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/customers/search",
+    params={"searchText": "17936189969", "quantidade": 20, "skip": 0},
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.json()["dados"][0]["idRef"])
+```
+
 ```http
-https://apiv3.ihelpchat.com/api/v2/customers/search?searchText=<numero>&quantidade=20&skip=0
+GET https://apiv3.ihelpchat.com/api/v2/customers/search?searchText=<numero>&quantidade=20&skip=0
+GET https://apiv3.ihelpchat.com/api/v2/customers/search?searchText=17936189969&quantidade=20&skip=0
 ```
-ex:
-```
-https://apiv3.ihelpchat.com/api/v2/customers/search?searchText=17936189969&quantidade=20&skip=0
-```
+
+</CodeTabs>
+
 <Callout type="warn" title="ID para enviar mensagem">
 O ID do atendimento usado para enviar mensagem é o `idRef` (ex: `69ea67a0ab43821f9dcb3976`), **não** o `id` curto numérico (ex: `20922413`).
 </Callout>
 
-response:
+## Resposta
+
+<Response status="200 OK">
 
 ```json
 {
@@ -101,3 +149,25 @@ response:
    ]
 }
 ```
+
+</Response>
+
+## Campos relevantes
+
+<Fields>
+<Field name="dados[].idRef">
+Identificador do atendimento usado no envio de mensagens.
+</Field>
+<Field name="dados[].canalId">
+Canal do atendimento.
+</Field>
+<Field name="dados[].departamentoId">
+Departamento do atendimento.
+</Field>
+<Field name="dados[].contato">
+Contato do atendimento, com nome, `idRef` e tags.
+</Field>
+<Field name="dados[].atendimentoUsuarios">
+Atendentes vinculados ao atendimento.
+</Field>
+</Fields>

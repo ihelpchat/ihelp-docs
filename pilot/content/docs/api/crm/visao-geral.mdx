@@ -35,12 +35,12 @@ Você precisa dos IDs antes de movimentar. O fluxo natural é:
 1. `GET /crm/funnel` - lista os funis, guarde o `id` do funil desejado
 2. `GET /crm/funnel/{id}/with-stages` - lista as etapas daquele funil, guarde o `id` da etapa
 3. Movimente:
-   - [Mover card](./mover-card) - um card entre etapas do mesmo funil
-   - [Mover em massa](./mover-cards-em-massa) - vários cards de uma vez
-   - [Trocar de funil](./trocar-de-funil) - mudar o card de funil
-   - [Mover por telefone](./mover-por-telefone) - sem precisar do `cardId`
+   - [Mover card](/api/crm/mover-card) - um card entre etapas do mesmo funil
+   - [Mover em massa](/api/crm/mover-cards-em-massa) - vários cards de uma vez
+   - [Trocar de funil](/api/crm/trocar-de-funil) - mudar o card de funil
+   - [Mover por telefone](/api/crm/mover-por-telefone) - sem precisar do `cardId`
 
-Os dois primeiros passos estão em [Funis e etapas](./funis-e-etapas).
+Os dois primeiros passos estão em [Funis e etapas](/api/crm/funis-e-etapas).
 
 ## Convenções
 
@@ -78,5 +78,5 @@ Os erros de negócio seguem o formato `{ "error": "...", "message": "..." }`.
 | 409 | *(sem `error`)* | Corpo `{ canMove: false, missingFields, pendingTasks }`, pendências obrigatórias |
 
 <Callout type="info" title="Além da movimentação">
-Esta seção detalha o fluxo de movimentação de cards. Os demais endpoints de CRM (CRUD de cards, funis, etapas, automações, filtros e pipelines) estão listados em [Referência completa](/api/crm/referencia).
+Esta seção detalha o fluxo de movimentação de cards. Os demais endpoints de CRM (CRUD de cards, funis, etapas, automações, filtros e pipelines) estão listados em [Referência completa](/api/crm/referencia/cards).
 </Callout>

@@ -14,9 +14,9 @@ https://apiv3.ihelpchat.com/api/v2/customers/send-template
 ```
 
 <Callout type="info" title="Observação">
-Informe o `atendimentoId` do atendimento em que o template será enviado. Para descobrir esse valor, use [Buscar atendimento pelo telefone](../atendimentos/buscar-atendimento-por-telefone) - o `atendimentoId` é o campo **`idRef`** da resposta (ex.: `69ea67a0ab43821f9dcb3976`), **não** o `id` curto numérico.
+Informe o `atendimentoId` do atendimento em que o template será enviado. Para descobrir esse valor, use [Buscar atendimento pelo telefone](/api/atendimentos/buscar-atendimento-por-telefone) - o `atendimentoId` é o campo **`idRef`** da resposta (ex.: `69ea67a0ab43821f9dcb3976`), **não** o `id` curto numérico.
 
-Para **iniciar um novo atendimento**, use [Criar novo chat](./template-criar-novo-chat) (`add-new-call`).
+Para **iniciar um novo atendimento**, use [Criar novo chat](/api/templates/template-criar-novo-chat) (`add-new-call`).
 
 Fora o `atendimentoId`, o body é o mesmo nos dois endpoints. O que muda é o **painel usado** para gerenciar os templates: **Gupshup** ou **Meta**.
 </Callout>
@@ -24,7 +24,7 @@ Fora o `atendimentoId`, o body é o mesmo nos dois endpoints. O que muda é o **
 <Callout type="error" title="A janela de 24h precisa estar aberta">
 Para enviar template em um chat existente, a **janela de 24 horas da Meta** precisa estar ativa: o cliente tem que ter enviado alguma mensagem nas últimas 24h. Veja a [documentação oficial da Meta sobre a janela de atendimento ao cliente](https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-messages).
 
-Se a janela já fechou, o request retorna erro de **sessão expirada**. Nesse caso, use o [Criar novo chat](./template-criar-novo-chat) (`add-new-call`) para abrir um novo atendimento com o template.
+Se a janela já fechou, o request retorna erro de **sessão expirada**. Nesse caso, use o [Criar novo chat](/api/templates/template-criar-novo-chat) (`add-new-call`) para abrir um novo atendimento com o template.
 </Callout>
 
 ## Onde vão os parâmetros
@@ -36,7 +36,7 @@ Se a janela já fechou, o request retorna erro de **sessão expirada**. Nesse ca
 
 Os valores seguem a **ordem em que aparecem no template**: primeiro as variáveis de texto, depois os botões de URL (da esquerda para a direita).
 
-Veja [Pegar ID do template](./pegar-id-do-template) para descobrir o valor de `cloudApiTemplateName`.
+Veja [Pegar ID do template](/api/templates/pegar-id-do-template) para descobrir o valor de `cloudApiTemplateName`.
 
 ---
 

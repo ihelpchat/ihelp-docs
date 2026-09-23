@@ -71,6 +71,6 @@ Se qualquer um dos dois faltar, a resposta é `403` com uma mensagem indicando q
 
 ## Boas práticas
 
-- Descubra as etapas válidas com `GET /crm/funnel/{targetFunnelId}/with-stages` (ver [Funis e etapas](./funis-e-etapas)) e filtre por `isActive: true` antes de escolher o `targetStageId`.
+- Descubra as etapas válidas com `GET /crm/funnel/{targetFunnelId}/with-stages` (ver [Funis e etapas](/api/crm/funis-e-etapas)) e filtre por `isActive: true` antes de escolher o `targetStageId`.
 - Somente cards com status aberto ou em andamento são elegíveis. Verifique o status antes de chamar para evitar o `409 card_closed`.
 - Esta operação move **um card por vez**. Não existe versão em massa para troca de funil.

@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { checksFor, colorGrid, gridBlock, launch, measureInPage, openAppScreen, screens } from './visual/measure.mjs';
-import { tolerance } from './visual/probes.mjs';
+import { accessibleColors, tolerance } from './visual/probes.mjs';
 
 const baseUrl = process.env.BASE_URL ?? 'http://127.0.0.1:4173';
 const minimum = Number(process.env.VISUAL_MIN ?? 90);
@@ -32,7 +32,9 @@ function compare(prop, expected, actual) {
   if (actual === undefined || actual === null) return { pass: false, delta: 'ausente' };
   if (['color', 'background', 'borderColor'].includes(prop)) {
     const delta = colorDistance(expected, actual);
-    return { pass: delta <= tolerance.color, delta };
+    if (delta <= tolerance.color) return { pass: true, delta };
+    const swap = accessibleColors.find((item) => colorDistance([...item.design, 1], expected) <= 2 && colorDistance([...item.app, 1], actual) <= 2);
+    return swap ? { pass: true, delta, a11y: swap.motivo } : { pass: false, delta };
   }
   if (prop === 'fontWeight') return { pass: Math.abs(expected - actual) < 100, delta: actual - expected };
   const delta = Math.round((actual - expected) * 10) / 10;
@@ -53,6 +55,7 @@ function gridSimilarity(expected, actual) {
 const results = { desktop: [], mobile: [] };
 const grids = { desktop: [], mobile: [] };
 const failures = [];
+const a11ySwaps = [];
 
 const browser = await launch();
 try {
@@ -74,11 +77,12 @@ try {
           const expected = reference.checks[check.id]?.[prop];
           const outcome = measured ? compare(prop, expected, measured[prop]) : { pass: false, delta: 'elemento ausente' };
           results[viewport].push(outcome.pass);
+          if (outcome.a11y) a11ySwaps.push(`${key} ${check.id}.${prop}: ${outcome.a11y}`);
           if (!outcome.pass) failures.push({ tela: key, ponto: check.id, medida: prop, esperado: expected, obtido: measured?.[prop], diferenca: outcome.delta });
         }
       }
 
-      if (layoutComparable) {
+      if (layoutComparable && screen.grid !== false) {
         const grid = await colorGrid(page, gridBlock[viewport]);
         const similarity = gridSimilarity(reference.grid, grid);
         grids[viewport].push({ tela: screen.name, similaridade: similarity });
@@ -103,10 +107,11 @@ for (const viewport of ['desktop', 'mobile']) {
 }
 
 for (const failure of failures) console.error('DIFERENTE', JSON.stringify(failure));
+for (const swap of a11ySwaps) console.log('ACESSIBILIDADE', swap);
 for (const [viewport, item] of Object.entries(summary)) {
   console.log(`${viewport}: pontos de controle ${item.pontos}; grade de cor média ${item.gradeMedia}% (${item.grade.map((g) => `${g.tela} ${g.similaridade}%`).join(', ')})`);
 }
-if (reportDir) await writeFile(`${reportDir}/visual-summary.json`, JSON.stringify({ summary, failures }, null, 2));
+if (reportDir) await writeFile(`${reportDir}/visual-summary.json`, JSON.stringify({ summary, failures, a11ySwaps }, null, 2));
 
 for (const [viewport, item] of Object.entries(summary)) {
   assert.ok(item.pontosPct >= minimum, `${viewport}: pontos de controle abaixo de ${minimum}% (${item.pontos})`);

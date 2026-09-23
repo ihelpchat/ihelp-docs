@@ -12,7 +12,7 @@ const queries = [
   ['relatório exportar', 'Relatórios'],
   ['usuário permissão', 'Principais dúvidas'],
   ['mensagem comum api', 'Mensagem comum'],
-  ['carteirizar contato', 'Tutoriais Guiados'],
+  ['carteirizar contato', 'Tutoriais guiados'],
   ['como encerrar atendimento', 'Atendimento'],
   ['CSAT', 'Relatórios'],
   ['reabrir atendimento', 'Atendimento'],
@@ -23,8 +23,8 @@ const queries = [
   ['colunas relatório', 'Relatórios'],
   ['token navegador', 'Autenticação'],
   ['Bearer token', 'Autenticação'],
-  ['Gupshup créditos', 'Tutoriais Guiados'],
-  ['pipeline CRM', 'Tutoriais Guiados'],
+  ['Gupshup créditos', 'Tutoriais guiados'],
+  ['pipeline CRM', 'Tutoriais guiados'],
 ];
 
 // Erros do iframe do Tango (terceiro) não são do nosso site.
@@ -60,6 +60,12 @@ try {
   await page.getByRole('heading', { name: 'Tire sua dúvida sobre o iHelp em uma pergunta.' }).waitFor();
   await assertNoHorizontalOverflow(page, 'home desktop');
   await page.screenshot({ path: '/tmp/ihelp-fumadocs-home-desktop.png', fullPage: true });
+
+  // Atalho ⌘K / Ctrl+K abre a busca.
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+k' : 'Control+k');
+  await page.locator('#ih-search-dialog').waitFor();
+  await page.keyboard.press('Escape');
+  await page.locator('#ih-search-dialog').waitFor({ state: 'detached' });
 
   await page.locator('.home-search').click();
   const searchInput = page.locator('[data-search-input]');

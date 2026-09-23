@@ -4,6 +4,7 @@ import { AnchorProvider, TOCItem, type TableOfContents } from 'fumadocs-core/toc
 import { Sparkles } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useSearchContext } from 'fumadocs-ui/contexts/search';
+import { setPendingQuery } from '@/lib/search-query';
 
 function useReadingProgress() {
   const [progress, setProgress] = useState(0);
@@ -23,10 +24,12 @@ function useReadingProgress() {
   return progress;
 }
 
-export function PageToc({ toc, ask = true }: { toc: TableOfContents; ask?: boolean }) {
+export function PageToc({ toc, title, ask = true }: { toc: TableOfContents; title?: string; ask?: boolean }) {
   const progress = useReadingProgress();
   const { setOpenSearch } = useSearchContext();
-  const items = toc.filter((item) => item.depth <= 3);
+  // O nível mais alto da página vira o primeiro nível do índice (artigos migrados começam em ###).
+  const base = toc[0]?.depth ?? 2;
+  const items = toc.filter((item) => item.depth <= base + 1);
 
   return (
     <aside className="ih-toc" aria-label="Nesta página">
@@ -37,14 +40,17 @@ export function PageToc({ toc, ask = true }: { toc: TableOfContents; ask?: boole
           <ul>
             {items.map((item) => (
               <li key={item.url}>
-                <TOCItem href={item.url} className="ih-toc-link" data-depth={item.depth}>{item.title as ReactNode}</TOCItem>
+                <TOCItem href={item.url} className="ih-toc-link" data-depth={item.depth - base + 2}>{item.title as ReactNode}</TOCItem>
               </li>
             ))}
           </ul>
         </AnchorProvider>
       ) : null}
       {ask ? (
-        <button type="button" className="ih-toc-ask" onClick={() => setOpenSearch(true)}>
+        <button type="button" className="ih-toc-ask" onClick={() => {
+          if (title) setPendingQuery(title);
+          setOpenSearch(true);
+        }}>
           <Sparkles aria-hidden="true" />
           Perguntar sobre esta página
         </button>

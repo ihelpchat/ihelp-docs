@@ -20,6 +20,8 @@ const docs = defineDocs({
     postprocess: {
       includeProcessedMarkdown: true,
     },
+    // Data do último commit do arquivo (o deploy do Pages clona o histórico completo).
+    lastModified: true,
   },
   meta: {
     schema: metaSchema,

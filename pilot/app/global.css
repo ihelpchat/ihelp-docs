@@ -18,7 +18,7 @@
   --color-fd-card: #ffffff;
   --color-fd-card-foreground: #0f172a;
   --color-fd-border: #e2e8f0;
-  --color-fd-primary: #d45638;
+  --color-fd-primary: #c5482b;
   --color-fd-primary-foreground: #ffffff;
   --color-fd-secondary: #f1f5f9;
   --color-fd-secondary-foreground: #334155;
@@ -28,7 +28,10 @@
   --color-fd-overlay: rgb(15 23 42 / 32%);
 
   --ih-coral: #eb5f3e;
-  --ih-coral-600: #d45638;
+  /* #d45638 do protótipo escurecido o mínimo para contraste AA (4,5:1) em texto sobre branco. */
+  --ih-coral-600: #c5482b;
+  /* Fundo de botões com texto branco: #eb5f3e não passa em AA, então usamos o mesmo tom acessível. */
+  --ih-coral-cta: #c5482b;
   --ih-coral-700: #b0472f;
   --ih-coral-900: #7c2f1f;
   --ih-coral-50: #fef7f5;
@@ -141,13 +144,13 @@ button {
   color: var(--ih-white);
   font-weight: 600;
   border-color: transparent;
-  background: var(--ih-coral);
+  background: var(--ih-coral-cta);
 }
 
 .ih-button-primary:hover {
   color: var(--ih-white);
   border-color: transparent;
-  background: var(--ih-coral-600);
+  background: var(--ih-coral-700);
 }
 
 .ih-button-dark {
@@ -225,7 +228,7 @@ button {
 .ih-method {
   flex: 0 0 34px;
   padding: 2px 0;
-  color: var(--ih-slate-500);
+  color: var(--ih-slate-600);
   font-family: var(--ih-mono);
   font-size: 9px;
   font-weight: 600;
@@ -244,7 +247,7 @@ button {
 
 .ih-eyebrow {
   margin: 0 0 12px;
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -394,7 +397,7 @@ button {
 .ih-side-search kbd {
   flex: 0 0 auto;
   padding: 2px 5px;
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-size: 11px;
   border: 1px solid var(--ih-slate-200);
   border-radius: 4px;
@@ -484,7 +487,7 @@ button {
 }
 
 .ih-header-dark .ih-header-search kbd {
-  color: var(--ih-slate-500);
+  color: var(--ih-slate-400);
   border-color: rgb(148 163 184 / 20%);
 }
 
@@ -497,12 +500,12 @@ button {
   color: var(--ih-white);
   font-weight: 600;
   border: 0;
-  background: var(--ih-coral);
+  background: var(--ih-coral-cta);
 }
 
 .ih-header-cta-primary:hover {
   color: var(--ih-white);
-  background: var(--ih-coral-600);
+  background: var(--ih-coral-700);
 }
 
 /* ---------- Corpo e barra lateral ---------- */
@@ -556,7 +559,7 @@ button {
 .ih-side-kicker {
   margin: 0;
   padding: 0 10px 12px;
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -586,7 +589,7 @@ button {
 }
 
 .ih-sidebar-api .ih-side-title {
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-size: 11px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -774,7 +777,7 @@ button {
   align-items: center;
   gap: 7px;
   margin-bottom: 18px;
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-size: 12px;
 }
 
@@ -810,7 +813,7 @@ button {
 
 .ih-mono-kicker {
   margin: 0 0 14px;
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-family: var(--ih-mono);
   font-size: 11px;
 }
@@ -957,11 +960,17 @@ button {
 .ih-prose h3 a,
 .ih-prose h4 a {
   color: inherit;
+  text-decoration: none;
 }
+
 
 .ih-prose a {
   color: var(--ih-coral-600);
   font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--ih-coral-100);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 .ih-prose a:hover {
@@ -993,7 +1002,42 @@ button {
   color: var(--ih-slate-400);
 }
 
-.ih-prose ol > li::marker {
+/* Passo a passo numerado, como no desenho (círculo coral com o número). */
+.ih-prose > ol {
+  padding-left: 0;
+  list-style: none;
+  counter-reset: ih-step;
+}
+
+.ih-prose > ol > li {
+  position: relative;
+  min-height: 26px;
+  margin: 0;
+  padding: 10px 0 10px 40px;
+  counter-increment: ih-step;
+}
+
+.ih-prose > ol > li::before {
+  content: counter(ih-step);
+  position: absolute;
+  top: 11px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: var(--ih-coral-700);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  border: 1px solid var(--ih-coral-100);
+  border-radius: 999px;
+  background: var(--ih-coral-50);
+}
+
+.ih-prose ol ol > li::marker,
+.ih-callout ol > li::marker {
   color: var(--ih-coral-700);
   font-weight: 600;
 }
@@ -1056,7 +1100,7 @@ button {
 }
 
 .ih-prose th {
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -1066,6 +1110,41 @@ button {
 
 .ih-prose tr:last-child td {
   border-bottom: 0;
+}
+
+/* Links de navegação em destaque dentro do conteúdo (<ButtonLink>), no estilo dos cartões do desenho. */
+.ih-prose .ih-link-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: 0 0 8px;
+  padding: 10px 14px;
+  color: var(--ih-ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid var(--ih-slate-200);
+  border-radius: 10px;
+  background: var(--ih-white);
+}
+
+.ih-prose .ih-link-row:hover {
+  color: var(--ih-ink);
+  text-decoration: none;
+  border-color: var(--ih-slate-300);
+  background: #fdfffc;
+}
+
+.ih-link-row span {
+  flex: 1;
+}
+
+.ih-link-row svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--ih-slate-400);
 }
 
 /* Blocos de código escuros, como no desenho da API */
@@ -1100,6 +1179,11 @@ button {
 .ih-prose .shiki span,
 .ih-prose pre span {
   color: var(--shiki-dark, inherit) !important;
+}
+
+/* Comentário do tema github-dark (#6a737d) não passa em AA no fundo escuro. */
+.ih-prose pre span[style*='#6A737D' i] {
+  color: #8b949e !important;
 }
 
 .ih-prose figure :where(button) {
@@ -1172,6 +1256,229 @@ button {
 .ih-copy svg {
   width: 12px;
   height: 12px;
+}
+
+/* Blocos de referência da API: parâmetros, campos, abas de código e resposta */
+
+.ih-params {
+  margin: 0 0 30px;
+  overflow: hidden;
+  border: 1px solid var(--ih-slate-200);
+  border-radius: 10px;
+  background: var(--ih-white);
+}
+
+.ih-param,
+.ih-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ih-slate-100);
+}
+
+.ih-param:last-child,
+.ih-field:last-child {
+  border-bottom: 0;
+}
+
+.ih-prose .ih-param-name,
+.ih-prose .ih-param-type {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.ih-prose .ih-param-name {
+  flex: 0 0 130px;
+  color: var(--ih-ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ih-field .ih-param-name {
+  flex-basis: 170px;
+}
+
+.ih-prose .ih-param-type {
+  flex: 0 0 60px;
+  color: var(--ih-slate-500);
+  font-size: 11px;
+}
+
+.ih-param-req {
+  padding: 2px 7px;
+  color: var(--ih-slate-600);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  background: var(--ih-slate-100);
+}
+
+.ih-param-req[data-required] {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.ih-param-text {
+  flex: 1;
+  min-width: 200px;
+  color: var(--ih-slate-600);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ih-param-text > p {
+  margin: 0;
+}
+
+.ih-code-card {
+  margin: 0 0 26px;
+  overflow: hidden;
+  border: 1px solid rgb(148 163 184 / 18%);
+  border-radius: 12px;
+  background: var(--ih-code);
+}
+
+.ih-code-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid rgb(148 163 184 / 14%);
+}
+
+.ih-code-head button {
+  padding: 4px 9px;
+  color: var(--ih-slate-400);
+  font-family: var(--ih-mono);
+  font-size: 11px;
+  font-weight: 500;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.ih-code-head button[aria-selected='true'] {
+  color: #f7bfb2;
+  background: rgb(235 95 62 / 18%);
+}
+
+.ih-code-head .ih-code-toggle {
+  color: var(--ih-slate-300);
+  font-family: inherit;
+}
+
+.ih-code-head .ih-code-toggle:hover {
+  background: rgb(148 163 184 / 14%);
+}
+
+.ih-code-spacer {
+  flex: 1;
+}
+
+.ih-status {
+  padding: 2px 7px;
+  color: #fca5a5;
+  font-family: var(--ih-mono);
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 5px;
+  background: rgb(220 38 38 / 18%);
+}
+
+.ih-status[data-ok] {
+  color: #86d8a6;
+  background: rgb(22 163 74 / 18%);
+}
+
+.ih-prose .ih-code-card figure {
+  margin: 0 !important;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.ih-code-card[data-collapsed] .fd-scroll-container {
+  max-height: 380px;
+}
+
+.ih-code-card:not([data-collapsed]) .fd-scroll-container {
+  max-height: none;
+}
+
+.ih-step-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+  gap: 12px;
+  margin: 0 0 20px;
+  counter-reset: ih-card;
+}
+
+.ih-step-card {
+  padding: 16px;
+  border: 1px solid var(--ih-slate-200);
+  border-radius: 10px;
+  background: var(--ih-white);
+  counter-increment: ih-card;
+}
+
+.ih-prose .ih-step-card-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 9px;
+  color: var(--ih-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ih-step-card-title::before {
+  content: counter(ih-card);
+  display: flex;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  color: var(--ih-white);
+  font-family: var(--ih-mono);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--ih-ink);
+}
+
+.ih-step-card-text {
+  color: var(--ih-slate-600);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ih-step-card-text p {
+  margin: 0;
+}
+
+.ih-article-endpoint .ih-lead {
+  margin-bottom: 20px;
+}
+
+/* Na página de um endpoint, as seções viram rótulos discretos, como no desenho. */
+.ih-article-endpoint .ih-prose > h2 {
+  margin: 30px 0 10px;
+  color: var(--ih-slate-500);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Título dos blocos de código (```lang title="...") */
+.ih-prose figure > div:first-child:has(> figcaption) {
+  padding: 9px 12px;
+  border-bottom: 1px solid rgb(148 163 184 / 14%);
 }
 
 /* Avisos */
@@ -1493,7 +1800,7 @@ button {
 .ih-related-grid span {
   display: block;
   margin-bottom: 5px;
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-size: 11px;
 }
 
@@ -1523,7 +1830,7 @@ button {
 
 .ih-toc-kicker {
   margin: 0 0 10px;
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -1617,7 +1924,7 @@ button {
 
 .ih-facts dt {
   margin-bottom: 6px;
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-size: 11px;
   font-weight: 500;
 }
@@ -1671,7 +1978,7 @@ button {
 }
 
 .ih-resource-head span {
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-family: var(--ih-mono);
   font-size: 10px;
 }
@@ -1706,6 +2013,12 @@ button {
 
 .ih-page-header .ih-title {
   margin-bottom: 10px;
+}
+
+/* Nas páginas de índice (FAQ, tutoriais, novidades, visão geral da API) o título do desenho usa a altura de linha padrão. */
+.ih-page .ih-title,
+.ih-article-wide .ih-title {
+  line-height: 1.5 !important;
 }
 
 .ih-page-header .ih-lead {
@@ -1789,7 +2102,7 @@ button {
 }
 
 .ih-faq-filter > span {
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-size: 12px;
 }
 
@@ -1808,8 +2121,9 @@ button {
   border-bottom: 0;
 }
 
-.ih-faq-item h3 {
+.ih-faq-item h2 {
   margin: 0;
+  font-size: inherit;
 }
 
 .ih-faq-item button {
@@ -1995,7 +2309,7 @@ button {
 }
 
 .ih-player-poster:hover .ih-player-start {
-  background: var(--ih-coral);
+  background: var(--ih-coral-cta);
 }
 
 .ih-player-start svg {
@@ -2134,7 +2448,7 @@ button {
 }
 
 .ih-guide-copy span {
-  color: var(--ih-slate-500);
+  color: var(--ih-slate-600);
   font-size: 11px;
 }
 
@@ -2182,7 +2496,7 @@ button {
 .ih-timeline time {
   flex: 0 0 96px;
   padding-top: 2px;
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-family: var(--ih-mono);
   font-size: 11px;
 }
@@ -2212,12 +2526,12 @@ button {
   align-items: center;
   gap: 8px;
   margin: 0 0 8px;
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-size: 11px;
 }
 
 .ih-timeline-meta time {
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-family: var(--ih-mono);
   font-size: 11px;
 }
@@ -2589,7 +2903,7 @@ button {
   font-size: 13px;
   font-weight: 600;
   border-radius: 8px;
-  background: var(--ih-coral);
+  background: var(--ih-coral-cta);
 }
 
 .home-search-action svg {
@@ -2911,7 +3225,7 @@ button {
 .design-news time {
   flex: 0 0 62px;
   padding-top: 2px;
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-family: var(--ih-mono);
   font-size: 11px;
 }
@@ -2997,12 +3311,12 @@ button {
 .design-support a {
   color: var(--ih-white);
   font-weight: 600;
-  background: var(--ih-coral);
+  background: var(--ih-coral-cta);
 }
 
 .design-support a:hover {
   color: var(--ih-white);
-  background: var(--ih-coral-600);
+  background: var(--ih-coral-700);
 }
 
 .design-support button {
@@ -3024,7 +3338,7 @@ button {
   gap: 20px;
   margin-top: 56px;
   padding: 28px 0 40px;
-  color: var(--ih-slate-400);
+  color: var(--ih-slate-500);
   font-size: 12px;
   border-top: 1px solid var(--ih-slate-200);
 }
@@ -3104,9 +3418,18 @@ button {
     justify-content: center;
   }
 
-  .ih-header-search span,
   .ih-header-search kbd {
     display: none;
+  }
+
+  /* Some da tela, mas continua sendo o nome do botão para leitores de tela. */
+  .ih-header-search span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .ih-body-sidebar,
@@ -3241,7 +3564,7 @@ button {
     padding: 12px;
   }
 
-  .ih-search-count {
+  .ih-search-footer .ih-search-count {
     display: none;
   }
 

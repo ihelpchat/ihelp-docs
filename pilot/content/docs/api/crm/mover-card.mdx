@@ -108,4 +108,4 @@ Este caso **não** é contornável por `force`.
 
 - **Retry é seguro.** Se o card já estiver na etapa de destino, a API responde `200` sem alterar nada.
 - Fluxo recomendado: chame sem `force`; se vier `409` com `canMove: false`, apresente as pendências ao usuário e só então repita com `force=true`.
-- Este endpoint é para movimentação **dentro do mesmo funil**. Para mudar o card de funil, use [Trocar de funil](./trocar-de-funil).
+- Este endpoint é para movimentação **dentro do mesmo funil**. Para mudar o card de funil, use [Trocar de funil](/api/crm/trocar-de-funil).

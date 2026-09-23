@@ -7,7 +7,7 @@ contentType: referencia
 ---
 
 <Callout type="info" title="Profundidade desta página">
-Verbo, rota e o que cada endpoint faz. Os dois endpoints de descoberta de IDs (`GET /funnel` e `GET /funnel/{id}/with-stages`) estão detalhados em [Funis e etapas](../funis-e-etapas), com corpo de resposta e erros.
+Verbo, rota e o que cada endpoint faz. Os dois endpoints de descoberta de IDs (`GET /funnel` e `GET /funnel/{id}/with-stages`) estão detalhados em [Funis e etapas](/api/crm/funis-e-etapas), com corpo de resposta e erros.
 </Callout>
 
 ## Funis
@@ -16,10 +16,10 @@ Rota base: `https://apiv3.ihelpchat.com/api/v2/crm/funnel`
 
 | Método | Rota | Parâmetros | O que faz |
 |---|---|---|---|
-| `GET` | `/funnel` | - | Todos os funis ativos da empresa. Ver [detalhes](../funis-e-etapas) |
+| `GET` | `/funnel` | - | Todos os funis ativos da empresa. Ver [detalhes](/api/crm/funis-e-etapas) |
 | `GET` | `/funnel/default` | - | O funil padrão da empresa |
 | `GET` | `/funnel/{id}` | rota `id` | Um funil por ID |
-| `GET` | `/funnel/{id}/with-stages` | rota `id` | O funil com suas etapas. Ver [detalhes](../funis-e-etapas) |
+| `GET` | `/funnel/{id}/with-stages` | rota `id` | O funil com suas etapas. Ver [detalhes](/api/crm/funis-e-etapas) |
 | `GET` | `/funnel/{id}/with-rules` | rota `id` | O funil com suas regras de automação |
 | `GET` | `/funnel/{id}/with-stages-and-rules` | rota `id` | O funil com etapas e regras |
 | `POST` | `/funnel` | body | Cria um novo funil. O criador entra automaticamente como Admin |

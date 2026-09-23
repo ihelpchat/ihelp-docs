@@ -45,13 +45,13 @@ export function FaqList({ items }: { items: FaqItem[] }) {
             const expanded = open === item.id;
             return (
               <section key={item.id} id={item.id} className="ih-faq-item" data-open={expanded || undefined}>
-                <h3>
+                <h2>
                   <button type="button" aria-expanded={expanded} aria-controls={`${item.id}-resposta`} onClick={() => setOpen(expanded ? null : item.id)}>
                     <span className="ih-faq-cat">{item.category}</span>
                     <span className="ih-faq-q">{item.question}</span>
                     <ChevronDown aria-hidden="true" />
                   </button>
-                </h3>
+                </h2>
                 <div id={`${item.id}-resposta`} className="ih-faq-answer ih-prose" hidden={!expanded}>{item.answer}</div>
               </section>
             );

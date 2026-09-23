@@ -26,7 +26,7 @@ export function SiteHeader({ menuOpen, onMenu }: { menuOpen?: boolean; onMenu?: 
   return (
     <header className={dark ? 'ih-header ih-header-dark' : 'ih-header'}>
       <div className="ih-header-inner">
-        <Link href="/" className="ih-brand" aria-label="iHelp documentação — início">
+        <Link href="/" className="ih-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={withBasePath(dark ? '/brand/logo-lockup-light-on-dark.svg' : '/brand/logo-lockup.svg')} alt="iHelp" width={51} height={22} />
           {dark ? <span className="ih-brand-tag">API</span> : <span className="ih-brand-label">documentação</span>}
@@ -44,7 +44,7 @@ export function SiteHeader({ menuOpen, onMenu }: { menuOpen?: boolean; onMenu?: 
             </Link>
           ))}
         </nav>
-        <button type="button" className="ih-header-search" onClick={() => setOpenSearch(true)} aria-label="Buscar na documentação">
+        <button type="button" className="ih-header-search" onClick={() => setOpenSearch(true)}>
           <Search aria-hidden="true" />
           <span>{dark ? 'Buscar na documentação' : 'Buscar ou perguntar'}</span>
           <kbd>⌘K</kbd>

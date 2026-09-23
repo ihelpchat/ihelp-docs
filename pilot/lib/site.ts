@@ -89,7 +89,12 @@ export function getNavGroups(section: 'docs' | 'api'): NavGroup[] {
     const start = concepts >= 0 ? groups.splice(concepts, 1)[0].items : [];
     return [{ title: 'Começar', items: [...loose, ...start] }, ...groups];
   }
-  return [{ title: '', items: loose }, ...groups];
+  // Como no desenho: a página inicial fica no cabeçalho, e “Principais dúvidas” mora em “Dúvidas e dicas”.
+  const faq = loose.find((item) => item.url === '/docs/principais-duvidas');
+  const tips = groups.find((group) => group.items.some((item) => item.url?.startsWith('/docs/duvidas-e-dicas')));
+  if (faq && tips) tips.items.unshift(faq);
+  const others = loose.filter((item) => item !== faq && item.url !== rootIndex?.url);
+  return others.length ? [{ title: '', items: others }, ...groups] : groups;
 }
 
 export function getSiteCounts() {

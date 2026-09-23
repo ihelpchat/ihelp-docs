@@ -1,20 +1,38 @@
 ---
-title: Documentação da API
-description: Consulte autenticação e exemplos para integrar sistemas à API do iHelp.
+title: API do iHelp
+description: REST sobre HTTPS, JSON em tudo e autenticação por Bearer token. Busque atendimentos, envie mensagens e templates, transcreva áudios e movimente cards do CRM.
 source: api
 contentType: referencia
 ---
 
-Esta seção documenta a **API do iHelp**: autenticação, busca de atendimentos,
-envio de mensagens e uso de templates.
+## Primeira chamada em 3 passos
 
-## Categorias
+Da credencial à primeira mensagem enviada.
 
-- **[Autenticação](/api/conceitos/autenticacao)** — envie uma credencial dedicada no header.
-- **[Obter credencial](/api/conceitos/obter-token)** — solicite e armazene a credencial com segurança.
-- **[Enviar mensagem comum](/api/mensagens/mensagem-comum)** — exemplo de endpoint e payload JSON.
+<StepCards>
+<StepCard title="Solicite a credencial">
+Peça ao suporte uma [credencial própria para a integração](/api/conceitos/obter-token) e guarde como segredo no servidor.
+</StepCard>
+<StepCard title="Descubra os IDs">
+[Busque o atendimento pelo telefone](/api/atendimentos/buscar-atendimento-por-telefone) para obter o `idRef` e [pegue os IDs de canal](/api/atendimentos/pegar-ids-departamento-canal).
+</StepCard>
+<StepCard title="Envie a mensagem">
+`POST` em [`/customers/send-message`](/api/mensagens/mensagem-comum) com `texto`, `canalId` e `contato`.
+</StepCard>
+</StepCards>
 
-<Callout title="Observação">
-Todas as requisições exigem o header `Authorization: Bearer <token>`. Veja
+```bash title="Primeira chamada — enviar uma mensagem de texto"
+curl -X POST https://apiv3.ihelpchat.com/api/v2/customers/send-message \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"texto":"Mensagem","canalId":"69bd5219d057b663d5476f5d","contato":"551788889999","messageType":0}'
+```
+
+## Autenticação
+
+Toda requisição precisa do header `Authorization` com a credencial da integração. Veja
 **[Autenticação](/api/conceitos/autenticacao)** para detalhes.
+
+<Callout type="warn" title="Não use o token da sua sessão">
+Não copie o token do navegador pelo DevTools. Use uma [credencial dedicada](/api/conceitos/obter-token), guardada como segredo no servidor.
 </Callout>

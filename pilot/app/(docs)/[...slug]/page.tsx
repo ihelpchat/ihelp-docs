@@ -2,6 +2,8 @@ import { source } from '@/lib/source';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
+import { Heading } from 'fumadocs-ui/components/heading';
+import type { ComponentProps } from 'react';
 import { getMDXComponents } from '@/components/mdx';
 import { ArticleLayout, Breadcrumbs } from '@/components/site/article';
 import { ApiIntro, ApiResources } from '@/components/site/api-overview';
@@ -17,7 +19,22 @@ export default async function Page(props: PageProps<'/[...slug]'>) {
   if (!page) notFound();
 
   const MDX = page.data.body;
-  const components = getMDXComponents({ a: createRelativeLink(source, page) });
+  // Conteúdo migrado costuma abrir as seções com ### ou ####. Descemos todos os títulos o mesmo
+  // tanto para o primeiro virar h2 e a ordem ficar correta (h1 → h2 → h3), sem mexer no texto.
+  const shift = Math.max(0, (page.data.toc[0]?.depth ?? 2) - 2);
+  const level = (depth: number) => `h${Math.max(2, depth - shift)}` as 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+  const components = getMDXComponents({
+    a: createRelativeLink(source, page),
+    ...(shift
+      ? {
+          h3: (heading: ComponentProps<'h3'>) => <Heading as={level(3)} {...heading} />,
+          h4: (heading: ComponentProps<'h4'>) => <Heading as={level(4)} {...heading} />,
+          h5: (heading: ComponentProps<'h5'>) => <Heading as={level(5)} {...heading} />,
+          h6: (heading: ComponentProps<'h6'>) => <Heading as={level(6)} {...heading} />,
+        }
+      : {}),
+  });
+
 
   if (page.url === '/tutoriais') {
     return <TutorialsPage title={page.data.title} body={MDX} />;
