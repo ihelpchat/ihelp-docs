@@ -1,0 +1,61 @@
+---
+title: "MCP da documentação"
+description: "Instale o servidor MCP local para pesquisar, revisar e propor artigos da documentação do iHelp com revisão humana."
+source: produto
+contentType: guia
+---
+
+O MCP da documentação dá a um assistente acesso aos artigos desta central e permite preparar propostas de conteúdo. Ele trabalha com arquivos do repositório `ihelpchat/ihelp-docs`. **Não é o MCP core de clientes**: não consulta atendimentos, contatos, mensagens nem dados de empresas. Para integrações com a API do produto, consulte a [referência da API](/api).
+
+## Instalar para uso local
+
+Você precisa de Node.js, Git, uma cópia local de `ihelpchat/ihelp-docs` e um cliente que aceite servidores MCP via stdio. O exemplo abaixo usa **Claude Desktop (chat)**. Na raiz do repositório:
+
+```bash
+cd pilot
+npm ci
+npm run mcp:test
+```
+
+O teste inicia `mcp/server.mjs` via stdio em uma cópia temporária da documentação e confere as tools sem publicar conteúdo. Para iniciar o servidor manualmente, ainda em `pilot`, rode `npm run mcp:start`; ele fica aguardando mensagens do cliente MCP no stdin, por isso não mostra uma página web.
+
+Abra o arquivo `claude_desktop_config.json` do Claude Desktop e **adicione a entrada** abaixo em `mcpServers`, preservando as outras entradas. No macOS, o arquivo fica em `~/Library/Application Support/Claude/claude_desktop_config.json`; no Windows, em `%APPDATA%\Claude\claude_desktop_config.json`. Troque os caminhos de exemplo pelos caminhos absolutos da sua máquina:
+
+```json
+{
+  "mcpServers": {
+    "ihelp-docs": {
+      "command": "/CAMINHO/ABSOLUTO/PARA/node",
+      "args": ["/CAMINHO/ABSOLUTO/PARA/ihelp-docs/pilot/mcp/server.mjs"]
+    }
+  }
+}
+```
+
+Use `command -v node` (macOS/Linux) ou `where node` (Windows) para localizar o executável. O próprio `server.mjs` resolve `pilot` como raiz quando `DOCS_ROOT` não é definido. Encerre completamente o Claude Desktop e abra novamente; confira se `ihelp-docs` aparece nos conectores/tools. Esse arquivo é do **Claude Desktop (chat)**; Claude Code usa configuração MCP separada. Consulte a [documentação do Claude Desktop](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop) para detalhes do cliente.
+
+<Callout type="warn" title="Acesso aos arquivos">
+O processo local lê `pilot/content/docs` e `pilot/architecture`. A tool de envio em modo `draft` pode criar arquivos em `pilot/.drafts`; conceda esse acesso apenas em uma cópia de trabalho apropriada. Não coloque tokens ou dados de clientes no arquivo de configuração ou nos artigos.
+</Callout>
+
+## Tools disponíveis
+
+| Tool | Uso | Efeito |
+| --- | --- | --- |
+| `docs_inventory` | Ver módulos cobertos e lacunas prioritárias | Leitura |
+| `docs_search` | Buscar artigos antes de criar conteúdo | Leitura |
+| `docs_get_article` | Ler um artigo inteiro pelo `path`, sem extensão | Leitura |
+| `docs_audit_content` | Auditar a base contra o padrão editorial | Leitura |
+| `docs_validate_article` | Validar metadados, caminho, conteúdo, Tango e possíveis segredos | Leitura; não grava |
+| `docs_submit_article` | Enviar artigo validado com `mode: "draft"` ou `"pull_request"` | Cria arquivo local ou PR |
+
+O `path` de um artigo segue a forma `docs/assunto/slug`, `api/assunto/slug` ou `blog/assunto/slug`, sem `/` inicial e sem `.mdx`. As tools de validação e envio recebem `path`, `title`, `description`, `source` (`produto`, `suporte` ou `api`), `contentType` (`faq`, `tutorial`, `guia` ou `referencia`) e `body` em Markdown sem frontmatter; `tangoUrl` é opcional. O conteúdo precisa seguir o [padrão editorial](https://github.com/ihelpchat/ihelp-docs/blob/bruunofco/fumadocs-pilot/pilot/architecture/editorial-standard.md).
+
+## Fluxo para propor um artigo
+
+1. Use `docs_inventory` para localizar uma lacuna e `docs_search` para verificar se o assunto já existe.
+2. Se for revisar conteúdo existente, use `docs_get_article` com o `path` retornado pela busca e preserve fatos, links e permissões confirmados.
+3. Escreva o artigo e chame `docs_validate_article`; corrija os apontamentos antes de enviar. `docs_audit_content` confere a base completa.
+4. Chame `docs_submit_article` com `mode: "draft"` para criar um arquivo em `pilot/.drafts/<path>.mdx`. Revise o arquivo e leve a proposta a um PR. Quem revisa o PR confere precisão, privacidade, links e acesso antes do merge.
+
+Também existe `mode: "pull_request"`: o servidor abre um branch e PR no GitHub quando recebe `GITHUB_TOKEN` no **ambiente do processo**. Defina também `GITHUB_REPOSITORY` e `GITHUB_BASE_BRANCH` para apontar explicitamente para o repositório e branch de destino aprovados; sem eles, o código usa `ihelpchat/ihelp-docs` e `main`. Solicite acesso ao responsável pelo repositório; não registre o token neste JSON. O MCP não faz merge nem deploy. A publicação depende do fluxo normal de revisão do repositório.
