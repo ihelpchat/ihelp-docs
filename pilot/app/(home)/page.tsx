@@ -104,13 +104,24 @@ export default function HomePage() {
 
         <footer className="design-footer">
           <div className="design-footer-brand">
+            <Link href="/" aria-label="iHelp, início da documentação">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={withBasePath('/brand/logo-lockup.svg')} alt="iHelp" width={70} height={30} />
+            </Link>
             <span>© 2026 iHelp · Documentação</span>
             <TechnologyMark />
           </div>
           <nav aria-label="Rodapé">
-            <a href="https://ihelpchat.com.br">Site</a>
-            <Link href="/blog">Novidades</Link>
-            <a href={supportUrl} target="_blank" rel="noreferrer noopener">Suporte</a>
+            <div className="design-footer-links">
+              <span>Explore</span>
+              <Link href="/tutoriais">Tutoriais</Link>
+              <Link href="/blog">Novidades</Link>
+            </div>
+            <div className="design-footer-links">
+              <span>iHelp</span>
+              <a href="https://ihelpchat.com" target="_blank" rel="noopener noreferrer">Site</a>
+              <a href={supportUrl} target="_blank" rel="noreferrer noopener">Suporte</a>
+            </div>
           </nav>
         </footer>
       </div>

@@ -31,8 +31,8 @@ export function SiteHeader({ menuOpen, onMenu }: { menuOpen?: boolean; onMenu?: 
       <div className="ih-header-inner">
         <Link href="/" className="ih-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={withBasePath(dark ? '/brand/logo-lockup-light-on-dark.svg' : '/brand/logo-lockup.svg')} alt="iHelp" width={51} height={22} />
-          {dark ? <span className="ih-brand-tag">API</span> : <span className="ih-brand-label">documentação</span>}
+          <img src={withBasePath(dark ? '/brand/logo-lockup-light-on-dark.svg' : '/brand/logo-lockup.svg')} alt="iHelp" width={70} height={30} />
+          {dark ? <span className="ih-brand-tag">API</span> : null}
         </Link>
         <nav className="ih-nav" aria-label="Seções">
           {nav.map((item) => (
@@ -49,26 +49,28 @@ export function SiteHeader({ menuOpen, onMenu }: { menuOpen?: boolean; onMenu?: 
             </Link>
           ))}
         </nav>
-        <button type="button" className="ih-header-search" onClick={() => setOpenSearch(true)}>
-          <Search aria-hidden="true" />
-          <span>{dark || !assistantEnabled ? 'Buscar na documentação' : 'Buscar ou perguntar'}</span>
-          <kbd>⌘K</kbd>
-        </button>
-        {dark ? (
-          <Link href="/api/conceitos/obter-token" className="ih-header-cta ih-header-cta-primary">
-            <Zap aria-hidden="true" />
-            Pegar meu token
-          </Link>
-        ) : (
-          <a href={supportUrl} className="ih-header-cta" target="_blank" rel="noreferrer noopener">
-            Falar com o suporte
-          </a>
-        )}
-        {onMenu ? (
-          <button type="button" className="ih-menu-button" aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'} aria-expanded={menuOpen} onClick={onMenu}>
-            {menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
+        <div className="ih-header-actions">
+          <button type="button" className="ih-header-search" onClick={() => setOpenSearch(true)}>
+            <Search aria-hidden="true" />
+            <span>{dark || !assistantEnabled ? 'Buscar na documentação' : 'Buscar ou perguntar'}</span>
+            <kbd>⌘K</kbd>
           </button>
-        ) : null}
+          {dark ? (
+            <Link href="/api/conceitos/obter-token" className="ih-header-cta ih-header-cta-primary">
+              <Zap aria-hidden="true" />
+              Pegar meu token
+            </Link>
+          ) : (
+            <a href={supportUrl} className="ih-header-cta" target="_blank" rel="noreferrer noopener">
+              Falar com o suporte
+            </a>
+          )}
+          {onMenu ? (
+            <button type="button" className="ih-menu-button" aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'} aria-expanded={menuOpen} onClick={onMenu}>
+              {menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
+            </button>
+          ) : null}
+        </div>
       </div>
     </header>
   );
