@@ -2,16 +2,18 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, Search, X, Zap } from 'lucide-react';
+import { Menu, Search, Sparkles, X, Zap } from 'lucide-react';
 import { useSearchContext } from 'fumadocs-ui/contexts/search';
 import { withBasePath } from '@/lib/shared';
 import { supportUrl } from '@/lib/links';
 
+// `extra`: itens que somem primeiro quando a tela estreita (mesma regra do desenho).
 const nav = [
+  { label: 'Assistente de IA', href: '/assistente', icon: true },
   { label: 'Central de ajuda', href: '/docs' },
-  { label: 'Tutoriais', href: '/tutoriais' },
+  { label: 'Tutoriais', href: '/tutoriais', extra: true },
   { label: 'Referência da API', href: '/api' },
-  { label: 'Novidades', href: '/blog' },
+  { label: 'Novidades', href: '/blog', extra: true },
 ];
 
 export function isActive(pathname: string, href: string) {
@@ -33,14 +35,15 @@ export function SiteHeader({ menuOpen, onMenu }: { menuOpen?: boolean; onMenu?: 
           {dark ? <span className="ih-brand-tag">API</span> : <span className="ih-brand-label">documentação</span>}
         </Link>
         <nav className="ih-nav" aria-label="Seções">
-          {nav.map((item, index) => (
+          {nav.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className={`ih-nav-link${index % 2 === 1 ? ' ih-nav-extra' : ''}`}
-              data-active={isActive(pathname, item.href) || (pathname === '/' && item.href === '/docs') || undefined}
+              className={`ih-nav-link${item.extra ? ' ih-nav-extra' : ''}`}
+              data-active={isActive(pathname, item.href) || undefined}
               aria-current={isActive(pathname, item.href) ? 'page' : undefined}
             >
+              {item.icon ? <Sparkles aria-hidden="true" className="ih-nav-ai" /> : null}
               {item.label}
             </Link>
           ))}

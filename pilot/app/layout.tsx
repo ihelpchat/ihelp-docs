@@ -1,7 +1,8 @@
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import { Provider } from '@/components/provider';
 import { SiteShell } from '@/components/site/shell';
-import { getNavGroups, getSiteCounts } from '@/lib/site';
+import { getNavGroups, getScopeCounts, getSiteCounts } from '@/lib/site';
+import { AssistantProvider } from '@/components/assistant/assistant-context';
 import type { Metadata } from 'next';
 import './global.css';
 
@@ -28,9 +29,11 @@ export default function Layout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="pt-BR" className={`${inter.variable} ${jetBrainsMono.variable}`} suppressHydrationWarning>
       <body>
-        <Provider counts={getSiteCounts()}>
-          <SiteShell docs={getNavGroups('docs')} api={getNavGroups('api')}>{children}</SiteShell>
-        </Provider>
+        <AssistantProvider counts={getScopeCounts()}>
+          <Provider counts={getSiteCounts()}>
+            <SiteShell docs={getNavGroups('docs')} api={getNavGroups('api')}>{children}</SiteShell>
+          </Provider>
+        </AssistantProvider>
       </body>
     </html>
   );

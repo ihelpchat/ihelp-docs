@@ -37,15 +37,6 @@ export function extractTutorials(body: unknown): Tutorial[] {
 export function TutorialsPage({ title, body }: { title: string; body: unknown }) {
   const tutorials = extractTutorials(body);
   return (
-    <div className="ih-page ih-page-wide">
-      <header className="ih-page-header ih-page-header-split">
-        <div>
-          <h1 className="ih-title">{title}</h1>
-          <p className="ih-lead">Guias interativos que mostram cada clique dentro do iHelp. Acompanhe aqui o passo a passo ou abra o guia no Tango.</p>
-        </div>
-        <p className="ih-status-pill"><span aria-hidden="true" />{tutorials.length} guias publicados no Tango</p>
-      </header>
-      <TutorialGallery tutorials={tutorials} />
-    </div>
+    <TutorialGallery tutorials={tutorials} title={title} />
   );
 }

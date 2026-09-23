@@ -103,13 +103,22 @@ function altTextForHeading(title, heading) {
   return `Tela do iHelp: ${context}`;
 }
 
+/** Aplica `transform` só no texto fora de blocos de código cercados por ```. */
+export function outsideCode(text, transform) {
+  return text
+    .split(/(^```[^\n]*\n[\s\S]*?^```[^\n]*$)/m)
+    .map((part, index) => (index % 2 === 1 ? part : transform(part)))
+    .join('');
+}
+
 export function normalizeBody(body, title, description, path = '') {
   let normalized = body.replaceAll('\r', '').replace(LEGACY_TUTORIAL, '\n');
-  normalized = normalized
-    .replaceAll('](/api/category/templates)', '](/api/templates)')
+  // Blocos de código ficam intactos: a barra no fim da linha ali é continuação de comando (cURL), não quebra de Markdown.
+  normalized = outsideCode(normalized, (text) => text
+    .replaceAll('](/api/category/templates)', '](/api/templates/template-enviar-chat-existente)')
     .replace(/^\s*(?:\*\*\*|---)\s*$/gm, '')
     .replace(/[ \t]+$/gm, '')
-    .replace(/\\\n/g, '\n\n');
+    .replace(/\\\n/g, '\n\n'));
 
   let lastHeading = title;
   let lines = normalized.split('\n').map((line) => {

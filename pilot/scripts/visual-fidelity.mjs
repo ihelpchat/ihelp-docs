@@ -65,7 +65,7 @@ try {
       const reference = baseline.screens[key];
       assert.ok(reference, `Sem referência para ${key}; rode qa:visual:baseline`);
       const page = await openAppScreen(browser, baseUrl, screen, viewport);
-      const layoutComparable = viewport === 'desktop' || screen.name === 'home';
+      const layoutComparable = viewport === 'desktop' || screen.name === 'home' || Boolean(screen.mobileLayout);
 
       for (const check of checksFor(screen, viewport)) {
         const measured = await page.evaluate(

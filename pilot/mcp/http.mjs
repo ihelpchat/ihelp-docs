@@ -57,7 +57,12 @@ const httpServer = createServer(async (request, response) => {
       const body = await readJson(request);
       const question = typeof body.question === 'string' ? body.question.trim() : '';
       if (question.length < 4 || question.length > 500) throw new Error('A pergunta deve ter entre 4 e 500 caracteres.');
-      const result = await answerQuestion(root, question);
+      const history = Array.isArray(body.history) ? body.history.slice(-6) : [];
+      const scope = typeof body.scope === 'string' ? body.scope : 'Tudo';
+      const page = body.page && typeof body.page.path === 'string' && body.page.path.startsWith('/') && body.page.path.length < 300
+        ? { path: body.page.path, title: typeof body.page.title === 'string' ? body.page.title.slice(0, 200) : '' }
+        : undefined;
+      const result = await answerQuestion(root, question, { history, scope, page });
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(result));
     } catch (error) {
       const unavailable = /OPENAI_API_KEY/.test(error.message);

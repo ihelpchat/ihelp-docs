@@ -105,3 +105,16 @@ export function getSiteCounts() {
     news: pages.filter((page) => page.url.startsWith('/blog/')).length,
   };
 }
+
+/** Quantos documentos cada escopo do assistente consulta (mostrado enquanto ele responde). */
+export function getScopeCounts() {
+  const pages = source.getPages();
+  const count = (prefix: string) => pages.filter((page) => page.url.startsWith(prefix)).length;
+  return {
+    Tudo: pages.length,
+    'Ajuda e FAQ': count('/docs/'),
+    API: count('/api'),
+    Tutoriais: count('/tutoriais'),
+    Novidades: count('/blog/'),
+  };
+}

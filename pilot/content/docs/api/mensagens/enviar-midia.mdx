@@ -84,12 +84,9 @@ https://apiv3.ihelpchat.com/api/v2/customers/upload-files/{IdRef}/{caption?}
 
 **Exemplo (curl):**
 ```bash
-curl -X POST
-
-  "https://apiv3.ihelpchat.com/api/v2/customers/upload-files/{IdRef}/Segue%20o%20contrato?targetUserId=123&skipLastAgentMessageTimeUpdate=true"
-
-  -H "Authorization: Bearer <TOKEN>"
-
+curl -X POST \
+  "https://apiv3.ihelpchat.com/api/v2/customers/upload-files/{IdRef}/Segue%20o%20contrato?targetUserId=123&skipLastAgentMessageTimeUpdate=true" \
+  -H "Authorization: Bearer <TOKEN>" \
   -F "myFile=@/caminho/contrato.pdf"
 ```
 

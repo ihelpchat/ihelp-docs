@@ -80,12 +80,12 @@ export async function openDesignScreen(browser, designUrl, screen, viewportName)
   await page.waitForTimeout(600);
   await page.evaluate(designHelpers);
   for (const step of screen.design) {
-    const clicked = await page.evaluate((text) => {
-      const el = window.__byText(text);
+    const clicked = await page.evaluate(([text, nth]) => {
+      const el = window.__byText(text, document, nth);
       if (!el) return false;
       el.click();
       return true;
-    }, step.click);
+    }, [step.click, step.nth ?? 0]);
     if (!clicked) throw new Error(`Protótipo: não achei "${step.click}" em ${screen.name}`);
     await page.waitForTimeout(350);
   }
@@ -108,6 +108,12 @@ export async function openAppScreen(browser, baseUrl, screen, viewportName) {
     await page.locator('.ih-header-search').click();
     await page.locator('.ih-search').waitFor();
   }
+  for (const selector of screen.appClicks ?? []) {
+    await page.locator(selector).first().click();
+    await page.waitForTimeout(300);
+  }
+  // Campos com foco automático ganham borda de foco; tiramos o foco para medir o estado de repouso.
+  await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : null));
   await page.waitForTimeout(350);
   return page;
 }

@@ -16,6 +16,14 @@ type Page = NonNullable<ReturnType<typeof source.getPage>>;
 
 const contentLabel = { faq: 'Perguntas frequentes', tutorial: 'Tutorial', guia: 'Guia', referencia: 'Referência' } as const;
 
+/** O padrão editorial repete a descrição como 1º parágrafo; na página ela já aparece como subtítulo. */
+export async function repeatsDescription(page: Page) {
+  const raw = await page.data.getText('raw');
+  const body = raw.replace(/^---[\s\S]*?---\s*/, '').trimStart();
+  const first = body.split(/\n\s*\n/)[0]?.trim() ?? '';
+  return first === page.data.description.trim();
+}
+
 export async function readingMinutes(page: Page) {
   const text = await page.data.getText('processed');
   return Math.max(1, Math.round(text.split(/\s+/).filter(Boolean).length / 200));
@@ -78,6 +86,7 @@ export async function ArticleLayout({
   wide?: boolean;
 }) {
   const minutes = meta ? await readingMinutes(page) : 0;
+  const hideFirst = await repeatsDescription(page);
   const api = page.url.startsWith('/api');
 
   return (
@@ -111,7 +120,7 @@ export async function ArticleLayout({
             ) : null}
           </>
         )}
-        <div className="ih-prose">{children}</div>
+        <div className="ih-prose" data-skip-lead={hideFirst || undefined}>{children}</div>
         {api ? null : <Feedback />}
         <ContinueReading page={page} />
       </article>

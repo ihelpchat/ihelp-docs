@@ -24,12 +24,9 @@ Peça ao suporte uma [credencial própria para a integração](/api/conceitos/ob
 </StepCards>
 
 ```bash title="Primeira chamada — enviar uma mensagem de texto"
-curl -X POST https://apiv3.ihelpchat.com/api/v2/customers/send-message
-
-  -H "Authorization: Bearer $IHELP_TOKEN"
-
-  -H "Content-Type: application/json"
-
+curl -X POST https://apiv3.ihelpchat.com/api/v2/customers/send-message \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
   -d '{"texto":"Mensagem","canalId":"69bd5219d057b663d5476f5d","contato":"551788889999","messageType":0}'
 ```
 

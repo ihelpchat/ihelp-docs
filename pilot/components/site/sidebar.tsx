@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Search } from 'lucide-react';
+import { ChevronRight, Search } from 'lucide-react';
+import { useId, useState } from 'react';
 import { useSearchContext } from 'fumadocs-ui/contexts/search';
 import type { NavGroup, NavItem } from '@/lib/site';
 
@@ -48,29 +49,86 @@ function Item({ item, api, depth }: { item: NavItem; api: boolean; depth: number
   );
 }
 
+/**
+ * Grupos recolhíveis. Sem escolha da pessoa, abre o grupo da página atual e o primeiro, como no desenho.
+ * A escolha vale enquanto ela navega (o menu fica no layout e não é recriado).
+ */
+export function useCollapsible<T extends { title: string }>(groups: T[], isActive: (group: T) => boolean) {
+  const [choice, setChoice] = useState<Record<string, boolean>>({});
+  const openOf = (group: T, index: number) => choice[group.title] ?? (isActive(group) || index === 0);
+  const anyOpen = groups.some((group, index) => openOf(group, index));
+  return {
+    openOf,
+    toggle: (group: T, index: number) => setChoice((current) => ({ ...current, [group.title]: !openOf(group, index) })),
+    allLabel: anyOpen ? 'Recolher tudo' : 'Expandir tudo',
+    toggleAll: () => setChoice(Object.fromEntries(groups.map((group) => [group.title, !anyOpen]))),
+  };
+}
+
+export function GroupToggle({ open, count, title, controls, onClick, variant }: {
+  open: boolean;
+  count: number;
+  title: string;
+  controls: string;
+  onClick: () => void;
+  variant: 'help' | 'api';
+}) {
+  return (
+    <button type="button" className="ih-side-group-toggle" data-variant={variant} aria-expanded={open} aria-controls={controls} onClick={onClick}>
+      <ChevronRight aria-hidden="true" />
+      <span className="ih-side-group-title">{title}</span>
+      <span className="ih-side-count" aria-label={`${count} itens`}>{count}</span>
+    </button>
+  );
+}
+
 export function Sidebar({ groups, section }: { groups: NavGroup[]; section: 'docs' | 'api' }) {
   const api = section === 'api';
+  const pathname = normalize(usePathname());
   const { setOpenSearch } = useSearchContext();
+  const base = useId();
+  const collapse = useCollapsible(groups, (group) => group.items.some((item) => contains(item, pathname)));
 
   return (
     <nav className={api ? 'ih-sidebar ih-sidebar-api' : 'ih-sidebar'} aria-label={api ? 'Referência da API' : 'Central de ajuda'}>
       {api ? (
-        <button type="button" className="ih-side-search" onClick={() => setOpenSearch(true)}>
-          <Search aria-hidden="true" />
-          <span>Buscar endpoint</span>
-          <kbd>⌘K</kbd>
-        </button>
+        <>
+          <button type="button" className="ih-side-search" onClick={() => setOpenSearch(true)}>
+            <Search aria-hidden="true" />
+            <span>Buscar endpoint</span>
+            <kbd>⌘K</kbd>
+          </button>
+          <div className="ih-side-head ih-side-head-api">
+            <button type="button" className="ih-side-all" onClick={collapse.toggleAll}>{collapse.allLabel}</button>
+          </div>
+        </>
       ) : (
-        <p className="ih-side-kicker">Central de ajuda</p>
-      )}
-      {groups.map((group, index) => (
-        <div className="ih-side-group" key={`${group.title}-${index}`}>
-          {group.title ? <p className="ih-side-title">{group.title}</p> : null}
-          <ul>
-            {group.items.map((item) => <Item key={`${item.title}-${item.url}`} item={item} api={api} depth={0} />)}
-          </ul>
+        <div className="ih-side-head">
+          <p className="ih-side-kicker">Central de ajuda</p>
+          <button type="button" className="ih-side-all" onClick={collapse.toggleAll}>{collapse.allLabel}</button>
         </div>
-      ))}
+      )}
+      {groups.map((group, index) => {
+        const open = collapse.openOf(group, index);
+        const listId = `${base}-g${index}`;
+        return (
+          <div className="ih-side-group" key={`${group.title}-${index}`} data-open={open || undefined}>
+            {group.title ? (
+              <GroupToggle
+                open={open}
+                count={group.items.length}
+                title={group.title}
+                controls={listId}
+                onClick={() => collapse.toggle(group, index)}
+                variant={api ? 'api' : 'help'}
+              />
+            ) : null}
+            <ul id={listId} hidden={Boolean(group.title) && !open}>
+              {group.items.map((item) => <Item key={`${item.title}-${item.url}`} item={item} api={api} depth={0} />)}
+            </ul>
+          </div>
+        );
+      })}
       {api ? null : (
         <div className="ih-side-promo">
           <strong>Prefere ver na prática?</strong>

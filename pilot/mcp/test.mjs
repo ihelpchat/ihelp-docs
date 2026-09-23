@@ -104,6 +104,41 @@ try {
   const assistant = await answerQuestion(testRoot, 'como transferir um atendimento', { client: fakeClient });
   assert.equal(assistant.model, 'gpt-test');
   assert.match(assistant.answer, /transferência/);
+  // Resposta estruturada: passos, código e fontes; fonte fora da recuperação local é descartada.
+  const structuredClient = {
+    responses: {
+      create: async (request) => {
+        assert.equal(request.text.format.type, 'json_schema');
+        assert.match(request.input[0].content, /Esta página|esta página/);
+        return {
+          model: 'gpt-test',
+          output_text: JSON.stringify({
+            answer: 'Abra a conversa e transfira.',
+            steps: ['Abra a conversa', 'Clique em Transferir'],
+            code: null,
+            sources: ['/docs/sobre-o-sistema/atendimento', '/docs/pagina-inventada'],
+            suggestions: ['Como reabrir?'],
+            found: true,
+          }),
+        };
+      },
+    },
+  };
+  const structured = await answerQuestion(testRoot, 'como transferir', {
+    client: structuredClient,
+    scope: 'Ajuda e FAQ',
+    page: { path: '/docs/sobre-o-sistema/atendimento', title: 'Atendimento' },
+  });
+  assert.deepEqual(structured.steps, ['Abra a conversa', 'Clique em Transferir']);
+  assert.deepEqual(structured.sources.map((source) => source.path), ['/docs/sobre-o-sistema/atendimento']);
+  assert.equal(structured.sources[0].kind, 'Ajuda');
+  const apiScoped = await retrieveContext(testRoot, 'mensagem', 6, { scope: 'API' });
+  assert.ok(apiScoped.length && apiScoped.every((source) => source.path.startsWith('/api')));
+
+  // Barra de continuação dentro de bloco de código não pode virar quebra de parágrafo.
+  const curlBody = 'Texto\\\nquebra\n\n```bash\ncurl -X POST https://exemplo \\\n  -H "a: b"\n```\n';
+  assert.match(normalizeBody(curlBody, 'Título', 'Descrição', '/api/teste'), /https:\/\/exemplo \\\n {2}-H/);
+
   const withTango = renderArticle({ ...article, tangoUrl: 'https://app.tango.us/app/embed/c547fbf6-a68a-4f30-9cf4-bbf79f6f65d1' });
   assert.match(withTango, /app\/workflow\/Como-validar-o-MCP-c547fbf6a68a4f309cf4bbf79f6f65d1/);
   assert.doesNotMatch(withTango, /embedUrl=/);

@@ -6,8 +6,11 @@ import { useState, type ReactNode } from 'react';
 import { SiteHeader, isActive } from '@/components/site/header';
 import { Sidebar } from '@/components/site/sidebar';
 import type { NavGroup } from '@/lib/site';
+import { AssistantDrawer, AssistantLauncher } from '@/components/assistant/assistant-drawer';
+import { assistantEnabled } from '@/lib/assistant';
 
 const sections = [
+  { label: 'Assistente de IA', href: '/assistente' },
   { label: 'Central de ajuda', href: '/docs' },
   { label: 'Tutoriais', href: '/tutoriais' },
   { label: 'Referência da API', href: '/api' },
@@ -23,7 +26,11 @@ export function SiteShell({ docs, api, children }: { docs: NavGroup[]; api: NavG
   const groups = section === 'api' ? api : section === 'docs' ? docs : undefined;
 
   return (
-    <div className="ih-app" data-section={section ?? 'page'}>
+    <div
+      className="ih-app"
+      data-section={section ?? (isActive(pathname, '/assistente') ? 'assistente' : 'page')}
+      data-assistant={assistantEnabled ? 'on' : 'off'}
+    >
       <SiteHeader menuOpen={open} onMenu={() => setMenu({ open: !open, path: pathname })} />
       <div className={groups ? 'ih-body ih-body-sidebar' : 'ih-body'}>
         {groups && section ? (
@@ -47,6 +54,8 @@ export function SiteShell({ docs, api, children }: { docs: NavGroup[]; api: NavG
         {open ? <button type="button" className="ih-scrim" aria-label="Fechar menu" onClick={() => setMenu({ open: false, path: pathname })} /> : null}
         <div className="ih-main">{children}</div>
       </div>
+      <AssistantLauncher />
+      <AssistantDrawer />
     </div>
   );
 }
