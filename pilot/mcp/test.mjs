@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
@@ -131,6 +131,49 @@ try {
   }
   const rawAudit = JSON.stringify(entries);
   assert.doesNotMatch(rawAudit, /Use a ferramenta de validação|fake-test-token|bruno@example.com|sk-test-secret/);
+
+  const directRoot = await mkdtemp(join(tmpdir(), 'ihelp-docs-direct-'));
+  await assert.rejects(submitArticle(directRoot, { ...article, path: 'docs/teste/sem-ator' }, 'draft'), /requestedBy/);
+  await assert.rejects(readFile(join(directRoot, '.drafts/docs/teste/sem-ator.mdx')));
+  const externalDraftRoot = await mkdtemp(join(tmpdir(), 'ihelp-docs-external-'));
+  const symlinkRoot = await mkdtemp(join(tmpdir(), 'ihelp-docs-symlink-'));
+  await symlink(externalDraftRoot, join(symlinkRoot, '.drafts'));
+  await assert.rejects(submitArticle(symlinkRoot, article, 'draft', 'service:docs-bot'), /draft|symlink|path/i);
+  await assert.rejects(readFile(join(externalDraftRoot, `${article.path}.mdx`)));
+  assert.deepEqual((await readFile(join(symlinkRoot, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse).map(({ result }) => result), ['attempt', 'failure']);
+
+  const failRoot = await mkdtemp(join(tmpdir(), 'ihelp-docs-pr-failure-'));
+  const priorFetch = globalThis.fetch;
+  const priorToken = process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = 'fake-test-token';
+  let pullsCreated = 0;
+  let postedBody;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith('/pulls')) {
+      pullsCreated += 1;
+      postedBody = JSON.parse(init.body).body;
+      await chmod(join(failRoot, '.audit/docs-submissions.jsonl'), 0o400);
+      return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/456' }) };
+    }
+    return { ok: true, json: async () => String(url).includes('/git/ref/') ? { object: { sha: 'test-sha' } } : {} };
+  };
+  try {
+    await assert.rejects(submitArticle(failRoot, article, 'pull_request', 'service:docs-bot'));
+  } finally {
+    globalThis.fetch = priorFetch;
+    if (priorToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = priorToken;
+  }
+  assert.equal(pullsCreated, 1);
+  assert.match(postedBody, /service:docs-bot/);
+  assert.match(postedBody, /docs_submit_article/);
+  assert.match(postedBody, /docs\/teste\/como-validar-o-mcp/);
+  assert.match(postedBody, /\d{4}-\d\d-\d\dT.*Z/);
+  assert.doesNotMatch(postedBody, /Use a ferramenta de validação|fake-test-token/);
+  const failureEvents = (await readFile(join(failRoot, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(failureEvents.map(({ result }) => result), ['attempt', 'external_request']);
+  assert.equal(failureEvents[1].actor, 'service:docs-bot');
+  assert.equal(failureEvents[1].target, article.path);
 
   const context = await retrieveContext(testRoot, 'como transferir um atendimento');
   assert.match(context[0].title, /Atendimento/);
