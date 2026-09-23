@@ -122,8 +122,9 @@ try {
     else process.env.GITHUB_TOKEN = originalToken;
   }
   const entries = [...await auditEvents(), ...(await readFile(join(pullRoot, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse)];
-  assert.deepEqual(entries.map(({ result }) => result), ['attempt', 'success', 'attempt', 'failure', 'attempt', 'failure', 'attempt', 'success']);
-  assert.deepEqual(entries.map(({ target }) => target), [article.path, article.path, null, null, article.path, article.path, article.path, article.path]);
+  assert.deepEqual(entries.map(({ result }) => result), ['attempt', 'success', 'attempt', 'failure', 'attempt', 'failure', 'attempt', 'external_request', 'success']);
+  assert.deepEqual(entries.map(({ target }) => target), [article.path, article.path, null, null, article.path, article.path, article.path, article.path, article.path]);
+  assert.match(entries[7].reference, /^docs\/ia-como-validar-o-mcp-\d+$/);
   for (const entry of entries) {
     assert.equal(entry.actor, 'service:docs-bot');
     assert.equal(entry.operation, 'docs_submit_article');
@@ -158,7 +159,7 @@ try {
     return { ok: true, json: async () => String(url).includes('/git/ref/') ? { object: { sha: 'test-sha' } } : {} };
   };
   try {
-    await assert.rejects(submitArticle(failRoot, article, 'pull_request', 'service:docs-bot'));
+    await assert.rejects(submitArticle(failRoot, article, 'pull_request', 'service:docs-bot'), /github\.com\/ihelpchat\/ihelp-docs\/pull\/456/);
   } finally {
     globalThis.fetch = priorFetch;
     if (priorToken === undefined) delete process.env.GITHUB_TOKEN;
@@ -174,6 +175,8 @@ try {
   assert.deepEqual(failureEvents.map(({ result }) => result), ['attempt', 'external_request']);
   assert.equal(failureEvents[1].actor, 'service:docs-bot');
   assert.equal(failureEvents[1].target, article.path);
+  assert.equal(failureEvents[1].operation, 'docs_submit_article');
+  assert.match(failureEvents[1].at, /^\d{4}-\d\d-\d\dT.*Z$/);
 
   const context = await retrieveContext(testRoot, 'como transferir um atendimento');
   assert.match(context[0].title, /Atendimento/);
