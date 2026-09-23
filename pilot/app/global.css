@@ -5278,6 +5278,7 @@ button {
   .design-footer {
     flex-direction: column;
     gap: 28px;
+    padding-bottom: 112px;
   }
 
   .design-footer nav {
