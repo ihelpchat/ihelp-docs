@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod/v4';
-import { getInventory, isSafeRequestedBy, searchContent, submitArticle, validateArticle } from './content-service.mjs';
+import { getInventory, isSafeRequestedBy, searchContent, SubmitArticleError, submitArticle, validateArticle } from './content-service.mjs';
 import { auditContent, readArticle } from './editorial-standard.mjs';
 
 const articleSchema = z.object({
@@ -66,7 +66,9 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     try {
       return textResult(await submitArticle(root, article, mode, requestedBy));
     } catch (error) {
-      return textResult({ error: error instanceof Error ? error.message : String(error) }, true);
+      return textResult(error instanceof SubmitArticleError
+        ? { error: error.message, code: error.code }
+        : { error: 'Não foi possível enviar o artigo', code: 'SUBMIT_FAILED' }, true);
     }
   });
 

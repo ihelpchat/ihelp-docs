@@ -7,6 +7,18 @@ const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
 const SAFE_PATH = /^(docs|api|blog)\/[a-z0-9][a-z0-9/-]*$/;
 const SAFE_ACTOR = /^(?:user|service):[a-z0-9][a-z0-9_-]{2,63}$/;
 export const isSafeRequestedBy = (value) => typeof value === 'string' && SAFE_ACTOR.test(value);
+export class SubmitArticleError extends Error {
+  constructor(code, message, options) {
+    super(message, options);
+    this.code = code;
+  }
+}
+
+function publicSubmitError(error) {
+  if (error instanceof SubmitArticleError) return error;
+  if (error?.code === 'EEXIST') return new SubmitArticleError('DRAFT_EXISTS', 'Draft já existe');
+  return new SubmitArticleError('SUBMIT_FAILED', 'Não foi possível enviar o artigo');
+}
 const SECRET_PATTERNS = [
   /Authorization:\s*Bearer\s+[A-Za-z0-9._-]{20,}/i,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
@@ -119,7 +131,7 @@ export async function getInventory(root) {
 
 async function githubRequest(path, init = {}) {
   const token = process.env.GITHUB_TOKEN;
-  if (!token) throw new Error('GITHUB_TOKEN não configurado');
+  if (!token) throw new SubmitArticleError('GITHUB_NOT_CONFIGURED', 'GITHUB_TOKEN não configurado');
   const response = await fetch(`https://api.github.com${path}`, {
     ...init,
     headers: {
@@ -130,7 +142,10 @@ async function githubRequest(path, init = {}) {
       ...init.headers,
     },
   });
-  if (!response.ok) throw new Error(`GitHub API ${response.status}: ${await response.text()}`);
+  if (!response.ok) {
+    const status = Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : 'desconhecido';
+    throw new SubmitArticleError('GITHUB_HTTP_ERROR', `GitHub API ${status} rejeitou operação`);
+  }
   return response.json();
 }
 
@@ -181,13 +196,21 @@ async function appendAudit(root, actor, mode, target, result, reference) {
 }
 
 export async function submitArticle(root, article, mode = 'draft', requestedBy) {
+  try {
+    return await submitArticleAudited(root, article, mode, requestedBy);
+  } catch (error) {
+    throw publicSubmitError(error);
+  }
+}
+
+async function submitArticleAudited(root, article, mode, requestedBy) {
   const actor = isSafeRequestedBy(requestedBy) ? requestedBy : null;
   const target = typeof article.path === 'string' && SAFE_PATH.test(article.path) && !article.path.endsWith('/') ? article.path : null;
   const safeMode = mode === 'draft' || mode === 'pull_request' ? mode : null;
   await appendAudit(root, actor, safeMode, target, 'attempt');
   let result;
   try {
-    if (!actor) throw new Error('requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
+    if (!actor) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
     result = await submitValidatedArticle(root, article, mode, actor, (branch) => appendAudit(root, actor, safeMode, target, 'external_request', branch));
   } catch (error) {
     await appendAudit(root, actor, safeMode, target, 'failure');
@@ -198,7 +221,7 @@ export async function submitArticle(root, article, mode = 'draft', requestedBy) 
   } catch (error) {
     if (mode === 'pull_request') {
       const safeUrl = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*$/.test(result.url) ? result.url : '(URL indisponível)';
-      throw new Error(`pull_request criado em ${safeUrl}; audit final indisponível`, { cause: error });
+      throw new SubmitArticleError('PR_CREATED_AUDIT_FAILED', `pull_request criado em ${safeUrl}; audit final indisponível`, { cause: error });
     }
     throw error;
   }
@@ -217,11 +240,11 @@ async function createDraft(root, article, rendered) {
       if (error.code !== 'EEXIST') throw error;
     }
     const stat = await lstat(directory);
-    if (!stat.isDirectory() || (stat.mode & 0o022) !== 0) throw new Error('diretório de draft inseguro');
+    if (!stat.isDirectory() || (stat.mode & 0o022) !== 0) throw new SubmitArticleError('UNSAFE_DRAFT_PATH', 'Diretório de draft inseguro');
   }
   const canonicalRoot = await realpath(draftRoot);
   const canonicalParent = await realpath(directory);
-  if (!canonicalParent.startsWith(`${canonicalRoot}/`)) throw new Error('path de draft fora da base');
+  if (!canonicalParent.startsWith(`${canonicalRoot}/`)) throw new SubmitArticleError('UNSAFE_DRAFT_PATH', 'Path de draft fora da base');
   const target = join(directory, `${parts.at(-1)}.mdx`);
   const file = await open(target, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
   try {
