@@ -283,10 +283,11 @@ button {
 }
 
 .ih-header-inner {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 28px;
-  max-width: 1480px;
+  gap: 16px;
+  max-width: 1360px;
   height: var(--ih-header);
   margin: 0 auto;
   padding: 0 20px;
@@ -296,6 +297,7 @@ button {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
+  justify-self: start;
   gap: 9px;
 }
 
@@ -306,14 +308,7 @@ button {
 .ih-brand img {
   display: block;
   width: auto;
-  height: 22px;
-}
-
-.ih-brand-label {
-  color: var(--ih-slate-500);
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
+  height: 30px;
 }
 
 .ih-brand-tag {
@@ -330,9 +325,17 @@ button {
 
 .ih-nav {
   display: flex;
-  flex: 0 1 auto;
   align-items: center;
+  justify-self: center;
   gap: 4px;
+  min-width: 0;
+}
+
+.ih-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -362,7 +365,7 @@ button {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  max-width: 300px;
+  max-width: 230px;
   height: 34px;
   padding: 0 10px 0 11px;
   color: var(--ih-slate-500);
@@ -459,7 +462,7 @@ button {
 }
 
 .ih-header-dark .ih-brand img {
-  height: 21px;
+  height: 28px;
 }
 
 .ih-header-dark .ih-nav-link {
@@ -3522,31 +3525,57 @@ button {
 
 .design-footer {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
+  gap: 32px;
   margin-top: 56px;
-  padding: 28px 0 40px;
+  padding: 32px 0 48px;
   color: var(--ih-slate-500);
   font-size: 12px;
   border-top: 1px solid var(--ih-slate-200);
 }
 
 .design-footer nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(100px, 1fr));
+  gap: 32px;
+}
+
+.design-footer-links {
   display: flex;
-  gap: 20px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.design-footer-links > span {
+  color: var(--ih-ink);
+  font-weight: 700;
 }
 
 .design-footer-brand {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.design-footer-brand img {
+  display: block;
+  width: auto;
+  height: 30px;
 }
 
 .design-footer a {
-  color: var(--ih-slate-500);
+  color: var(--ih-slate-600);
+}
+
+.design-footer a:hover {
+  color: var(--ih-coral-600);
+}
+
+.design-footer a:focus-visible {
+  border-radius: 3px;
 }
 
 .ih-tech-mark {
@@ -5146,6 +5175,7 @@ button {
   }
 
   .ih-header-inner {
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 12px;
     padding: 0 16px;
   }
@@ -5157,7 +5187,6 @@ button {
   .ih-header-search {
     flex: 0 0 auto;
     width: 36px;
-    margin-left: auto;
     padding: 0;
     justify-content: center;
   }
@@ -5246,8 +5275,14 @@ button {
 }
 
 @media (max-width: 640px) {
-  .ih-brand-label {
-    display: none;
+  .design-footer {
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .design-footer nav {
+    width: 100%;
+    gap: 24px;
   }
 
   .ih-page {
