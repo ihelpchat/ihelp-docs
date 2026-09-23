@@ -52,7 +52,7 @@ export function AssistantLauncher() {
   return (
     <button type="button" className="ih-ai-launcher" onClick={openDrawer} aria-haspopup="dialog">
       <Sparkles aria-hidden="true" />
-      Assistente de IA
+      Claricia · assistente de IA
       {messages.length ? <span className="ih-ai-launcher-dot" aria-label="conversa em andamento" /> : null}
     </button>
   );
@@ -84,11 +84,11 @@ export function AssistantDrawer() {
   const ref = page.section === 'home' ? undefined : { path: page.path, title: page.title };
 
   return (
-    <div className="ih-ai-drawer" role="dialog" aria-label="Assistente de IA" ref={panel}>
+    <div className="ih-ai-drawer" role="dialog" aria-label="Claricia, assistente de IA do iHelp" ref={panel}>
       <header className="ih-ai-drawer-head">
         <span className="ih-ai-avatar" aria-hidden="true"><Sparkles /></span>
         <div>
-          <p className="ih-ai-drawer-title">Assistente de IA</p>
+          <p className="ih-ai-drawer-title">Claricia · assistente de IA</p>
           <p className="ih-ai-drawer-sub">Responde com base na documentação do iHelp</p>
         </div>
         <button

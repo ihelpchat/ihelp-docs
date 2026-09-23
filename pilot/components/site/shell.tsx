@@ -10,7 +10,7 @@ import { AssistantDrawer, AssistantLauncher } from '@/components/assistant/assis
 import { assistantEnabled } from '@/lib/assistant';
 
 const sections = [
-  { label: 'Assistente de IA', href: '/assistente' },
+  { label: 'Claricia', href: '/assistente' },
   { label: 'Central de ajuda', href: '/docs' },
   { label: 'Tutoriais', href: '/tutoriais' },
   { label: 'Referência da API', href: '/api' },

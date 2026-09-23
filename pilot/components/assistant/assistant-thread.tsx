@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { AlertCircle, ArrowRight, Check, ChevronRight, Copy, MessageCircle, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { AlertCircle, ArrowRight, Check, ChevronRight, Copy, MessageCircle, Play, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchContext } from 'fumadocs-ui/contexts/search';
 import { useAssistant, type ChatMessage } from '@/components/assistant/assistant-context';
@@ -36,6 +36,7 @@ function Avatar() {
 function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, { role: 'ai' }>; last: boolean; compact: boolean }) {
   const { feedback, rate, ask, busy, closeDrawer } = useAssistant();
   const { copied, copy } = useCopy();
+  const [openMedia, setOpenMedia] = useState<string | null>(null);
   const { reply } = message;
   const rating = feedback[message.id];
   const paragraphs = reply.answer.split(/\n{2,}/).map((text) => text.trim()).filter(Boolean);
@@ -46,7 +47,7 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
     <div className="ih-ai-row">
       {compact ? null : <Avatar />}
       <div className="ih-ai-body">
-        {compact ? null : <p className="ih-ai-name">Assistente iHelp</p>}
+        {compact ? null : <p className="ih-ai-name">Claricia · assistente de IA do iHelp</p>}
         {reply.resolution === 'partial' ? <p className="ih-ai-flag">Parte da resposta exige atendimento</p> : null}
         {reply.resolution === 'not_found' ? <p className="ih-ai-flag">Procedimento não documentado</p> : null}
         <div className="ih-ai-text">
@@ -89,10 +90,31 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
                     <span className="ih-pill" data-kind={source.kind}>{source.kind}</span>
                     <span className="ih-ai-source-copy">
                       <span className="ih-ai-source-title">{source.title}</span>
-                      <small>Abrir artigo</small>
+                      <small>Ver resposta completa</small>
                     </span>
                     <ChevronRight aria-hidden="true" />
                   </Link>
+                  {source.media ? (
+                    <div className="ih-ai-media-action">
+                      <span className="ih-pill">{source.media.kind === 'tango' ? 'Tango' : 'Vídeo'}</span>
+                      {source.media.embedUrl ? (
+                        <button type="button" onClick={() => setOpenMedia(openMedia === source.path ? null : source.path)} aria-expanded={openMedia === source.path}>
+                          <Play aria-hidden="true" />{source.media.kind === 'tango' ? 'Ver Tango' : 'Ver vídeo'}
+                        </button>
+                      ) : (
+                        <a href={source.media.url} target="_blank" rel="noreferrer noopener">Abrir no Tango</a>
+                      )}
+                      {openMedia === source.path && source.media.embedUrl ? (
+                        <div className="ih-ai-media">
+                          {source.media.kind === 'video' && source.media.embedUrl.startsWith('/') ? (
+                            <video controls preload="metadata" aria-label={`Vídeo: ${source.title}`}><source src={source.media.embedUrl} /></video>
+                          ) : (
+                            <iframe src={source.media.embedUrl} title={`${source.media.kind === 'tango' ? 'Tango' : 'Vídeo'}: ${source.title}`} loading="lazy" sandbox="allow-scripts allow-same-origin allow-popups allow-top-navigation-by-user-activation" allowFullScreen />
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -145,7 +167,7 @@ function OfflineMessage({ question, compact }: { question: string; compact: bool
     <div className="ih-ai-row">
       {compact ? null : <Avatar />}
       <div className="ih-ai-body">
-        {compact ? null : <p className="ih-ai-name">Assistente iHelp</p>}
+        {compact ? null : <p className="ih-ai-name">Claricia · assistente de IA do iHelp</p>}
         <p className="ih-ai-flag">Assistente não conectado</p>
         <div className="ih-ai-text">
           <p>O assistente de IA ainda não está conectado neste ambiente, então não há resposta gerada. A busca da documentação encontra artigos, endpoints e tutoriais sobre a sua pergunta.</p>

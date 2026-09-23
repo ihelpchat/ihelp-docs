@@ -21,7 +21,7 @@ const starters: { kind: SourceKind; label: string }[] = [
 function transcript(messages: ChatMessage[]) {
   const lines = messages.flatMap((message) => {
     if (message.role === 'user') return [`Eu: ${message.text}`];
-    if (message.role === 'ai') return [`Assistente: ${message.reply.answer}`];
+    if (message.role === 'ai') return [`Claricia: ${message.reply.answer}`];
     return [];
   });
   const text = ['Olá! Conversei com o assistente da documentação e ainda preciso de ajuda.', '', ...lines].join('\n');
@@ -48,7 +48,7 @@ function SourcesPanel() {
                 <span className="ih-ai-panel-head"><span className="ih-pill" data-kind={source.kind}>{source.kind}</span><ExternalLink aria-hidden="true" /></span>
                 <strong>{source.title}</strong>
                 {source.excerpt ? <span>{source.excerpt.length > 150 ? `${source.excerpt.slice(0, 150).trim()}…` : source.excerpt}</span> : null}
-                <small>Abrir artigo</small>
+                <small>Ver resposta completa</small>
               </Link>
             </li>
           ))}
@@ -87,7 +87,7 @@ export function AssistantScreen() {
               <section className="ih-ai-empty">
                 <span className="ih-ai-empty-icon" aria-hidden="true"><Sparkles /></span>
                 <h1>Pergunte qualquer coisa sobre o iHelp</h1>
-                <p>O assistente responde com base na Central de ajuda, nas principais dúvidas, nos tutoriais, nas novidades e na referência da API — e mostra de onde tirou cada resposta.</p>
+                <p>A Claricia é a assistente de IA do iHelp. Ela responde com base na Central de ajuda, nas principais dúvidas, nos tutoriais, nas novidades e na referência da API — e mostra de onde tirou cada resposta.</p>
                 <div className="ih-ai-starters">
                   {starters.map((starter) => (
                     <button type="button" key={starter.label} onClick={() => ask(starter.label)}>
@@ -99,7 +99,7 @@ export function AssistantScreen() {
               </section>
             ) : (
               <>
-                <h1 className="ih-visually-hidden">Assistente de IA</h1>
+                <h1 className="ih-visually-hidden">Claricia, assistente de IA do iHelp</h1>
                 <AssistantThread />
               </>
             )}
