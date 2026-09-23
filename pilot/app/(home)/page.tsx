@@ -38,7 +38,7 @@ export default function HomePage() {
         <div className="design-container design-hero-content">
           <span className="design-badge">
             <Sparkles aria-hidden="true" />
-            {assistantEnabled ? 'Assistente GPT conectado à documentação do iHelp' : 'Busca em toda a documentação do iHelp'}
+            {assistantEnabled ? 'Assistente GPT conectado à documentação do iHelp' : 'Busca inteligente em toda a documentação do iHelp'}
           </span>
           <h1>Tire sua dúvida sobre o iHelp em uma pergunta.</h1>
           <p>Central de ajuda para o dia a dia do atendimento e referência técnica da API — no mesmo lugar, com busca que entende o que você quer.</p>
