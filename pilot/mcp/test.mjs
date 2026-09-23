@@ -102,6 +102,8 @@ try {
   assert.equal(unsafe.isError, true);
   const duplicate = await client.callTool({ name: 'docs_submit_article', arguments: { ...article, mode: 'draft', requestedBy: 'service:docs-bot' } });
   assert.equal(duplicate.isError, true);
+  assert.doesNotMatch(duplicate.content[0].text, new RegExp(testRoot));
+  assert.match(duplicate.content[0].text, /DRAFT_EXISTS/);
   const pullRoot = await mkdtemp(join(tmpdir(), 'ihelp-docs-pr-audit-'));
   const originalFetch = globalThis.fetch;
   const originalToken = process.env.GITHUB_TOKEN;
@@ -178,6 +180,56 @@ try {
   assert.equal(failureEvents[1].target, article.path);
   assert.equal(failureEvents[1].operation, 'docs_submit_article');
   assert.match(failureEvents[1].at, /^\d{4}-\d\d-\d\dT.*Z$/);
+
+  const remoteErrorRoot = await mkdtemp(join(tmpdir(), 'ihelp-docs-remote-error-'));
+  const savedFetch = globalThis.fetch;
+  const savedToken = process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = 'fake-test-token';
+  globalThis.fetch = async () => ({ ok: false, status: 422, text: async () => 'token=secret-from-provider' });
+  try {
+    await assert.rejects(submitArticle(remoteErrorRoot, article, 'pull_request', 'service:docs-bot'), (error) => {
+      assert.doesNotMatch(error.message, /secret-from-provider|token=/);
+      assert.match(error.message, /GitHub API 422/);
+      return true;
+    });
+  } finally {
+    globalThis.fetch = savedFetch;
+    if (savedToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = savedToken;
+  }
+  const mockFetchFile = join(await mkdtemp(join(tmpdir(), 'ihelp-docs-fetch-')), 'mock.mjs');
+  await writeFile(mockFetchFile, `import { chmod } from 'node:fs/promises';
+import { join } from 'node:path';
+globalThis.fetch = async (url) => {
+  if (process.env.MOCK_GITHUB_OUTCOME === '422') return { ok: false, status: 422, text: async () => 'token=secret-from-provider' };
+  if (String(url).endsWith('/pulls')) {
+    await chmod(join(process.env.DOCS_ROOT, '.audit/docs-submissions.jsonl'), 0o400);
+    return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/789' }) };
+  }
+  return { ok: true, json: async () => String(url).includes('/git/ref/') ? { object: { sha: 'test-sha' } } : {} };
+};`);
+  for (const outcome of ['422', 'created']) {
+    const root = await mkdtemp(join(tmpdir(), 'ihelp-docs-tool-error-'));
+    const mockedTransport = new StdioClientTransport({
+      command: process.execPath,
+      args: ['--import', mockFetchFile, join(projectRoot, 'mcp/server.mjs')],
+      cwd: projectRoot,
+      env: { ...process.env, DOCS_ROOT: root, GITHUB_TOKEN: 'fake-test-token', MOCK_GITHUB_OUTCOME: outcome },
+      stderr: 'pipe',
+    });
+    const mockedClient = new Client({ name: `ihelp-docs-error-${outcome}`, version: '1.0.0' });
+    try {
+      await mockedClient.connect(mockedTransport);
+      const result = await mockedClient.callTool({ name: 'docs_submit_article', arguments: { ...article, mode: 'pull_request', requestedBy: 'service:docs-bot' } });
+      assert.equal(result.isError, true);
+      assert.doesNotMatch(result.content[0].text, /secret-from-provider|token=/);
+      assert.doesNotMatch(result.content[0].text, new RegExp(root));
+      if (outcome === '422') assert.match(result.content[0].text, /GITHUB_HTTP_ERROR/);
+      else assert.match(result.content[0].text, /github\.com\/ihelpchat\/ihelp-docs\/pull\/789/);
+    } finally {
+      await mockedClient.close();
+    }
+  }
 
   const context = await retrieveContext(testRoot, 'como transferir um atendimento');
   assert.match(context[0].title, /Atendimento/);
