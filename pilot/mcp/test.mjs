@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, cp, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
@@ -278,6 +278,34 @@ globalThis.fetch = async (url) => {
   assert.equal(structured.resolution, 'partial');
   assert.deepEqual(structured.sources.map((source) => source.path), ['/docs/sobre-o-sistema/atendimento']);
   assert.equal(structured.sources[0].kind, 'Ajuda');
+  assert.deepEqual(structured.sources[0].media, { kind: 'video', url: '/videos/atendimento.mp4', embedUrl: '/videos/atendimento.mp4' });
+  assert.equal(structured.sources[0].path, '/docs/sobre-o-sistema/atendimento', 'URL inventada não vira CTA');
+
+  const mediaDir = join(testRoot, 'content/docs/docs/teste');
+  await mkdir(mediaDir, { recursive: true });
+  await writeFile(join(mediaDir, 'claricia-tango.mdx'), `---\ntitle: "Guia Claricia Tango"\ndescription: "Guia de teste da mídia real."\n---\n<TutorialCard title="Fluxo" url="https://app.tango.us/app/workflow/Fluxo-586c4a6cabce4edd8032e657bf2979ae" embedUrl="https://app.tango.us/app/embed/586c4a6cabce4edd8032e657bf2979ae" />\n`);
+  await writeFile(join(mediaDir, 'claricia-sem-midia.mdx'), `---\ntitle: "Guia Claricia Sem Mídia"\ndescription: "Guia de teste sem vídeo."\n---\nResposta completa sem vídeo.\n`);
+  await writeFile(join(mediaDir, 'claricia-url-insegura.mdx'), `---\ntitle: "Guia Claricia URL Insegura"\ndescription: "Guia de teste da URL."\n---\n<VideoEmbed url="javascript:alert(1)" />\n`);
+  const mediaClient = (path) => ({ responses: { create: async () => ({ model: 'gpt-test', output_text: JSON.stringify({ answer: 'Consulte o guia.', sources: [path, 'https://evil.example/falso'], resolution: 'partial', found: true }) }) } });
+  const tangoReply = await answerQuestion(testRoot, 'Guia Claricia Tango', { client: mediaClient('/docs/teste/claricia-tango') });
+  assert.deepEqual(tangoReply.sources.map((source) => source.path), ['/docs/teste/claricia-tango']);
+  assert.deepEqual(tangoReply.sources[0].media, { kind: 'tango', url: 'https://app.tango.us/app/workflow/Fluxo-586c4a6cabce4edd8032e657bf2979ae', embedUrl: 'https://app.tango.us/app/embed/586c4a6cabce4edd8032e657bf2979ae' });
+  assert.equal(tangoReply.resolution, 'partial');
+  const plainReply = await answerQuestion(testRoot, 'Guia Claricia Sem Mídia', { client: mediaClient('/docs/teste/claricia-sem-midia') });
+  assert.equal(plainReply.sources[0].media, undefined);
+  const unsafeReply = await answerQuestion(testRoot, 'Guia Claricia URL Insegura', { client: mediaClient('/docs/teste/claricia-url-insegura') });
+  assert.equal(unsafeReply.sources[0].media, undefined);
+  const tellaPath = '/docs/primeiros-passos/acessando-a-plataforma';
+  const tellaReply = await answerQuestion(testRoot, 'Como acessar a plataforma?', {
+    client: mediaClient(tellaPath),
+    page: { path: tellaPath, title: 'Acessando a Plataforma' },
+  });
+  assert.deepEqual(tellaReply.sources.map((source) => source.path), [tellaPath]);
+  assert.deepEqual(tellaReply.sources[0].media, {
+    kind: 'video',
+    url: 'https://www.tella.tv/video/faq-como-alterar-sua-senha-no-ihelp-1-8jwf',
+    embedUrl: 'https://www.tella.tv/video/faq-como-alterar-sua-senha-no-ihelp-1-8jwf/embed',
+  });
   const apiScoped = await retrieveContext(testRoot, 'mensagem', 6, { scope: 'API' });
   assert.ok(apiScoped.length && apiScoped.every((source) => source.path.startsWith('/api')));
 
