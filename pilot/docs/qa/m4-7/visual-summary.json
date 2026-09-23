@@ -1,0 +1,284 @@
+{
+  "summary": {
+    "desktop": {
+      "pontos": "96% (409/426)",
+      "pontosPct": 96,
+      "gradeMedia": 92.9,
+      "grade": [
+        {
+          "tela": "home",
+          "similaridade": 99
+        },
+        {
+          "tela": "artigo",
+          "similaridade": 84.4
+        },
+        {
+          "tela": "faq",
+          "similaridade": 97.1
+        },
+        {
+          "tela": "api",
+          "similaridade": 92.8
+        },
+        {
+          "tela": "endpoint",
+          "similaridade": 81.6
+        },
+        {
+          "tela": "tutoriais",
+          "similaridade": 89.9
+        },
+        {
+          "tela": "novidades",
+          "similaridade": 98.3
+        },
+        {
+          "tela": "assistente",
+          "similaridade": 99.7
+        },
+        {
+          "tela": "painel",
+          "similaridade": 86
+        },
+        {
+          "tela": "busca",
+          "similaridade": 99.9
+        }
+      ]
+    },
+    "mobile": {
+      "pontos": "95.7% (177/185)",
+      "pontosPct": 95.7,
+      "gradeMedia": 97,
+      "grade": [
+        {
+          "tela": "home",
+          "similaridade": 95.8
+        },
+        {
+          "tela": "assistente",
+          "similaridade": 96.9
+        },
+        {
+          "tela": "painel",
+          "similaridade": 98.3
+        }
+      ]
+    }
+  },
+  "failures": [
+    {
+      "tela": "home:desktop",
+      "ponto": "logo",
+      "medida": "left",
+      "esperado": 20,
+      "obtido": 60,
+      "diferenca": 40
+    },
+    {
+      "tela": "home:desktop",
+      "ponto": "nav-ia",
+      "medida": "left",
+      "esperado": 200.921875,
+      "obtido": 457.9375,
+      "diferenca": 257
+    },
+    {
+      "tela": "home:desktop",
+      "ponto": "nav-ia",
+      "medida": "width",
+      "esperado": 142.484375,
+      "obtido": 88.765625,
+      "diferenca": -53.7
+    },
+    {
+      "tela": "home:desktop",
+      "ponto": "nav-ajuda",
+      "medida": "left",
+      "esperado": 347.40625,
+      "obtido": 550.703125,
+      "diferenca": 203.3
+    },
+    {
+      "tela": "home:desktop",
+      "ponto": "lancador",
+      "medida": "left",
+      "esperado": 1264.140625,
+      "obtido": 1207.828125,
+      "diferenca": -56.3
+    },
+    {
+      "tela": "home:desktop",
+      "ponto": "lancador",
+      "medida": "width",
+      "esperado": 155.859375,
+      "obtido": 212.171875,
+      "diferenca": 56.3
+    },
+    {
+      "tela": "home:desktop",
+      "ponto": "busca-topo",
+      "medida": "left",
+      "esperado": 806.75,
+      "obtido": 998.046875,
+      "diferenca": 191.3
+    },
+    {
+      "tela": "home:desktop",
+      "ponto": "busca-topo",
+      "medida": "width",
+      "esperado": 300,
+      "obtido": 222.46875,
+      "diferenca": -77.5
+    },
+    {
+      "tela": "home:desktop",
+      "ponto": "cta-topo",
+      "medida": "left",
+      "esperado": 1134.75,
+      "obtido": 1230.515625,
+      "diferenca": 95.8
+    },
+    {
+      "tela": "home:desktop",
+      "ponto": "selo-ia",
+      "medida": "width",
+      "esperado": 344.25,
+      "obtido": 236.390625,
+      "diferenca": -107.9
+    },
+    {
+      "tela": "home:mobile",
+      "ponto": "lancador",
+      "medida": "left",
+      "esperado": 214.140625,
+      "obtido": 161.828125,
+      "diferenca": -52.3
+    },
+    {
+      "tela": "home:mobile",
+      "ponto": "lancador",
+      "medida": "width",
+      "esperado": 155.859375,
+      "obtido": 212.171875,
+      "diferenca": 56.3
+    },
+    {
+      "tela": "home:mobile",
+      "ponto": "selo-ia",
+      "medida": "width",
+      "esperado": 344.25,
+      "obtido": 236.390625,
+      "diferenca": -107.9
+    },
+    {
+      "tela": "home:mobile",
+      "ponto": "duvidas",
+      "medida": "top",
+      "esperado": 1692.171875,
+      "obtido": 1710.171875,
+      "diferenca": 18
+    },
+    {
+      "tela": "artigo:desktop",
+      "ponto": "grupo-1",
+      "medida": "top",
+      "esperado": 107.5,
+      "obtido": 147,
+      "diferenca": 39.5
+    },
+    {
+      "tela": "api:desktop",
+      "ponto": "selo-api",
+      "medida": "left",
+      "esperado": 77.65625,
+      "obtido": 133.875,
+      "diferenca": 56.2
+    },
+    {
+      "tela": "api:desktop",
+      "ponto": "nav-ativo",
+      "medida": "left",
+      "esperado": 496.71875,
+      "obtido": 757.3125,
+      "diferenca": 260.6
+    },
+    {
+      "tela": "api:desktop",
+      "ponto": "cta-token",
+      "medida": "left",
+      "esperado": 1077.96875,
+      "obtido": 1228.234375,
+      "diferenca": 150.3
+    },
+    {
+      "tela": "assistente:desktop",
+      "ponto": "nav-ativo",
+      "medida": "left",
+      "esperado": 200.921875,
+      "obtido": 457.5625,
+      "diferenca": 256.6
+    },
+    {
+      "tela": "assistente:desktop",
+      "ponto": "nav-ativo",
+      "medida": "width",
+      "esperado": 143.859375,
+      "obtido": 89.53125,
+      "diferenca": -54.3
+    },
+    {
+      "tela": "assistente:mobile",
+      "ponto": "sugestao-1",
+      "medida": "top",
+      "esperado": 387.78125,
+      "obtido": 412.53125,
+      "diferenca": 24.8
+    },
+    {
+      "tela": "assistente:mobile",
+      "ponto": "sugestao-selo",
+      "medida": "top",
+      "esperado": 406.78125,
+      "obtido": 427.53125,
+      "diferenca": 20.8
+    },
+    {
+      "tela": "assistente:mobile",
+      "ponto": "escopo-rotulo",
+      "medida": "top",
+      "esperado": 628.5,
+      "obtido": 642,
+      "diferenca": 13.5
+    },
+    {
+      "tela": "painel:desktop",
+      "ponto": "campo",
+      "medida": "top",
+      "esperado": 896,
+      "obtido": 881,
+      "diferenca": -15
+    },
+    {
+      "tela": "painel:mobile",
+      "ponto": "campo",
+      "medida": "top",
+      "esperado": 740,
+      "obtido": 725,
+      "diferenca": -15
+    }
+  ],
+  "a11ySwaps": [
+    "artigo:desktop lateral-rotulo.color: texto #94a3b8 → #64748b",
+    "artigo:desktop indice-rotulo.color: texto #94a3b8 → #64748b",
+    "api:desktop cta-token.background: botão #eb5f3e → #c5482b (texto branco)",
+    "api:desktop selo-metodo.color: selo sobre cinza #64748b → #475569",
+    "api:desktop endereco.color: texto #94a3b8 → #64748b",
+    "api:mobile endereco.color: texto #94a3b8 → #64748b",
+    "tutoriais:desktop lista-rotulo.color: texto #94a3b8 → #64748b",
+    "tutoriais:desktop modulos-rotulo.color: texto #94a3b8 → #64748b",
+    "novidades:desktop data.color: texto #94a3b8 → #64748b",
+    "busca:desktop rotulo.color: texto #94a3b8 → #64748b"
+  ]
+}
