@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod/v4';
-import { getInventory, searchContent, submitArticle, validateArticle } from './content-service.mjs';
+import { getInventory, isSafeRequestedBy, searchContent, SubmitArticleError, submitArticle, validateArticle } from './content-service.mjs';
 import { auditContent, readArticle } from './editorial-standard.mjs';
 
 const articleSchema = z.object({
@@ -58,12 +58,17 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
 
   server.registerTool('docs_submit_article', {
     description: 'Envia conteúdo validado como draft local ou abre pull request no GitHub. Nunca faz merge ou deploy.',
-    inputSchema: articleSchema.extend({ mode: z.enum(['draft', 'pull_request']).default('draft') }),
-  }, async ({ mode, ...article }) => {
+    inputSchema: articleSchema.extend({
+      mode: z.enum(['draft', 'pull_request']).default('draft'),
+      requestedBy: z.string().refine(isSafeRequestedBy, 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais').describe('ID opaco não sensível, como service:docs-bot; obrigatório para escrita'),
+    }),
+  }, async ({ mode, requestedBy, ...article }) => {
     try {
-      return textResult(await submitArticle(root, article, mode));
+      return textResult(await submitArticle(root, article, mode, requestedBy));
     } catch (error) {
-      return textResult({ error: error instanceof Error ? error.message : String(error) }, true);
+      return textResult(error instanceof SubmitArticleError
+        ? { error: error.message, code: error.code }
+        : { error: 'Não foi possível enviar o artigo', code: 'SUBMIT_FAILED' }, true);
     }
   });
 

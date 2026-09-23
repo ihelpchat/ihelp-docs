@@ -51,11 +51,13 @@ O processo local lê `pilot/content/docs` e `pilot/architecture`. A tool de envi
 
 O `path` aceito por `docs_get_article`, validação e envio segue a forma `docs/assunto/slug`, `api/assunto/slug` ou `blog/assunto/slug`, sem `/` inicial e sem `.mdx`. `docs_search` devolve uma URL pública no campo `path`, com `/` inicial; converta-a antes de chamar `docs_get_article`. As tools de validação e envio recebem `path`, `title`, `description`, `source` (`produto`, `suporte` ou `api`), `contentType` (`faq`, `tutorial`, `guia` ou `referencia`) e `body` em Markdown sem frontmatter; `tangoUrl` é opcional. O conteúdo precisa seguir o [padrão editorial](https://github.com/ihelpchat/ihelp-docs/blob/bruunofco/fumadocs-pilot/pilot/architecture/editorial-standard.md).
 
+Para enviar com `docs_submit_article`, atualize o cliente para incluir `requestedBy` obrigatório: use um ID opaco e não sensível como `service:docs-bot` ou `user:operador-123`, nunca nome, email ou token. Isso vale para `draft` e `pull_request`; as tools de leitura e `docs_validate_article` não exigem ator. Sem esse campo, o envio é rejeitado. O servidor registra localmente tentativa, resultado, ator, data UTC, operação e alvo, sem gravar o texto do artigo nem credenciais.
+
 ## Fluxo para propor um artigo
 
 1. Use `docs_inventory` para localizar uma lacuna e `docs_search` para verificar se o assunto já existe.
 2. Se for revisar conteúdo existente, retire o `/` inicial do `path` da busca antes de chamar `docs_get_article`: `/docs/sobre-o-sistema/atendimento` vira `docs/sobre-o-sistema/atendimento`. Para uma página de seção armazenada como `index.mdx`, acrescente `/index` após retirar o `/` inicial (por exemplo, `/docs` vira `docs/index`). Preserve fatos, links e permissões confirmados.
 3. Escreva o artigo e chame `docs_validate_article`; corrija os apontamentos antes de enviar. `docs_audit_content` confere a base completa.
-4. Chame `docs_submit_article` com `mode: "draft"` para criar um arquivo em `pilot/.drafts/<path>.mdx`. Revise o arquivo e leve a proposta a um PR. Quem revisa o PR confere precisão, privacidade, links e acesso antes do merge.
+4. Chame `docs_submit_article` com `mode: "draft"` e `requestedBy: "service:docs-bot"` (substituindo pelo ID opaco do seu cliente) para criar um arquivo em `pilot/.drafts/<path>.mdx`. Revise o arquivo e leve a proposta a um PR. Quem revisa o PR confere precisão, privacidade, links e acesso antes do merge.
 
 Também existe `mode: "pull_request"`: o servidor abre um branch e PR no GitHub quando recebe `GITHUB_TOKEN` no **ambiente do processo**. Defina também `GITHUB_REPOSITORY` e `GITHUB_BASE_BRANCH` para apontar explicitamente para o repositório e branch de destino aprovados; sem eles, o código usa `ihelpchat/ihelp-docs` e `main`. Solicite acesso ao responsável pelo repositório; não registre o token neste JSON. O MCP não faz merge nem deploy. A publicação depende do fluxo normal de revisão do repositório.

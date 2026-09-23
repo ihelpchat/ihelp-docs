@@ -25,4 +25,5 @@ yarn-error.log*
 !.env.example
 .vercel
 .drafts/
+.audit/
 next-env.d.ts
