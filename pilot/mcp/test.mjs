@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { answerQuestion, retrieveContext } from './assistant-service.mjs';
+import { renderArticle } from './content-service.mjs';
 
 const projectRoot = new URL('../', import.meta.url).pathname;
 const testRoot = await mkdtemp(join(tmpdir(), 'ihelp-docs-mcp-'));
@@ -49,7 +51,27 @@ try {
 
   const unsafe = await client.callTool({ name: 'docs_submit_article', arguments: { ...article, path: '../segredo', mode: 'draft' } });
   assert.equal(unsafe.isError, true);
-  console.log('MCP smoke passou: inventário, busca, validação, draft e bloqueio de path.');
+
+  const context = await retrieveContext(testRoot, 'como transferir um atendimento');
+  assert.match(context[0].title, /Atendimento/);
+  const fakeClient = {
+    responses: {
+      create: async (request) => {
+        assert.equal(request.store, false);
+        assert.match(request.input[1].content, /Atendimento/);
+        return { output_text: 'Abra o atendimento e use a opção de transferência.\n\nFontes: Atendimento (/docs/sobre-o-sistema/atendimento)', model: 'gpt-test' };
+      },
+    },
+  };
+  const assistant = await answerQuestion(testRoot, 'como transferir um atendimento', { client: fakeClient });
+  assert.equal(assistant.model, 'gpt-test');
+  assert.match(assistant.answer, /transferência/);
+  const withTango = renderArticle({ ...article, tangoUrl: 'https://app.tango.us/app/embed/c547fbf6-a68a-4f30-9cf4-bbf79f6f65d1' });
+  assert.match(withTango, /app\/workflow\/Como-validar-o-MCP-c547fbf6a68a4f309cf4bbf79f6f65d1/);
+  assert.doesNotMatch(withTango, /embedUrl=/);
+  const workflowUrl = 'https://app.tango.us/app/workflow/Como-validar-o-MCP-c547fbf6a68a4f309cf4bbf79f6f65d1';
+  assert.match(renderArticle({ ...article, tangoUrl: workflowUrl }), new RegExp(workflowUrl));
+  console.log('MCP smoke passou: inventário, busca, validação, draft, bloqueio de path e contexto do assistente.');
 } finally {
   await client.close();
 }

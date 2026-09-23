@@ -7,7 +7,7 @@ import { withBasePath } from '@/lib/shared';
 export type Tutorial = {
   title: string;
   description: string;
-  embedUrl: string;
+  embedUrl?: string;
   url?: string;
   category: string;
 };
@@ -26,13 +26,13 @@ export function TutorialGallery({ tutorials }: { tutorials: Tutorial[] }) {
             <h2>{current.title}</h2>
             <p>{current.category} · guia publicado no Tango</p>
           </div>
-          <a className="ih-button ih-button-primary" href={current.url ?? current.embedUrl} target="_blank" rel="noreferrer noopener">
+          <a className="ih-button ih-button-primary" href={current.url ?? current.embedUrl ?? '#'} target="_blank" rel="noreferrer noopener">
             <Play aria-hidden="true" />Abrir no Tango
           </a>
         </header>
         <div className="ih-player-frame">
           <span className="ih-player-badge"><span aria-hidden="true" />Guia {index + 1} de {tutorials.length}</span>
-          {loaded === current.embedUrl ? (
+          {current.embedUrl && loaded === current.embedUrl ? (
             <iframe
               key={current.embedUrl}
               src={current.embedUrl}
@@ -40,12 +40,18 @@ export function TutorialGallery({ tutorials }: { tutorials: Tutorial[] }) {
               sandbox="allow-scripts allow-top-navigation-by-user-activation allow-popups allow-same-origin"
               allowFullScreen
             />
-          ) : (
-            <button type="button" className="ih-player-poster" onClick={() => setLoaded(current.embedUrl)}>
+          ) : current.embedUrl ? (
+            <button type="button" className="ih-player-poster" onClick={() => setLoaded(current.embedUrl!)}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={withBasePath(current.category === 'CRM' ? '/brand/preview-crm.png' : '/brand/preview-chat.webp')} alt="" />
               <span className="ih-player-start"><Play aria-hidden="true" />Ver o passo a passo aqui</span>
             </button>
+          ) : (
+            <a className="ih-player-poster" href={current.url} target="_blank" rel="noreferrer noopener">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={withBasePath(current.category === 'CRM' ? '/brand/preview-crm.png' : '/brand/preview-chat.webp')} alt="" />
+              <span className="ih-player-start"><Play aria-hidden="true" />Abrir passo a passo no Tango</span>
+            </a>
           )}
         </div>
         <footer>
@@ -58,7 +64,7 @@ export function TutorialGallery({ tutorials }: { tutorials: Tutorial[] }) {
               Próximo guia<ChevronRight aria-hidden="true" />
             </button>
             <span className="ih-dots" aria-hidden="true">
-              {tutorials.map((tutorial, dot) => <span key={tutorial.embedUrl} data-active={dot === index || undefined} />)}
+              {tutorials.map((tutorial, dot) => <span key={tutorial.url ?? tutorial.embedUrl ?? tutorial.title} data-active={dot === index || undefined} />)}
             </span>
           </div>
         </footer>
@@ -68,8 +74,8 @@ export function TutorialGallery({ tutorials }: { tutorials: Tutorial[] }) {
         <p className="ih-eyebrow">Guias disponíveis</p>
         <ul className="ih-guides">
           {tutorials.map((tutorial, item) => (
-            <li key={tutorial.embedUrl}>
-              <button type="button" className="ih-guide" aria-pressed={item === index} onClick={() => setIndex(item)}>
+            <li key={tutorial.url ?? tutorial.embedUrl ?? tutorial.title}>
+              <button type="button" className="ih-guide" aria-pressed={item === index} onClick={() => { setIndex(item); setLoaded(null); }}>
                 <span className="ih-guide-icon"><Play aria-hidden="true" /></span>
                 <span className="ih-guide-copy">
                   <strong>{tutorial.title}</strong>

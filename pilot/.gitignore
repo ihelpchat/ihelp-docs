@@ -21,7 +21,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # others
-.env*.local
+.env*
+!.env.example
 .vercel
 .drafts/
 next-env.d.ts

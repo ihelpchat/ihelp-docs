@@ -15,12 +15,14 @@ O servidor permite que uma IA consulte a base, valide conteúdo e envie um FAQ/t
 npm run mcp:start
 ```
 
-## HTTP remoto
+## HTTP remoto e assistente GPT
 
-Configure `DOCS_MCP_API_KEY` com ao menos 24 caracteres. Para abrir pull requests, configure também `GITHUB_TOKEN`, `GITHUB_REPOSITORY=ihelpchat/ihelp-docs` e `GITHUB_BASE_BRANCH`.
+Configure `DOCS_MCP_API_KEY` com ao menos 24 caracteres. Para abrir pull requests, configure também `GITHUB_TOKEN`, `GITHUB_REPOSITORY=ihelpchat/ihelp-docs` e `GITHUB_BASE_BRANCH`. Para ativar o assistente, configure `OPENAI_API_KEY`; o modelo padrão é `gpt-6-luna` e pode ser trocado por `OPENAI_MODEL`.
 
 ```bash
-DOCS_MCP_API_KEY=... npm run mcp:http
+DOCS_MCP_API_KEY=... OPENAI_API_KEY=... ASSISTANT_ALLOWED_ORIGINS=https://docs.exemplo.com npm run mcp:http
 ```
 
-O endpoint é `/mcp` e exige `Authorization: Bearer <DOCS_MCP_API_KEY>`. Em produção, a próxima evolução é trocar a chave compartilhada por OAuth e identidade por usuário.
+O endpoint `/mcp` exige `Authorization: Bearer <DOCS_MCP_API_KEY>`. O endpoint público `/assistant` aceita somente perguntas curtas, aplica rate limit, envia apenas trechos recuperados da documentação e chama a OpenAI com `store: false`. A chave permanece exclusivamente no servidor.
+
+Em produção, a próxima evolução do MCP é trocar a chave compartilhada por OAuth e identidade por usuário.

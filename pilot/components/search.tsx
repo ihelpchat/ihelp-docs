@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Sparkles } from 'lucide-react';
+import { Bot, ChevronRight, LoaderCircle, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useDocsSearch } from 'fumadocs-core/search/client';
@@ -14,6 +14,9 @@ export type SiteCounts = { articles: number; endpoints: number; news: number };
 
 type Kind = 'Ajuda' | 'FAQ' | 'API' | 'Tutorial' | 'Novidade';
 type Result = { id: string; url: string; title: string; path: string; kind: Kind };
+type AssistantAnswer = { answer: string; sources: { title: string; path: string }[] };
+
+const assistantUrl = process.env.NEXT_PUBLIC_ASSISTANT_URL?.trim();
 
 const tabs = ['Tudo', 'Ajuda', 'API', 'Tutoriais', 'Novidades'] as const;
 type Tab = (typeof tabs)[number];
@@ -61,6 +64,9 @@ export default function SearchDialog({ open, onOpenChange, counts }: SharedProps
   const inputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<Tab>('Tudo');
   const [selected, setSelected] = useState(0);
+  const [assistant, setAssistant] = useState<AssistantAnswer | null>(null);
+  const [assistantError, setAssistantError] = useState('');
+  const [asking, setAsking] = useState(false);
   const { search, setSearch, query } = useDocsSearch({ client: staticClient({}) });
 
   useEffect(() => {
@@ -111,6 +117,27 @@ export default function SearchDialog({ open, onOpenChange, counts }: SharedProps
     router.push(result.url);
   };
 
+  const askAssistant = async () => {
+    if (!assistantUrl || search.trim().length < 4 || asking) return;
+    setAsking(true);
+    setAssistant(null);
+    setAssistantError('');
+    try {
+      const response = await fetch(assistantUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: search.trim() }),
+      });
+      const result = await response.json() as AssistantAnswer & { error?: string };
+      if (!response.ok) throw new Error(result.error || 'Não foi possível consultar o assistente.');
+      setAssistant(result);
+    } catch (error) {
+      setAssistantError(error instanceof Error ? error.message : 'Não foi possível consultar o assistente.');
+    } finally {
+      setAsking(false);
+    }
+  };
+
   const onKey = (event: KeyboardEvent) => {
     if (event.key === 'Escape') onOpenChange(false);
     else if (event.key === 'ArrowDown') {
@@ -146,13 +173,21 @@ export default function SearchDialog({ open, onOpenChange, counts }: SharedProps
             onChange={(event) => {
               setSearch(event.target.value);
               setSelected(0);
+              setAssistant(null);
+              setAssistantError('');
             }}
-            placeholder="Buscar artigos, endpoints ou perguntar com suas palavras"
+            placeholder={assistantUrl ? 'Buscar ou perguntar com suas palavras' : 'Buscar artigos, endpoints e tutoriais'}
             aria-label="Buscar na documentação"
             data-search-input
           />
-          <button type="button" className="ih-button ih-button-primary ih-button-sm" onClick={() => go(visible[active])}>
-            Abrir <span aria-hidden="true">↵</span>
+          <button
+            type="button"
+            className="ih-button ih-button-primary ih-button-sm"
+            onClick={assistantUrl && search.trim() ? askAssistant : () => go(visible[active])}
+            disabled={asking || (Boolean(assistantUrl) && Boolean(search.trim()) && search.trim().length < 4)}
+            data-assistant={assistantUrl && search.trim() ? true : undefined}
+          >
+            {asking ? <><LoaderCircle className="ih-spin" aria-hidden="true" />Consultando</> : assistantUrl && search.trim() ? <><Bot aria-hidden="true" />Perguntar à IA</> : <>Abrir <span aria-hidden="true">↵</span></>}
           </button>
         </div>
         <div className="ih-search-tabs" role="tablist" aria-label="Filtrar resultados">
@@ -161,6 +196,18 @@ export default function SearchDialog({ open, onOpenChange, counts }: SharedProps
           ))}
         </div>
         <div className="ih-search-results">
+          {assistant ? (
+            <section className="ih-assistant-answer" aria-label="Resposta do assistente" aria-live="polite">
+              <header><Bot aria-hidden="true" /><strong>Assistente iHelp</strong></header>
+              <p>{assistant.answer}</p>
+              {assistant.sources.length ? (
+                <nav aria-label="Fontes da resposta">
+                  {assistant.sources.slice(0, 4).map((source) => <a key={source.path} href={withBasePath(source.path)}>{source.title}</a>)}
+                </nav>
+              ) : null}
+            </section>
+          ) : null}
+          {assistantError ? <p className="ih-assistant-error" role="alert">{assistantError}</p> : null}
           <p className="ih-eyebrow">{search.trim() ? `Resultados para “${search.trim()}”` : 'Mais acessados'}</p>
           {search.trim() && query.isLoading && !visible.length ? <p className="ih-search-empty">Buscando…</p> : null}
           {search.trim() && !query.isLoading && !visible.length ? (

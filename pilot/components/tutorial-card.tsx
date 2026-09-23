@@ -6,13 +6,14 @@ import { useRef } from 'react';
 type TutorialCardProps = {
   title: string;
   description: string;
-  embedUrl: string;
+  embedUrl?: string;
   url?: string;
   compact?: boolean;
 };
 
 export function TutorialCard({ title, description, embedUrl, url }: TutorialCardProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const canEmbed = Boolean(embedUrl);
 
   return (
     <>
@@ -22,12 +23,18 @@ export function TutorialCard({ title, description, embedUrl, url }: TutorialCard
           <strong>Tutorial guiado: {title}</strong>
           <span>{description}</span>
         </div>
-        <button type="button" className="ih-button ih-button-primary" onClick={() => dialogRef.current?.showModal()}>
-          Ver passo a passo <ArrowRight aria-hidden="true" />
-        </button>
+        {canEmbed ? (
+          <button type="button" className="ih-button ih-button-primary" onClick={() => dialogRef.current?.showModal()}>
+            Ver passo a passo <ArrowRight aria-hidden="true" />
+          </button>
+        ) : url ? (
+          <a href={url} target="_blank" rel="noreferrer noopener" className="ih-button ih-button-primary">
+            Abrir no Tango <ExternalLink aria-hidden="true" />
+          </a>
+        ) : null}
       </div>
 
-      <dialog ref={dialogRef} className="tutorial-dialog" aria-label={title}>
+      {canEmbed ? <dialog ref={dialogRef} className="tutorial-dialog" aria-label={title}>
         <div className="tutorial-dialog-header">
           <div>
             <span>Tutorial guiado</span>
@@ -43,13 +50,13 @@ export function TutorialCard({ title, description, embedUrl, url }: TutorialCard
           </button>
         </div>
         <iframe
-          src={embedUrl}
+          src={embedUrl!}
           title={title}
           loading="lazy"
           sandbox="allow-scripts allow-top-navigation-by-user-activation allow-popups allow-same-origin"
           allowFullScreen
         />
-      </dialog>
+      </dialog> : null}
     </>
   );
 }

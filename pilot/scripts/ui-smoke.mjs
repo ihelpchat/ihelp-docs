@@ -80,6 +80,15 @@ try {
     );
   }
 
+  if (process.env.ASSISTANT_TEST === '1') {
+    await searchInput.fill('Como transfiro um atendimento para outro departamento?');
+    await page.locator('[data-assistant]').click();
+    const answer = page.locator('.ih-assistant-answer');
+    await answer.waitFor({ timeout: 30_000 });
+    assert.match(await answer.textContent(), /transferir|transferência/i, 'Assistente GPT não respondeu com o contexto esperado');
+    assert.ok(await answer.locator('a').count(), 'Assistente GPT respondeu sem fonte');
+  }
+
   // Enter abre o primeiro resultado.
   await searchInput.fill('transferir atendimento');
   const firstResult = searchDialog.locator('.ih-search-result').first();
@@ -124,8 +133,9 @@ try {
   await page.goto(`${baseUrl}/tutoriais/`, { waitUntil: 'networkidle' });
   assert.ok(await page.locator('.ih-guide').count() >= 4, 'Lista de tutoriais incompleta');
   await page.locator('.ih-guide').nth(2).click();
-  await page.locator('.ih-player-poster').click();
-  await page.locator('.ih-player iframe[src*="tango.us"]').waitFor();
+  const tangoLink = page.locator('.ih-player-poster');
+  assert.match(await tangoLink.getAttribute('href'), /tango\.us\/app\/workflow/);
+  assert.equal(await page.locator('.ih-player iframe').count(), 0, 'Tutorial não deve carregar embed privado');
 
   assert.deepEqual(errors, [], `Erros no navegador:\n${errors.join('\n')}`);
   await desktop.close();

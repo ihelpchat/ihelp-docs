@@ -45,8 +45,13 @@ export function validateArticle(article) {
 export function renderArticle(article) {
   const validation = validateArticle(article);
   if (!validation.valid) throw new Error(validation.issues.join('; '));
+  const tangoId = article.tangoUrl?.split('/').pop()?.split('?')[0].replaceAll('-', '');
+  const tangoSlug = article.title.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const publicTangoUrl = article.tangoUrl?.includes('/workflow/')
+    ? article.tangoUrl
+    : tangoId ? `https://app.tango.us/app/workflow/${tangoSlug}-${tangoId}` : undefined;
   const tutorial = article.tangoUrl
-    ? `\n\n<TutorialCard title=${escapeYaml(article.title)} url=${escapeYaml(article.tangoUrl)} embedUrl=${escapeYaml(article.tangoUrl.replace('/workflow/', '/embed/'))} description=${escapeYaml(article.description)} />`
+    ? `\n\n<TutorialCard title=${escapeYaml(article.title)} url=${escapeYaml(publicTangoUrl)} description=${escapeYaml(article.description)} />`
     : '';
   return `---\ntitle: ${escapeYaml(article.title)}\ndescription: ${escapeYaml(article.description)}\nsource: ${article.source}\ncontentType: ${article.contentType}\n---\n\n${article.body.trim()}${tutorial}\n`;
 }

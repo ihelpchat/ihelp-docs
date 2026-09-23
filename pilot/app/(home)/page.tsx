@@ -27,6 +27,7 @@ function topQuestions() {
 export default function HomePage() {
   const counts = getSiteCounts();
   const news = getNews().slice(0, 3);
+  const assistantEnabled = Boolean(process.env.NEXT_PUBLIC_ASSISTANT_URL);
 
   return (
     <main className="design-home">
@@ -37,7 +38,7 @@ export default function HomePage() {
         <div className="design-container design-hero-content">
           <span className="design-badge">
             <Sparkles aria-hidden="true" />
-            Assistente de IA treinado na documentação do iHelp
+            {assistantEnabled ? 'Assistente GPT conectado à documentação do iHelp' : 'Busca em toda a documentação do iHelp'}
           </span>
           <h1>Tire sua dúvida sobre o iHelp em uma pergunta.</h1>
           <p>Central de ajuda para o dia a dia do atendimento e referência técnica da API — no mesmo lugar, com busca que entende o que você quer.</p>
@@ -99,7 +100,7 @@ export default function HomePage() {
           </div>
           <div>
             <a href={supportUrl} target="_blank" rel="noreferrer noopener">Falar com o suporte</a>
-            <AskButton>Perguntar ao assistente</AskButton>
+            <AskButton>{assistantEnabled ? 'Perguntar ao assistente' : 'Buscar na documentação'}</AskButton>
           </div>
         </section>
 

@@ -22,6 +22,7 @@ export function SiteHeader({ menuOpen, onMenu }: { menuOpen?: boolean; onMenu?: 
   const pathname = usePathname();
   const { setOpenSearch } = useSearchContext();
   const dark = isActive(pathname, '/api');
+  const assistantEnabled = Boolean(process.env.NEXT_PUBLIC_ASSISTANT_URL);
 
   return (
     <header className={dark ? 'ih-header ih-header-dark' : 'ih-header'}>
@@ -46,7 +47,7 @@ export function SiteHeader({ menuOpen, onMenu }: { menuOpen?: boolean; onMenu?: 
         </nav>
         <button type="button" className="ih-header-search" onClick={() => setOpenSearch(true)}>
           <Search aria-hidden="true" />
-          <span>{dark ? 'Buscar na documentação' : 'Buscar ou perguntar'}</span>
+          <span>{dark || !assistantEnabled ? 'Buscar na documentação' : 'Buscar ou perguntar'}</span>
           <kbd>⌘K</kbd>
         </button>
         {dark ? (
