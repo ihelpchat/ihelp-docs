@@ -34,7 +34,9 @@ function trackErrors(page, errors) {
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
   page.on('console', (message) => {
     const location = message.location()?.url ?? '';
-    if (message.type() === 'error' && !thirdParty.test(location) && !thirdParty.test(message.text())) {
+    const tellaCspWarning = /^https:\/\/www\.tella\.tv\/video\//.test(location)
+      && message.text() === "Unrecognized Content-Security-Policy directive 'none'.";
+    if (message.type() === 'error' && !thirdParty.test(location) && !thirdParty.test(message.text()) && !tellaCspWarning) {
       errors.push(`console: ${message.text()} (${location})`);
     }
   });
