@@ -1,9 +1,12 @@
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, readdir, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { basename, dirname, join, normalize, relative } from 'node:path';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
 const SAFE_PATH = /^(docs|api|blog)\/[a-z0-9][a-z0-9/-]*$/;
+const SAFE_ACTOR = /^(?:user|service):[a-z0-9][a-z0-9_-]{2,63}$/;
+export const isSafeRequestedBy = (value) => typeof value === 'string' && SAFE_ACTOR.test(value);
 const SECRET_PATTERNS = [
   /Authorization:\s*Bearer\s+[A-Za-z0-9._-]{20,}/i,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
@@ -157,7 +160,41 @@ async function createPullRequest(article, rendered) {
   return { status: 'pull_request', url: pull.html_url, branch, filePath };
 }
 
-export async function submitArticle(root, article, mode = 'draft') {
+async function appendAudit(root, actor, mode, target, result) {
+  const directory = join(root, '.audit');
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const directoryStat = await lstat(directory);
+  if (!directoryStat.isDirectory() || (directoryStat.mode & 0o077) !== 0) throw new Error('diretório de audit inseguro');
+  const file = await open(join(directory, 'docs-submissions.jsonl'), constants.O_APPEND | constants.O_CREAT | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+  try {
+    const stat = await file.stat();
+    if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0) throw new Error('arquivo de audit inseguro');
+    const line = `${JSON.stringify({ at: new Date().toISOString(), actor, operation: 'docs_submit_article', mode, target, result })}\n`;
+    const { bytesWritten } = await file.write(line);
+    if (bytesWritten !== Buffer.byteLength(line)) throw new Error('registro de audit incompleto');
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+}
+
+export async function submitArticle(root, article, mode = 'draft', requestedBy) {
+  const actor = isSafeRequestedBy(requestedBy) ? requestedBy : null;
+  const target = typeof article.path === 'string' && SAFE_PATH.test(article.path) && !article.path.endsWith('/') ? article.path : null;
+  const safeMode = mode === 'draft' || mode === 'pull_request' ? mode : null;
+  await appendAudit(root, actor, safeMode, target, 'attempt');
+  try {
+    if (!actor) throw new Error('requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
+    const result = await submitValidatedArticle(root, article, mode);
+    await appendAudit(root, actor, safeMode, target, 'success');
+    return result;
+  } catch (error) {
+    await appendAudit(root, actor, safeMode, target, 'failure');
+    throw error;
+  }
+}
+
+async function submitValidatedArticle(root, article, mode) {
   const rendered = renderArticle(article);
   safeContentPath(root, article.path);
   if (mode === 'pull_request') return createPullRequest(article, rendered);
