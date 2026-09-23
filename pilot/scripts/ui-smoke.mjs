@@ -91,7 +91,7 @@ async function testAssistant(context, errors) {
   await page.getByRole('link', { name: 'Assistente de IA' }).first().click();
   await page.waitForURL(/\/assistente\/?$/);
   await page.getByRole('heading', { name: 'Pergunte qualquer coisa sobre o iHelp' }).waitFor();
-  await page.getByText('Claria', { exact: false }).first().waitFor();
+  await page.getByText('Claricia', { exact: false }).first().waitFor();
   assert.equal(await page.locator('.ih-ai-starters button').count(), 4, 'Sugestões iniciais ausentes');
   assert.equal(await page.locator('.ih-ai-launcher').count(), 0, 'Botão flutuante não deve aparecer na tela do assistente');
 
