@@ -55,7 +55,7 @@ const mockReply = {
   sections: [{ title: 'Antes de começar', items: ['Confirme o departamento de destino.'] }],
   steps: ['Abra a conversa.', 'Clique em Transferir.', 'Escolha o destino e confirme.'],
   code: { language: 'bash', content: 'curl -H "Authorization: Bearer $IHELP_TOKEN" https://apiv3.ihelpchat.com/api/v2/customers/search' },
-  sources: [{ title: 'Atendimento', path: '/docs/sobre-o-sistema/atendimento', excerpt: 'Iniciar, transferir, encerrar e reabrir atendimentos.' }],
+  sources: [{ title: 'Atendimento', path: '/docs/sobre-o-sistema/atendimento', excerpt: 'Iniciar, transferir, encerrar e reabrir atendimentos.', media: { kind: 'video', url: '/videos/atendimento.mp4', embedUrl: '/videos/atendimento.mp4' } }],
   suggestions: ['Como reabrir um atendimento finalizado?'],
   resolution: 'partial',
   found: true,
@@ -91,6 +91,7 @@ async function testAssistant(context, errors) {
   await page.getByRole('link', { name: 'Assistente de IA' }).first().click();
   await page.waitForURL(/\/assistente\/?$/);
   await page.getByRole('heading', { name: 'Pergunte qualquer coisa sobre o iHelp' }).waitFor();
+  await page.getByText('Claria', { exact: false }).first().waitFor();
   assert.equal(await page.locator('.ih-ai-starters button').count(), 4, 'Sugestões iniciais ausentes');
   assert.equal(await page.locator('.ih-ai-launcher').count(), 0, 'Botão flutuante não deve aparecer na tela do assistente');
 
@@ -112,7 +113,10 @@ async function testAssistant(context, errors) {
   assert.equal(await page.locator('.ih-ai-sections section').count(), 1);
   const supportCta = page.getByRole('link', { name: 'Falar com o atendimento' }).last();
   assert.match(await supportCta.getAttribute('href'), /wa\.me\/551730422307\?text=/);
-  assert.ok(await page.getByText('Abrir artigo').count(), 'Fonte sem ação explícita para abrir o artigo');
+  assert.ok(await page.getByText('Ver resposta completa').count(), 'Fonte sem CTA de artigo');
+  assert.ok(await page.getByText('Vídeo').count(), 'Mídia real sem badge');
+  await page.getByRole('button', { name: 'Ver vídeo' }).last().click();
+  assert.ok(await page.locator('.ih-ai-media video source[src="/videos/atendimento.mp4"]').count(), 'Vídeo não abriu in-page');
   assert.equal(await page.locator('.ih-ai-error').count(), 0, 'Erro deveria sumir após tentar de novo');
   assert.equal(await page.locator('.ih-ai-steps li').count(), 3);
   assert.equal(await page.locator('.ih-ai-code pre').count(), 1);

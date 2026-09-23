@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
@@ -138,6 +138,23 @@ try {
   assert.equal(structured.resolution, 'partial');
   assert.deepEqual(structured.sources.map((source) => source.path), ['/docs/sobre-o-sistema/atendimento']);
   assert.equal(structured.sources[0].kind, 'Ajuda');
+  assert.deepEqual(structured.sources[0].media, { kind: 'video', url: '/videos/atendimento.mp4', embedUrl: '/videos/atendimento.mp4' });
+  assert.equal(structured.sources[0].path, '/docs/sobre-o-sistema/atendimento', 'URL inventada não vira CTA');
+
+  const mediaDir = join(testRoot, 'content/docs/docs/teste');
+  await mkdir(mediaDir, { recursive: true });
+  await writeFile(join(mediaDir, 'claria-tango.mdx'), `---\ntitle: "Guia Claria Tango"\ndescription: "Guia de teste da mídia real."\n---\n<TutorialCard title="Fluxo" url="https://app.tango.us/app/workflow/Fluxo-586c4a6cabce4edd8032e657bf2979ae" embedUrl="https://app.tango.us/app/embed/586c4a6cabce4edd8032e657bf2979ae" />\n`);
+  await writeFile(join(mediaDir, 'claria-sem-midia.mdx'), `---\ntitle: "Guia Claria Sem Mídia"\ndescription: "Guia de teste sem vídeo."\n---\nResposta completa sem vídeo.\n`);
+  await writeFile(join(mediaDir, 'claria-url-insegura.mdx'), `---\ntitle: "Guia Claria URL Insegura"\ndescription: "Guia de teste da URL."\n---\n<VideoEmbed url="javascript:alert(1)" />\n`);
+  const mediaClient = (path) => ({ responses: { create: async () => ({ model: 'gpt-test', output_text: JSON.stringify({ answer: 'Consulte o guia.', sources: [path, 'https://evil.example/falso'], resolution: 'partial', found: true }) }) } });
+  const tangoReply = await answerQuestion(testRoot, 'Guia Claria Tango', { client: mediaClient('/docs/teste/claria-tango') });
+  assert.deepEqual(tangoReply.sources.map((source) => source.path), ['/docs/teste/claria-tango']);
+  assert.deepEqual(tangoReply.sources[0].media, { kind: 'tango', url: 'https://app.tango.us/app/workflow/Fluxo-586c4a6cabce4edd8032e657bf2979ae', embedUrl: 'https://app.tango.us/app/embed/586c4a6cabce4edd8032e657bf2979ae' });
+  assert.equal(tangoReply.resolution, 'partial');
+  const plainReply = await answerQuestion(testRoot, 'Guia Claria Sem Mídia', { client: mediaClient('/docs/teste/claria-sem-midia') });
+  assert.equal(plainReply.sources[0].media, undefined);
+  const unsafeReply = await answerQuestion(testRoot, 'Guia Claria URL Insegura', { client: mediaClient('/docs/teste/claria-url-insegura') });
+  assert.equal(unsafeReply.sources[0].media, undefined);
   const apiScoped = await retrieveContext(testRoot, 'mensagem', 6, { scope: 'API' });
   assert.ok(apiScoped.length && apiScoped.every((source) => source.path.startsWith('/api')));
 
