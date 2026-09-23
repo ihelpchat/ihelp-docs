@@ -286,7 +286,7 @@ try {
     await page.unroute('**/assistant');
   } else {
     await page.locator('.search-suggestions button').first().click();
-    assert.match(await page.locator('[data-search-input]').inputValue(), /transferir um atendimento/i);
+    assert.match(await page.locator('[data-search-input]').inputValue(), /reconectar meu WhatsApp/i);
     await page.keyboard.press('Escape');
   }
 
