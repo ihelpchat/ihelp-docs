@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
@@ -75,7 +75,8 @@ try {
   assert.match(existing.content[0].text, /Como transferir um atendimento/);
 
   const audit = await client.callTool({ name: 'docs_audit_content', arguments: {} });
-  assert.match(audit.content[0].text, /"total": 88/);
+  const articleCount = (await readdir(join(testRoot, 'content/docs'), { recursive: true })).filter((path) => path.endsWith('.mdx')).length;
+  assert.equal(JSON.parse(audit.content[0].text).total, articleCount);
   const faqPath = join(testRoot, 'content/docs/docs/principais-duvidas.mdx');
   const faqOriginal = await readFile(faqPath, 'utf8');
   await writeFile(faqPath, `${faqOriginal}\n[Link quebrado](/docs/pagina-inexistente)\n`);
