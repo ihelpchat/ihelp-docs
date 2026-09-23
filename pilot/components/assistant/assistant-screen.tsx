@@ -48,6 +48,7 @@ function SourcesPanel() {
                 <span className="ih-ai-panel-head"><span className="ih-pill" data-kind={source.kind}>{source.kind}</span><ExternalLink aria-hidden="true" /></span>
                 <strong>{source.title}</strong>
                 {source.excerpt ? <span>{source.excerpt.length > 150 ? `${source.excerpt.slice(0, 150).trim()}…` : source.excerpt}</span> : null}
+                <small>Abrir artigo</small>
               </Link>
             </li>
           ))}

@@ -120,6 +120,7 @@ try {
             code: null,
             sources: ['/docs/sobre-o-sistema/atendimento', '/docs/pagina-inventada'],
             suggestions: ['Como reabrir?'],
+            resolution: 'partial',
             found: true,
           }),
         };
@@ -133,6 +134,7 @@ try {
   });
   assert.deepEqual(structured.steps, ['Abra a conversa', 'Clique em Transferir']);
   assert.deepEqual(structured.sections, [{ title: 'Antes de começar', items: ['Confirme o departamento de destino'] }]);
+  assert.equal(structured.resolution, 'partial');
   assert.deepEqual(structured.sources.map((source) => source.path), ['/docs/sobre-o-sistema/atendimento']);
   assert.equal(structured.sources[0].kind, 'Ajuda');
   const apiScoped = await retrieveContext(testRoot, 'mensagem', 6, { scope: 'API' });

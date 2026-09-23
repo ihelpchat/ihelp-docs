@@ -4204,6 +4204,14 @@ button {
   line-height: 1.6;
 }
 
+.ih-ai-panel-list small {
+  display: inline-block;
+  margin-top: 9px;
+  color: var(--ih-coral-700);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .ih-ai-panel-support {
   margin-top: 20px;
   padding-top: 16px;
@@ -4494,6 +4502,84 @@ button {
   text-overflow: ellipsis;
 }
 
+.ih-ai-source-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ih-ai-source-copy small {
+  color: var(--ih-coral-700);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.ih-ai-sources a > svg {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  color: var(--ih-coral-600);
+}
+
+.ih-ai-support-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 13px 14px;
+  border: 1px solid var(--ih-coral-100);
+  border-radius: 10px;
+  background: var(--ih-coral-50);
+}
+
+.ih-ai-support-cta > div {
+  min-width: 0;
+}
+
+.ih-ai-support-cta strong,
+.ih-ai-support-cta span {
+  display: block;
+}
+
+.ih-ai-support-cta strong {
+  margin-bottom: 3px;
+  color: var(--ih-ink);
+  font-size: 12px;
+}
+
+.ih-ai-support-cta span {
+  color: var(--ih-slate-600);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ih-ai-support-cta > a {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  color: var(--ih-white);
+  font-size: 11px;
+  font-weight: 650;
+  border-radius: 8px;
+  background: var(--ih-coral-cta);
+}
+
+.ih-ai-support-cta > a:hover {
+  color: var(--ih-white);
+  background: var(--ih-coral-700);
+}
+
+.ih-ai-support-cta > a svg {
+  width: 14px;
+  height: 14px;
+}
+
 .ih-ai-actions {
   display: flex;
   align-items: center;
@@ -4754,7 +4840,7 @@ button {
 }
 
 .ih-ai-thread[data-compact] .ih-ai-source-title {
-  flex: 1;
+  white-space: normal;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-sources a > svg {
@@ -4762,6 +4848,20 @@ button {
   width: 12px;
   height: 12px;
   color: var(--ih-slate-500);
+}
+
+.ih-ai-thread[data-compact] .ih-ai-support-cta {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 11px;
+  border-radius: 8px;
+}
+
+.ih-ai-thread[data-compact] .ih-ai-support-cta > a {
+  justify-content: center;
+  width: 100%;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-actions {

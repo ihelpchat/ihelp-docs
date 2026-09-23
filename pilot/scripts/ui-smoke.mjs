@@ -57,6 +57,7 @@ const mockReply = {
   code: { language: 'bash', content: 'curl -H "Authorization: Bearer $IHELP_TOKEN" https://apiv3.ihelpchat.com/api/v2/customers/search' },
   sources: [{ title: 'Atendimento', path: '/docs/sobre-o-sistema/atendimento', excerpt: 'Iniciar, transferir, encerrar e reabrir atendimentos.' }],
   suggestions: ['Como reabrir um atendimento finalizado?'],
+  resolution: 'partial',
   found: true,
 };
 
@@ -109,6 +110,9 @@ async function testAssistant(context, errors) {
   await page.getByRole('button', { name: 'Tentar de novo' }).click();
   await page.locator('.ih-ai-steps li').first().waitFor();
   assert.equal(await page.locator('.ih-ai-sections section').count(), 1);
+  const supportCta = page.getByRole('link', { name: 'Falar com o atendimento' }).last();
+  assert.match(await supportCta.getAttribute('href'), /wa\.me\/551730422307\?text=/);
+  assert.ok(await page.getByText('Abrir artigo').count(), 'Fonte sem ação explícita para abrir o artigo');
   assert.equal(await page.locator('.ih-ai-error').count(), 0, 'Erro deveria sumir após tentar de novo');
   assert.equal(await page.locator('.ih-ai-steps li').count(), 3);
   assert.equal(await page.locator('.ih-ai-code pre').count(), 1);

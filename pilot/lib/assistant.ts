@@ -7,7 +7,7 @@
  *
  * Pedido  (POST JSON): { question, history?: {role, content}[], scope?, page?: { path, title } }
  * Resposta (JSON):     { answer, steps?, code?: { language, content } | null,
- *                        sources?: { title, path, kind?, excerpt? }[], suggestions?, found? }
+ *                        sources?: { title, path, kind?, excerpt? }[], suggestions?, resolution?, found? }
  */
 
 export const assistantEndpoint = process.env.NEXT_PUBLIC_ASSISTANT_URL?.trim() ?? '';
@@ -20,6 +20,7 @@ export type SourceKind = 'Ajuda' | 'FAQ' | 'API' | 'Tutorial' | 'Novidade';
 
 export type AssistantSource = { title: string; path: string; kind: SourceKind; excerpt?: string };
 export type AssistantSection = { title: string; items: string[] };
+export type AssistantResolution = 'complete' | 'partial' | 'not_found';
 
 export type AssistantReply = {
   answer: string;
@@ -28,6 +29,7 @@ export type AssistantReply = {
   code: { language: string; content: string } | null;
   sources: AssistantSource[];
   suggestions: string[];
+  resolution: AssistantResolution;
   found: boolean;
 };
 
@@ -65,6 +67,9 @@ export function normalizeReply(data: unknown): AssistantReply {
   if (!answer) throw new AssistantError('Resposta vazia do assistente.');
   const code = raw.code as { language?: unknown; content?: unknown } | null | undefined;
   const sources = Array.isArray(raw.sources) ? raw.sources : [];
+  const resolution = raw.resolution === 'partial' || raw.resolution === 'not_found' || raw.resolution === 'complete'
+    ? raw.resolution
+    : raw.found === false ? 'not_found' : 'complete';
   return {
     answer,
     sections: Array.isArray(raw.sections)
@@ -84,7 +89,8 @@ export function normalizeReply(data: unknown): AssistantReply {
       .slice(0, 4)
       .map((item) => ({ title: item.title, path: item.path, kind: kindOf(item.path), excerpt: typeof item.excerpt === 'string' ? item.excerpt : undefined })),
     suggestions: strings(raw.suggestions, 3),
-    found: raw.found !== false,
+    resolution,
+    found: resolution !== 'not_found' && raw.found !== false,
   };
 }
 

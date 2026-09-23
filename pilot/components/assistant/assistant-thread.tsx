@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { AlertCircle, ArrowRight, Check, ChevronRight, Copy, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { AlertCircle, ArrowRight, Check, ChevronRight, Copy, MessageCircle, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchContext } from 'fumadocs-ui/contexts/search';
 import { useAssistant, type ChatMessage } from '@/components/assistant/assistant-context';
 import { setPendingQuery } from '@/lib/search-query';
 import type { AssistantReply } from '@/lib/assistant';
+import { supportUrl } from '@/lib/links';
 
 function useCopy() {
   const [copied, setCopied] = useState<string | null>(null);
@@ -24,7 +25,8 @@ function useCopy() {
 }
 
 function plainText(reply: AssistantReply) {
-  return [reply.answer, ...reply.steps.map((step, index) => `${index + 1}. ${step}`), reply.code?.content ?? ''].filter(Boolean).join('\n\n');
+  const sections = reply.sections.flatMap((section) => [section.title, ...section.items.map((item) => `• ${item}`)]);
+  return [reply.answer, ...sections, ...reply.steps.map((step, index) => `${index + 1}. ${step}`), reply.code?.content ?? ''].filter(Boolean).join('\n\n');
 }
 
 function Avatar() {
@@ -37,13 +39,16 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
   const { reply } = message;
   const rating = feedback[message.id];
   const paragraphs = reply.answer.split(/\n{2,}/).map((text) => text.trim()).filter(Boolean);
+  const needsSupport = reply.resolution !== 'complete';
+  const supportMessage = `Olá! Consultei a Central de Ajuda do iHelp e preciso de atendimento para: ${message.question}`;
 
   return (
     <div className="ih-ai-row">
       {compact ? null : <Avatar />}
       <div className="ih-ai-body">
         {compact ? null : <p className="ih-ai-name">Assistente iHelp</p>}
-        {reply.found ? null : <p className="ih-ai-flag">Não encontrei isso na documentação</p>}
+        {reply.resolution === 'partial' ? <p className="ih-ai-flag">Parte da resposta exige atendimento</p> : null}
+        {reply.resolution === 'not_found' ? <p className="ih-ai-flag">Procedimento não documentado</p> : null}
         <div className="ih-ai-text">
           {paragraphs.map((text, index) => <p key={index}>{text}</p>)}
         </div>
@@ -82,12 +87,27 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
                 <li key={source.path}>
                   <Link href={source.path} onClick={compact ? closeDrawer : undefined}>
                     <span className="ih-pill" data-kind={source.kind}>{source.kind}</span>
-                    <span className="ih-ai-source-title">{source.title}</span>
-                    {compact ? <ChevronRight aria-hidden="true" /> : null}
+                    <span className="ih-ai-source-copy">
+                      <span className="ih-ai-source-title">{source.title}</span>
+                      <small>Abrir artigo</small>
+                    </span>
+                    <ChevronRight aria-hidden="true" />
                   </Link>
                 </li>
               ))}
             </ul>
+          </div>
+        ) : null}
+        {needsSupport ? (
+          <div className="ih-ai-support-cta">
+            <div>
+              <strong>Precisa concluir este procedimento?</strong>
+              <span>Nosso time de atendimento continua com você pelo WhatsApp.</span>
+            </div>
+            <a href={`${supportUrl}?text=${encodeURIComponent(supportMessage)}`} target="_blank" rel="noreferrer noopener">
+              <MessageCircle aria-hidden="true" />
+              Falar com o atendimento
+            </a>
           </div>
         ) : null}
         <div className="ih-ai-actions">
