@@ -7,6 +7,7 @@ import { useSearchContext } from 'fumadocs-ui/contexts/search';
 import { useAssistant } from '@/components/assistant/assistant-context';
 import { AssistantComposer } from '@/components/assistant/assistant-composer';
 import { AssistantThread } from '@/components/assistant/assistant-thread';
+import { TechnologyMark } from '@/components/site/technology-mark';
 
 const sectionLabel: Record<string, string> = {
   docs: 'Central de ajuda',
@@ -132,7 +133,10 @@ export function AssistantDrawer() {
       </div>
       <div className="ih-ai-drawer-foot">
         <AssistantComposer compact autoFocus placeholder="Pergunte sobre esta página ou qualquer outra coisa" page={ref} />
-        <p>Gerado por IA a partir da documentação. Confira as fontes. · Uma tecnologia iHelp</p>
+        <div className="ih-ai-drawer-meta">
+          <p>Gerado por IA a partir da documentação. Confira as fontes.</p>
+          <TechnologyMark compact />
+        </div>
       </div>
     </div>
   );

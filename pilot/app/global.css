@@ -3538,8 +3538,55 @@ button {
   gap: 20px;
 }
 
+.design-footer-brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
 .design-footer a {
   color: var(--ih-slate-500);
+}
+
+.ih-tech-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 3px 9px 3px 5px;
+  color: var(--ih-slate-500);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid var(--ih-slate-200);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 72%);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 5%);
+}
+
+.ih-tech-mark img {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  filter: drop-shadow(0 1px 1px rgb(235 95 62 / 18%));
+}
+
+.ih-tech-mark strong {
+  color: var(--ih-ink);
+  font-weight: 650;
+}
+
+.ih-tech-mark[data-compact] {
+  min-height: 22px;
+  padding: 2px 7px 2px 3px;
+  font-size: 9px;
+}
+
+.ih-tech-mark[data-compact] img {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
 }
 
 /* ---------- Assistente de IA ---------- */
@@ -3808,8 +3855,16 @@ button {
   border-top: 1px solid var(--ih-slate-200);
 }
 
-.ih-ai-drawer-foot > p {
-  margin: 6px 0 0;
+.ih-ai-drawer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.ih-ai-drawer-meta > p {
+  margin: 0;
   color: var(--ih-slate-500);
   font-size: 10px;
 }
@@ -4060,6 +4115,12 @@ button {
 
 .ih-ai-hint kbd {
   font-family: var(--ih-mono);
+}
+
+.ih-ai-hint-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 /* Painel de fontes (tela cheia, telas largas) */

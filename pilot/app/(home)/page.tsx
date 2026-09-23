@@ -5,6 +5,7 @@ import { getNews } from '@/lib/news';
 import { getSiteCounts } from '@/lib/site';
 import { supportPhone, supportUrl } from '@/lib/links';
 import { withBasePath } from '@/lib/shared';
+import { TechnologyMark } from '@/components/site/technology-mark';
 
 const startHere = [
   ['01', 'Reconectar WhatsApp', 'Canal desconectado e leitura do QR Code', '/docs/sobre-o-sistema/configuracoes/canais'],
@@ -102,7 +103,10 @@ export default function HomePage() {
         </section>
 
         <footer className="design-footer">
-          <span>© 2026 iHelp · Documentação · Uma tecnologia iHelp</span>
+          <div className="design-footer-brand">
+            <span>© 2026 iHelp · Documentação</span>
+            <TechnologyMark />
+          </div>
           <nav aria-label="Rodapé">
             <a href="https://ihelpchat.com.br">Site</a>
             <Link href="/blog">Novidades</Link>
