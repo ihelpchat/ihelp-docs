@@ -61,4 +61,18 @@ assert.deepEqual(beginnerReply.steps[0], {
   },
 });
 
+const modelWithAction = (actionId, path) => ({ responses: { create: async () => ({
+  model: 'gpt-test', output_text: JSON.stringify({ answer: 'Abra Contatos.', sections: [], steps: [{ text: 'Abra Contatos.', actionId }], code: null, sources: [path], suggestions: [], resolution: 'complete', found: true }),
+}) } });
+const invented = await answerQuestion(testRoot, 'importar contatos', { client: modelWithAction('acao-inventada', '/docs/teste/importar-contatos') });
+assert.equal(invented.steps[0].action, undefined, 'actionId inventado não pode usar a primeira ação da fonte');
+
+for (const [slug, route, target] of [['rota-divergente', '/reports', 'contacts-more-options'], ['alvo-divergente', '/contact', 'wrong-target']]) {
+  await writeFile(join(actionDir, `${slug}.mdx`), `---\ntitle: "${slug}"\ndescription: "Guia para verificar ação de produto com ${slug}."\nsource: produto\ncontentType: tutorial\n---\n\nAbra Contatos para ${slug.replace('-', ' ')}.\n\n<ProductAction id="importar-contatos" label="Abrir Contatos" route="${route}" target="${target}" />\n`);
+  const reply = await answerQuestion(testRoot, slug.replace('-', ' '), { client: modelWithAction('importar-contatos', `/docs/teste/${slug}`) });
+  assert.equal(reply.steps[0].action, undefined, `${slug} não pode virar ação`);
+}
+const actionComponent = await readFile(join(projectRoot, 'components/product-action.tsx'), 'utf8');
+assert.doesNotMatch(actionComponent, /exatamente na tela deste passo/i, 'CTA ainda promete abertura exata antes da integração no app');
+
 console.log("Claricia para iniciantes passou.");
