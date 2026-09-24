@@ -95,8 +95,14 @@ assert.match(guidedRequests[0].input.at(-1).content, /PASSOS DOCUMENTADOS:/);
 assert.match(guidedRequests[0].input.at(-1).content, /TELAS DOCUMENTADAS:/);
 assert.match(guidedRequests[0].input.at(-1).content, /MÍDIA DISPONÍVEL: vídeo/i);
 assert.match(guidedRequests[0].input[0].content, /visão geral conversacional/i, 'pedido amplo deve iniciar com visão geral, sem despejar o manual');
-assert.equal(guidedReply.steps.length, 0, 'primeira resposta ampla deve convidar a pessoa para o guia, sem despejar todos os passos');
-assert.ok(guidedReply.suggestions.some((suggestion) => /passo a passo/i.test(suggestion)), 'resposta procedural deve convidar continuação guiada');
+assert.equal(guidedReply.steps.length, 1, 'primeira resposta ampla deve mostrar somente a ação para começar');
+assert.equal(guidedReply.steps[0].action?.route, '/bot', 'primeira ação deve levar diretamente à tela correta');
+assert.equal(guidedReply.steps[0].action?.target, 'robots-create', 'ação deve carregar o alvo do tour no app');
+assert.deepEqual(
+  guidedReply.suggestions.slice(0, 2),
+  ['Pode me guiar etapa por etapa', 'Quero ver todos os passos'],
+  'resposta ampla deve sempre oferecer guia progressivo ou procedimento completo',
+);
 
 const continuedReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
   client: guidedClient,
@@ -107,9 +113,18 @@ const continuedReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
 });
 assert.match(guidedRequests[1].input.at(-1).content, /FONTE 1: Robô de Atendimento/, 'continuação curta deve recuperar a fonte usada na conversa');
 assert.equal(continuedReply.steps.length, 1, 'continuação guiada deve entregar uma etapa pequena por vez');
-assert.ok(continuedReply.suggestions.some((suggestion) => /concluí|encontrei/i.test(suggestion)), 'continuação guiada deve perguntar pelo resultado do passo');
+assert.deepEqual(
+  continuedReply.suggestions,
+  ['Encontrei o botão', 'Não encontrei esse botão'],
+  'continuação guiada deve oferecer confirmações simples para um iniciante',
+);
+assert.doesNotMatch(
+  continuedReply.answer,
+  /Na lista de Robôs, clique em “Criar novo Robô”/i,
+  'a introdução não deve repetir a instrução exibida no passo',
+);
 
-const fullGuideReply = await answerQuestion(testRoot, 'mostre todos os passos para criar um chatbot', { client: guidedClient });
+const fullGuideReply = await answerQuestion(testRoot, 'mostre todos os passos para criar um robô', { client: guidedClient });
 assert.match(guidedRequests[2].input[0].content, /passo a passo completo/i, 'pedido explícito deve ativar o modo detalhado');
 assert.ok(fullGuideReply.steps.length >= 5, 'modo detalhado deve recuperar o procedimento documentado completo');
 assert.ok(fullGuideReply.steps.some((step) => step.image), 'modo detalhado deve incluir telas documentadas relevantes');
@@ -129,7 +144,7 @@ const screenshotClient = {
     }),
   },
 };
-const screenshotReply = await answerQuestion(testRoot, 'como criar um robô', { client: screenshotClient });
+const screenshotReply = await answerQuestion(testRoot, 'mostre todos os passos para criar um robô', { client: screenshotClient });
 assert.equal(screenshotReply.steps[0].image?.src, '/img/help/q4tBz2R7cevwT94eUQKB.png');
 assert.equal(screenshotReply.steps[1].image, undefined, 'imagem que não pertence à fonte não pode chegar à interface');
 
@@ -149,7 +164,7 @@ const omittedScreenshotClient = {
     }),
   },
 };
-const omittedScreenshotReply = await answerQuestion(testRoot, 'como criar um chatbot?', { client: omittedScreenshotClient });
+const omittedScreenshotReply = await answerQuestion(testRoot, 'mostre todos os passos para criar um robô', { client: omittedScreenshotClient });
 const robotArticle = await readFile(join(testRoot, 'content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx'), 'utf8');
 assert.match(robotArticle, /Encaminhar atendimento/i, 'guia básico precisa ensinar um destino funcional para o fluxo');
 assert.match(robotArticle, /Salvar[\s\S]{0,240}Publicar/i, 'guia precisa explicar a diferença entre salvar e publicar');
