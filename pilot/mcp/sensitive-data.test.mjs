@@ -48,14 +48,21 @@ const cases = [
   ['JWT strong key', 'JWT_SECRET_KEY="administradores"'],
   ['private strong key', 'private_key="administradores"'],
   ['DB strong pass', 'DB_PASS="administradores"'],
+  ['privateKey camel', 'privateKey="administradores"'],
+  ['awsSecretAccessKey camel', 'awsSecretAccessKey="administradores"'],
+  ['jwtSecretKey camel', 'jwtSecretKey="administradores"'],
+  ['dbPass camel', 'dbPass="administradores"'],
+  ['secretKey camel', 'secretKey="administradores"'],
+  ['private key mixed case', 'PrIvAtE_KeY="administradores"'],
+  ['GitHub token uppercase value', 'GITHUB_TOKEN=ABCDEFGHIJKLMNOPQRSTUVWX'],
 ];
 
 for (const [name, value] of cases) {
   assert.equal(containsSensitiveData(value), true, `${name} precisa ser detectado`);
   assert.equal(redactSensitiveData(value).includes(value), false, `${name} precisa ser redigido`);
-  if (/OPENAI_API_KEY|GITHUB_TOKEN|access_token|client_secret|prefixo|GitHub gh[osru]_|Google AIza alfabética|AWS|JWT|private|DB|credentials/.test(name)) assert.equal(sensitiveKinds(value).credential, true, `${name} deve ser credencial independentemente de telefone`);
+  if (/OPENAI_API_KEY|GITHUB_TOKEN|access_token|client_secret|prefixo|GitHub gh[osru]_|Google AIza alfabética|AWS|JWT|private|DB|credentials|camel|mixed case|uppercase value/.test(name)) assert.equal(sensitiveKinds(value).credential, true, `${name} deve ser credencial independentemente de telefone`);
 }
-for (const value of ['docs/contatos/antigo', 'Abra a opção A', 'ID de teste 12', 'token de acesso', 'senha do usuário', 'apiKey inválida', 'token=$IHELP_TOKEN', 'tokenizer="abcdefghijklmno"', 'password_hint="abcdefghijklmno"', 'access_token_count=25', 'dono do token: administradores veem todos os funis', 'token: administradores', 'secret: usuários', 'password: administradores', 'credentials: administradores', 'private_key_description="texto explicativo"', 'monkey="alphaBetaGammaDeltaEpsilon"']) {
+for (const value of ['docs/contatos/antigo', 'Abra a opção A', 'ID de teste 12', 'token de acesso', 'senha do usuário', 'apiKey inválida', 'token=$IHELP_TOKEN', 'token=${TOKEN}', 'tokenizer="abcdefghijklmno"', 'password_hint="abcdefghijklmno"', 'access_token_count=25', 'dono do token: administradores veem todos os funis', 'token: administradores', 'secret: usuários', 'password: administradores', 'credentials: administradores', 'private_key_description="texto explicativo"', 'monkey="alphaBetaGammaDeltaEpsilon"']) {
   assert.equal(containsSensitiveData(value), false, `${value} não deve ser redigido`);
   assert.equal(redactSensitiveData(value), value);
 }
