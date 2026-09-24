@@ -23,6 +23,10 @@ const articleSchema = z.object({
   body: z.string().describe('Conteúdo Markdown sem frontmatter'),
   tangoUrl: z.string().url().optional(),
   productActions: z.array(productActionSchema).max(12).optional(),
+  assistantQuestion: z.string().optional().describe('Pergunta canônica que a Claricia deve reconhecer'),
+  assistantOverview: z.string().optional().describe('Visão inicial curta para quem acabou de entrar no produto'),
+  assistantInitialSteps: z.number().int().optional().describe('Quantidade de passos concretos iniciais no body, entre 1 e 3'),
+  assistantSuggestions: z.array(z.string()).optional().describe('De 1 a 3 próximas perguntas ou ações distintas'),
 });
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;

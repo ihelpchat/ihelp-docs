@@ -3,6 +3,7 @@ import { constants } from 'node:fs';
 import { basename, join, normalize, relative } from 'node:path';
 import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 import { isCatalogAction } from './product-actions.mjs';
+import { conversationalIssues } from './conversational-contract.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -29,7 +30,7 @@ function escapeYaml(value) {
 }
 
 function publicArticleText(article) {
-  const fields = [article.path, article.title, article.description, article.source, article.contentType, article.body, article.tangoUrl];
+  const fields = [article.path, article.title, article.description, article.source, article.contentType, article.body, article.tangoUrl, article.assistantQuestion, article.assistantOverview, ...(Array.isArray(article.assistantSuggestions) ? article.assistantSuggestions : [])];
   for (const action of Array.isArray(article.productActions) ? article.productActions : []) {
     fields.push(action?.id, action?.label, action?.route, action?.target);
   }
@@ -87,6 +88,7 @@ export function validateArticle(article) {
     if (!isCatalogAction(action)) issues.push('productActions deve corresponder exatamente ao catálogo confiável');
   }
   if ((article.productActions?.length ?? 0) > 12) issues.push('productActions aceita no máximo 12 ações');
+  issues.push(...conversationalIssues(article));
   return { valid: issues.length === 0, issues };
 }
 
@@ -105,7 +107,8 @@ export function renderArticle(article) {
     `<ProductAction id=${escapeYaml(action.id)} label=${escapeYaml(action.label)} route=${escapeYaml(action.route)}${action.target ? ` target=${escapeYaml(action.target)}` : ''} />`
   ).join('\n');
   const actionBlock = actions ? `\n\n${actions}` : '';
-  return `---\ntitle: ${escapeYaml(article.title)}\ndescription: ${escapeYaml(article.description)}\nsource: ${article.source}\ncontentType: ${article.contentType}\n---\n\n${article.body.trim()}${actionBlock}${tutorial}\n`;
+  const conversation = article.assistantQuestion ? `assistantQuestion: ${escapeYaml(article.assistantQuestion)}\nassistantOverview: ${escapeYaml(article.assistantOverview)}\nassistantInitialSteps: ${article.assistantInitialSteps}\nassistantSuggestions: ${escapeYaml(article.assistantSuggestions.join(' | '))}\n` : '';
+  return `---\ntitle: ${escapeYaml(article.title)}\ndescription: ${escapeYaml(article.description)}\nsource: ${article.source}\ncontentType: ${article.contentType}\n${conversation}---\n\n${article.body.trim()}${actionBlock}${tutorial}\n`;
 }
 
 async function walk(root) {

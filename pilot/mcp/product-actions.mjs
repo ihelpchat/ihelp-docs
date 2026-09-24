@@ -5,6 +5,10 @@ export function catalogAction(id) {
   return action ? { id, label: action.label, route: action.route, target: action.target } : undefined;
 }
 
+export function catalogActions() {
+  return Object.keys(allowedActions).map(catalogAction);
+}
+
 export function isCatalogAction(action) {
   const trusted = action && catalogAction(action.id);
   return Boolean(trusted && action.label === trusted.label && action.route === trusted.route && action.target === trusted.target);
