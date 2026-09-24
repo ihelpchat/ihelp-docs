@@ -58,6 +58,7 @@ const resumeHistory = [...diagnosing, { role: 'user', content: 'sim' },
 const resume = await ask('sim', resumeHistory);
 assert.deepEqual(resume.steps, [], 'confirmação da etapa ainda não escolhe automação');
 assert.equal(resume.answer, undecided.answer, 'diagnóstico resolvido reabre o prompt explícito');
+assert.deepEqual(resume.suggestions, ['Quero automação', 'Sem automação']);
 const promptedAgain = [...resumeHistory, { role: 'user', content: 'sim' },
   { role: 'assistant', content: `${resume.answer}\nFonte usada: ${path}` }];
 assert.deepEqual((await ask('sim', promptedAgain)).steps.map(({ text }) => text), [all.steps[8].text]);
@@ -85,6 +86,11 @@ for (const [question, slug] of [
   const no = await ask('não quero automação', history);
   assert.notEqual(no.sources[0]?.path, path, `intenção preservada: ${slug}`);
   assert.notDeepEqual(no.steps.map(({ text }) => text), [all.steps[15].text], `sem salto: ${slug}`);
+  const otherDiagnosis = await ask('não encontrei', history);
+  const afterDiagnosis = await ask('sim', [...history, { role: 'user', content: 'não encontrei' },
+    { role: 'assistant', content: `${otherDiagnosis.answer}\nFonte usada: ${otherPath}` }]);
+  assert.notEqual(afterDiagnosis.sources[0]?.path, path, `diagnóstico mantém intenção: ${slug}`);
+  assert.notDeepEqual(afterDiagnosis.steps.map(({ text }) => text), [all.steps[8].text], `sem ramo CRM: ${slug}`);
 }
 
 console.log('CRM: ramo opcional e isolamento de intenções.');
