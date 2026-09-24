@@ -29,13 +29,17 @@ const leakedAliases = [
   'SECRET_KEY_BASE=abcdef0123456789abcdef0123456789',
   'PWD="Sup3rS3cret!"',
   'AdminPassWd="Sup3rS3cret!"',
+  'DB_PASSWORD2="Sup3rS3cret!"',
+  'API_KEY2="Adm!n2024#x"',
+  'TOKEN2="Sup3rS3cret!"',
+  'MYSQL_PWD1="Adm!n2024#x"',
 ];
 for (const leaked of leakedAliases) {
   const unsafe = { ...realArticle, body: `${realArticle.body}\n\n${leaked}` };
   assert.ok(validateArticle(unsafe).issues.some((issue) => /credencial/i.test(issue)), `${leaked.split('=')[0]} deve falhar validateArticle`);
   await assert.rejects(submitContentPackage(root, [unsafe], 'dry_run', 'user:tester'), /credencial/i);
 }
-const descriptiveArticle = { ...realArticle, body: `${realArticle.body}\n\nadmin_password_hint="Sup3rS3cret!"\nsecret_name="Sup3rS3cret!"` };
+const descriptiveArticle = { ...realArticle, body: `${realArticle.body}\n\nadmin_password_hint="Sup3rS3cret!"\nsecret_name="Sup3rS3cret!"\nversion2="Sup3rS3cret!"\nstep2="Sup3rS3cret!"\ntoken_count2="Sup3rS3cret!"\npassword_hint2="Sup3rS3cret!"\nprivate_key_description2="Sup3rS3cret!"` };
 assert.equal(validateArticle(descriptiveArticle).valid, true, 'campos descritivos não podem ser tratados como credenciais');
 assert.equal((await submitContentPackage(await mkdtemp(join(tmpdir(), 'ihelp-descriptive-')), [descriptiveArticle], 'dry_run', 'user:tester')).status, 'dry_run');
 assert.equal(validateArticle({ ...article('docs/teste/rota', 'Rota segura'), productActions: [{ id: 'abrir-rota', label: 'Abrir rota', route: '//externo' }] }).valid, false);
