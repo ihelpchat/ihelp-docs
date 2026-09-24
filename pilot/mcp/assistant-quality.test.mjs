@@ -144,6 +144,14 @@ const afterFirstReply = await answerQuestion(testRoot, 'Concluí este passo', {
 });
 assert.match(afterFirstReply.steps[0].text, /Título do Robô/i, 'confirmação no guia avança uma ação');
 assert.deepEqual(afterFirstReply.suggestions, guideSuggestions);
+const fieldHelp = await answerQuestion(testRoot, 'Preciso de ajuda', {
+  client: guidedClient,
+  history: [guidedHistory[0], { role: 'assistant', content: `1. ${afterFirstReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
+});
+assert.equal(fieldHelp.steps[0].text, afterFirstReply.steps[0].text, 'ajuda com campo não avança');
+assert.equal(fieldHelp.steps[0].action, undefined, 'campo sem CTA não deve herdar atalho');
+assert.deepEqual(fieldHelp.steps[0].image, afterFirstReply.steps[0].image, 'ajuda mantém o screenshot contextual do campo');
+assert.doesNotMatch(fieldHelp.answer, /atalho/i, 'ajuda sem CTA não promete atalho');
 const stuckReply = await answerQuestion(testRoot, 'Preciso de ajuda', {
   client: guidedClient,
   history: [guidedHistory[0], { role: 'assistant', content: `1. ${restartedReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
@@ -173,6 +181,12 @@ assert.equal(finalHelp.steps[0].text, currentGuideReply.steps[0].text);
 assert.deepEqual(finalHelp.steps[0].image, currentGuideReply.steps[0].image);
 assert.equal(finalHelp.steps[0].action, undefined, 'ajuda no passo final não deve prometer atalho de criação');
 assert.doesNotMatch(finalHelp.answer, /atalho/i, 'sem CTA não deve prometer atalho');
+const finishedReply = await answerQuestion(testRoot, 'Concluí este passo', {
+  client: guidedClient,
+  history: [guidedHistory[0], { role: 'assistant', content: `1. ${currentGuideReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
+});
+assert.deepEqual(finishedReply.steps, [], 'após Salvar/Publicar o guia não reinicia no primeiro passo');
+assert.doesNotMatch(JSON.stringify(finishedReply), /Testar robô|status Ativo/i);
 
 const continuedReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
   client: guidedClient,

@@ -53,6 +53,21 @@ function screenshotsOf(raw) {
     .filter((image, index, list) => list.findIndex((item) => item.src === image.src) === index);
 }
 
+function documentedStepImagesOf(raw, screenshots) {
+  const allowed = new Set(screenshots.map(({ src }) => src));
+  const images = [];
+  let stepIndex = -1;
+  for (const line of raw.split('\n')) {
+    const numbered = line.match(/^\s*(\d+)\.\s+/);
+    if (numbered) stepIndex = Number(numbered[1]) - 1;
+    const image = line.match(/!\[[^\]]*\]\((\/img\/[A-Za-z0-9._/-]+\.(?:png|jpe?g|webp|gif))\)/i)?.[1];
+    if (stepIndex >= 0 && stepIndex < 12 && image && allowed.has(image) && !images[stepIndex]) {
+      images[stepIndex] = image;
+    }
+  }
+  return images;
+}
+
 function relevantScreenshotMap(steps, screenshots) {
   const termsOf = (value) => new Set(
     normalize(value).split(/[^a-z0-9]+/)
@@ -171,6 +186,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       + (onPage ? 100 : 0)
       // Continuações curtas como “sim, pode me guiar” mantêm a fonte da conversa.
       + (fromConversation ? 80 : 0);
+    const screenshots = screenshotsOf(raw);
     ranked.push({
       title,
       description,
@@ -181,7 +197,8 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       assistantSuggestions: [...new Set(frontmatterValue(raw, 'assistantSuggestions').split('|')
         .map(cleanText).filter((item) => item.length > 0 && item.length <= 100))].slice(0, 3),
       media: mediaOf(raw),
-      screenshots: screenshotsOf(raw),
+      screenshots,
+      stepImages: documentedStepImagesOf(raw, screenshots),
       documentedSteps: documentedStepsOf(raw),
       productActions: productActionsOf(raw),
       score,
@@ -348,7 +365,7 @@ function proceduralQuestion(question) {
 
 function guidedContinuation(question, history) {
   const value = normalize(question).replace(/[^a-z0-9]+/g, ' ').trim();
-  return history.length > 0 && /^(?:sim(?: (?:pode )?me (?:guiar|ajudar))?|vamos(?: continuar)?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?|continue|continuar|comece|comecar|proximo(?: passo)?|(?:(?:ainda )?nao )?encontrei(?: .*)?|conclui(?: .*)?|preenchi(?: .*)?|terminei|pronto|feito)$/.test(value);
+  return history.length > 0 && /^(?:sim(?: (?:pode )?me (?:guiar|ajudar))?|vamos(?: continuar)?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?|continue|continuar|comece|comecar|proximo(?: passo)?|(?:(?:ainda )?nao )?encontrei(?: .*)?|conclui(?: (?:este )?passo)?|preciso de ajuda|preenchi(?: .*)?|terminei|pronto|feito)$/.test(value);
 }
 
 function guidedStepIndex(history, documentedSteps, firstShown = false) {
@@ -455,16 +472,19 @@ export async function answerQuestion(root, question, options = {}) {
   const initialStepCount = overviewSource?.assistantInitialSteps ?? 1;
   const intent = normalize(question).replace(/[^a-z0-9]+/g, ' ').trim();
   const stuck = /^(?:ainda )?nao encontrei\b/.test(intent);
+  const needsHelp = intent === 'preciso de ajuda' || stuck;
+  const completedStep = intent === 'conclui este passo';
   const foundButton = /^encontrei (?:o |esse )?botao\b/.test(intent);
   const startGuide = /^(?:sim(?: (?:pode )?me (?:guiar|ajudar))?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?)$/.test(intent);
   const progressIndex = continuation && fallbackSource
-    ? guidedStepIndex(history, fallbackSource.documentedSteps, stuck || foundButton || startGuide)
+    ? guidedStepIndex(history, fallbackSource.documentedSteps, needsHelp || foundButton || startGuide)
     : -1;
-  const nextIndex = startGuide ? progressIndex : stuck ? progressIndex : progressIndex + 1;
+  const nextIndex = startGuide || needsHelp ? progressIndex : progressIndex + 1;
+  const guideFinished = continuation && completedStep && progressIndex === fallbackSource?.documentedSteps.length - 1;
   const progressStep = continuation && progressIndex >= 0 && nextIndex < fallbackSource.documentedSteps.length
-    ? { text: fallbackSource.documentedSteps[nextIndex], actionId: nextIndex === 0 ? fallbackSource.productActions[0]?.id ?? null : null, imagePath: null }
+    ? { text: fallbackSource.documentedSteps[nextIndex], actionId: nextIndex === 0 ? fallbackSource.productActions[0]?.id ?? null : null, imagePath: fallbackSource.stepImages[nextIndex] ?? null }
     : null;
-  const documentedFallback = procedure && !parsed.steps.length
+  const documentedFallback = (procedure || continuation) && !parsed.steps.length
     ? (fallbackSource?.documentedSteps ?? []).slice(0, continuation ? 1 : overviewProcedure ? initialStepCount : 12).map((text, index) => ({
         text,
         actionId: overviewProcedure && index === 0 ? fallbackSource?.productActions[0]?.id ?? null : null,
@@ -479,14 +499,18 @@ export async function answerQuestion(root, question, options = {}) {
           imagePath: null,
         }))
       : (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
-    : progressStep ? [progressStep] : parsed.steps.length ? parsed.steps : documentedFallback;
+    : guideFinished ? [] : progressStep ? [progressStep] : parsed.steps.length ? parsed.steps : documentedFallback;
   const modelUsedValidatedImage = responseSteps.some(({ imagePath }) => availableImages.has(imagePath));
-  const shouldFallbackImages = procedure && !overviewProcedure && !modelUsedValidatedImage;
+  const shouldFallbackImages = (procedure || continuation) && !overviewProcedure && !modelUsedValidatedImage;
   const fallbackImages = shouldFallbackImages
     ? relevantScreenshotMap(responseSteps, fallbackSource?.screenshots ?? [])
     : new Map();
-  const suggestions = continuation
-    ? ['Encontrei o botão', 'Não encontrei esse botão']
+  const helpImage = progressStep && (availableImages.has(progressStep.imagePath) || fallbackImages.has(0));
+  const helpAction = progressStep && availableActions.has(progressStep.actionId);
+  const suggestions = guideFinished
+    ? []
+    : continuation
+    ? ['Concluí este passo', 'Preciso de ajuda']
     : overviewProcedure
       ? [...new Set(['Pode me guiar etapa por etapa', 'Quero ver todos os passos', ...(used[0]?.assistantSuggestions ?? [])])].slice(0, 3)
       : parsed.suggestions.length
@@ -498,10 +522,13 @@ export async function answerQuestion(root, question, options = {}) {
   return {
     answer: withoutRepeatedInstructions(overviewSource
       ? overviewSource.assistantOverview
-      : progressStep ? stuck ? 'Vamos localizar este botão juntos. Use o atalho abaixo quando disponível.' : 'Vamos para a próxima ação.'
+      : guideFinished ? 'Você chegou ao fim das etapas documentadas.'
+      : progressStep ? needsHelp
+        ? ['Vamos resolver esta etapa.', helpImage ? 'Veja a imagem do passo abaixo.' : 'Confira o passo abaixo.', helpAction ? 'Use o atalho para abrir a tela.' : '', 'Se sua tela estiver diferente, diga o que apareceu.'].filter(Boolean).join(' ')
+        : 'Vamos para a próxima ação.'
       : parsed.answer, responseSteps)
       || (continuation ? 'Vamos por uma ação de cada vez.' : 'Siga os passos abaixo e me diga onde precisar de ajuda.'),
-    sections: overviewSource || progressStep ? [] : parsed.sections,
+    sections: overviewSource || progressStep || guideFinished ? [] : parsed.sections,
     steps: responseSteps.map(({ text, actionId, imagePath }, index) => {
       const safeImagePath = modelUsedValidatedImage
         ? imagePath
