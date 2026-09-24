@@ -441,14 +441,14 @@ export async function answerQuestion(root, question, options = {}) {
     ? (fallbackSource?.documentedSteps ?? []).slice(0, continuation || overviewProcedure ? 1 : 12).map((text, index) => ({
         text,
         actionId: overviewProcedure && index === 0 ? fallbackSource?.productActions[0]?.id ?? null : null,
-        imagePath: fallbackSource?.screenshots[index]?.src ?? null,
+        imagePath: null,
       }))
     : [];
   const responseSteps = overviewProcedure
     ? (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
     : parsed.steps.length ? parsed.steps : documentedFallback;
   const modelUsedValidatedImage = responseSteps.some(({ imagePath }) => availableImages.has(imagePath));
-  const shouldFallbackImages = procedure && !modelUsedValidatedImage;
+  const shouldFallbackImages = procedure && !overviewProcedure && !modelUsedValidatedImage;
   const fallbackImages = shouldFallbackImages
     ? relevantScreenshotMap(responseSteps, fallbackSource?.screenshots ?? [])
     : new Map();

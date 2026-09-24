@@ -18,7 +18,7 @@ export function ProductAction({ id, route, target }: ProductActionProps) {
     <a className="ih-product-action" href={href} target="_blank" rel="noreferrer noopener">
       <span>
         <strong>{label}</strong>
-        <small>Abre {destination} no iHelp e destaca onde começar.</small>
+        <small>Abre {destination} no iHelp.</small>
       </span>
       <ArrowUpRight aria-hidden="true" />
     </a>
