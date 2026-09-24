@@ -350,11 +350,17 @@ async function createPackagePullRequest(items, deletes, actor, beforePull) {
   const body = `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`;
   rejectSensitive(`${title}\n${body}`);
   const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(base)}`);
+  const contentFile = (path) => `pilot/content/docs/${path}.mdx`;
+  const fileAt = (path, revision) => `/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(revision)}`;
+  const previousByPath = new Map();
+  for (const path of [...items.map(({ article }) => article.path), ...deletes]) {
+    const previous = await githubRequest(fileAt(contentFile(path), ref.object.sha), {}, true);
+    if (deletes.includes(path) && !previous) throw new SubmitArticleError('ARTICLE_NOT_FOUND', `Artigo não encontrado: ${path}`);
+    previousByPath.set(path, previous);
+  }
   const branch = `docs/ia-pacote-${Date.now()}`;
   await githubRequest(`/repos/${owner}/${repo}/git/refs`, { method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: ref.object.sha }) });
   const affectedDirectories = new Map();
-  const contentFile = (path) => `pilot/content/docs/${path}.mdx`;
-  const fileAt = (path) => `/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`;
   const remember = (path, operation) => {
     const parts = path.split('/');
     for (let depth = parts.length - 1; depth >= 1; depth -= 1) {
@@ -366,7 +372,7 @@ async function createPackagePullRequest(items, deletes, actor, beforePull) {
   };
   for (const { article, rendered } of items) {
     const filePath = contentFile(article.path);
-    const previous = await githubRequest(fileAt(filePath), {}, true);
+    const previous = previousByPath.get(article.path);
     await githubRequest(`/repos/${owner}/${repo}/contents/${filePath}`, {
       method: 'PUT',
       body: JSON.stringify({ message: `docs: atualiza ${article.title}`, content: Buffer.from(rendered).toString('base64'), branch, ...(previous ? { sha: previous.sha } : {}) }),
@@ -375,8 +381,7 @@ async function createPackagePullRequest(items, deletes, actor, beforePull) {
   }
   for (const path of deletes) {
     const filePath = contentFile(path);
-    const previous = await githubRequest(fileAt(filePath), {}, true);
-    if (!previous) throw new SubmitArticleError('ARTICLE_NOT_FOUND', `Artigo não encontrado: ${path}`);
+    const previous = previousByPath.get(path);
     await githubRequest(`/repos/${owner}/${repo}/contents/${filePath}`, {
       method: 'DELETE', body: JSON.stringify({ message: `docs: remove ${path}`, sha: previous.sha, branch }),
     });
@@ -384,7 +389,7 @@ async function createPackagePullRequest(items, deletes, actor, beforePull) {
   }
   for (const [directory, changes] of affectedDirectories) {
     const filePath = `pilot/content/docs/${directory}/meta.json`;
-    const previous = await githubRequest(fileAt(filePath), {}, true);
+    const previous = await githubRequest(fileAt(filePath, branch), {}, true);
     let meta;
     try {
       meta = previous ? JSON.parse(Buffer.from(previous.content.replaceAll('\n', ''), 'base64').toString('utf8')) : { pages: [] };

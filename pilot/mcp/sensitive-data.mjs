@@ -8,11 +8,19 @@ const PERSONAL = [
 const CREDENTIALS = [
   /(?:Authorization:\s*)?Bearer\s+[A-Za-z0-9._~+/-]{12,}/iu,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/iu,
-  /(?:apiKey|password|secret|token)\s*[:=]\s*["']?[A-Za-z0-9._~+/-]{12,}/iu,
   /(?<![A-Za-z0-9])sk-(?:proj-)?[A-Za-z0-9_-]{20,}/iu,
-  /(?<![A-Za-z0-9])(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{20,}/iu,
+  /(?<![A-Za-z0-9])(?:sk|ghp|gho|github_pat)_[A-Za-z0-9_-]{20,}/iu,
   /(?<![A-Za-z0-9])AIza[0-9A-Za-z_-]{30,}/u,
 ];
+const CREDENTIAL_PAIR = /(?<![\p{L}\p{N}_])["']?(?:api[_-]?key|password|senha|secret|token)["']?\s*[:=]\s*(?:"[^"\n]+"|'[^'\n]+'|[^\s,;}\]]+)/giu;
+const PLACEHOLDER = /^(?:\$[A-Z_][A-Z0-9_]*|\$\{[A-Z_][A-Z0-9_]*\}|null|true|false|undefined|string|number|[A-Z_]+)$/u;
+
+function credentialPairs(value) {
+  return [...String(value ?? '').matchAll(CREDENTIAL_PAIR)].filter(([pair]) => {
+    const raw = pair.replace(/^.*?[:=]\s*/u, '').replace(/^["']|["']$/gu, '');
+    return raw.length >= 6 && !PLACEHOLDER.test(raw);
+  });
+}
 
 function matchesAny(value, patterns) {
   const text = String(value ?? '');
@@ -24,7 +32,7 @@ function redact(value, patterns, marker) {
 }
 
 export function sensitiveKinds(value) {
-  return { personal: matchesAny(value, PERSONAL), credential: matchesAny(value, CREDENTIALS) };
+  return { personal: matchesAny(value, PERSONAL), credential: matchesAny(value, CREDENTIALS) || credentialPairs(value).length > 0 };
 }
 
 export function containsSensitiveData(value) {
@@ -33,7 +41,9 @@ export function containsSensitiveData(value) {
 }
 
 export function redactSensitiveData(value) {
-  return redact(redact(value, CREDENTIALS, '[segredo removido]'), PERSONAL, '[dado removido]');
+  const pairs = new Set(credentialPairs(value).map(([pair]) => pair));
+  const withoutPairs = String(value ?? '').replace(CREDENTIAL_PAIR, (pair) => pairs.has(pair) ? '[segredo removido]' : pair);
+  return redact(redact(withoutPairs, CREDENTIALS, '[segredo removido]'), PERSONAL, '[dado removido]');
 }
 
 export function containsPersonalData(value) {
