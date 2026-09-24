@@ -87,8 +87,9 @@ for (const [question, slug, intent, action, count, moduleName] of cases) {
   assert.equal(next.steps.length, 1, question);
   const walk = [...history];
   for (let index = 1; index < count; index++) {
-    walk.push({ role: 'user', content: 'Concluí este passo' });
-    const reply = await ask('Concluí este passo', { history: walk });
+    const input = slug === 'crm' && index === 8 ? 'quero automação' : 'Concluí este passo';
+    walk.push({ role: 'user', content: input });
+    const reply = await ask(input, { history: walk });
     assert.deepEqual(reply.steps.map(({ text }) => text), [all.steps[index].text], `ação ${index + 1}: ${question}`);
     walk.push({ role: 'assistant', content: `${reply.answer}\n1. ${reply.steps[0].text}\nFonte usada: ${path}` });
   }
