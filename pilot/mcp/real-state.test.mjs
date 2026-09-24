@@ -167,7 +167,16 @@ assert.match((await ask('não encontrei', { history: [
   { role: 'assistant', content: 'Fonte usada: /docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha' },
 ], widgetContext: { surface: 'app', module: 'users' } })).answer, /Campanhas/, 'módulo público divergente não sobrepõe objeto explícito');
 assert.match((await ask('não encontrei', { history: [
+  { role: 'user', content: 'não tenho permissão para conectar canal' },
+  { role: 'assistant', content: 'Fonte usada: /docs/sobre-o-sistema/configuracoes/canais' },
+], widgetContext: { surface: 'app', module: 'users' } })).answer, /Canais/, 'objeto canal prevalece sobre módulo público divergente');
+assert.match((await ask('não encontrei', { history: [
+  { role: 'user', content: 'não tenho acesso ao usuário' },
+  { role: 'assistant', content: 'Fonte usada: /docs/sobre-o-sistema/configuracoes/gerenciamento-de-usuarios' },
+], widgetContext: { surface: 'app', module: 'channels' } })).answer, /Usuários/, 'objeto usuário prevalece sobre módulo público divergente');
+assert.match((await ask('não encontrei', { history: [
   { role: 'user', content: 'não tenho permissão' },
   { role: 'assistant', content: 'Fonte usada: /docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha' },
 ], widgetContext: { surface: 'app', module: 'campaigns' } })).answer, /Campanhas/, 'módulo seguro só ajuda quando objeto não foi informado');
+assert.doesNotMatch(diagnosticQuestion('não tenho permissão'), /Usuários/, 'sintoma sem objeto ou módulo não presume usuários');
 console.log('Estado real, guia e escalonamento: contratos passaram.');

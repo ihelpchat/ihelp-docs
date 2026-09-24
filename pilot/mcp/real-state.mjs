@@ -31,20 +31,26 @@ export function sanitizeWidgetContext(value) {
 
 const plain = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
-export function intentOf(question) {
+export function intentOf(question, context) {
   const value = plain(question);
   if (/\b(?:robo|chatbot)\b/.test(value)) return 'create_robot';
-  if (/\b(?:usuario|permissao)\b/.test(value)) return 'manage_users';
   if (/\b(?:campanha|disparo)\b/.test(value)) return 'campaigns';
   if (/\btemplate\b/.test(value)) return 'templates';
   if (/\b(?:canal|qr|numero|conectar|meta|coexistencia|api oficial)\b/.test(value)) return 'connect_channel';
   if (/\b(?:cobranca|plano|credito|fatura)\b/.test(value)) return 'billing';
+  if (/\b(?:usuario|usuarios)\b/.test(value)) return 'manage_users';
+  // Permissão e acesso descrevem o sintoma, não a área. O módulo público só ajuda sem objeto explícito.
+  const moduleIntent = {
+    robots: 'create_robot', campaigns: 'campaigns', templates: 'templates',
+    channels: 'connect_channel', billing: 'billing', users: 'manage_users',
+  }[context?.module];
+  if (moduleIntent) return moduleIntent;
   return 'get_help';
 }
 
 export function diagnoseState(question, context) {
   const value = plain(question);
-  const intent = intentOf(question);
+  const intent = intentOf(question, context);
   if (/\b(?:cancelar|reembolso|alterar contrato|alterar plano|excluir conta|dados pessoais)\b/.test(value)) return { cause: 'sensitive_action' };
   if (/\b(?:sem permissao|nao tenho permissao|permissao negada|acesso negado|nao tenho acesso)\b/.test(value)) return { cause: 'permission' };
   if (/\b(?:erro|falha|travou|bug)\b/.test(value)) return { cause: 'bug_incident' };
@@ -63,7 +69,7 @@ export function diagnoseState(question, context) {
 }
 
 export function diagnosticQuestion(question, context, diagnosis = diagnoseState(question, context)) {
-  const intent = intentOf(question);
+  const intent = intentOf(question, context);
   const moduleName = {
     create_robot: 'Robôs', manage_users: 'Usuários', campaigns: 'Campanhas', templates: 'Templates',
     connect_channel: 'Canais', billing: 'Plano e cobrança', get_help: 'a área que você procura',
@@ -80,8 +86,7 @@ export function diagnosticQuestion(question, context, diagnosis = diagnoseState(
 
 export function escalationFor(question, diagnosis, context, history) {
   const past = history.map(({ content }) => plain(content));
-  const topic = past.find((item) => intentOf(item) !== 'get_help') ?? question;
-  const intent = intentOf(topic);
+  const intent = intentOf(question, context);
   return {
     intent,
     diagnosis: diagnosis.cause,
