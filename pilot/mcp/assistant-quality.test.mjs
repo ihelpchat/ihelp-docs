@@ -104,6 +104,7 @@ assert.match(guidedReply.answer, /Menu de opções/i, 'visão geral deve explica
 assert.match(guidedReply.answer, /(?:caminhos|ramifica|árvore)/i);
 assert.match(guidedReply.answer, /(?:mais simples|exemplo básico)/i, 'saudação e encaminhamento são apenas um exemplo');
 assert.doesNotMatch(JSON.stringify(guidedReply), /Condição|filtro/i, 'bloco inativo não pode aparecer na resposta');
+assert.doesNotMatch(JSON.stringify(guidedReply), /\b(?:Continuar|Testar robô|Ativo)\b/i, 'visão não pode inventar botões ou status');
 assert.ok(guidedReply.answer.length < 300, 'introdução deve permanecer curta');
 assert.equal(guidedReply.steps[0].action?.id, 'abrir-robos');
 assert.equal(guidedReply.steps[0].action?.route, '/bot', 'primeira ação deve levar diretamente à tela correta');
@@ -115,6 +116,32 @@ assert.deepEqual(
   'resposta ampla deve sempre oferecer guia progressivo ou procedimento completo',
 );
 
+const shownSteps = guidedReply.steps.map((step, index) => `${index + 1}. ${step.text}`).join('\n');
+const guidedHistory = [
+  { role: 'user', content: 'Como criar um chatbot?' },
+  { role: 'assistant', content: `${guidedReply.answer}\n${shownSteps}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` },
+];
+const nextReply = await answerQuestion(testRoot, 'próximo passo', { client: guidedClient, history: guidedHistory });
+assert.equal(nextReply.steps.length, 1, 'continuação entrega uma ação por vez');
+assert.match(nextReply.steps[0].text, /Iniciar Fluxo[\s\S]*Mensagem do Cliente/i, 'próximo passo deve avançar após os três já mostrados');
+const buttonReply = await answerQuestion(testRoot, 'encontrei o botão', { client: guidedClient, history: guidedHistory });
+assert.match(buttonReply.steps[0].text, /Título do Robô/i, 'confirmar o botão avança para o título, mesmo após visão com três passos');
+const restartedReply = await answerQuestion(testRoot, 'sim, pode me guiar', { client: guidedClient, history: guidedHistory });
+assert.equal(restartedReply.steps.length, 1, 'entrada no guia entrega uma única ação');
+assert.match(restartedReply.steps[0].text, /Criar novo Robô/i, 'aceitar guia progressivo começa pelo primeiro passo');
+assert.deepEqual(restartedReply.suggestions, ['Encontrei o botão', 'Não encontrei esse botão']);
+const afterButtonReply = await answerQuestion(testRoot, 'Encontrei o botão', {
+  client: guidedClient,
+  history: [guidedHistory[0], { role: 'assistant', content: `1. ${restartedReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
+});
+assert.match(afterButtonReply.steps[0].text, /Título do Robô/i, 'confirmação no guia avança uma ação');
+const stuckReply = await answerQuestion(testRoot, 'não encontrei esse botão', {
+  client: guidedClient,
+  history: guidedHistory,
+});
+assert.match(stuckReply.steps[0].text, /Criar novo Robô/i, 'dificuldade deve retomar o passo onde a pessoa travou');
+assert.equal(stuckReply.steps[0].action?.id, 'abrir-robos', 'ajuda ao travar deve manter CTA contextual');
+
 const continuedReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
   client: guidedClient,
   history: [
@@ -122,7 +149,7 @@ const continuedReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
     { role: 'assistant', content: 'Vamos criar juntos.\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento' },
   ],
 });
-assert.match(guidedRequests[1].input.at(-1).content, /FONTE 1: Robô de Atendimento/, 'continuação curta deve recuperar a fonte usada na conversa');
+assert.match(guidedRequests.at(-1).input.at(-1).content, /FONTE 1: Robô de Atendimento/, 'continuação curta deve recuperar a fonte usada na conversa');
 assert.equal(continuedReply.steps.length, 1, 'continuação guiada deve entregar uma etapa pequena por vez');
 assert.deepEqual(
   continuedReply.suggestions,
@@ -175,7 +202,7 @@ assert.doesNotMatch(
 );
 
 const fullGuideReply = await answerQuestion(testRoot, 'mostre todos os passos para criar um robô', { client: guidedClient });
-assert.match(guidedRequests[2].input[0].content, /passo a passo completo/i, 'pedido explícito deve ativar o modo detalhado');
+assert.match(guidedRequests.at(-1).input[0].content, /passo a passo completo/i, 'pedido explícito deve ativar o modo detalhado');
 assert.ok(fullGuideReply.steps.length >= 5, 'modo detalhado deve recuperar o procedimento documentado completo');
 assert.ok(fullGuideReply.steps.some((step) => step.image), 'modo detalhado deve incluir telas documentadas relevantes');
 

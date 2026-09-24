@@ -3,6 +3,8 @@ title: "Robô de Atendimento"
 description: "Crie e mantenha fluxos de pré-atendimento, opções automáticas e regras de transferência para a equipe."
 source: produto
 contentType: guia
+assistantOverview: "Saudação e encaminhamento são só o exemplo mais simples. Com Menu de opções, o robô cria caminhos diferentes conforme a escolha do cliente."
+assistantInitialSteps: 3
 ---
 
 Crie e mantenha fluxos de pré-atendimento, opções automáticas e regras de transferência para a equipe.
@@ -19,7 +21,7 @@ O fluxo do chatbot começa com uma mensagem do cliente, ativando o atendimento. 
 
 ## Como criar um novo robô
 
-Você pode montar um primeiro fluxo funcional com uma mensagem de boas-vindas e o encaminhamento para um departamento. Para começar, abra **Robôs** no menu do iHelp.
+Você pode montar um primeiro fluxo funcional com uma mensagem de boas-vindas e o encaminhamento para um departamento. Esse é só o exemplo mais simples: com **Menu de opções**, cada escolha do cliente pode abrir um caminho diferente no fluxo, como outra mensagem ou o encaminhamento para um departamento. Para começar, abra **Robôs** no menu do iHelp.
 
 <ProductAction id="abrir-robos" label="Abrir a tela Robôs" route="/bot" target="robots-create" />
 
@@ -59,7 +61,7 @@ Você pode montar um primeiro fluxo funcional com uma mensagem de boas-vindas e 
 
 **Mensagem simples:** envia uma ou mais mensagens quando o gatilho ocorrer. É a opção mais direta para uma saudação.
 
-**Menu de opções:** mostra escolhas para o cliente. Cada opção pode continuar para outra mensagem, encaminhar para um departamento ou executar uma ação.
+**Menu de opções:** mostra escolhas para o cliente. Cada escolha cria uma ramificação, ou caminho, na árvore do fluxo: pode continuar para outra mensagem, encaminhar para um departamento ou executar uma ação.
 
 **Ação:** executa o destino do fluxo, como **“Encaminhar atendimento”**, **“Finalizar atendimento”** ou **“Recomeçar atendimento”**.
 
