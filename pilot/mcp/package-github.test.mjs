@@ -18,6 +18,12 @@ const leakedAliases = [
   'private_key="charlieDeltaEchoFoxtrotGolf"',
   'DB_PASS="deltaEchoFoxtrotGolfHotel"',
   'credentials="echoFoxtrotGolfHotelIndia"',
+  'privateKey="administradores"',
+  'awsSecretAccessKey="administradores"',
+  'jwtSecretKey="administradores"',
+  'dbPass="administradores"',
+  'secretKey="administradores"',
+  'GITHUB_TOKEN=ABCDEFGHIJKLMNOPQRSTUVWX',
 ];
 for (const leaked of leakedAliases) {
   const unsafe = { ...realArticle, body: `${realArticle.body}\n\n${leaked}` };
@@ -56,11 +62,12 @@ const originalFetch = globalThis.fetch;
 const originalToken = process.env.GITHUB_TOKEN;
 process.env.GITHUB_TOKEN = 'mock-token';
 let pulls = 0;
+let refs = 0;
 globalThis.fetch = async (url, init = {}) => {
   const path = new URL(url).pathname;
   const method = init.method ?? 'GET';
   if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: 'base-sha' } }) };
-  if (path.endsWith('/git/refs')) return { ok: true, json: async () => ({}) };
+  if (path.endsWith('/git/refs')) { refs += 1; return { ok: true, json: async () => ({}) }; }
   if (path.endsWith('/pulls')) { pulls += 1; return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/321' }) }; }
   const file = decodeURIComponent(path.split('/contents/')[1] ?? '');
   if (!file) throw Error(`Unexpected GitHub call: ${method} ${path}`);
@@ -78,6 +85,7 @@ try {
     await assert.rejects(submitContentPackage(root, [{ ...realArticle, body: `${realArticle.body}\n\n${leaked}` }], 'pull_request', 'user:tester'), /credencial/i);
   }
   assert.equal(pulls, 0, 'aliases de credencial não podem chegar a refs ou PR');
+  assert.equal(refs, 0, 'aliases de credencial não podem criar ref');
   await assert.rejects(submitContentPackage(root, [{ ...article('docs/teste/pii', 'Guia seguro'), body: `${body} Ligue para (11) 98765-4321.` }], 'pull_request', 'user:tester'), /dado pessoal/i);
   await assert.rejects(submitContentPackage(root, [{ ...article('docs/teste/pii', 'Guia seguro'), productActions: [{ ...trustedAction, label: 'Ligue para (11) 98765-4321' }] }], 'pull_request', 'user:tester'), /dado pessoal/i);
   await assert.rejects(submitContentPackage(root, [openAiSecret], 'pull_request', 'user:tester'), /credencial/i);
