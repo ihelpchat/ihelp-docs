@@ -71,8 +71,8 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
                 <span aria-hidden="true">{index + 1}</span>
                 <div>
                   <p>{step.text}</p>
-                  {step.action ? (
-                    <a className="ih-ai-product-action" href={productActionUrl(step.action.route, step.action.id)} target="_blank" rel="noreferrer noopener">
+                  {step.action && productActionUrl(step.action.route, step.action.id, step.action.target) ? (
+                    <a className="ih-ai-product-action" href={productActionUrl(step.action.route, step.action.id, step.action.target) ?? undefined} target="_blank" rel="noreferrer noopener">
                       {step.action.label}<ArrowRight aria-hidden="true" />
                     </a>
                   ) : null}

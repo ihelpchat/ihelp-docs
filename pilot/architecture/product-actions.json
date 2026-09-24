@@ -1,0 +1,6 @@
+{
+  "importar-contatos": {
+    "route": "/contact",
+    "target": "contacts-more-options"
+  }
+}
