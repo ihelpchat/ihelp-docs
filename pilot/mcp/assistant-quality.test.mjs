@@ -133,6 +133,7 @@ const nextReply = await answerQuestion(testRoot, 'próximo passo', { client: gui
 assert.equal(nextReply.steps.length, 1, 'continuação entrega uma ação por vez');
 assert.match(nextReply.steps[0].text, /Iniciar Fluxo[\s\S]*Mensagem do Cliente/i, 'próximo passo deve avançar após os três já mostrados');
 const restartedReply = await answerQuestion(testRoot, 'sim, pode me guiar', { client: guidedClient, history: guidedHistory });
+assert.equal(restartedReply.answer, 'Vamos começar pelo primeiro passo.', 'entrada no guia não deve anunciar avanço antes de começar');
 assert.equal(restartedReply.steps.length, 1, 'entrada no guia entrega uma única ação');
 assert.match(restartedReply.steps[0].text, /Criar novo Robô/i, 'aceitar guia progressivo começa pelo primeiro passo');
 assert.ok(restartedReply.steps[0].image, 'primeira etapa guiada deve manter o screenshot documentado');
@@ -143,6 +144,7 @@ const afterFirstReply = await answerQuestion(testRoot, 'Concluí este passo', {
   client: guidedClient,
   history: [guidedHistory[0], { role: 'assistant', content: `1. ${restartedReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
 });
+assert.equal(afterFirstReply.answer, 'Vamos para a próxima ação.', 'confirmação deve anunciar avanço');
 assert.match(afterFirstReply.steps[0].text, /Título do Robô/i, 'confirmação no guia avança uma ação');
 assert.equal(afterFirstReply.steps[0].image?.src, '/img/help/Vc7GpOtHK4rebqsNycJs.png', 'Título usa o screenshot do formulário, não a lista de Robôs');
 assert.deepEqual(afterFirstReply.suggestions, guideSuggestions);
