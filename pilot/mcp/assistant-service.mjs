@@ -193,10 +193,11 @@ function normalizeStep(step) {
 }
 
 function instructionKey(value) {
-  const destinationAndResult = normalize(value)
+  const markedSelectors = String(value).replace(/\b(opção|opcao|seletor|alternativa|item)\s+([A-Z])\b/g, (_, kind, letter) => `${kind} seletor${letter}`);
+  const destinationAndResult = normalize(markedSelectors)
     .replace(/^(?:(?:comece|inicie)\s+(?:abrindo|acessando|indo\s+para)\s+|(?:abra|acesse|entre\s+em|va\s+para|navegue\s+ate)\s+)/, '');
   return destinationAndResult.split(/[^a-z0-9]+/)
-    .filter((token) => token.length > 2 && !STOP_WORDS.has(token) && !['pelo', 'pela', 'pelos', 'pelas'].includes(token))
+    .filter((token) => (token.length > 2 || /^\d+$/.test(token)) && !STOP_WORDS.has(token) && !['pelo', 'pela', 'pelos', 'pelas'].includes(token))
     .join(' ');
 }
 
