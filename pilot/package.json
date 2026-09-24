@@ -16,7 +16,7 @@
     "content:validate": "node scripts/validate-coverage.mjs",
     "mcp:start": "node mcp/server.mjs",
     "mcp:http": "node mcp/http.mjs",
-    "mcp:test": "node mcp/test.mjs",
+    "mcp:test": "node mcp/test.mjs && node mcp/assistant-quality.test.mjs",
     "qa:visual:baseline": "node scripts/visual/design-baseline.mjs"
   },
   "dependencies": {
