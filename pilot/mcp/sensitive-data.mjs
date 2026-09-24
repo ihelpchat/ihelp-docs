@@ -12,15 +12,34 @@ const CREDENTIALS = [
   /(?<![A-Za-z0-9])(?:sk|gh[pousr]|github_pat)_[A-Za-z0-9_-]{20,}/iu,
   /(?<![A-Za-z0-9])AIza[0-9A-Za-z_-]{30,}/u,
 ];
-const CREDENTIAL_PAIR = /(?<![\p{L}\p{N}_])(["']?)((?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:api[_-]?key|password|senha|secret|token))\1\s*[:=]\s*(?:"[^"\n]+"|'[^'\n]+'|[^\s,;}\]]+)/giu;
+const CREDENTIAL_PAIR = /(?<![\p{L}\p{N}_])(["']?)((?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:api[_-]?key|password|senha|secret|token))\1\s*[:=]\s*("[^"\n]+"|'[^'\n]+'|[^\s,;}\]]+)/giu;
 const CREDENTIAL_KEY = /(?:api[_-]?key|password|senha|secret|token)$/iu;
+const BARE_CREDENTIAL_KEY = /^(?:password|senha|secret|token)$/iu;
 const PLACEHOLDER = /^(?:\$[A-Z_][A-Z0-9_]*|\$\{[A-Z_][A-Z0-9_]*\}|null|true|false|undefined|string|number|[A-Z_]+)$/u;
 
+function entropy(value) {
+  const counts = new Map();
+  for (const character of value) counts.set(character, (counts.get(character) ?? 0) + 1);
+  return [...counts.values()].reduce((sum, count) => {
+    const probability = count / value.length;
+    return sum - probability * Math.log2(probability);
+  }, 0);
+}
+
+function secretLike(value) {
+  if (matchesAny(value, CREDENTIALS)) return true;
+  if (/\s/u.test(value)) return false;
+  const classes = [/[a-z]/u, /[A-Z]/u, /\d/u, /[^A-Za-z0-9]/u].filter((pattern) => pattern.test(value)).length;
+  return (value.length >= 8 && classes >= 3)
+    || (value.length >= 20 && classes >= 2)
+    || (value.length >= 24 && entropy(value) >= 3.7);
+}
+
 function credentialPairs(value) {
-  return [...String(value ?? '').matchAll(CREDENTIAL_PAIR)].filter(([pair, , key]) => {
+  return [...String(value ?? '').matchAll(CREDENTIAL_PAIR)].filter(([, , key, rawValue]) => {
     if (!CREDENTIAL_KEY.test(key)) return false;
-    const raw = pair.replace(/^.*?[:=]\s*/u, '').replace(/^["']|["']$/gu, '');
-    return raw.length >= 6 && !PLACEHOLDER.test(raw);
+    const raw = rawValue.replace(/^["']|["']$/gu, '');
+    return raw.length >= 6 && !PLACEHOLDER.test(raw) && (!BARE_CREDENTIAL_KEY.test(key) || secretLike(raw));
   });
 }
 
