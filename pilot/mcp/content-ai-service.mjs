@@ -3,13 +3,23 @@ import { searchContent, validateArticle } from './content-service.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
 import { readArticle } from './editorial-standard.mjs';
 import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
-import { catalogAction } from './product-actions.mjs';
+import { catalogAction, catalogActions, isCatalogAction } from './product-actions.mjs';
 
 export function normalizeCatalogLabel(action) {
   const trusted = catalogAction(action.id);
   return trusted && action.route === trusted.route && action.target === trusted.target
     ? { ...action, label: trusted.label }
     : action;
+}
+
+function confirmedAction(action, request, productContext) {
+  if (!isCatalogAction(action)) return false;
+  const inRequest = request.productRoute === action.route;
+  const inCoverage = Array.isArray(productContext.coverage) && productContext.coverage.some((item) =>
+    item.module?.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
+      === request.module.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
+      && Array.isArray(item.productRoutes) && item.productRoutes.includes(action.route));
+  return inRequest || inCoverage;
 }
 
 const actionSchema = {
@@ -40,7 +50,7 @@ const PLAN_SCHEMA = {
 const ARTICLE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['path', 'title', 'description', 'source', 'contentType', 'body', 'productActions'],
+  required: ['path', 'title', 'description', 'source', 'contentType', 'body', 'productActions', 'assistantQuestion', 'assistantOverview', 'assistantInitialSteps', 'assistantSuggestions'],
   properties: {
     path: { type: 'string' },
     title: { type: 'string' },
@@ -49,6 +59,10 @@ const ARTICLE_SCHEMA = {
     contentType: { type: 'string', enum: ['faq', 'tutorial', 'guia', 'referencia'] },
     body: { type: 'string' },
     productActions: { type: 'array', items: actionSchema },
+    assistantQuestion: { type: 'string' },
+    assistantOverview: { type: 'string' },
+    assistantInitialSteps: { type: 'integer' },
+    assistantSuggestions: { type: 'array', items: { type: 'string' } },
   },
 };
 
@@ -111,6 +125,7 @@ function requestText(request, existing, productContext) {
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
     `Regras do suporte:\n${productContext.support?.rules?.map((item) => `- ${item}`).join('\n') ?? '- Nenhuma'}`,
     `Matriz de cobertura:\n${productContext.coverage?.map((item) => `- ${item.module}: ${item.coverage}; rotas=${item.productRoutes.join(', ')}; permissão=${item.permission}`).join('\n') ?? '- Nenhuma correspondência'}`,
+    `Catálogo confiável de ProductAction (id, label, route, target):\n${catalogActions().map((action) => JSON.stringify(action)).join('\n')}`,
   ].filter(Boolean).map(redactSensitiveData).join('\n');
 }
 
@@ -167,7 +182,9 @@ export async function generateContentPackage(root, request, options = {}) {
         'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
         'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
         'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
-        'productActions liga o artigo ao produto. Use somente rotas e targets confirmados no pedido ou no plano. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
+        'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
+        'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
+        'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
         'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
         'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
       ].join(' '),
@@ -181,7 +198,13 @@ export async function generateContentPackage(root, request, options = {}) {
     productActions: article.productActions.map(normalizeCatalogLabel),
     ...(request.tangoUrl && article.contentType === 'tutorial' ? { tangoUrl: request.tangoUrl } : {}),
   }));
-  const invalid = articles.map((article) => ({ path: article.path, ...validateArticle(article) })).filter(({ valid }) => !valid);
+  const invalid = articles.map((article) => {
+    const validation = validateArticle(article);
+    const issues = [...validation.issues, ...article.productActions
+      .filter((action) => !confirmedAction(action, request, productContext))
+      .map((action) => `productActions ${action.id} não confirmada para o pedido e módulo`)];
+    return { path: article.path, valid: issues.length === 0, issues };
+  }).filter(({ valid }) => !valid);
   if (invalid.length) {
     return {
       status: 'needs_information',

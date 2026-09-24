@@ -2,6 +2,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import OpenAI from 'openai';
 import { catalogAction } from './product-actions.mjs';
+import { parseAssistantSuggestions } from './conversational-contract.mjs';
 
 const STOP_WORDS = new Set([
   'a', 'ao', 'aos', 'as', 'como', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'eu',
@@ -195,7 +196,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       assistantQuestion: frontmatterValue(raw, 'assistantQuestion'),
       assistantOverview: frontmatterValue(raw, 'assistantOverview'),
       assistantInitialSteps: Math.min(3, Math.max(1, Number(frontmatterValue(raw, 'assistantInitialSteps')) || 1)),
-      assistantSuggestions: [...new Set(frontmatterValue(raw, 'assistantSuggestions').split('|')
+      assistantSuggestions: [...new Set(parseAssistantSuggestions(frontmatterValue(raw, 'assistantSuggestions'))
         .map(cleanText).filter((item) => item.length > 0 && item.length <= 100))].slice(0, 3),
       media: mediaOf(raw),
       screenshots,
@@ -525,7 +526,7 @@ export async function answerQuestion(root, question, options = {}) {
     : continuation
     ? ['Concluí este passo', 'Preciso de ajuda']
     : overviewProcedure
-      ? [...new Set(['Pode me guiar etapa por etapa', 'Quero ver todos os passos', ...(used[0]?.assistantSuggestions ?? [])])].slice(0, 3)
+      ? [...new Set(['Pode me guiar etapa por etapa', 'Quero ver todos os passos', ...(used[0]?.assistantSuggestions ?? [])])].slice(0, 5)
       : parsed.suggestions.length
         ? parsed.suggestions
         : responseSteps.length

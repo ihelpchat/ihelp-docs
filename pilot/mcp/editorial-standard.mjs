@@ -1,5 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join, normalize, relative } from 'node:path';
+import { conversationalIssues, parseAssistantSuggestions } from './conversational-contract.mjs';
 
 const GENERIC_DESCRIPTION = /^(?:Entenda .+ e veja como usar esse recurso no iHelp\.|Referência técnica da API do iHelp para .+\.)$/i;
 const LEGACY_TUTORIAL = /\n+(?:(?:\*\*\*|---)\n+\n+)?## Tutorial Guiado\n+\n+Prefere seguir o passo a passo interativo\?[^\n]*(?:\n|$)/gi;
@@ -203,6 +204,10 @@ export function renderNormalizedArticle(article) {
 export function auditArticle(raw, path) {
   const { metadata, body } = parseArticle(raw, path);
   const issues = [];
+  const conversation = { ...metadata, body };
+  if (Object.hasOwn(conversation, 'assistantInitialSteps')) conversation.assistantInitialSteps = Number(conversation.assistantInitialSteps);
+  if (Object.hasOwn(conversation, 'assistantSuggestions')) conversation.assistantSuggestions = parseAssistantSuggestions(conversation.assistantSuggestions);
+  issues.push(...conversationalIssues(conversation));
   if (!metadata.title || metadata.title.length < 4) issues.push('title ausente ou curto');
   if (!metadata.description || metadata.description.length < 40) issues.push('description ausente ou curta');
   if ((metadata.description?.length ?? 0) > 180) issues.push('description longa demais');
