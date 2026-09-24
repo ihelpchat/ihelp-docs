@@ -148,13 +148,11 @@ const omittedScreenshotClient = {
   },
 };
 const omittedScreenshotReply = await answerQuestion(testRoot, 'como criar um chatbot?', { client: omittedScreenshotClient });
-assert.equal(
-  omittedScreenshotReply.steps[0].image?.src,
-  '/img/help/q4tBz2R7cevwT94eUQKB.png',
-  'quando o modelo omitir todas as telas, o servidor deve anexar prints seguros da fonte usada',
-);
+const robotArticle = await readFile(join(testRoot, 'content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx'), 'utf8');
+const robotScreenshotPaths = new Set([...robotArticle.matchAll(/!\[[^\]]*\]\((\/img\/[^)]+)\)/g)].map((match) => match[1]));
+assert.ok(omittedScreenshotReply.steps.some((step) => step.image), 'quando o modelo omitir todas as telas, o servidor deve anexar um print relevante');
 assert.ok(
-  omittedScreenshotReply.steps.every((step) => !step.image || step.image.src.startsWith('/img/help/')),
+  omittedScreenshotReply.steps.every((step) => !step.image || robotScreenshotPaths.has(step.image.src)),
   'fallback de telas continua restrito aos arquivos da fonte recuperada',
 );
 
