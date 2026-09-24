@@ -217,6 +217,29 @@ async function testNavigation(page) {
   assert.match(await page.locator('.ih-guide-column .ih-eyebrow').textContent(), /Guias de CRM/);
 }
 
+async function testMcpSetup(page) {
+  await page.goto(`${baseUrl}/acesso-mcp/`, { waitUntil: 'networkidle' });
+  await page.getByRole('heading', { name: 'Conecte o MCP da documentação' }).waitFor();
+  assert.match(await page.locator('meta[name="robots"]').getAttribute('content'), /noindex/i, 'Página MCP sem noindex');
+  assert.equal(await page.locator('.ih-header').count(), 0, 'Página MCP não deve exibir o menu do site');
+  assert.equal(await page.locator('.ih-ai-launcher').count(), 0, 'Página MCP não deve exibir a Claricia');
+  assert.match(await page.getByText('Servidor online').textContent(), /Servidor online/);
+
+  const key = page.getByLabel('Chave de acesso do MCP');
+  await key.fill('teste-seguro-123');
+  const command = page.locator('[data-mcp-command]');
+  assert.match(await command.textContent(), /ihelp-docs-assistant-production\.up\.railway\.app\/mcp/);
+  assert.match(await command.textContent(), /teste-seguro-123/);
+  assert.match(await page.locator('[data-mcp-steps]').textContent(), /Reabra o Claude Code/);
+
+  await page.getByRole('button', { name: 'Codex' }).click();
+  assert.match(await command.textContent(), /codex mcp add ihelp-docs/);
+  assert.match(await command.textContent(), /IHELP_DOCS_MCP_TOKEN/);
+  assert.match(await page.locator('[data-mcp-steps]').textContent(), /Reabra o Orca ou o Codex/);
+  assert.equal(await page.locator('[data-mcp-steps] li').count(), 5, 'Passo a passo MCP incompleto');
+  await assertNoHorizontalOverflow(page, 'configuração MCP');
+}
+
 const browser = await chromium.launch({ executablePath, headless: true });
 
 try {
@@ -324,6 +347,7 @@ try {
 
   await testNavigation(page);
   await testAssistant(desktop, errors);
+  await testMcpSetup(page);
 
   assert.deepEqual(errors, [], `Erros no navegador:\n${errors.join('\n')}`);
   await desktop.close();
@@ -348,6 +372,8 @@ try {
     await mobilePage.goto(`${baseUrl}${path}`, { waitUntil: 'networkidle' });
     await assertNoHorizontalOverflow(mobilePage, `mobile ${path}`);
   }
+
+  await testMcpSetup(mobilePage);
 
   // Menu do celular abre, mostra a navegação e fecha ao navegar.
   await mobilePage.goto(`${baseUrl}/docs/sobre-o-sistema/atendimento/`, { waitUntil: 'networkidle' });

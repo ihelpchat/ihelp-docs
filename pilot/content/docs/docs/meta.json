@@ -2,5 +2,5 @@
   "title": "Central de ajuda",
   "description": "Respostas e orientações para usar o iHelp",
   "root": true,
-  "pages": ["index", "principais-duvidas", "primeiros-passos", "sobre-o-sistema", "whatsapp-business-api", "duvidas-e-dicas", "sobre-o-ihelp", "mcp-da-documentacao"]
+  "pages": ["index", "principais-duvidas", "primeiros-passos", "sobre-o-sistema", "whatsapp-business-api", "duvidas-e-dicas", "sobre-o-ihelp"]
 }
