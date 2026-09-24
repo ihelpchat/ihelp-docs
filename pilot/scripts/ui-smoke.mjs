@@ -398,6 +398,12 @@ try {
   await mobilePage.getByRole('textbox', { name: 'Pergunta para o assistente' }).fill('Como criar um robô?');
   await mobilePage.keyboard.press('Enter');
   await mobilePage.locator('.ih-ai-steps').waitFor();
+  const mobileScroll = await mobilePage.locator('.ih-ai-scroll').boundingBox();
+  const mobileQuestion = await mobilePage.locator('.ih-ai-user').last().boundingBox();
+  assert.ok(
+    mobileScroll && mobileQuestion && mobileQuestion.y >= mobileScroll.y && mobileQuestion.y < mobileScroll.y + mobileScroll.height / 2,
+    'Depois de responder, a conversa deve começar pela pergunta, não pular para o rodapé',
+  );
   const mobileFooter = await mobilePage.locator('.ih-ai-footer').boundingBox();
   const mobileComposer = await mobilePage.locator('.ih-ai-composer').boundingBox();
   const mobileNewChat = await mobilePage.getByRole('button', { name: 'Nova conversa' }).boundingBox();
