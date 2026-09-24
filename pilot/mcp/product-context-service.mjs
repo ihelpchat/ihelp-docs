@@ -1,5 +1,6 @@
 const treeCache = new Map();
 import { readFile } from 'node:fs/promises';
+import { redactSensitiveData } from './sensitive-data.mjs';
 import { join } from 'node:path';
 const CACHE_MS = 5 * 60_000;
 const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|cs)$/;
@@ -69,15 +70,10 @@ function excerptOf(content, terms) {
     const value = normalize(line);
     if (terms.some((term) => value.includes(term))) indexes.push(index);
   });
-  const redact = (value) => value
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email removido]')
-    .replace(/\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{20,}\b/gi, '[segredo removido]')
-    .replace(/(?:Bearer\s+)[A-Za-z0-9._-]{20,}/gi, 'Bearer [segredo removido]')
-    .replace(/((?:apiKey|password|secret|token)\s*[:=]\s*["'])[A-Za-z0-9._-]{12,}(["'])/gi, '$1[segredo removido]$2');
-  if (!indexes.length) return redact(lines.slice(0, 80).join('\n').slice(0, 6_000));
+  if (!indexes.length) return redactSensitiveData(lines.slice(0, 80).join('\n').slice(0, 6_000));
   const selected = new Set();
   for (const index of indexes.slice(0, 20)) for (let line = Math.max(0, index - 3); line <= Math.min(lines.length - 1, index + 5); line += 1) selected.add(line);
-  return redact([...selected].toSorted((left, right) => left - right).map((index) => `${index + 1}: ${lines[index]}`).join('\n').slice(0, 8_000));
+  return redactSensitiveData([...selected].toSorted((left, right) => left - right).map((index) => `${index + 1}: ${lines[index]}`).join('\n').slice(0, 8_000));
 }
 
 export async function searchProductContext(topic, module, provided = {}) {
@@ -101,7 +97,7 @@ export async function searchProductContext(topic, module, provided = {}) {
     if (data.encoding !== 'base64' || typeof data.content !== 'string') continue;
     const content = Buffer.from(data.content.replaceAll('\n', ''), 'base64').toString('utf8');
     const textScore = terms.reduce((score, term) => score + (normalize(content).includes(term) ? 3 : 0), candidate.score);
-    matches.push({ path: candidate.path, score: textScore, excerpt: excerptOf(content, terms) });
+    matches.push({ path: redactSensitiveData(candidate.path), score: textScore, excerpt: excerptOf(content, terms) });
   }
   return {
     available: true,

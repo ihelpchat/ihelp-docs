@@ -1,12 +1,16 @@
 import { lstat, mkdir, open, readFile, readdir, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { basename, join, normalize, relative } from 'node:path';
+import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 import { isCatalogAction } from './product-actions.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
-const SAFE_PATH = /^(docs|api|blog)\/[a-z0-9][a-z0-9/-]*$/;
+const SAFE_PATH = /^(docs|api|blog|tutoriais)\/[a-z0-9][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)*$/;
 const SAFE_ACTOR = /^(?:user|service):[a-z0-9][a-z0-9_-]{2,63}$/;
+const SAFE_ACTION_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
+const SAFE_PRODUCT_ROUTE = /^\/(?!\/)[a-z0-9/_-]*$/;
+const SAFE_TARGET = /^[a-z][a-z0-9-]{2,63}$/;
 export const isSafeRequestedBy = (value) => typeof value === 'string' && SAFE_ACTOR.test(value);
 export class SubmitArticleError extends Error {
   constructor(code, message, options) {
@@ -20,20 +24,28 @@ function publicSubmitError(error) {
   if (error?.code === 'EEXIST') return new SubmitArticleError('DRAFT_EXISTS', 'Draft já existe');
   return new SubmitArticleError('SUBMIT_FAILED', 'Não foi possível enviar o artigo');
 }
-const SECRET_PATTERNS = [
-  /Authorization:\s*Bearer\s+[A-Za-z0-9._-]{20,}/i,
-  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
-  /(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{20,}/i,
-  /AIza[0-9A-Za-z_-]{30,}/,
-];
-
 function escapeYaml(value) {
   return JSON.stringify(value.replaceAll('\r', '').trim());
 }
 
+function publicArticleText(article) {
+  const fields = [article.path, article.title, article.description, article.source, article.contentType, article.body, article.tangoUrl];
+  for (const action of Array.isArray(article.productActions) ? article.productActions : []) {
+    fields.push(action?.id, action?.label, action?.route, action?.target);
+  }
+  return fields.filter((value) => typeof value === 'string').join('\n');
+}
+
+function rejectSensitive(value) {
+  if (!containsSensitiveData(value)) return;
+  const kinds = sensitiveKinds(value);
+  if (kinds.credential) throw new SubmitArticleError('CREDENTIAL', 'Artigo contém possível credencial');
+  if (kinds.personal) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém possível dado pessoal');
+}
+
 function safeContentPath(root, contentPath) {
   if (!SAFE_PATH.test(contentPath) || contentPath.includes('..') || contentPath.endsWith('/')) {
-    throw new Error('path deve começar com docs/, api/ ou blog/ e usar apenas slug seguro');
+    throw new Error('path deve começar com docs/, tutoriais/, api/ ou blog/ e usar apenas slug seguro');
   }
   const target = normalize(join(root, 'content/docs', `${contentPath}.mdx`));
   const base = normalize(join(root, 'content/docs'));
@@ -51,18 +63,30 @@ export function validateArticle(article) {
   if (!article.body || article.body.trim().split(/\s+/).filter(Boolean).length < 60) issues.push('body precisa ter ao menos 60 palavras');
   if (/<script\b/i.test(article.body ?? '')) issues.push('scripts não são permitidos');
   if (/<iframe\b/i.test(article.body ?? '')) issues.push('iframes devem ser enviados pelo campo tangoUrl');
+  if (/<(?:video|VideoEmbed)\b|https?:\/\/\S+\.(?:mp4|webm)\b/i.test(article.body ?? '')) issues.push('vídeo não faz parte do pacote editorial');
   if (/!\[\]\(/.test(article.body ?? '')) issues.push('imagens precisam de texto alternativo');
   if (/ihelpchat\.github\.io\/ihelp-docs/i.test(article.body ?? '')) issues.push('links legados não são permitidos');
   if (/^## Tutorial Guiado$/m.test(article.body ?? '')) issues.push('use um Tango público no campo tangoUrl em vez de rodapé genérico');
   if (/^#{2,6}\s+\*\*/m.test(article.body ?? '')) issues.push('headings não devem usar negrito redundante');
-  if (SECRET_PATTERNS.some((pattern) => pattern.test(`${article.body ?? ''}\n${article.description ?? ''}`))) issues.push('possível credencial detectada');
-  if (article.productActions !== undefined && !Array.isArray(article.productActions)) issues.push('productActions precisa ser uma lista');
-  for (const action of Array.isArray(article.productActions) ? article.productActions : []) {
-    if (!isCatalogAction(action)) issues.push('productActions deve corresponder exatamente ao catálogo confiável');
-  }
+  const publicText = publicArticleText(article);
+  const sensitive = sensitiveKinds(publicText);
+  if (sensitive.credential) issues.push('possível credencial detectada');
+  if (sensitive.personal) issues.push('possível dado pessoal detectado');
   if (article.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(article.tangoUrl)) {
     issues.push('tangoUrl precisa ser uma URL oficial de embed ou workflow do Tango');
   }
+  if (article.productActions !== undefined && !Array.isArray(article.productActions)) issues.push('productActions precisa ser uma lista');
+  const actionIds = new Set();
+  for (const action of Array.isArray(article.productActions) ? article.productActions : []) {
+    if (!action || !SAFE_ACTION_ID.test(action.id ?? '')) issues.push('productActions.id inválido');
+    else if (actionIds.has(action.id)) issues.push(`productActions.id duplicado: ${action.id}`);
+    else actionIds.add(action.id);
+    if (typeof action?.label !== 'string' || action.label.trim().length < 3 || action.label.trim().length > 80) issues.push('productActions.label inválido');
+    if (!SAFE_PRODUCT_ROUTE.test(action?.route ?? '')) issues.push('productActions.route inválida');
+    if (action?.target && !SAFE_TARGET.test(action.target)) issues.push('productActions.target inválido');
+    if (!isCatalogAction(action)) issues.push('productActions deve corresponder exatamente ao catálogo confiável');
+  }
+  if ((article.productActions?.length ?? 0) > 12) issues.push('productActions aceita no máximo 12 ações');
   return { valid: issues.length === 0, issues };
 }
 
@@ -77,7 +101,11 @@ export function renderArticle(article) {
   const tutorial = article.tangoUrl
     ? `\n\n<TutorialCard title=${escapeYaml(article.title)} url=${escapeYaml(publicTangoUrl)} description=${escapeYaml(article.description)} />`
     : '';
-  return `---\ntitle: ${escapeYaml(article.title)}\ndescription: ${escapeYaml(article.description)}\nsource: ${article.source}\ncontentType: ${article.contentType}\n---\n\n${article.body.trim()}${tutorial}\n`;
+  const actions = (article.productActions ?? []).map((action) =>
+    `<ProductAction id=${escapeYaml(action.id)} label=${escapeYaml(action.label)} route=${escapeYaml(action.route)}${action.target ? ` target=${escapeYaml(action.target)}` : ''} />`
+  ).join('\n');
+  const actionBlock = actions ? `\n\n${actions}` : '';
+  return `---\ntitle: ${escapeYaml(article.title)}\ndescription: ${escapeYaml(article.description)}\nsource: ${article.source}\ncontentType: ${article.contentType}\n---\n\n${article.body.trim()}${actionBlock}${tutorial}\n`;
 }
 
 async function walk(root) {
@@ -134,7 +162,7 @@ export async function getInventory(root) {
   };
 }
 
-async function githubRequest(path, init = {}) {
+async function githubRequest(path, init = {}, allowNotFound = false) {
   const token = process.env.GITHUB_TOKEN;
   if (!token) throw new SubmitArticleError('GITHUB_NOT_CONFIGURED', 'GITHUB_TOKEN não configurado');
   const response = await fetch(`https://api.github.com${path}`, {
@@ -147,6 +175,7 @@ async function githubRequest(path, init = {}) {
       ...init.headers,
     },
   });
+  if (allowNotFound && response.status === 404) return null;
   if (!response.ok) {
     const status = Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : 'desconhecido';
     throw new SubmitArticleError('GITHUB_HTTP_ERROR', `GitHub API ${status} rejeitou operação`);
@@ -159,6 +188,10 @@ async function createPullRequest(article, rendered, actor, beforePull) {
   const base = process.env.GITHUB_BASE_BRANCH ?? 'main';
   const [owner, repo] = repository.split('/');
   if (!owner || !repo) throw new Error('GITHUB_REPOSITORY inválido');
+  const submittedAt = new Date().toISOString();
+  const title = `docs: ${article.title}`;
+  const body = `Conteúdo enviado pelo MCP de documentação. Revise precisão, permissões, privacidade e links antes do merge.\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_article; target=${article.path}; mode=pull_request.`;
+  rejectSensitive(`${title}\n${body}`);
   const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(base)}`);
   const slug = basename(article.path);
   const branch = `docs/ia-${slug}-${Date.now()}`;
@@ -169,14 +202,13 @@ async function createPullRequest(article, rendered, actor, beforePull) {
     body: JSON.stringify({ message: `docs: adiciona ${article.title}`, content: Buffer.from(rendered).toString('base64'), branch }),
   });
   await beforePull(branch);
-  const submittedAt = new Date().toISOString();
   const pull = await githubRequest(`/repos/${owner}/${repo}/pulls`, {
     method: 'POST',
     body: JSON.stringify({
-      title: `docs: ${article.title}`,
+      title,
       head: branch,
       base,
-      body: `Conteúdo enviado pelo MCP de documentação. Revise precisão, permissões, privacidade e links antes do merge.\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_article; target=${article.path}; mode=pull_request.`,
+      body,
     }),
   });
   return { status: 'pull_request', url: pull.html_url, branch, filePath };
@@ -191,7 +223,7 @@ async function appendAudit(root, actor, mode, target, result, reference) {
   try {
     const stat = await file.stat();
     if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0) throw new Error('arquivo de audit inseguro');
-    const line = `${JSON.stringify({ at: new Date().toISOString(), actor, operation: 'docs_submit_article', mode, target, result, ...(reference ? { reference } : {}) })}\n`;
+    const line = `${JSON.stringify({ at: new Date().toISOString(), actor, operation: 'docs_submit_article', mode, target: typeof target === 'string' ? redactSensitiveData(target) : target, result, ...(reference ? { reference } : {}) })}\n`;
     const { bytesWritten } = await file.write(line);
     if (bytesWritten !== Buffer.byteLength(line)) throw new Error('registro de audit incompleto');
     await file.sync();
@@ -210,7 +242,8 @@ export async function auditOperation(root, { actor, operation, mode = null, targ
   try {
     const stat = await file.stat();
     if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0) throw new Error('arquivo de audit inseguro');
-    const line = `${JSON.stringify({ at: new Date().toISOString(), actor, operation, mode, target, result, ...(reference ? { reference } : {}) })}\n`;
+    const safeTarget = Array.isArray(target) ? target.map(redactSensitiveData) : typeof target === 'string' ? redactSensitiveData(target) : target;
+    const line = `${JSON.stringify({ at: new Date().toISOString(), actor, operation, mode, target: safeTarget, result, ...(reference ? { reference } : {}) })}\n`;
     await file.writeFile(line);
     await file.sync();
   } finally {
@@ -228,7 +261,7 @@ export async function submitArticle(root, article, mode = 'draft', requestedBy) 
 
 async function submitArticleAudited(root, article, mode, requestedBy) {
   const actor = isSafeRequestedBy(requestedBy) ? requestedBy : null;
-  const target = typeof article.path === 'string' && SAFE_PATH.test(article.path) && !article.path.endsWith('/') ? article.path : null;
+  const target = typeof article.path === 'string' && SAFE_PATH.test(article.path) && !article.path.endsWith('/') ? redactSensitiveData(article.path) : null;
   const safeMode = mode === 'draft' || mode === 'pull_request' ? mode : null;
   await appendAudit(root, actor, safeMode, target, 'attempt');
   let result;
@@ -285,4 +318,170 @@ async function submitValidatedArticle(root, article, mode, actor, beforePull) {
   if (mode === 'pull_request') return createPullRequest(article, rendered, actor, beforePull);
   if (mode !== 'draft') throw new Error('mode deve ser draft ou pull_request');
   return createDraft(root, article, rendered);
+}
+
+function safeArticleList(articles, deletes = []) {
+  if (!Array.isArray(articles) || !Array.isArray(deletes) || articles.length + deletes.length < 1 || articles.length + deletes.length > 8) throw new SubmitArticleError('INVALID_PACKAGE', 'O pacote precisa ter entre 1 e 8 operações');
+  const paths = new Set();
+  const upserts = articles.map((article) => {
+    rejectSensitive(publicArticleText(article));
+    if (paths.has(article.path)) throw new SubmitArticleError('INVALID_PACKAGE', `Path duplicado no pacote: ${article.path}`);
+    paths.add(article.path);
+    safeContentPath(process.cwd(), article.path);
+    return { article, rendered: renderArticle(article) };
+  });
+  for (const path of deletes) {
+    rejectSensitive(path);
+    safeContentPath(process.cwd(), path);
+    if (paths.has(path)) throw new SubmitArticleError('INVALID_PACKAGE', `Path duplicado no pacote: ${path}`);
+    paths.add(path);
+  }
+  return upserts;
+}
+
+async function createPackagePullRequest(items, deletes, actor, beforePull) {
+  const repository = process.env.GITHUB_REPOSITORY ?? 'ihelpchat/ihelp-docs';
+  const base = process.env.GITHUB_BASE_BRANCH ?? 'main';
+  const [owner, repo] = repository.split('/');
+  if (!owner || !repo) throw new Error('GITHUB_REPOSITORY inválido');
+  const submittedAt = new Date().toISOString();
+  const targets = [...items.map(({ article }) => article.path), ...deletes.map((path) => `-${path}`)].join(', ');
+  const title = items.length ? `docs: pacote ${items[0].article.title}` : `docs: remove ${deletes.length === 1 ? deletes[0] : `${deletes.length} artigos`}`;
+  const body = `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`;
+  rejectSensitive(`${title}\n${body}`);
+  const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(base)}`);
+  const contentFile = (path) => `pilot/content/docs/${path}.mdx`;
+  const fileAt = (path, revision) => `/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(revision)}`;
+  const previousByPath = new Map();
+  for (const path of [...items.map(({ article }) => article.path), ...deletes]) {
+    const previous = await githubRequest(fileAt(contentFile(path), ref.object.sha), {}, true);
+    if (deletes.includes(path) && !previous) throw new SubmitArticleError('ARTICLE_NOT_FOUND', `Artigo não encontrado: ${path}`);
+    previousByPath.set(path, previous);
+  }
+  const branch = `docs/ia-pacote-${Date.now()}`;
+  await githubRequest(`/repos/${owner}/${repo}/git/refs`, { method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: ref.object.sha }) });
+  const affectedDirectories = new Map();
+  const remember = (path, operation) => {
+    const parts = path.split('/');
+    for (let depth = parts.length - 1; depth >= 1; depth -= 1) {
+      if (operation === 'delete' && depth !== parts.length - 1) break;
+      const directory = parts.slice(0, depth).join('/');
+      if (!affectedDirectories.has(directory)) affectedDirectories.set(directory, []);
+      affectedDirectories.get(directory).push({ slug: parts[depth], operation: depth === parts.length - 1 ? operation : 'upsert' });
+    }
+  };
+  for (const { article, rendered } of items) {
+    const filePath = contentFile(article.path);
+    const previous = previousByPath.get(article.path);
+    await githubRequest(`/repos/${owner}/${repo}/contents/${filePath}`, {
+      method: 'PUT',
+      body: JSON.stringify({ message: `docs: atualiza ${article.title}`, content: Buffer.from(rendered).toString('base64'), branch, ...(previous ? { sha: previous.sha } : {}) }),
+    });
+    remember(article.path, 'upsert');
+  }
+  for (const path of deletes) {
+    const filePath = contentFile(path);
+    const previous = previousByPath.get(path);
+    await githubRequest(`/repos/${owner}/${repo}/contents/${filePath}`, {
+      method: 'DELETE', body: JSON.stringify({ message: `docs: remove ${path}`, sha: previous.sha, branch }),
+    });
+    remember(path, 'delete');
+  }
+  for (const [directory, changes] of affectedDirectories) {
+    const filePath = `pilot/content/docs/${directory}/meta.json`;
+    const previous = await githubRequest(fileAt(filePath, branch), {}, true);
+    let meta;
+    try {
+      meta = previous ? JSON.parse(Buffer.from(previous.content.replaceAll('\n', ''), 'base64').toString('utf8')) : { pages: [] };
+    } catch {
+      throw new SubmitArticleError('INVALID_META', `meta.json inválido em ${directory}`);
+    }
+    if (!Array.isArray(meta.pages)) throw new SubmitArticleError('INVALID_META', `meta.json sem pages em ${directory}`);
+    const pages = [...meta.pages];
+    for (const { slug, operation } of changes) {
+      const index = pages.indexOf(slug);
+      if (operation === 'delete' && index >= 0) pages.splice(index, 1);
+      if (operation === 'upsert' && index < 0) pages.push(slug);
+    }
+    if (JSON.stringify(pages) !== JSON.stringify(meta.pages)) {
+      meta.pages = pages;
+      await githubRequest(`/repos/${owner}/${repo}/contents/${filePath}`, {
+        method: 'PUT', body: JSON.stringify({ message: `docs: atualiza navegação ${directory}`, content: Buffer.from(`${JSON.stringify(meta, null, 2)}\n`).toString('base64'), branch, ...(previous ? { sha: previous.sha } : {}) }),
+      });
+    }
+  }
+  await beforePull(branch);
+  const pull = await githubRequest(`/repos/${owner}/${repo}/pulls`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title,
+      head: branch,
+      base,
+      body,
+    }),
+  });
+  return { status: 'pull_request', url: pull.html_url, branch, articles: items.map(({ article }) => article.path), deleted: deletes };
+}
+
+export async function submitContentPackage(root, articles, mode = 'draft', requestedBy, deletes = []) {
+  if (!isSafeRequestedBy(requestedBy)) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
+  const actor = isSafeRequestedBy(requestedBy) ? requestedBy : null;
+  const targets = [...(Array.isArray(articles) ? articles.map((article) => article?.path) : []), ...(Array.isArray(deletes) ? deletes : [])].filter((path) => typeof path === 'string' && SAFE_PATH.test(path)).map(redactSensitiveData);
+  const operation = !articles?.length && deletes?.length ? 'docs_delete_article' : 'docs_submit_package';
+  const auditMode = ['draft', 'pull_request'].includes(mode) ? mode : null;
+  if (mode === 'dry_run') {
+    safeArticleList(articles, deletes);
+    return { status: 'dry_run', articles: articles.map(({ path }) => path), deleted: deletes };
+  }
+  await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'attempt' });
+  try {
+    const items = safeArticleList(articles, deletes);
+    let result;
+    if (mode === 'draft') {
+      const drafts = [];
+      for (const { article, rendered } of items) drafts.push(await createDraft(root, article, rendered));
+      for (const path of deletes) {
+        const manifest = { operation: 'delete', path };
+        drafts.push(await createDraft(root, { path: `docs/remocoes/${path.replaceAll('/', '-')}` }, `${JSON.stringify(manifest, null, 2)}\n`));
+      }
+      result = { status: 'draft', articles: drafts };
+    } else if (mode === 'pull_request') {
+      result = await createPackagePullRequest(items, deletes, actor, (branch) => auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'external_request', reference: branch }));
+    } else {
+      throw new SubmitArticleError('INVALID_MODE', 'mode deve ser draft ou pull_request');
+    }
+    await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'success', reference: result.branch });
+    return result;
+  } catch (error) {
+    if (actor) await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'failure' });
+    throw publicSubmitError(error);
+  }
+}
+
+export async function deleteArticle(root, contentPath, mode = 'draft', requestedBy) {
+  if (!isSafeRequestedBy(requestedBy)) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
+  rejectSensitive(contentPath);
+  safeContentPath(root, contentPath);
+  if (mode === 'pull_request') return submitContentPackage(root, [], mode, requestedBy, [contentPath]);
+  await auditOperation(root, { actor: requestedBy, operation: 'docs_delete_article', mode, target: contentPath, result: 'attempt' });
+  try {
+    if (mode === 'draft') {
+      const manifest = { path: contentPath, operation: 'delete' };
+      const article = {
+        path: `docs/remocoes/${contentPath.replaceAll('/', '-')}`,
+        title: `Remover ${basename(contentPath)}`,
+        description: `Solicitação versionada para remover o conteúdo ${contentPath} da documentação do iHelp.`,
+        source: 'produto', contentType: 'guia',
+        body: `Esta solicitação registra a remoção do artigo ${contentPath}. Antes de aplicar, confira links internos, navegação e conteúdos que dependem dessa página. A remoção deve acontecer em pull request para preservar o histórico e permitir revisão. Depois da alteração, execute a auditoria completa da documentação e confirme que nenhuma rota interna ficou quebrada. O registro existe apenas para revisão e não remove conteúdo automaticamente neste modo.`,
+      };
+      const draft = await createDraft(root, article, `${JSON.stringify(manifest, null, 2)}\n`);
+      const result = { status: 'draft', ...draft };
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_delete_article', mode, target: contentPath, result: 'success' });
+      return result;
+    }
+    throw new SubmitArticleError('DELETE_REQUIRES_REVIEW', 'A remoção remota deve ser aplicada por pull request após validar dependências');
+  } catch (error) {
+    await auditOperation(root, { actor: requestedBy, operation: 'docs_delete_article', mode, target: contentPath, result: 'failure' });
+    throw publicSubmitError(error);
+  }
 }
