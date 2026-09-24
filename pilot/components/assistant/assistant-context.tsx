@@ -48,7 +48,15 @@ function historyOf(messages: ChatMessage[]): AssistantHistoryItem[] {
   const history: AssistantHistoryItem[] = [];
   for (const message of messages) {
     if (message.role === 'user') history.push({ role: 'user', content: message.text });
-    else if (message.role === 'ai') history.push({ role: 'assistant', content: message.reply.answer });
+    else if (message.role === 'ai') {
+      const sections = message.reply.sections.flatMap((section) => [section.title, ...section.items.map((item) => `- ${item}`)]);
+      const steps = message.reply.steps.map((step, index) => `${index + 1}. ${step.text}`);
+      const sources = message.reply.sources.map((source) => `Fonte usada: ${source.path}`);
+      history.push({
+        role: 'assistant',
+        content: [message.reply.answer, ...sections, ...steps, ...sources].filter(Boolean).join('\n'),
+      });
+    }
   }
   return history.slice(-6);
 }

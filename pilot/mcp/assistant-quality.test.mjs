@@ -101,7 +101,7 @@ assert.deepEqual(guidedReply.steps[0].image, {
 });
 assert.ok(guidedReply.suggestions.some((suggestion) => /passo a passo/i.test(suggestion)), 'resposta procedural deve convidar continuação guiada');
 
-await answerQuestion(testRoot, 'sim, pode me guiar', {
+const continuedReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
   client: guidedClient,
   history: [
     { role: 'user', content: 'Como criar um chatbot?' },
@@ -109,6 +109,8 @@ await answerQuestion(testRoot, 'sim, pode me guiar', {
   ],
 });
 assert.match(guidedRequests[1].input.at(-1).content, /FONTE 1: Robô de Atendimento/, 'continuação curta deve recuperar a fonte usada na conversa');
+assert.equal(continuedReply.steps.length, 1, 'continuação guiada deve entregar uma etapa pequena por vez');
+assert.ok(continuedReply.suggestions.some((suggestion) => /concluí|encontrei/i.test(suggestion)), 'continuação guiada deve perguntar pelo resultado do passo');
 
 const screenshotClient = {
   responses: {

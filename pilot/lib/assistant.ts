@@ -24,7 +24,8 @@ export type AssistantMedia = { kind: 'video' | 'tango'; url: string; embedUrl?: 
 export type AssistantSource = { title: string; path: string; kind: SourceKind; excerpt?: string; media?: AssistantMedia };
 export type AssistantSection = { title: string; items: string[] };
 export type AssistantProductAction = { id: string; label: string; route: string; target?: string };
-export type AssistantStep = { text: string; action?: AssistantProductAction };
+export type AssistantImage = { src: string; alt: string };
+export type AssistantStep = { text: string; action?: AssistantProductAction; image?: AssistantImage };
 export type AssistantResolution = 'complete' | 'partial' | 'not_found';
 
 export type AssistantReply = {
@@ -81,12 +82,21 @@ function steps(value: unknown): AssistantStep[] {
   return value.slice(0, 12).flatMap((item) => {
     if (typeof item === 'string' && item.trim()) return [{ text: item.trim() }];
     if (!item || typeof item !== 'object' || typeof (item as { text?: unknown }).text !== 'string') return [];
-    const raw = item as { text: string; action?: unknown };
+    const raw = item as { text: string; action?: unknown; image?: unknown };
     const text = raw.text.trim();
     if (!text) return [];
     const action = safeAction(raw.action);
-    return [{ text, ...(action ? { action } : {}) }];
+    const image = safeImage(raw.image);
+    return [{ text, ...(action ? { action } : {}), ...(image ? { image } : {}) }];
   });
+}
+
+function safeImage(value: unknown): AssistantImage | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const image = value as Record<string, unknown>;
+  if (typeof image.src !== 'string' || !/^\/img\/[A-Za-z0-9._/-]+\.(?:png|jpe?g|webp|gif)$/i.test(image.src)) return undefined;
+  if (typeof image.alt !== 'string' || !image.alt.trim()) return undefined;
+  return { src: image.src, alt: image.alt.trim().slice(0, 200) };
 }
 
 function safeMedia(value: unknown): AssistantMedia | undefined {

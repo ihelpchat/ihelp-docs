@@ -4439,6 +4439,16 @@ button {
   margin: 0;
 }
 
+.ih-ai-step-image {
+  display: block;
+  width: min(100%, 560px);
+  height: auto;
+  margin-top: 10px;
+  border: 1px solid var(--ih-slate-200);
+  border-radius: 9px;
+  background: var(--ih-slate-50);
+}
+
 .ih-ai-product-action {
   display: inline-flex;
   align-items: center;
@@ -4615,17 +4625,46 @@ button {
   color: var(--ih-coral-600);
 }
 
-.ih-ai-media-action {
+.ih-ai-media-guide {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 7px 0 0 2px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--ih-coral-100);
+  border-radius: 10px;
+  background: var(--ih-coral-50);
+}
+
+.ih-ai-media-guide-copy {
+  flex: 1 0 100%;
+}
+
+.ih-ai-media-guide-copy strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--ih-ink);
+  font-size: 12px;
+}
+
+.ih-ai-media-guide-copy p {
+  margin: 0;
+  color: var(--ih-slate-600);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ih-ai-media-guide-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   font-size: 11px;
 }
 
-.ih-ai-media-action button,
-.ih-ai-media-action > a {
+.ih-ai-media-guide-item button,
+.ih-ai-media-guide-item > a {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -4633,7 +4672,7 @@ button {
   font-weight: 600;
 }
 
-.ih-ai-media-action button svg { width: 13px; height: 13px; }
+.ih-ai-media-guide-item button svg { width: 13px; height: 13px; }
 .ih-ai-media { flex-basis: 100%; }
 .ih-ai-media video,
 .ih-ai-media iframe {
@@ -4759,6 +4798,13 @@ button {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 14px;
+}
+
+.ih-ai-follow > p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--ih-slate-500);
+  font-size: 12px;
 }
 
 .ih-ai-follow button {
@@ -4925,6 +4971,17 @@ button {
   flex-basis: 20px;
   height: 20px;
   font-size: 10px;
+}
+
+.ih-ai-thread[data-compact] .ih-ai-step-image {
+  margin-top: 8px;
+  border-radius: 7px;
+}
+
+.ih-ai-thread[data-compact] .ih-ai-media-guide {
+  margin-top: 10px;
+  padding: 10px 11px;
+  border-radius: 8px;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-code {
