@@ -20,7 +20,7 @@ assert.deepEqual(normalizeCatalogLabel({ id: 'abrir-relatorios', label: 'Label i
 const aiClient = {
   responses: {
     create: async (request) => {
-      assert.doesNotMatch(request.input.at(-1).content, /11987654321|123\.456\.789-09|sk-proj-abcdefghijklmnop1234567890/, 'PII e sk-proj não podem entrar no prompt');
+      assert.doesNotMatch(request.input.at(-1).content, /11987654321|123\.456\.789-09|sk-proj-abcdefghijklmnop1234567890|alphaBetaGammaDeltaEpsilon|bravoCharlieDeltaEchoFoxtrot|charlieDeltaEchoFoxtrotGolf/, 'PII e credenciais não podem entrar no prompt');
       if (request.text.format.name === 'plano_documentacao') {
         return { model: 'gpt-test', output_text: JSON.stringify({
           status: 'ready',
@@ -71,6 +71,11 @@ const request = {
 };
 await assert.rejects(planContent(testRoot, { ...request, details: 'Cliente bruno@example.com perguntou sobre a importação.' }, { client: { responses: { create: async () => { throw new Error('modelo foi chamado'); } } } }), /dado pessoal/i);
 await assert.rejects(generateContentPackage(testRoot, { ...request, details: 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456' }, { client: { responses: { create: async () => { throw new Error('modelo foi chamado'); } } } }), /credencial/i);
+for (const details of ['OPENAI_API_KEY="alphaBetaGammaDeltaEpsilon"', 'GITHUB_TOKEN="bravoCharlieDeltaEchoFoxtrot"', "access_token='charlieDeltaEchoFoxtrotGolf'"]) {
+  const noModel = { responses: { create: async () => { throw new Error('modelo foi chamado'); } } };
+  await assert.rejects(planContent(testRoot, { ...request, details }, { client: noModel }), /credencial/i);
+  await assert.rejects(generateContentPackage(testRoot, { ...request, details }, { client: noModel }), /credencial/i);
+}
 const plan = await planContent(testRoot, request, { client: aiClient });
 assert.equal(plan.status, 'ready');
 assert.equal(plan.suggestedActions[0].route, '/contact');
@@ -80,6 +85,12 @@ await planContent(testRoot, request, { client: aiClient, productContext: {
   code: [], matches: [{ repository: 'ihelpchat/front-react', ref: 'test', role: 'frontend', path: 'src/Contacts/CPF-123.456.789-09-phone-11987654321.tsx', excerpt: 'Tela Contatos // sk-proj-abcdefghijklmnop1234567890' }],
   support: { categories: [], rules: [] }, coverage: [],
 } });
+const secretContext = {
+  code: [], matches: [{ repository: 'ihelpchat/front-react', ref: 'test', role: 'frontend', path: 'src/Contacts/index.tsx', excerpt: 'const config = { "OPENAI_API_KEY": "alphaBetaGammaDeltaEpsilon", "GITHUB_TOKEN": "bravoCharlieDeltaEchoFoxtrot" }; access_token = charlieDeltaEchoFoxtrotGolf;' }],
+  support: { categories: [], rules: [] }, coverage: [],
+};
+await planContent(testRoot, request, { client: aiClient, productContext: secretContext });
+await generateContentPackage(testRoot, request, { client: aiClient, productContext: secretContext });
 const generated = await generateContentPackage(testRoot, request, { client: aiClient });
 assert.equal(generated.articles.length, 2);
 assert.deepEqual(generated.articles.map(({ contentType }) => contentType), ['faq', 'tutorial']);

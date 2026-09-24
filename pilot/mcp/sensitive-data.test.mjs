@@ -24,14 +24,24 @@ const cases = [
   ['api_key assignment', 'api_key = abc!def#ghi$123'],
   ['senha simbólica', "senha = 'P@ss!word#123'"],
   ['GitHub gho_', 'gho_abcdefghijklmnop1234567890'],
+  ['OPENAI_API_KEY', 'OPENAI_API_KEY="alphaBetaGammaDeltaEpsilon"'],
+  ['GITHUB_TOKEN', 'GITHUB_TOKEN = "bravoCharlieDeltaEchoFoxtrot"'],
+  ['access_token', "access_token='charlieDeltaEchoFoxtrotGolf'"],
+  ['client_secret', 'client_secret = "deltaEchoFoxtrotGolfHotel"'],
+  ['prefixo snake', 'tenant_api_key = "echoFoxtrotGolfHotelIndia"'],
+  ['prefixo camel', 'vendorApiKey="foxtrotGolfHotelIndiaJuliet"'],
+  ['GitHub ghs_', 'ghs_abcdefghijklmnopqrstuvwxyza'],
+  ['GitHub ghu_', 'ghu_abcdefghijklmnopqrstuvwxyza'],
+  ['GitHub ghr_', 'ghr_abcdefghijklmnopqrstuvwxyza'],
+  ['Google AIza alfabética', 'AIzaabcdefghijklmnopqrstuvwxyzABCDEFGH'],
 ];
 
 for (const [name, value] of cases) {
   assert.equal(containsSensitiveData(value), true, `${name} precisa ser detectado`);
   assert.equal(redactSensitiveData(value).includes(value), false, `${name} precisa ser redigido`);
-  if (name === 'GitHub gho_') assert.equal(sensitiveKinds(value).credential, true, 'gho_ é credencial mesmo com dígitos parecidos com telefone');
+  if (/OPENAI_API_KEY|GITHUB_TOKEN|access_token|client_secret|prefixo|GitHub gh[osru]_|Google AIza alfabética/.test(name)) assert.equal(sensitiveKinds(value).credential, true, `${name} deve ser credencial independentemente de telefone`);
 }
-for (const value of ['docs/contatos/antigo', 'Abra a opção A', 'ID de teste 12', 'token de acesso', 'senha do usuário', 'apiKey inválida', 'token=$IHELP_TOKEN']) {
+for (const value of ['docs/contatos/antigo', 'Abra a opção A', 'ID de teste 12', 'token de acesso', 'senha do usuário', 'apiKey inválida', 'token=$IHELP_TOKEN', 'tokenizer="abcdefghijklmno"', 'password_hint="abcdefghijklmno"', 'access_token_count=25']) {
   assert.equal(containsSensitiveData(value), false, `${value} não deve ser redigido`);
   assert.equal(redactSensitiveData(value), value);
 }

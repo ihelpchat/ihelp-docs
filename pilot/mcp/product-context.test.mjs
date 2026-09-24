@@ -5,7 +5,7 @@ const files = {
   'src/components/core/components/Router/utils/pagesData.tsx': 'export const pages = [{ path: "/contact", title: "Contatos" }];',
   'src/components/pages/Contacts/ContactsList/index.tsx': '<button aria-label="Mais opções">...</button><button>Importar Contatos</button> // suporte: (11) 98765-4321; CPF 123.456.789-09',
   'src/components/pages/Contacts/CPF-123.456.789-09-phone-11987654321.tsx': 'export const title = "Importar contatos";',
-  'src/components/pages/Contacts/contato11987654321X.tsx': 'export const title = "Importar contatos"; const sample = "sk-proj-abcdefghijklmnop1234567890"; const config = { "apiKey": "P@ss!word#123", "password": "abc!def#ghi$123", "token": "secret!value#123" }; const local = "api_key = abc!def#ghi$123; senha = P@ss!word#123; gho_abcdefghijklmnop1234567890";',
+  'src/components/pages/Contacts/contato11987654321X.tsx': 'export const title = "Importar contatos"; const sample = "sk-proj-abcdefghijklmnop1234567890"; const config = { "apiKey": "P@ss!word#123", "password": "abc!def#ghi$123", "token": "secret!value#123", "OPENAI_API_KEY": "alphaBetaGammaDeltaEpsilon" }; const local = "api_key = abc!def#ghi$123; senha = P@ss!word#123; GITHUB_TOKEN = bravoCharlieDeltaEchoFoxtrot; access_token = charlieDeltaEchoFoxtrotGolf; client_secret = deltaEchoFoxtrotGolfHotel; ghs_abcdefghijklmnopqrstuvwxyza; ghu_abcdefghijklmnopqrstuvwxyza; ghr_abcdefghijklmnopqrstuvwxyza; AIzaabcdefghijklmnopqrstuvwxyzABCDEFGH; gho_abcdefghijklmnop1234567890";',
   'src/components/pages/Tasks/index.tsx': '<h1>Tarefas</h1>',
 };
 const fakeFetch = async (url) => {
@@ -34,6 +34,7 @@ assert.ok(context.matches.some(({ path }) => path.includes('[dado removido]')), 
 assert.doesNotMatch(JSON.stringify(context.matches), /11987654321|123\.456\.789-09/, 'telefone e CPF no path do codebase precisam de redaction');
 assert.doesNotMatch(JSON.stringify(context.matches), /contato11987654321X|sk-proj-abcdefghijklmnop1234567890/, 'telefone adjacente e sk-proj não podem sair do codebase');
 assert.doesNotMatch(JSON.stringify(context.matches), /P@ss!word#123|abc!def#ghi\$123|secret!value#123|gho_abcdefghijklmnop1234567890/, 'credenciais JSON, atribuições e gho_ não podem sair no contexto');
+assert.doesNotMatch(JSON.stringify(context.matches), /alphaBetaGammaDeltaEpsilon|bravoCharlieDeltaEchoFoxtrot|charlieDeltaEchoFoxtrotGolf|deltaEchoFoxtrotGolfHotel|ghs_abcdefghijklmnopqrstuvwxyza|ghu_abcdefghijklmnopqrstuvwxyza|ghr_abcdefghijklmnopqrstuvwxyza|AIzaabcdefghijklmnopqrstuvwxyzABCDEFGH/, 'credenciais alfabéticas não podem sair do excerpt');
 
 const backendFiles = {
   'Comzada.Application/Controllers/V2/ContactsController.cs': 'public class ContactsController { public void ImportContacts() {} private string token = "abcdefghijklmnop123456"; }',
