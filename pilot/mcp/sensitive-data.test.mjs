@@ -35,6 +35,10 @@ const cases = [
   ['GitHub ghu_', 'ghu_abcdefghijklmnopqrstuvwxyza'],
   ['GitHub ghr_', 'ghr_abcdefghijklmnopqrstuvwxyza'],
   ['Google AIza alfabética', 'AIzaabcdefghijklmnopqrstuvwxyzABCDEFGH'],
+  ['bare token forte', 'token="aBcd!Efgh#Ijklmnop"'],
+  ['bare secret forte', 'secret=xyZ!abcdEfgh#mnop'],
+  ['bare password forte', 'password="aBcD!efGh#ijkl"'],
+  ['nome composto forte', 'OPENAI_API_KEY="administradores"'],
 ];
 
 for (const [name, value] of cases) {
@@ -42,7 +46,7 @@ for (const [name, value] of cases) {
   assert.equal(redactSensitiveData(value).includes(value), false, `${name} precisa ser redigido`);
   if (/OPENAI_API_KEY|GITHUB_TOKEN|access_token|client_secret|prefixo|GitHub gh[osru]_|Google AIza alfabética/.test(name)) assert.equal(sensitiveKinds(value).credential, true, `${name} deve ser credencial independentemente de telefone`);
 }
-for (const value of ['docs/contatos/antigo', 'Abra a opção A', 'ID de teste 12', 'token de acesso', 'senha do usuário', 'apiKey inválida', 'token=$IHELP_TOKEN', 'tokenizer="abcdefghijklmno"', 'password_hint="abcdefghijklmno"', 'access_token_count=25']) {
+for (const value of ['docs/contatos/antigo', 'Abra a opção A', 'ID de teste 12', 'token de acesso', 'senha do usuário', 'apiKey inválida', 'token=$IHELP_TOKEN', 'tokenizer="abcdefghijklmno"', 'password_hint="abcdefghijklmno"', 'access_token_count=25', 'dono do token: administradores veem todos os funis', 'token: administradores', 'secret: usuários', 'password: administradores']) {
   assert.equal(containsSensitiveData(value), false, `${value} não deve ser redigido`);
   assert.equal(redactSensitiveData(value), value);
 }
