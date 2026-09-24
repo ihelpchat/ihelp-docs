@@ -19,7 +19,7 @@ globalThis.fetch = async (url, init = {}) => {
   const path = new URL(url).pathname;
   const method = init.method ?? 'GET';
   if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: 'base-sha' } }) };
-  if (path.endsWith('/git/refs')) return { ok: true, json: async () => ({}) };
+  if (path.endsWith('/git/refs')) { calls.push({ method, path, body: JSON.parse(init.body) }); return { ok: true, json: async () => ({}) }; }
   if (path.endsWith('/pulls')) {
     calls.push({ method, path, body: JSON.parse(init.body) });
     return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/322' }) };
@@ -41,6 +41,10 @@ try {
     await assert.rejects(submitContentPackage(root, [], 'pull_request', 'user:tester', [path]), /dado pessoal/i);
     assert.equal(fetchCount, 0, 'delete com dado sensível não pode acessar GitHub');
   }
+  const beforeMissing = fetchCount;
+  await assert.rejects(submitContentPackage(root, [], 'pull_request', 'user:tester', ['docs/contatos/inexistente']), /Artigo não encontrado/i);
+  assert.equal(calls.length, 0, 'delete inexistente não pode criar branch, alterar arquivo ou abrir PR');
+  assert.ok(fetchCount > beforeMissing, 'existência deve ser consultada na base');
   const result = await submitContentPackage(root, [], 'pull_request', 'user:tester', ['docs/contatos/antigo']);
   assert.equal(result.status, 'pull_request');
   assert.deepEqual(result.articles, []);
