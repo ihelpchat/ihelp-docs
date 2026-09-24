@@ -20,10 +20,14 @@ const sections = [
 export function SiteShell({ docs, api, children }: { docs: NavGroup[]; api: NavGroup[]; children: ReactNode }) {
   const pathname = usePathname();
   const [menu, setMenu] = useState<{ open: boolean; path: string }>({ open: false, path: pathname });
+  const normalizedPath = pathname.replace(/\/+$/, '');
+  const standalone = normalizedPath === '/acesso-mcp' || normalizedPath.endsWith('/acesso-mcp');
   // Fecha o menu ao navegar sem precisar de efeito.
   const open = menu.open && menu.path === pathname;
   const section = isActive(pathname, '/api') ? 'api' : isActive(pathname, '/docs') ? 'docs' : undefined;
   const groups = section === 'api' ? api : section === 'docs' ? docs : undefined;
+
+  if (standalone) return <div className="ih-standalone">{children}</div>;
 
   return (
     <div
