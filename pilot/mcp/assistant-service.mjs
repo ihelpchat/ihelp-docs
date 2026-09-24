@@ -19,6 +19,13 @@ function normalizePath(path) {
   return `/${String(path).split(/[?#]/)[0].replace(/^\/+|\/+$/g, '')}`;
 }
 
+function campaignGuideQuestion(question) {
+  const value = normalize(question).replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '');
+  if (/\b(?:templates?|api|arquivos?|anexos?|midia)\b/.test(value)) return false;
+  return /\bcampanhas?\b/.test(value)
+    && /\b(?:criar|enviar|envio|disparar|disparo|fazer|montar|configurar|whatsapp)\b/.test(value);
+}
+
 function frontmatterValue(raw, key) {
   return raw.match(new RegExp(`^${key}:\\s*["']?(.+?)["']?$`, 'm'))?.[1]?.replace(/["']$/, '') ?? '';
 }
@@ -169,6 +176,7 @@ export function kindOf(path) {
 export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo', page, preferredPaths = [], requiredPath } = {}) {
   const contentRoot = join(root, 'content/docs');
   const normalizedQuestion = normalize(question);
+  const campaignRequest = campaignGuideQuestion(question);
   const terms = [...new Set(normalizedQuestion.split(/[^a-z0-9]+/).filter((term) => term.length > 2 && !STOP_WORDS.has(term)))];
   if (!terms.length && !page?.path) return [];
 
@@ -193,6 +201,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
     const guideQuestion = normalize(frontmatterValue(raw, 'assistantQuestion'));
     const guideRequest = normalizedQuestion.replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '');
     const guideMatch = guideQuestion && (normalizedQuestion === guideQuestion || guideRequest === guideQuestion);
+    const assistantIntent = frontmatterValue(raw, 'assistantIntent');
     const score = matches.length * 5
       + terms.reduce((total, term) => total + (titleText.includes(term) ? 12 : 0) + (descriptionText.includes(term) ? 4 : 0), 0)
       + (bodyText.includes(normalizedQuestion) ? 25 : 0)
@@ -201,7 +210,8 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       + (onPage ? 100 : 0)
       // Continuações curtas como “sim, pode me guiar” mantêm a fonte da conversa.
       + (fromConversation ? 80 : 0)
-      + (guideMatch ? 200 : 0);
+      + (guideMatch ? 200 : 0)
+      + (campaignRequest && assistantIntent === 'campaigns' ? 300 : 0);
     const screenshots = screenshotsOf(raw);
     const documentedSteps = documentedStepsOf(raw);
     ranked.push({
@@ -210,6 +220,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       path,
       body: body.slice(0, 12_000),
       assistantQuestion: frontmatterValue(raw, 'assistantQuestion'),
+      assistantIntent,
       assistantOverview: frontmatterValue(raw, 'assistantOverview'),
       assistantResolution: frontmatterValue(raw, 'assistantResolution') === 'partial' ? 'partial' : undefined,
       assistantInitialSteps: Math.min(3, Math.max(1, Number(frontmatterValue(raw, 'assistantInitialSteps')) || 1)),
@@ -342,11 +353,46 @@ function withoutRepeatedInstructions(answer, steps) {
   return unique.join(' ').trim() || 'Siga os passos abaixo.';
 }
 
-/** Lê a resposta estruturada; se o modelo devolver texto livre, usa o texto como resposta. */
+const MAX_RESPONSE_UNWRAPS = 3;
+
+function parseJsonCandidate(value) {
+  const text = value.trim();
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+  for (const candidate of [text, fenced, text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)]) {
+    if (!candidate) continue;
+    try { return JSON.parse(candidate); } catch { /* tenta a próxima forma limitada */ }
+  }
+  return null;
+}
+
+function structuredAnswerOf(outputText) {
+  let value = outputText;
+  for (let depth = 0; depth < MAX_RESPONSE_UNWRAPS; depth++) {
+    if (typeof value === 'string') {
+      value = parseJsonCandidate(value);
+      if (value === null) return null;
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.answer !== 'string') {
+      if (typeof value !== 'string') return null;
+      continue;
+    }
+    const nested = parseJsonCandidate(value.answer);
+    if (nested && typeof nested === 'object' && !Array.isArray(nested) && typeof nested.answer === 'string') {
+      value = nested;
+      continue;
+    }
+    if (/^\s*(?:[\[{"`]|\\?"answer"\s*:)/.test(value.answer)) return null;
+    return value;
+  }
+  return null;
+}
+
+/** Lê a resposta estruturada sem expor JSON literal ou wrappers malformados. */
 export function parseAnswer(outputText) {
   const text = String(outputText ?? '').trim();
   try {
-    const json = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+    if (text.length > 50_000) throw new Error('resposta extensa');
+    const json = structuredAnswerOf(text);
     if (typeof json.answer !== 'string') throw new Error('sem answer');
     const resolution = ['complete', 'partial', 'not_found'].includes(json.resolution) ? json.resolution : json.found === false ? 'not_found' : 'complete';
     return {
@@ -368,8 +414,10 @@ export function parseAnswer(outputText) {
       found: resolution !== 'not_found',
     };
   } catch {
-    const answer = cleanText(text.replace(/\n+Fontes:[\s\S]*$/i, ''));
-    return { answer, sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: 'complete', found: true, citations: text };
+    const structuredLike = /```|[\[{][\s\S]*[\]}]|\\?"answer\\?"\s*:|^\s*["{\[]/.test(text);
+    const answer = structuredLike ? 'Não consegui organizar a resposta. Tente novamente ou peça ajuda ao atendimento.'
+      : cleanText(text.replace(/\n+Fontes:[\s\S]*$/i, ''));
+    return { answer, sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: structuredLike ? 'not_found' : 'complete', found: !structuredLike, citations: structuredLike ? '' : text };
   }
 }
 
@@ -482,7 +530,7 @@ export async function answerQuestion(root, question, options = {}) {
   const exactGuide = sources.find((source) => source.assistantQuestion && (
     normalize(source.assistantQuestion) === normalize(question.trim())
     || (detailedProcedure && normalize(question).replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '') === normalize(source.assistantQuestion))
-  ));
+  )) || (campaignGuideQuestion(question) ? sources.find((source) => source.assistantIntent === 'campaigns') : undefined);
   if (exactGuide?.assistantOverview && !continuation && !detailedProcedure) overviewProcedure = true;
   const historyGuide = continuation ? priorGuide : undefined;
   if (continuation && historyGuide?.assistantQuestion

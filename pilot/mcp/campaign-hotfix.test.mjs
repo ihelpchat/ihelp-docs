@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
 import { answerQuestion, parseAnswer, retrieveContext } from './assistant-service.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
@@ -58,6 +60,40 @@ for (const [question, expected] of [
   const reply = await answerQuestion(root, question, { client: relevantClient });
   assert.notEqual(reply.sources[0]?.path, guide, `não força campanha: ${question}`);
   assert.notEqual(reply.steps[0]?.action?.id, 'abrir-campanhas', `ação correta: ${question}`);
+}
+
+const fakeOpenAI = createServer(async (request, response) => {
+  assert.equal(request.url, '/v1/responses');
+  response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
+    id: 'resp_fixture', object: 'response', created_at: 1, model: 'fixture', status: 'completed',
+    output: [{ type: 'message', id: 'msg_fixture', status: 'completed', role: 'assistant',
+      content: [{ type: 'output_text', text: nested, annotations: [] }] }],
+  }));
+});
+try {
+  fakeOpenAI.listen(0, '127.0.0.1');
+  await once(fakeOpenAI, 'listening');
+  process.env.OPENAI_API_KEY = 'fixture';
+  process.env.OPENAI_BASE_URL = `http://127.0.0.1:${fakeOpenAI.address().port}/v1`;
+  process.env.PORT = '0';
+  process.env.DOCS_ROOT = root;
+  const { httpServer } = await import('./http.mjs');
+  try {
+    if (!httpServer.listening) await once(httpServer, 'listening');
+    const response = await fetch(`http://127.0.0.1:${httpServer.address().port}/assistant`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: 'Como criar e enviar uma campanha?' }),
+    });
+    assert.equal(response.status, 200, 'POST /assistant responde com sucesso');
+    const reply = await response.json();
+    assert.equal(reply.sources[0]?.path, guide);
+    assert.equal(reply.steps[0]?.action?.id, 'abrir-campanhas');
+    assert.doesNotMatch(reply.answer, /^\s*[\{\["`]|\\"answer\\"|"answer"\s*:/);
+  } finally {
+    await new Promise((resolve, reject) => httpServer.close((error) => error ? reject(error) : resolve()));
+  }
+} finally {
+  await new Promise((resolve, reject) => fakeOpenAI.close((error) => error ? reject(error) : resolve()));
 }
 
 console.log('Hotfix Campanhas: parser e seleção do guia.');
