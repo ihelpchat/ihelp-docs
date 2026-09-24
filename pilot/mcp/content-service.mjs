@@ -200,6 +200,24 @@ async function appendAudit(root, actor, mode, target, result, reference) {
   }
 }
 
+export async function auditOperation(root, { actor, operation, mode = null, target = null, result, reference }) {
+  if (!isSafeRequestedBy(actor)) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
+  const directory = join(root, '.audit');
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const directoryStat = await lstat(directory);
+  if (!directoryStat.isDirectory() || (directoryStat.mode & 0o077) !== 0) throw new Error('diretório de audit inseguro');
+  const file = await open(join(directory, 'docs-submissions.jsonl'), constants.O_APPEND | constants.O_CREAT | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+  try {
+    const stat = await file.stat();
+    if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0) throw new Error('arquivo de audit inseguro');
+    const line = `${JSON.stringify({ at: new Date().toISOString(), actor, operation, mode, target, result, ...(reference ? { reference } : {}) })}\n`;
+    await file.writeFile(line);
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+}
+
 export async function submitArticle(root, article, mode = 'draft', requestedBy) {
   try {
     return await submitArticleAudited(root, article, mode, requestedBy);
