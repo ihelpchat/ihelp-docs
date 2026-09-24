@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import OpenAI from 'openai';
+import allowedActions from '../architecture/product-actions.json' with { type: 'json' };
 
 const STOP_WORDS = new Set([
   'a', 'ao', 'aos', 'as', 'como', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'eu',
@@ -57,7 +58,9 @@ function productActionsOf(raw) {
       /^[a-z0-9][a-z0-9-]{2,63}$/.test(id ?? '')
       && typeof label === 'string' && label.length >= 3 && label.length <= 80
       && /^\/(?!\/)[a-z0-9/_-]*$/.test(route ?? '')
-      && (!target || /^[a-z][a-z0-9-]{2,63}$/.test(target)))
+      && (!target || /^[a-z][a-z0-9-]{2,63}$/.test(target))
+      && allowedActions[id]?.route === route
+      && allowedActions[id]?.target === target)
     .map(({ id, label, route, target }) => ({ id, label, route, ...(target ? { target } : {}) }));
 }
 
@@ -295,13 +298,13 @@ export async function answerQuestion(root, question, options = {}) {
 
   const parsed = parseAnswer(response.output_text);
   const byPath = new Map(sources.map((source) => [source.path, source]));
-  const availableActions = new Map(sources.flatMap((source) => source.productActions.map((action) => [action.id, action])));
   // Só aceitamos fontes que vieram da recuperação local: o modelo não consegue inventar links.
   const chosen = parsed.citations
     ? sources.filter((source) => parsed.citations.includes(source.path) || parsed.citations.includes(source.title))
     : parsed.sources.map((path) => byPath.get(`/${String(path).split(/[?#]/)[0].replace(/^\/+|\/+$/g, '')}`)).filter(Boolean);
   const used = (chosen.length ? chosen : parsed.found ? sources.slice(0, 3) : [])
     .filter((source, index, list) => list.indexOf(source) === index);
+  const availableActions = new Map(used.flatMap((source) => source.productActions.map((action) => [action.id, action])));
 
   return {
     answer: parsed.answer || 'Não consegui gerar uma resposta agora. Tente novamente em instantes.',
