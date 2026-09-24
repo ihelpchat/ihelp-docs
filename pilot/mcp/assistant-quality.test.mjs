@@ -202,6 +202,24 @@ const falseActivationClient = { responses: { create: async () => ({
     code: null, sources: ['/docs/sobre-o-sistema/robo-de-atendimento'], suggestions: [], resolution: 'complete', found: true,
   }),
 }) } };
+const falseFoundClient = { responses: { create: async () => ({
+  model: 'gpt-test', output_text: JSON.stringify({
+    answer: 'Use a busca da Central.', sections: [],
+    steps: [{ text: 'Abra a busca da Central.', actionId: null, imagePath: null }],
+    code: null, sources: ['/docs/teste/busca-central'], suggestions: [], resolution: 'not_found', found: false,
+  }),
+}) } };
+const falseFoundHelp = await answerQuestion(testRoot, 'Preciso de ajuda', {
+  client: falseFoundClient,
+  history: [guidedHistory[0], { role: 'assistant', content: `1. ${restartedReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
+});
+assert.deepEqual(falseFoundHelp.steps.map(({ text }) => text), [fullRobotSteps[0]], 'historyGuide válido prevalece sobre found:false');
+assert.equal(falseFoundHelp.steps[0].action?.id, 'abrir-robos');
+assert.equal(falseFoundHelp.steps[0].image?.src, '/img/help/q4tBz2R7cevwT94eUQKB.png');
+assert.deepEqual(falseFoundHelp.sources.map(({ path }) => path), ['/docs/sobre-o-sistema/robo-de-atendimento']);
+assert.equal(falseFoundHelp.found, true);
+assert.equal(falseFoundHelp.resolution, 'complete');
+assert.doesNotMatch(falseFoundHelp.answer, /busca da Central/i);
 for (const alias of ['Concluí', 'feito', 'terminei', 'pronto', 'preenchi os campos']) {
   const aliasReply = await answerQuestion(testRoot, alias, {
     client: falseActivationClient,
@@ -211,6 +229,16 @@ for (const alias of ['Concluí', 'feito', 'terminei', 'pronto', 'preenchi os cam
   assert.match(aliasReply.answer, /Publicar[\s\S]*online/i, `${alias}: conclusão deve ser grounded`);
   assert.match(aliasReply.answer, /Salvar[\s\S]*inativo/i, `${alias}: conclusão deve distinguir salvar`);
   assert.doesNotMatch(JSON.stringify(aliasReply), /Ativar robô|status Ativo/i);
+}
+for (const prompt of ['próximo passo', 'continuar', 'Encontrei o botão']) {
+  const afterLastReply = await answerQuestion(testRoot, prompt, {
+    client: falseActivationClient,
+    history: [guidedHistory[0], { role: 'assistant', content: `1. ${currentGuideReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
+  });
+  assert.deepEqual(afterLastReply.steps, [], `${prompt}: não avança após o último passo`);
+  assert.match(afterLastReply.answer, /Publicar[\s\S]*online/i);
+  assert.match(afterLastReply.answer, /Salvar[\s\S]*inativo/i);
+  assert.doesNotMatch(JSON.stringify(afterLastReply), /Ativar robô|status Ativo/i);
 }
 
 const hostileGuideClient = { responses: { create: async (request) => {
@@ -378,6 +406,9 @@ const menuPath = '/docs/sobre-o-sistema/menu-de-opcoes-do-robo';
 const menuQuestion = 'Quero montar um menu com opções';
 const menuSources = await retrieveContext(testRoot, menuQuestion);
 assert.equal(menuSources[0]?.path, menuPath, 'pergunta editorial exata deve priorizar o procedimento do Menu de opções');
+const lastMenuStep = menuSources[0].documentedSteps.at(-1);
+assert.match(lastMenuStep, /Publicar[\s\S]*online/i, 'passo 7 deve explicar o efeito de Publicar');
+assert.match(lastMenuStep, /Salvar[\s\S]*inativo/i, 'passo 7 deve explicar o efeito de Salvar');
 const menuArticle = await readFile(join(testRoot, 'content/docs', `${menuPath.slice(1)}.mdx`), 'utf8');
 assert.match(menuArticle, /Adicionar bloco[\s\S]*Menu de opções/i);
 assert.match(menuArticle, /título do bloco[\s\S]*Bloco de pergunta/i);
