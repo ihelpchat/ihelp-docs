@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import OpenAI from 'openai';
-import allowedActions from '../architecture/product-actions.json' with { type: 'json' };
+import { catalogAction } from './product-actions.mjs';
 
 const STOP_WORDS = new Set([
   'a', 'ao', 'aos', 'as', 'como', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'eu',
@@ -59,9 +59,9 @@ function productActionsOf(raw) {
       && typeof label === 'string' && label.length >= 3 && label.length <= 80
       && /^\/(?!\/)[a-z0-9/_-]*$/.test(route ?? '')
       && (!target || /^[a-z][a-z0-9-]{2,63}$/.test(target))
-      && allowedActions[id]?.route === route
-      && allowedActions[id]?.target === target)
-    .map(({ id, route, target }) => ({ id, label: allowedActions[id].label, route, ...(target ? { target } : {}) }));
+      && catalogAction(id)?.route === route
+      && catalogAction(id)?.target === target)
+    .map(({ id }) => catalogAction(id));
 }
 
 async function walk(root) {
@@ -192,11 +192,20 @@ function normalizeStep(step) {
   return { text, actionId: typeof step.actionId === 'string' ? step.actionId : null };
 }
 
+function instructionKey(value) {
+  const destinationAndResult = normalize(value)
+    .replace(/^(?:(?:comece|inicie)\s+(?:abrindo|acessando|indo\s+para)\s+|(?:abra|acesse|entre\s+em|va\s+para|navegue\s+ate)\s+)/, '');
+  return destinationAndResult.split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 2 && !STOP_WORDS.has(token) && !['pelo', 'pela', 'pelos', 'pelas'].includes(token))
+    .join(' ');
+}
+
 function uniqueSteps(steps) {
   const seen = new Set();
   return steps.filter((step) => {
-    const key = normalize(step.text).replace(/[^a-z0-9]+/g, ' ').trim();
-    if (!key || seen.has(key)) return false;
+    const destinationAndResult = instructionKey(step.text);
+    const key = `${destinationAndResult}|${step.actionId ?? ''}`;
+    if (!destinationAndResult || seen.has(key)) return false;
     seen.add(key);
     return true;
   });
@@ -204,16 +213,9 @@ function uniqueSteps(steps) {
 
 function withoutRepeatedInstructions(answer, steps) {
   if (!steps.length) return answer;
-  const instructionTokens = (text) => normalize(text)
-    .split(/[^a-z0-9]+/)
-    .filter((token) => token.length > 2 && !STOP_WORDS.has(token) && !['comece', 'abrindo', 'abra', 'acesse', 'acessar'].includes(token));
-  const stepTokens = steps.map(({ text }) => instructionTokens(text));
+  const stepKeys = new Set(steps.map(({ text }) => instructionKey(text)));
   const sentences = answer.split(/(?<=[.!?])\s+|\n{2,}/).filter(Boolean);
-  const unique = sentences.filter((sentence) => {
-    const tokens = instructionTokens(sentence);
-    if (tokens.length < 2) return true;
-    return !stepTokens.some((step) => step.length >= 2 && tokens.filter((token) => step.includes(token)).length / Math.min(tokens.length, step.length) >= 0.8);
-  });
+  const unique = sentences.filter((sentence) => !stepKeys.has(instructionKey(sentence)));
   return unique.join(' ').trim() || 'Siga os passos abaixo.';
 }
 
