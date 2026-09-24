@@ -4430,6 +4430,69 @@ button {
   background: var(--ih-coral-50);
 }
 
+.ih-ai-steps li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.ih-ai-steps li p {
+  margin: 0;
+}
+
+.ih-ai-product-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  margin-top: 8px;
+  color: var(--ih-coral-700);
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--ih-coral-100);
+  border-radius: 8px;
+  background: var(--ih-coral-50);
+}
+
+.ih-ai-product-action:hover {
+  color: var(--ih-coral-800);
+  border-color: var(--ih-coral-300);
+}
+
+.ih-ai-product-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ih-product-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  margin: 20px 0;
+  color: var(--ih-ink);
+  border: 1px solid var(--ih-coral-100);
+  border-radius: 12px;
+  background: var(--ih-coral-50);
+}
+
+.ih-product-action span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ih-product-action small {
+  color: var(--ih-slate-600);
+}
+
+.ih-product-action > svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  color: var(--ih-coral-700);
+}
+
 .ih-ai-code {
   margin-top: 12px;
   overflow: hidden;

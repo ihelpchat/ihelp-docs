@@ -8,6 +8,7 @@ import { useAssistant, type ChatMessage } from '@/components/assistant/assistant
 import { setPendingQuery } from '@/lib/search-query';
 import type { AssistantReply } from '@/lib/assistant';
 import { supportUrl } from '@/lib/links';
+import { productActionUrl } from '@/lib/links';
 
 function useCopy() {
   const [copied, setCopied] = useState<string | null>(null);
@@ -26,7 +27,7 @@ function useCopy() {
 
 function plainText(reply: AssistantReply) {
   const sections = reply.sections.flatMap((section) => [section.title, ...section.items.map((item) => `• ${item}`)]);
-  return [reply.answer, ...sections, ...reply.steps.map((step, index) => `${index + 1}. ${step}`), reply.code?.content ?? ''].filter(Boolean).join('\n\n');
+  return [reply.answer, ...sections, ...reply.steps.map((step, index) => `${index + 1}. ${step.text}`), reply.code?.content ?? ''].filter(Boolean).join('\n\n');
 }
 
 function Avatar() {
@@ -65,7 +66,19 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
         ) : null}
         {reply.steps.length ? (
           <ol className="ih-ai-steps">
-            {reply.steps.map((step, index) => <li key={index}><span aria-hidden="true">{index + 1}</span>{step}</li>)}
+            {reply.steps.map((step, index) => (
+              <li key={`${step.text}-${index}`}>
+                <span aria-hidden="true">{index + 1}</span>
+                <div>
+                  <p>{step.text}</p>
+                  {step.action ? (
+                    <a className="ih-ai-product-action" href={productActionUrl(step.action.route, step.action.id)} target="_blank" rel="noreferrer noopener">
+                      {step.action.label}<ArrowRight aria-hidden="true" />
+                    </a>
+                  ) : null}
+                </div>
+              </li>
+            ))}
           </ol>
         ) : null}
         {reply.code ? (

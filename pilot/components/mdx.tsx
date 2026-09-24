@@ -8,6 +8,7 @@ import { Field, Fields, Param, Params, StepCard, StepCards } from '@/components/
 import { CodeTabs, Response } from '@/components/site/api-code';
 import { TutorialCard } from '@/components/tutorial-card';
 import { VideoEmbed } from '@/components/video-embed';
+import { ProductAction } from '@/components/product-action';
 
 // Listas quebradas por imagens recomeçam com start="N"; o contador dos círculos precisa seguir o número.
 function OrderedList({ start, style, ...props }: ComponentProps<'ol'>) {
@@ -27,6 +28,7 @@ export function getMDXComponents(components?: MDXComponents) {
     Fields,
     Param,
     Params,
+    ProductAction,
     Response,
     StepCard,
     StepCards,

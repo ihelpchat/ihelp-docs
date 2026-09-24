@@ -55,7 +55,11 @@ async function assertNoHorizontalOverflow(page, label) {
 const mockReply = {
   answer: 'Abra a conversa e use a opção Transferir no painel do contato.\n\nO histórico vai junto.',
   sections: [{ title: 'Antes de começar', items: ['Confirme o departamento de destino.'] }],
-  steps: ['Abra a conversa.', 'Clique em Transferir.', 'Escolha o destino e confirme.'],
+  steps: [
+    { text: 'Abra a conversa.', action: { id: 'abrir-atendimento', label: 'Ir para Atendimento', route: '/atendimento', target: 'attendance-list' } },
+    { text: 'Clique em Transferir.' },
+    { text: 'Escolha o destino e confirme.' },
+  ],
   code: { language: 'bash', content: 'curl -H "Authorization: Bearer $IHELP_TOKEN" https://apiv3.ihelpchat.com/api/v2/customers/search' },
   sources: [
     { title: 'Atendimento', path: '/docs/sobre-o-sistema/atendimento', excerpt: 'Iniciar, transferir, encerrar e reabrir atendimentos.', media: { kind: 'video', url: '/videos/atendimento.mp4', embedUrl: '/videos/atendimento.mp4' } },
@@ -115,6 +119,7 @@ async function testAssistant(context, errors) {
   errors.splice(0, errors.length, ...errors.filter((item) => !/502|Failed to load resource/.test(item)));
   await page.getByRole('button', { name: 'Tentar de novo' }).click();
   await page.locator('.ih-ai-steps li').first().waitFor();
+  assert.match(await page.getByRole('link', { name: 'Ir para Atendimento' }).first().getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/atendimento\?ihelpGuide=abrir-atendimento$/);
   assert.equal(await page.locator('.ih-ai-sections section').count(), 1);
   const supportCta = page.getByRole('link', { name: 'Falar com o atendimento' }).last();
   assert.match(await supportCta.getAttribute('href'), /wa\.me\/551730422307\?text=/);
@@ -309,6 +314,7 @@ try {
     await page.unroute('**/assistant');
   } else {
     await page.locator('.search-suggestions button').first().click();
+    await page.waitForFunction(() => /reconectar meu WhatsApp/i.test(document.querySelector('[data-search-input]')?.value ?? ''), { timeout: 5_000 });
     assert.match(await page.locator('[data-search-input]').inputValue(), /reconectar meu WhatsApp/i);
     await page.keyboard.press('Escape');
   }
