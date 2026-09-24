@@ -395,15 +395,21 @@ try {
 
   await mockAssistant(mobilePage);
   await mobilePage.goto(`${baseUrl}/assistente/`, { waitUntil: 'networkidle' });
-  await mobilePage.getByRole('textbox', { name: 'Pergunta para o assistente' }).fill('Como criar um robô?');
-  await mobilePage.keyboard.press('Enter');
-  await mobilePage.locator('.ih-ai-steps').waitFor();
-  const mobileScroll = await mobilePage.locator('.ih-ai-scroll').boundingBox();
-  const mobileQuestion = await mobilePage.locator('.ih-ai-user').last().boundingBox();
-  assert.ok(
-    mobileScroll && mobileQuestion && mobileQuestion.y >= mobileScroll.y && mobileQuestion.y < mobileScroll.y + mobileScroll.height / 2,
-    'Depois de responder, a conversa deve começar pela pergunta, não pular para o rodapé',
-  );
+  const mobileAssistantEnabled = (await mobilePage.locator('.ih-app').getAttribute('data-assistant')) === 'on';
+  if (mobileAssistantEnabled) {
+    await mobilePage.getByRole('textbox', { name: 'Pergunta para o assistente' }).fill('Como criar um robô?');
+    await mobilePage.keyboard.press('Enter');
+    await mobilePage.locator('.ih-ai-steps').waitFor();
+    const mobileScroll = await mobilePage.locator('.ih-ai-scroll').boundingBox();
+    const mobileQuestion = await mobilePage.locator('.ih-ai-user').last().boundingBox();
+    assert.ok(
+      mobileScroll && mobileQuestion && mobileQuestion.y >= mobileScroll.y && mobileQuestion.y < mobileScroll.y + mobileScroll.height / 2,
+      'Depois de responder, a conversa deve começar pela pergunta, não pular para o rodapé',
+    );
+  } else {
+    await mobilePage.locator('.ih-ai-starters button').first().click();
+    await mobilePage.getByText('Assistente não conectado').waitFor();
+  }
   const mobileFooter = await mobilePage.locator('.ih-ai-footer').boundingBox();
   const mobileComposer = await mobilePage.locator('.ih-ai-composer').boundingBox();
   const mobileNewChat = await mobilePage.getByRole('button', { name: 'Nova conversa' }).boundingBox();
@@ -412,10 +418,12 @@ try {
   assert.ok(mobileNewChat && mobileNewChat.x >= 0 && mobileNewChat.x + mobileNewChat.width <= 390, 'Nova conversa sai da tela no celular');
   const scopeMetrics = await mobilePage.locator('.ih-ai-scopes > div').evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }));
   assert.ok(scopeMetrics.scrollHeight <= scopeMetrics.clientHeight + 2, 'Filtros do celular quebraram em várias linhas');
-  const visual = mobilePage.locator('.ih-ai-step-visual').first();
-  assert.equal(await visual.getAttribute('open'), null, 'Print deve começar recolhido no celular');
-  await visual.locator('summary').click();
-  assert.ok(await visual.locator('.ih-ai-step-image').isVisible(), 'Print do passo não abriu no celular');
+  if (mobileAssistantEnabled) {
+    const visual = mobilePage.locator('.ih-ai-step-visual').first();
+    assert.equal(await visual.getAttribute('open'), null, 'Print deve começar recolhido no celular');
+    await visual.locator('summary').click();
+    assert.ok(await visual.locator('.ih-ai-step-image').isVisible(), 'Print do passo não abriu no celular');
+  }
   await assertNoHorizontalOverflow(mobilePage, 'mobile conversa da Claricia');
 
   await testMcpSetup(mobilePage);

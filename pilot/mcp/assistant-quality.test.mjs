@@ -151,7 +151,7 @@ const changedTopicReply = await answerQuestion(testRoot, 'Pode explicar como cri
 assert.doesNotMatch(changedTopicRequests[0].input[0].content, /MODO: acompanhamento guiado/i, 'troca de assunto não pode continuar o guia anterior');
 assert.match(changedTopicRequests[0].input[0].content, /MODO: visão geral conversacional/i, 'novo procedimento amplo deve iniciar uma nova visão geral');
 assert.equal(changedTopicReply.steps.length, 1, 'procedimento em prosa deve fornecer a primeira ação mesmo se o modelo omitir steps');
-assert.match(changedTopicReply.steps[0].text, /prepare|acesse/i, 'fallback deve começar por uma ação documentada da campanha');
+assert.match(changedTopicReply.steps[0].text, /antes de|prepare|acesse/i, 'fallback deve começar por uma ação documentada da campanha');
 assert.deepEqual(
   changedTopicReply.suggestions,
   ['Pode me guiar etapa por etapa', 'Quero ver todos os passos', 'Como preparo a planilha?'],

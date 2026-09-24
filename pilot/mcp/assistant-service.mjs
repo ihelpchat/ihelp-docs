@@ -80,9 +80,17 @@ function relevantScreenshotMap(steps, screenshots) {
 }
 
 function documentedStepsOf(raw) {
-  return [...raw.matchAll(/^\s*\d+\.\s+(.+)$/gm)]
+  const numbered = [...raw.matchAll(/^\s*\d+\.\s+(.+)$/gm)]
     .map(([, text]) => cleanText(text.replace(/!\[[^\]]*\]\([^)]*\)/g, '')))
     .filter(Boolean)
+    .slice(0, 12);
+  if (numbered.length) return numbered;
+  const proceduralStart = /^(?:antes de|ap[oó]s|acesse|abra|clique|crie|configure|defina|digite|escolha|habilite|insira|selecione|na (?:primeira|pr[oó]xima|etapa|tela|[uú]ltima)|primeiro disparo|n[uú]mero de disparo|em intervalo|voc[eê] ver[aá]|clicando)\b/i;
+  return raw
+    .replace(/^---[\s\S]*?---\s*/m, '')
+    .split(/\n+/)
+    .map((line) => cleanText(line.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/^#+\s*/, '')))
+    .filter((line) => proceduralStart.test(line))
     .slice(0, 12);
 }
 
@@ -335,8 +343,8 @@ function proceduralQuestion(question) {
 }
 
 function guidedContinuation(question, history) {
-  return history.length > 0
-    && /\b(?:sim|vamos|pode|guie|guiar|continuar|comece|comecar|proximo|encontrei|conclui)\b/i.test(normalize(question));
+  const value = normalize(question).replace(/[^a-z0-9]+/g, ' ').trim();
+  return history.length > 0 && /^(?:sim(?: (?:pode )?me (?:guiar|ajudar))?|vamos(?: continuar)?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?|continue|continuar|comece|comecar|proximo(?: passo)?|(?:nao )?encontrei(?: .*)?|conclui(?: .*)?|preenchi(?: .*)?|terminei|pronto|feito)$/.test(value);
 }
 
 function detailedProcedureQuestion(question) {
@@ -361,8 +369,7 @@ export async function answerQuestion(root, question, options = {}) {
   const overviewProcedure = procedure
     && /\b(?:criar|configurar|montar)\b/i.test(normalize(question))
     && !continuation
-    && !detailedProcedure
-    && history.length === 0;
+    && !detailedProcedure;
   const sources = await retrieveContext(root, question, 6, { scope, page, preferredPaths: sourcePathsFromHistory(history) });
   if (!sources.length) {
     return {
@@ -448,7 +455,7 @@ export async function answerQuestion(root, question, options = {}) {
   const suggestions = continuation
     ? ['Encontrei o botão', 'Não encontrei esse botão']
     : overviewProcedure
-      ? ['Pode me guiar etapa por etapa', 'Quero ver todos os passos', 'Quero entender os tipos de bloco']
+      ? [...new Set(['Pode me guiar etapa por etapa', 'Quero ver todos os passos', ...parsed.suggestions])].slice(0, 3)
       : parsed.suggestions.length
         ? parsed.suggestions
         : responseSteps.length
