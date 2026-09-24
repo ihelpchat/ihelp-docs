@@ -44,12 +44,16 @@ const cases = [
   ['private key', 'private_key="charlieDeltaEchoFoxtrotGolf"'],
   ['DB pass', 'DB_PASS="deltaEchoFoxtrotGolfHotel"'],
   ['credentials', 'credentials="echoFoxtrotGolfHotelIndia"'],
+  ['AWS strong key', 'AWS_SECRET_ACCESS_KEY="administradores"'],
+  ['JWT strong key', 'JWT_SECRET_KEY="administradores"'],
+  ['private strong key', 'private_key="administradores"'],
+  ['DB strong pass', 'DB_PASS="administradores"'],
 ];
 
 for (const [name, value] of cases) {
   assert.equal(containsSensitiveData(value), true, `${name} precisa ser detectado`);
   assert.equal(redactSensitiveData(value).includes(value), false, `${name} precisa ser redigido`);
-  if (/OPENAI_API_KEY|GITHUB_TOKEN|access_token|client_secret|prefixo|GitHub gh[osru]_|Google AIza alfabética|AWS secret access key|JWT secret key|private key|DB pass|credentials/.test(name)) assert.equal(sensitiveKinds(value).credential, true, `${name} deve ser credencial independentemente de telefone`);
+  if (/OPENAI_API_KEY|GITHUB_TOKEN|access_token|client_secret|prefixo|GitHub gh[osru]_|Google AIza alfabética|AWS|JWT|private|DB|credentials/.test(name)) assert.equal(sensitiveKinds(value).credential, true, `${name} deve ser credencial independentemente de telefone`);
 }
 for (const value of ['docs/contatos/antigo', 'Abra a opção A', 'ID de teste 12', 'token de acesso', 'senha do usuário', 'apiKey inválida', 'token=$IHELP_TOKEN', 'tokenizer="abcdefghijklmno"', 'password_hint="abcdefghijklmno"', 'access_token_count=25', 'dono do token: administradores veem todos os funis', 'token: administradores', 'secret: usuários', 'password: administradores', 'credentials: administradores', 'private_key_description="texto explicativo"', 'monkey="alphaBetaGammaDeltaEpsilon"']) {
   assert.equal(containsSensitiveData(value), false, `${value} não deve ser redigido`);
