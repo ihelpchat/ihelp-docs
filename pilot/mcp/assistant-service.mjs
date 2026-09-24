@@ -470,7 +470,7 @@ export async function answerQuestion(root, question, options = {}) {
   const chosen = parsed.citations
     ? sources.filter((source) => parsed.citations.includes(source.path) || parsed.citations.includes(source.title))
     : parsed.sources.map((path) => byPath.get(`/${String(path).split(/[?#]/)[0].replace(/^\/+|\/+$/g, '')}`)).filter(Boolean);
-  const selected = (chosen.length ? chosen : parsed.found ? sources.slice(0, 3) : [])
+  const selected = (historyGuide ? [historyGuide] : chosen.length ? chosen : parsed.found ? sources.slice(0, 3) : [])
     .filter((source, index, list) => list.indexOf(source) === index);
   const used = procedure && selected.some((source) => source.documentedSteps.length)
     ? selected.filter((source) => source.documentedSteps.length || source.productActions.length)
@@ -484,14 +484,14 @@ export async function answerQuestion(root, question, options = {}) {
   const intent = normalize(question).replace(/[^a-z0-9]+/g, ' ').trim();
   const stuck = /^(?:ainda )?nao encontrei\b/.test(intent);
   const needsHelp = intent === 'preciso de ajuda' || stuck;
-  const completedStep = /^(?:conclui(?: este passo)?|feito|terminei|pronto|preenchi(?: .*)?)$/.test(intent);
   const foundButton = /^encontrei (?:o |esse )?botao\b/.test(intent);
   const startGuide = /^(?:sim(?: (?:pode )?me (?:guiar|ajudar))?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?)$/.test(intent);
   const progressIndex = continuation && fallbackSource
     ? guidedStepIndex(history, fallbackSource.documentedSteps, needsHelp || foundButton || startGuide)
     : -1;
   const nextIndex = startGuide || progressIndex < 0 ? 0 : needsHelp ? progressIndex : progressIndex + 1;
-  const guideFinished = continuation && completedStep && progressIndex >= 0 && progressIndex === fallbackSource?.documentedSteps.length - 1;
+  const guideFinished = continuation && !needsHelp && !startGuide && progressIndex >= 0
+    && progressIndex === fallbackSource?.documentedSteps.length - 1;
   const progressStep = continuation && fallbackSource && !guideFinished && nextIndex < fallbackSource.documentedSteps.length
     ? { text: fallbackSource.documentedSteps[nextIndex], actionId: nextIndex === 0 ? fallbackSource.productActions[0]?.id ?? null : null, imagePath: fallbackSource.stepImages[nextIndex] ?? null }
     : null;
@@ -554,11 +554,11 @@ export async function answerQuestion(root, question, options = {}) {
         ...(availableImages.has(safeImagePath) ? { image: availableImages.get(safeImagePath) } : {}),
       };
     }),
-    code: parsed.code,
+    code: historyGuide ? null : parsed.code,
     sources: used.map(({ title, path, description, media }) => ({ title, path, kind: kindOf(path), excerpt: description, ...(media ? { media } : {}) })),
     suggestions,
-    resolution: parsed.resolution,
-    found: parsed.found,
+    resolution: historyGuide ? 'complete' : parsed.resolution,
+    found: historyGuide ? true : parsed.found,
     model: response.model,
   };
 }
