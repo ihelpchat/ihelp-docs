@@ -30,6 +30,7 @@ const cases = [
   ['client_secret', 'client_secret = "deltaEchoFoxtrotGolfHotel"'],
   ['prefixo snake', 'tenant_api_key = "echoFoxtrotGolfHotelIndia"'],
   ['prefixo camel', 'vendorApiKey="foxtrotGolfHotelIndiaJuliet"'],
+  ['prefixo simples', 'tenanttoken="golfHotelIndiaJulietKilo"'],
   ['GitHub ghs_', 'ghs_abcdefghijklmnopqrstuvwxyza'],
   ['GitHub ghu_', 'ghu_abcdefghijklmnopqrstuvwxyza'],
   ['GitHub ghr_', 'ghr_abcdefghijklmnopqrstuvwxyza'],
