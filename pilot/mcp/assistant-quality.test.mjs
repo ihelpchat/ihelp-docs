@@ -95,6 +95,7 @@ assert.match(guidedRequests[0].input.at(-1).content, /PASSOS DOCUMENTADOS:/);
 assert.match(guidedRequests[0].input.at(-1).content, /TELAS DOCUMENTADAS:/);
 assert.match(guidedRequests[0].input.at(-1).content, /MÍDIA DISPONÍVEL: vídeo/i);
 assert.match(guidedRequests[0].input[0].content, /visão geral conversacional/i, 'pedido amplo deve iniciar com visão geral, sem despejar o manual');
+assert.match(guidedRequests[0].input[0].content, /explique.*termo/i, 'resposta para iniciante deve explicar termos do produto quando aparecem');
 assert.equal(guidedReply.steps.length, 1, 'primeira resposta ampla deve mostrar somente a ação para começar');
 assert.equal(guidedReply.steps[0].action?.route, '/bot', 'primeira ação deve levar diretamente à tela correta');
 assert.equal(guidedReply.steps[0].action?.target, 'robots-create', 'ação deve carregar o alvo do tour no app');
@@ -168,6 +169,9 @@ const omittedScreenshotReply = await answerQuestion(testRoot, 'mostre todos os p
 const robotArticle = await readFile(join(testRoot, 'content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx'), 'utf8');
 assert.match(robotArticle, /Encaminhar atendimento/i, 'guia básico precisa ensinar um destino funcional para o fluxo');
 assert.match(robotArticle, /Salvar[\s\S]{0,240}Publicar/i, 'guia precisa explicar a diferença entre salvar e publicar');
+assert.match(robotArticle, /Canais[\s\S]{0,180}números/i, 'guia precisa explicar o que são canais');
+assert.match(robotArticle, /Gatilho[\s\S]{0,220}inicia/i, 'guia precisa explicar o que é gatilho');
+assert.match(robotArticle, /Departamento[\s\S]{0,260}fila/i, 'guia precisa explicar a diferença de destino para iniciantes');
 assert.match(robotArticle, /<ProductAction id="abrir-robos"/i, 'guia precisa levar a pessoa diretamente para a tela de robôs');
 const robotScreenshotPaths = new Set([...robotArticle.matchAll(/!\[[^\]]*\]\((\/img\/[^)]+)\)/g)].map((match) => match[1]));
 assert.ok(omittedScreenshotReply.steps.some((step) => step.image), 'quando o modelo omitir todas as telas, o servidor deve anexar um print relevante');
