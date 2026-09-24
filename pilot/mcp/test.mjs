@@ -273,7 +273,7 @@ globalThis.fetch = async (url) => {
     scope: 'Ajuda e FAQ',
     page: { path: '/docs/sobre-o-sistema/atendimento', title: 'Atendimento' },
   });
-  assert.deepEqual(structured.steps, ['Abra a conversa', 'Clique em Transferir']);
+  assert.deepEqual(structured.steps, [{ text: 'Abra a conversa' }, { text: 'Clique em Transferir' }]);
   assert.deepEqual(structured.sections, [{ title: 'Antes de começar', items: ['Confirme o departamento de destino'] }]);
   assert.equal(structured.resolution, 'partial');
   assert.deepEqual(structured.sources.map((source) => source.path), ['/docs/sobre-o-sistema/atendimento']);

@@ -1,3 +1,5 @@
+import allowedActions from '@/architecture/product-actions.json';
+
 /**
  * Cliente do assistente de IA.
  *
@@ -21,12 +23,14 @@ export type SourceKind = 'Ajuda' | 'FAQ' | 'API' | 'Tutorial' | 'Novidade';
 export type AssistantMedia = { kind: 'video' | 'tango'; url: string; embedUrl?: string };
 export type AssistantSource = { title: string; path: string; kind: SourceKind; excerpt?: string; media?: AssistantMedia };
 export type AssistantSection = { title: string; items: string[] };
+export type AssistantProductAction = { id: string; label: string; route: string; target?: string };
+export type AssistantStep = { text: string; action?: AssistantProductAction };
 export type AssistantResolution = 'complete' | 'partial' | 'not_found';
 
 export type AssistantReply = {
   answer: string;
   sections: AssistantSection[];
-  steps: string[];
+  steps: AssistantStep[];
   code: { language: string; content: string } | null;
   sources: AssistantSource[];
   suggestions: string[];
@@ -59,6 +63,30 @@ export function kindOf(path: string): SourceKind {
 
 function strings(value: unknown, max: number) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '').slice(0, max) : [];
+}
+
+function safeAction(value: unknown): AssistantProductAction | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const action = value as Record<string, unknown>;
+  if (typeof action.id !== 'string' || !/^[a-z0-9][a-z0-9-]{2,63}$/.test(action.id)) return undefined;
+  if (typeof action.route !== 'string' || !/^\/(?!\/)[a-z0-9/_-]*$/.test(action.route)) return undefined;
+  const target = typeof action.target === 'string' && /^[a-z][a-z0-9-]{2,63}$/.test(action.target) ? action.target : undefined;
+  const allowed = (allowedActions as Record<string, { label: string; route: string; target: string }>)[action.id];
+  if (!allowed || action.route !== allowed.route || target !== allowed.target) return undefined;
+  return { id: action.id, label: allowed.label, route: action.route, ...(target ? { target } : {}) };
+}
+
+function steps(value: unknown): AssistantStep[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 12).flatMap((item) => {
+    if (typeof item === 'string' && item.trim()) return [{ text: item.trim() }];
+    if (!item || typeof item !== 'object' || typeof (item as { text?: unknown }).text !== 'string') return [];
+    const raw = item as { text: string; action?: unknown };
+    const text = raw.text.trim();
+    if (!text) return [];
+    const action = safeAction(raw.action);
+    return [{ text, ...(action ? { action } : {}) }];
+  });
 }
 
 function safeMedia(value: unknown): AssistantMedia | undefined {
@@ -98,7 +126,7 @@ export function normalizeReply(data: unknown): AssistantReply {
           .map((item) => ({ title: item.title.trim(), items: strings(item.items, 5) }))
           .filter((item) => item.title && item.items.length)
       : [],
-    steps: strings(raw.steps, 12),
+    steps: steps(raw.steps),
     code: code && typeof code.content === 'string' && code.content.trim()
       ? { language: typeof code.language === 'string' && code.language ? code.language : 'código', content: code.content.trim() }
       : null,

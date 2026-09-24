@@ -55,7 +55,12 @@ async function assertNoHorizontalOverflow(page, label) {
 const mockReply = {
   answer: 'Abra a conversa e use a opção Transferir no painel do contato.\n\nO histórico vai junto.',
   sections: [{ title: 'Antes de começar', items: ['Confirme o departamento de destino.'] }],
-  steps: ['Abra a conversa.', 'Clique em Transferir.', 'Escolha o destino e confirme.'],
+  steps: [
+    { text: 'Abra a conversa.' },
+    { text: 'Clique em Transferir.', action: { id: 'importar-contatos', label: 'Abrir Contatos', route: '/reports', target: 'contacts-more-options' } },
+    { text: 'Escolha o destino e confirme.', action: { id: 'acao-inventada', label: 'Abrir Contatos', route: '/contact', target: 'contacts-more-options' } },
+    { text: 'Abra Contatos.', action: { id: 'importar-contatos', label: 'Importar contatos automaticamente', route: '/contact', target: 'contacts-more-options' } },
+  ],
   code: { language: 'bash', content: 'curl -H "Authorization: Bearer $IHELP_TOKEN" https://apiv3.ihelpchat.com/api/v2/customers/search' },
   sources: [
     { title: 'Atendimento', path: '/docs/sobre-o-sistema/atendimento', excerpt: 'Iniciar, transferir, encerrar e reabrir atendimentos.', media: { kind: 'video', url: '/videos/atendimento.mp4', embedUrl: '/videos/atendimento.mp4' } },
@@ -115,6 +120,8 @@ async function testAssistant(context, errors) {
   errors.splice(0, errors.length, ...errors.filter((item) => !/502|Failed to load resource/.test(item)));
   await page.getByRole('button', { name: 'Tentar de novo' }).click();
   await page.locator('.ih-ai-steps li').first().waitFor();
+  assert.equal(await page.locator('.ih-ai-product-action').count(), 1, 'Somente action allowlisted pode virar CTA');
+  assert.equal(await page.locator('.ih-ai-product-action').textContent(), 'Abrir a tela Contatos', 'Label inventado pelo endpoint não pode chegar ao CTA');
   assert.equal(await page.locator('.ih-ai-sections section').count(), 1);
   const supportCta = page.getByRole('link', { name: 'Falar com o atendimento' }).last();
   assert.match(await supportCta.getAttribute('href'), /wa\.me\/551730422307\?text=/);
@@ -125,7 +132,7 @@ async function testAssistant(context, errors) {
   await page.getByRole('button', { name: 'Ver vídeo' }).last().click();
   assert.ok(await page.locator('.ih-ai-media iframe[src="https://www.tella.tv/video/faq-como-alterar-sua-senha-no-ihelp-1-8jwf/embed"]').count(), 'Tella real não abriu in-page');
   assert.equal(await page.locator('.ih-ai-error').count(), 0, 'Erro deveria sumir após tentar de novo');
-  assert.equal(await page.locator('.ih-ai-steps li').count(), 3);
+  assert.equal(await page.locator('.ih-ai-steps li').count(), 4);
   assert.equal(await page.locator('.ih-ai-code pre').count(), 1);
   assert.equal(await page.locator('.ih-ai-panel-list li').count(), 2, 'Painel de fontes incompleto');
   assert.equal(requests.at(-1).scope, 'Tudo');
@@ -309,6 +316,7 @@ try {
     await page.unroute('**/assistant');
   } else {
     await page.locator('.search-suggestions button').first().click();
+    await page.waitForFunction(() => /reconectar meu WhatsApp/i.test(document.querySelector('[data-search-input]')?.value ?? ''), { timeout: 5_000 });
     assert.match(await page.locator('[data-search-input]').inputValue(), /reconectar meu WhatsApp/i);
     await page.keyboard.press('Escape');
   }
@@ -348,6 +356,11 @@ try {
   await testNavigation(page);
   await testAssistant(desktop, errors);
   await testMcpSetup(page);
+
+  await page.goto(`${baseUrl}/docs/sobre-o-sistema/agenda-de-contatos/`, { waitUntil: 'networkidle' });
+  const productAction = page.getByRole('link', { name: /Abrir a tela Contatos/i }).last();
+  assert.match(await productAction.getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/contact\?ihelpGuide=importar-contatos$/);
+  assert.match(await productAction.textContent(), /Abre a tela Contatos no iHelp/);
 
   assert.deepEqual(errors, [], `Erros no navegador:\n${errors.join('\n')}`);
   await desktop.close();
