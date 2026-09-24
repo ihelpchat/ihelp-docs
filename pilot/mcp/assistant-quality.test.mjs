@@ -119,6 +119,44 @@ assert.deepEqual(
   ['Encontrei o botão', 'Não encontrei esse botão'],
   'continuação guiada deve oferecer confirmações simples para um iniciante',
 );
+
+const changedTopicRequests = [];
+const changedTopicClient = {
+  responses: {
+    create: async (request) => {
+      changedTopicRequests.push(request);
+      return {
+        model: 'gpt-test',
+        output_text: JSON.stringify({
+          answer: 'Vamos preparar sua primeira campanha.',
+          sections: [],
+          steps: [],
+          code: null,
+          sources: ['/docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha'],
+          suggestions: ['Como preparo a planilha?'],
+          resolution: 'complete',
+          found: true,
+        }),
+      };
+    },
+  },
+};
+const changedTopicReply = await answerQuestion(testRoot, 'Pode explicar como criar uma campanha?', {
+  client: changedTopicClient,
+  history: [
+    { role: 'user', content: 'Como criar um robô?' },
+    { role: 'assistant', content: 'Fonte usada: /docs/sobre-o-sistema/robo-de-atendimento' },
+  ],
+});
+assert.doesNotMatch(changedTopicRequests[0].input[0].content, /MODO: acompanhamento guiado/i, 'troca de assunto não pode continuar o guia anterior');
+assert.match(changedTopicRequests[0].input[0].content, /MODO: visão geral conversacional/i, 'novo procedimento amplo deve iniciar uma nova visão geral');
+assert.equal(changedTopicReply.steps.length, 1, 'procedimento em prosa deve fornecer a primeira ação mesmo se o modelo omitir steps');
+assert.match(changedTopicReply.steps[0].text, /prepare|acesse/i, 'fallback deve começar por uma ação documentada da campanha');
+assert.deepEqual(
+  changedTopicReply.suggestions,
+  ['Pode me guiar etapa por etapa', 'Quero ver todos os passos', 'Como preparo a planilha?'],
+  'sugestões da visão geral devem combinar progressão padrão com o assunto atual',
+);
 assert.doesNotMatch(
   continuedReply.answer,
   /Na lista de Robôs, clique em “Criar novo Robô”/i,
@@ -230,5 +268,7 @@ const wrongSource = await answerQuestion(testRoot, 'importar contatos', { client
 assert.equal(wrongSource.steps[0].action, undefined, 'ação de outra fonte não pode acompanhar a fonte citada');
 const actionComponent = await readFile(join(projectRoot, 'components/product-action.tsx'), 'utf8');
 assert.doesNotMatch(actionComponent, /exatamente na tela deste passo/i, 'CTA ainda promete abertura exata antes da integração no app');
+assert.doesNotMatch(actionComponent, /Abre a tela Contatos no iHelp/i, 'descrição do CTA não pode ficar presa à ação de Contatos');
+assert.match(actionComponent, /destaca onde começar/i, 'CTA deve explicar o comportamento comum do tour no app');
 
 console.log("Claricia para iniciantes passou.");
