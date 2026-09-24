@@ -178,6 +178,8 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       body: body.slice(0, 12_000),
       assistantOverview: frontmatterValue(raw, 'assistantOverview'),
       assistantInitialSteps: Math.min(3, Math.max(1, Number(frontmatterValue(raw, 'assistantInitialSteps')) || 1)),
+      assistantSuggestions: [...new Set(frontmatterValue(raw, 'assistantSuggestions').split('|')
+        .map(cleanText).filter((item) => item.length > 0 && item.length <= 100))].slice(0, 3),
       media: mediaOf(raw),
       screenshots: screenshotsOf(raw),
       documentedSteps: documentedStepsOf(raw),
@@ -486,7 +488,7 @@ export async function answerQuestion(root, question, options = {}) {
   const suggestions = continuation
     ? ['Encontrei o botão', 'Não encontrei esse botão']
     : overviewProcedure
-      ? [...new Set(['Pode me guiar etapa por etapa', 'Quero ver todos os passos', ...parsed.suggestions])].slice(0, 3)
+      ? [...new Set(['Pode me guiar etapa por etapa', 'Quero ver todos os passos', ...(used[0]?.assistantSuggestions ?? [])])].slice(0, 3)
       : parsed.suggestions.length
         ? parsed.suggestions
         : responseSteps.length

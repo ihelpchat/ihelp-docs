@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { answerQuestion, parseAnswer } from './assistant-service.mjs';
+import { answerQuestion, parseAnswer, retrieveContext } from './assistant-service.mjs';
 import { renderArticle, validateArticle } from './content-service.mjs';
 import allowedActions from '../architecture/product-actions.json' with { type: 'json' };
 
@@ -22,6 +22,10 @@ assert.doesNotMatch(internalReply.answer, /documentaç|Node\.js|Git/i);
 
 const actionDir = join(testRoot, 'content/docs/docs/teste');
 await mkdir(actionDir, { recursive: true });
+await writeFile(join(actionDir, 'sugestoes.mdx'), `---\ntitle: "Roteiro editorial de sugestões"\ndescription: "Teste das sugestões do assistente."\nassistantSuggestions: "Primeira dúvida | Segunda dúvida | Primeira dúvida"\n---\n\nRoteiro editorial de sugestões.\n`);
+const suggestionSource = (await retrieveContext(testRoot, 'roteiro editorial de sugestões'))
+  .find((source) => source.path === '/docs/teste/sugestoes');
+assert.deepEqual(suggestionSource?.assistantSuggestions, ['Primeira dúvida', 'Segunda dúvida'], 'lista do frontmatter deve ser lida com separador e sem duplicatas');
 await writeFile(join(actionDir, 'importar-contatos.mdx'), `---\ntitle: "Importar contatos"\ndescription: "Aprenda a importar contatos pela tela correta do iHelp."\nsource: produto\ncontentType: tutorial\n---\n\nAbra a lista de contatos e use o menu de opções para iniciar a importação.\n\n<ProductAction id="importar-contatos" label="Ir para importar contatos" route="/contact" target="contacts-more-options" />\n`);
 
 const beginnerClient = {
@@ -193,8 +197,8 @@ assert.match(changedTopicReply.steps[0].text, /antes de|prepare|acesse/i, 'fallb
 assert.equal(changedTopicReply.steps[0].image, undefined, 'fallback não pode associar um print só pela posição no artigo');
 assert.deepEqual(
   changedTopicReply.suggestions,
-  ['Pode me guiar etapa por etapa', 'Quero ver todos os passos', 'Como preparo a planilha?'],
-  'sugestões da visão geral devem combinar progressão padrão com o assunto atual',
+  ['Pode me guiar etapa por etapa', 'Quero ver todos os passos'],
+  'sem sugestões no artigo, a visão geral deve ignorar a proposta do modelo',
 );
 assert.doesNotMatch(
   continuedReply.answer,
