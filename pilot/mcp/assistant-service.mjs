@@ -193,12 +193,18 @@ function normalizeStep(step) {
 }
 
 function instructionKey(value) {
-  const markedSelectors = String(value).replace(/\b(opção|opcao|seletor|alternativa|item)\s+([A-Z])\b/g, (_, kind, letter) => `${kind} seletor${letter}`);
-  const destinationAndResult = normalize(markedSelectors)
-    .replace(/^(?:(?:comece|inicie)\s+(?:abrindo|acessando|indo\s+para)\s+|(?:abra|acesse|entre\s+em|va\s+para|navegue\s+ate)\s+)/, '');
-  return destinationAndResult.split(/[^a-z0-9]+/)
-    .filter((token) => (token.length > 2 || /^\d+$/.test(token)) && !STOP_WORDS.has(token) && !['pelo', 'pela', 'pelos', 'pelas'].includes(token))
-    .join(' ');
+  const navigation = new Set(['abra', 'acesse', 'entre', 'va', 'navegue', 'comece', 'inicie', 'abrindo', 'acessando', 'indo']);
+  const prepositions = new Set(['pelo', 'pela', 'pelos', 'pelas', 'ate']);
+  const selectorNouns = new Set(['opcao', 'seletor', 'alternativa', 'item', 'plano', 'botao', 'campo', 'etapa']);
+  const tokens = String(value).match(/[\p{L}\p{N}]+/gu) ?? [];
+  return tokens.flatMap((raw, index) => {
+    const token = normalize(raw);
+    const previous = normalize(tokens[index - 1] ?? '');
+    const explicitSelector = /^[AB]$/.test(raw) && selectorNouns.has(previous);
+    if (explicitSelector) return [`seletor${token}`];
+    if (navigation.has(token) || prepositions.has(token) || STOP_WORDS.has(token)) return [];
+    return [token];
+  }).join(' ');
 }
 
 function uniqueSteps(steps) {
