@@ -56,18 +56,63 @@ export type AssistantRequest = {
   widgetContext?: Record<string, unknown>;
 };
 
+function stateSummary(state: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const add = (field: string, labels: Record<string, string>, title: string) => {
+    const value = state[field];
+    if (typeof value === 'string' && labels[value]) parts.push(`${title}: ${labels[value]}`);
+  };
+  add('module', { robots: 'Robôs', users: 'Usuários', channels: 'Canais', billing: 'Plano e cobrança', campaigns: 'Campanhas', templates: 'Templates', conversations: 'Atendimentos', settings: 'Configurações' }, 'área');
+  add('screen', { list: 'lista', create: 'criação', edit: 'edição', detail: 'detalhes', connection: 'conexão', qr: 'QR code', unknown: 'não identificada' }, 'tela');
+  add('role', { owner: 'titular', admin: 'administrador', manager: 'gestor', agent: 'atendente', unknown: 'não identificado' }, 'perfil');
+  add('plan', { trial: 'trial', active: 'ativo', expired: 'expirado', limited: 'limitado', unknown: 'não identificado' }, 'plano informado');
+  add('credit', { available: 'disponível', low: 'baixo', empty: 'sem crédito', unknown: 'não identificado' }, 'crédito');
+  add('templates', { none: 'nenhum', pending: 'aguardando aprovação', approved: 'aprovado', rejected: 'rejeitado', unknown: 'não identificado' }, 'templates');
+  const permissionLabels: Record<string, string> = {
+    'robots.read': 'ver robôs', 'robots.create': 'criar robôs', 'users.read': 'ver usuários', 'users.manage': 'gerenciar usuários',
+    'channels.read': 'ver canais', 'channels.manage': 'gerenciar canais', 'billing.read': 'ver cobrança',
+    'campaigns.read': 'ver campanhas', 'campaigns.create': 'criar campanhas', 'templates.read': 'ver templates', 'templates.manage': 'gerenciar templates',
+  };
+  if (Array.isArray(state.permissions)) {
+    const permissions = state.permissions.flatMap((item) => typeof item === 'string' && permissionLabels[item] ? [permissionLabels[item]] : []);
+    if (permissions.length) parts.push(`permissões informadas: ${permissions.join(', ')}`);
+  }
+  const kindLabels: Record<string, string> = { whatsapp: 'WhatsApp', official_api: 'API Oficial', coexistence: 'coexistência' };
+  const channelLabels: Record<string, string> = { connected: 'conectado', disconnected: 'desconectado', qr_pending: 'aguardando QR code', blocked: 'bloqueado', syncing: 'sincronizando', unknown: 'não identificado' };
+  if (Array.isArray(state.channels)) {
+    const channels = state.channels.flatMap((item) => item && typeof item === 'object' && kindLabels[item.kind] && channelLabels[item.state] ? [`${kindLabels[item.kind]} ${channelLabels[item.state]}`] : []);
+    if (channels.length) parts.push(`canais: ${channels.join(', ')}`);
+  }
+  const incidentLabels: Record<string, string> = { channel_outage: 'indisponibilidade de canal', message_delivery: 'entrega de mensagens', billing: 'cobrança', robot: 'robô', app: 'aplicativo' };
+  if (Array.isArray(state.incidents)) {
+    const incidents = state.incidents.flatMap((item) => typeof item === 'string' && incidentLabels[item] ? [incidentLabels[item]] : []);
+    if (incidents.length) parts.push(`incidentes informados: ${incidents.join(', ')}`);
+  }
+  return parts.join('; ');
+}
+
 export function supportMessageFor(reply: AssistantReply): string {
   if (!reply.escalation) return 'Olá! Consultei a Central de Ajuda do iHelp e preciso de atendimento.';
   const intentLabels: Record<AssistantEscalation['intent'], string> = {
     create_robot: 'criar robô', manage_users: 'gerenciar usuários', connect_channel: 'conectar canal',
     billing: 'cobrança ou plano', campaigns: 'campanhas', templates: 'templates', get_help: 'obter ajuda',
   };
+  const diagnosisLabels: Record<AssistantEscalation['diagnosis'], string> = {
+    usage: 'dúvida de uso', configuration: 'possível questão de configuração', permission: 'possível questão de permissão',
+    plan: 'possível questão de plano ou crédito', channel_qr: 'possível questão de conexão ou QR code',
+    meta_coexistence: 'possível questão com a Meta ou coexistência', bug_incident: 'possível problema no aplicativo ou incidente',
+    sensitive_action: 'solicitação que exige atendimento humano',
+  };
+  const attemptLabels: Record<AssistantEscalation['attempts'][number], string> = {
+    documented_guide: 'seguiu as orientações da Central de Ajuda', reported_stuck: 'não encontrou o passo esperado',
+  };
+  const state = reply.escalation.state ? stateSummary(reply.escalation.state) : '';
   return [
     'Olá! Preciso de atendimento no iHelp.',
     `Intenção: ${intentLabels[reply.escalation.intent]}.`,
-    `Diagnóstico inicial: ${reply.escalation.diagnosis}.`,
-    ...(reply.escalation.state ? [`Estado informado pelo widget: ${JSON.stringify(reply.escalation.state)}.`] : []),
-    `Tentativas: ${reply.escalation.attempts.join(', ') || 'nenhuma registrada'}.`,
+    `Diagnóstico inicial: ${diagnosisLabels[reply.escalation.diagnosis]}.`,
+    ...(state ? [`Estado informado pelo aplicativo, não confirmado pelo servidor: ${state}.`] : []),
+    `Tentativas: ${reply.escalation.attempts.map((item) => attemptLabels[item]).join('; ') || 'nenhuma registrada'}.`,
   ].join('\n');
 }
 

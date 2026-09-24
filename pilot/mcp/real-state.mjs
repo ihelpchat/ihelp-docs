@@ -29,31 +29,59 @@ export function sanitizeWidgetContext(value) {
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, Array.isArray(item) ? item.map((entry) => own(entry) ? { ...entry } : entry) : item]));
 }
 
+const plain = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+export function intentOf(question) {
+  const value = plain(question);
+  if (/\b(?:robo|chatbot)\b/.test(value)) return 'create_robot';
+  if (/\b(?:usuario|permissao)\b/.test(value)) return 'manage_users';
+  if (/\b(?:campanha|disparo)\b/.test(value)) return 'campaigns';
+  if (/\btemplate\b/.test(value)) return 'templates';
+  if (/\b(?:canal|qr|numero|conectar|meta|coexistencia|api oficial)\b/.test(value)) return 'connect_channel';
+  if (/\b(?:cobranca|plano|credito|fatura)\b/.test(value)) return 'billing';
+  return 'get_help';
+}
+
 export function diagnoseState(question, context) {
-  const value = String(question).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+  const value = plain(question);
+  const intent = intentOf(question);
   if (/\b(?:cancelar|reembolso|alterar contrato|alterar plano|excluir conta|dados pessoais)\b/.test(value)) return { cause: 'sensitive_action' };
-  if (context?.incidents?.length) return { cause: 'bug_incident' };
-  if (/\b(?:meta|coexistencia|api oficial|whatsapp business)\b/.test(value) || context?.channels?.some((item) => item.kind === 'coexistence' && item.state === 'blocked')) return { cause: 'meta_coexistence' };
-  if (/\b(?:qr|canal|numero|conexao|conectar)\b/.test(value) && context?.channels?.some((item) => item.state !== 'connected' && item.state !== 'unknown')) return { cause: 'channel_qr' };
-  if (context?.plan === 'expired' || context?.plan === 'limited' || (/\b(?:plano|credito|cobranca)\b/.test(value) && context?.credit === 'empty')) return { cause: 'plan' };
-  if (/\b(?:robo|chatbot)\b/.test(value) && context?.permissions && !context.permissions.includes('robots.create')) return { cause: 'permission' };
-  if (/\b(?:usuario|acesso|permissao)\b/.test(value) && context?.permissions && !context.permissions.includes('users.manage')) return { cause: 'permission' };
-  if (/\b(?:campanha|disparo)\b/.test(value) && context?.permissions && !context.permissions.includes('campaigns.create')) return { cause: 'permission' };
-  if (context?.templates === 'rejected' || (/\b(?:campanha|template)\b/.test(value) && context?.templates === 'pending')) return { cause: 'configuration' };
+  if (/\b(?:sem permissao|nao tenho permissao|permissao negada|acesso negado|nao tenho acesso)\b/.test(value)) return { cause: 'permission' };
   if (/\b(?:erro|falha|travou|bug)\b/.test(value)) return { cause: 'bug_incident' };
+  const relevantIncidents = {
+    create_robot: ['robot'], manage_users: [], campaigns: ['message_delivery'],
+    templates: [], connect_channel: ['channel_outage', 'message_delivery'], billing: ['billing'], get_help: [],
+  }[intent];
+  if (context?.incidents?.some((item) => relevantIncidents.includes(item))) return { cause: 'bug_incident' };
+  if (intent === 'connect_channel') {
+    if (/\b(?:meta|coexistencia|api oficial)\b/.test(value) || context?.channels?.some((item) => item.kind === 'coexistence' && item.state === 'blocked')) return { cause: 'meta_coexistence' };
+    if (context?.channels?.some((item) => item.state !== 'connected' && item.state !== 'unknown')) return { cause: 'channel_qr' };
+  }
+  if (intent === 'billing' && (['expired', 'limited'].includes(context?.plan) || context?.credit === 'empty')) return { cause: 'plan' };
+  if (['campaigns', 'templates'].includes(intent) && ['rejected', 'pending'].includes(context?.templates)) return { cause: 'configuration' };
   return { cause: 'usage' };
 }
 
+export function diagnosticQuestion(question, context, diagnosis = diagnoseState(question, context)) {
+  const intent = intentOf(question);
+  const moduleName = {
+    create_robot: 'Robôs', manage_users: 'Usuários', campaigns: 'Campanhas', templates: 'Templates',
+    connect_channel: 'Canais', billing: 'Plano e cobrança', get_help: 'a área que você procura',
+  }[intent];
+  if (diagnosis.cause === 'sensitive_action') return 'Qual alteração você precisa solicitar ao atendimento?';
+  if (diagnosis.cause === 'plan') return 'A tela de Plano e cobrança mostra algum aviso sobre limite ou vencimento?';
+  if (diagnosis.cause === 'channel_qr') return 'Na tela de Canais, aparece um QR code ou um aviso de desconexão?';
+  if (diagnosis.cause === 'meta_coexistence') return 'Na tela de Canais, aparece algum aviso da Meta ou de coexistência?';
+  if (diagnosis.cause === 'configuration') return `Na tela de ${moduleName}, qual opção ou aviso aparece?`;
+  if (diagnosis.cause === 'bug_incident') return `Na tela de ${moduleName}, qual aviso aparece quando você tenta continuar?`;
+  if (diagnosis.cause === 'permission') return `Ao abrir ${moduleName}, aparece um aviso de acesso negado?`;
+  return `Você vê ${moduleName} no menu lateral?`;
+}
+
 export function escalationFor(question, diagnosis, context, history) {
-  const value = String(question).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
-  const past = history.map(({ content }) => content.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase());
-  const topic = past.find((item) => /\b(?:robo|chatbot|usuario|canal|qr|cobranca|plano|campanha|template)\b/.test(item)) ?? value;
-  const intent = /\b(?:robo|chatbot)\b/.test(topic) ? 'create_robot'
-    : /\b(?:usuario|acesso|permissao)\b/.test(topic) ? 'manage_users'
-    : /\b(?:canal|qr|numero|conectar)\b/.test(topic) ? 'connect_channel'
-    : /\b(?:cobranca|plano|credito)\b/.test(topic) ? 'billing'
-    : /\b(?:campanha|disparo)\b/.test(topic) ? 'campaigns'
-    : /\btemplate\b/.test(topic) ? 'templates' : 'get_help';
+  const past = history.map(({ content }) => plain(content));
+  const topic = past.find((item) => intentOf(item) !== 'get_help') ?? question;
+  const intent = intentOf(topic);
   return {
     intent,
     diagnosis: diagnosis.cause,

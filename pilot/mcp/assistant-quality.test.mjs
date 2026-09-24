@@ -363,6 +363,9 @@ const screenshotClient = {
 };
 const screenshotReply = await answerQuestion(testRoot, 'mostre todos os passos para criar um robô', { client: screenshotClient });
 assert.equal(screenshotReply.steps[0].image?.src, '/img/help/q4tBz2R7cevwT94eUQKB.png');
+assert.equal(screenshotReply.steps[0].action?.id, 'abrir-robos', 'modelo hostil não remove atalho autorizado');
+assert.equal(screenshotReply.steps[1].image?.src, '/img/help/Vc7GpOtHK4rebqsNycJs.png', 'segunda etapa mantém screenshot documental do formulário');
+assert.deepEqual(screenshotReply.sources.map(({ path }) => path), ['/docs/sobre-o-sistema/robo-de-atendimento'], 'resposta detalhada mantém fonte autorizada');
 assert.ok(screenshotReply.steps.every((step) => step.image?.src !== '/img/help/inventada.png'), 'imagem que não pertence à fonte não pode chegar à interface');
 
 const omittedScreenshotClient = {
@@ -411,6 +414,8 @@ assert.match(menuReply.answer, /Menu de opções/i);
 assert.match(menuReply.steps[1].text, /Menu de opções/i);
 const robotScreenshotPaths = new Set([...robotArticle.matchAll(/!\[[^\]]*\]\((\/img\/[^)]+)\)/g)].map((match) => match[1]));
 assert.ok(omittedScreenshotReply.steps.some((step) => step.image), 'quando o modelo omitir todas as telas, o servidor deve anexar um print relevante');
+assert.equal(omittedScreenshotReply.steps[0].action?.id, 'abrir-robos', 'omissão de imagem não remove ProductAction');
+assert.equal(omittedScreenshotReply.steps[7].image?.src, '/img/help/PJa3jnEjfcR7uSX0naA2.png', 'passo final usa screenshot documental de Salvar e Publicar');
 assert.ok(
   omittedScreenshotReply.steps.every((step) => !step.image || robotScreenshotPaths.has(step.image.src)),
   'fallback de telas continua restrito aos arquivos da fonte recuperada',

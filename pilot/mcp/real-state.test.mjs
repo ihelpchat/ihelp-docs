@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 import { answerQuestion } from './assistant-service.mjs';
-import { sanitizeWidgetContext, diagnoseState } from './real-state.mjs';
+import { sanitizeWidgetContext, diagnoseState, diagnosticQuestion } from './real-state.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const robotPath = '/docs/sobre-o-sistema/robo-de-atendimento';
@@ -12,7 +12,8 @@ const response = { model: 'fixture', output_text: JSON.stringify({
   answer: 'Abra Robôs.', sections: [], steps: [{ text: 'No menu do iHelp, abra Robôs. Na lista, clique em “Criar novo Robô”.', actionId: null, imagePath: null }],
   code: null, sources: [robotPath], suggestions: [], resolution: 'complete', found: true,
 }) };
-const client = { responses: { create: async () => response } };
+const requests = [];
+const client = { responses: { create: async (request) => { requests.push(request); return response; } } };
 const ask = (question, options = {}) => answerQuestion(root, question, { client, ...options });
 
 const safe = sanitizeWidgetContext({
@@ -48,10 +49,17 @@ assert.equal(diagnoseState('template rejeitado', { templates: 'rejected' }).caus
 assert.equal(diagnoseState('template aprovado', { templates: 'approved' }).cause, 'usage');
 assert.equal(diagnoseState('como criar um usuário?', { module: 'users', permissions: ['users.read'] }).cause, 'usage');
 assert.equal(diagnoseState('como criar campanha?', { module: 'campaigns', permissions: ['campaigns.read'] }).cause, 'usage');
+assert.equal(diagnoseState('não tenho permissão para criar robô', { permissions: ['robots.read'] }).cause, 'permission');
+assert.equal(diagnoseState('acesso negado ao criar usuário', { permissions: ['users.read'] }).cause, 'permission');
+assert.equal(diagnoseState('não tenho permissão para campanha', { permissions: ['campaigns.read'] }).cause, 'permission');
+assert.equal(diagnoseState('não tenho acesso ao canal', { channels: [{ kind: 'whatsapp', state: 'disconnected' }] }).cause, 'permission');
+assert.match(diagnosticQuestion('não tenho acesso ao canal'), /Canais/);
 assert.equal(diagnoseState('quero cancelar o contrato', safe).cause, 'sensitive_action');
 
 const overview = await ask('como criar um chatbot?');
 assert.equal(overview.steps[0].action?.id, robotAction.id, 'primeiro passo documentado precisa trazer ProductAction mesmo se modelo omitir');
+assert.equal(overview.steps[0].image?.src, '/img/help/q4tBz2R7cevwT94eUQKB.png', 'primeiro passo usa screenshot da fonte');
+assert.deepEqual(overview.sources.map(({ path }) => path), [robotPath], 'fonte do guia permanece autorizada');
 assert.ok(overview.steps.length <= 3, 'pergunta ampla deve ser curta');
 assert.ok(overview.suggestions.some((item) => /me guiar/i.test(item)));
 for (const widgetContext of [
@@ -65,6 +73,7 @@ for (const widgetContext of [
   assert.deepEqual(contextualOverview.steps, overview.steps, 'hint irrelevante não muda passos, imagem ou ProductAction');
   assert.deepEqual(contextualOverview.sources, overview.sources, 'hint irrelevante não muda fonte');
   assert.equal(contextualOverview.answer, overview.answer, 'hint irrelevante não muda resposta');
+  assert.deepEqual(requests.at(-1).input, requests[0].input, 'hint irrelevante não pode alterar o prompt do modelo');
 }
 const relatedOverview = await ask('como criar um chatbot?', { widgetContext: { incidents: ['robot'] } });
 assert.equal(relatedOverview.diagnosis.cause, 'bug_incident');
@@ -90,6 +99,7 @@ const history = [
 ];
 const stuck = await ask('não encontrei', { history });
 assert.equal(stuck.steps.length, 0, 'não encontrei pede diagnóstico sem repetir o mesmo passo');
+assert.deepEqual(stuck.sources.map(({ path }) => path), [robotPath], 'diagnóstico mantém a fonte do guia');
 assert.match(stuck.answer, /\?/);
 assert.equal((stuck.answer.match(/\?/g) ?? []).length, 1, 'uma pergunta específica');
 const contextual = await ask('não encontrei', { history, widgetContext: safe });
