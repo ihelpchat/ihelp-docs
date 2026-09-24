@@ -64,6 +64,7 @@ await assert.rejects(generateContentPackage(testRoot, { ...request, details: 'Au
 const plan = await planContent(testRoot, request, { client: aiClient });
 assert.equal(plan.status, 'ready');
 assert.equal(plan.suggestedActions[0].route, '/contact');
+assert.deepEqual(plan.suggestedActions[0], { id: 'importar-contatos', label: 'Abrir a tela Contatos', route: '/contact', target: 'contacts-more-options' }, 'plano precisa canonizar label sem alterar destino');
 await planContent(testRoot, request, { client: aiClient, productContext: {
   code: [], matches: [{ repository: 'ihelpchat/front-react', ref: 'test', role: 'frontend', path: 'src/Contacts/CPF-123.456.789-09-phone-11987654321.tsx', excerpt: 'Tela Contatos // sk-proj-abcdefghijklmnop1234567890' }],
   support: { categories: [], rules: [] }, coverage: [],
@@ -72,6 +73,10 @@ const generated = await generateContentPackage(testRoot, request, { client: aiCl
 assert.equal(generated.articles.length, 2);
 assert.deepEqual(generated.articles.map(({ contentType }) => contentType), ['faq', 'tutorial']);
 assert.ok(generated.articles.every(({ productActions }) => productActions.length === 1));
+assert.ok(generated.articles.every(({ productActions }) => {
+  assert.deepEqual(productActions[0], { id: 'importar-contatos', label: 'Abrir a tela Contatos', route: '/contact', target: 'contacts-more-options' }, 'pacote precisa canonizar label sem alterar id, route ou target');
+  return true;
+}));
 
 const rendered = renderArticle(generated.articles[0]);
 assert.match(rendered, /<ProductAction id="importar-contatos"/);
