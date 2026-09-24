@@ -47,7 +47,7 @@ const auditEvents = async () => (await readFile(auditFile, 'utf8')).trim().split
 try {
   await client.connect(transport);
   const tools = await client.listTools();
-  assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), ['docs_audit_content', 'docs_get_article', 'docs_inventory', 'docs_product_context', 'docs_search', 'docs_submit_article', 'docs_validate_article']);
+  assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), ['docs_audit_content', 'docs_generate_package', 'docs_get_article', 'docs_inventory', 'docs_plan_content', 'docs_product_context', 'docs_search', 'docs_submit_article', 'docs_validate_article']);
 
   const validation = await client.callTool({ name: 'docs_validate_article', arguments: article });
   assert.match(validation.content[0].text, /"valid": true/);

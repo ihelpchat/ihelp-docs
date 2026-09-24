@@ -4,8 +4,11 @@ import { basename, join, normalize, relative } from 'node:path';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
-const SAFE_PATH = /^(docs|api|blog)\/[a-z0-9][a-z0-9/-]*$/;
+const SAFE_PATH = /^(docs|api|blog|tutoriais)\/[a-z0-9][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)*$/;
 const SAFE_ACTOR = /^(?:user|service):[a-z0-9][a-z0-9_-]{2,63}$/;
+const SAFE_ACTION_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
+const SAFE_PRODUCT_ROUTE = /^\/(?!\/)[a-z0-9/_-]*$/;
+const SAFE_TARGET = /^[a-z][a-z0-9-]{2,63}$/;
 export const isSafeRequestedBy = (value) => typeof value === 'string' && SAFE_ACTOR.test(value);
 export class SubmitArticleError extends Error {
   constructor(code, message, options) {
@@ -32,7 +35,7 @@ function escapeYaml(value) {
 
 function safeContentPath(root, contentPath) {
   if (!SAFE_PATH.test(contentPath) || contentPath.includes('..') || contentPath.endsWith('/')) {
-    throw new Error('path deve começar com docs/, api/ ou blog/ e usar apenas slug seguro');
+    throw new Error('path deve começar com docs/, tutoriais/, api/ ou blog/ e usar apenas slug seguro');
   }
   const target = normalize(join(root, 'content/docs', `${contentPath}.mdx`));
   const base = normalize(join(root, 'content/docs'));
@@ -50,14 +53,28 @@ export function validateArticle(article) {
   if (!article.body || article.body.trim().split(/\s+/).filter(Boolean).length < 60) issues.push('body precisa ter ao menos 60 palavras');
   if (/<script\b/i.test(article.body ?? '')) issues.push('scripts não são permitidos');
   if (/<iframe\b/i.test(article.body ?? '')) issues.push('iframes devem ser enviados pelo campo tangoUrl');
+  if (/<(?:video|VideoEmbed)\b|https?:\/\/\S+\.(?:mp4|webm)\b/i.test(article.body ?? '')) issues.push('vídeo não faz parte do pacote editorial');
   if (/!\[\]\(/.test(article.body ?? '')) issues.push('imagens precisam de texto alternativo');
   if (/ihelpchat\.github\.io\/ihelp-docs/i.test(article.body ?? '')) issues.push('links legados não são permitidos');
   if (/^## Tutorial Guiado$/m.test(article.body ?? '')) issues.push('use um Tango público no campo tangoUrl em vez de rodapé genérico');
   if (/^#{2,6}\s+\*\*/m.test(article.body ?? '')) issues.push('headings não devem usar negrito redundante');
-  if (SECRET_PATTERNS.some((pattern) => pattern.test(`${article.body ?? ''}\n${article.description ?? ''}`))) issues.push('possível credencial detectada');
+  const publicText = `${article.title ?? ''}\n${article.description ?? ''}\n${article.body ?? ''}`;
+  if (SECRET_PATTERNS.some((pattern) => pattern.test(publicText))) issues.push('possível credencial detectada');
+  if (/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(publicText) || /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/.test(publicText)) issues.push('possível dado pessoal detectado');
   if (article.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(article.tangoUrl)) {
     issues.push('tangoUrl precisa ser uma URL oficial de embed ou workflow do Tango');
   }
+  if (article.productActions !== undefined && !Array.isArray(article.productActions)) issues.push('productActions precisa ser uma lista');
+  const actionIds = new Set();
+  for (const action of Array.isArray(article.productActions) ? article.productActions : []) {
+    if (!action || !SAFE_ACTION_ID.test(action.id ?? '')) issues.push('productActions.id inválido');
+    else if (actionIds.has(action.id)) issues.push(`productActions.id duplicado: ${action.id}`);
+    else actionIds.add(action.id);
+    if (typeof action?.label !== 'string' || action.label.trim().length < 3 || action.label.trim().length > 80) issues.push('productActions.label inválido');
+    if (!SAFE_PRODUCT_ROUTE.test(action?.route ?? '')) issues.push('productActions.route inválida');
+    if (action?.target && !SAFE_TARGET.test(action.target)) issues.push('productActions.target inválido');
+  }
+  if ((article.productActions?.length ?? 0) > 12) issues.push('productActions aceita no máximo 12 ações');
   return { valid: issues.length === 0, issues };
 }
 
@@ -72,7 +89,11 @@ export function renderArticle(article) {
   const tutorial = article.tangoUrl
     ? `\n\n<TutorialCard title=${escapeYaml(article.title)} url=${escapeYaml(publicTangoUrl)} description=${escapeYaml(article.description)} />`
     : '';
-  return `---\ntitle: ${escapeYaml(article.title)}\ndescription: ${escapeYaml(article.description)}\nsource: ${article.source}\ncontentType: ${article.contentType}\n---\n\n${article.body.trim()}${tutorial}\n`;
+  const actions = (article.productActions ?? []).map((action) =>
+    `<ProductAction id=${escapeYaml(action.id)} label=${escapeYaml(action.label)} route=${escapeYaml(action.route)}${action.target ? ` target=${escapeYaml(action.target)}` : ''} />`
+  ).join('\n');
+  const actionBlock = actions ? `\n\n${actions}` : '';
+  return `---\ntitle: ${escapeYaml(article.title)}\ndescription: ${escapeYaml(article.description)}\nsource: ${article.source}\ncontentType: ${article.contentType}\n---\n\n${article.body.trim()}${actionBlock}${tutorial}\n`;
 }
 
 async function walk(root) {

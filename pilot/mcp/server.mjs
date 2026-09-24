@@ -5,18 +5,38 @@ import { createHash } from 'node:crypto';
 import { auditOperation, getInventory, isSafeRequestedBy, searchContent, SubmitArticleError, submitArticle, validateArticle } from './content-service.mjs';
 import { auditContent, readArticle } from './editorial-standard.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
+import { generateContentPackage, planContent } from './content-ai-service.mjs';
 
 const requestedBySchema = z.string().refine(isSafeRequestedBy, 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
 
+const productActionSchema = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]{2,63}$/),
+  label: z.string().min(3).max(80),
+  route: z.string().regex(/^\/(?!\/)[a-z0-9/_-]*$/),
+  target: z.string().regex(/^[a-z][a-z0-9-]{2,63}$/).optional(),
+});
+
 const articleSchema = z.object({
-  path: z.string().describe('Caminho sem extensão, começando com docs/, api/ ou blog/'),
+  path: z.string().describe('Caminho sem extensão, começando com docs/, tutoriais/, api/ ou blog/'),
   title: z.string(),
   description: z.string(),
   source: z.enum(['produto', 'suporte', 'api']),
   contentType: z.enum(['faq', 'tutorial', 'guia', 'referencia']),
   body: z.string().describe('Conteúdo Markdown sem frontmatter'),
   tangoUrl: z.string().url().optional(),
+  productActions: z.array(productActionSchema).max(12).optional(),
+});
+
+const contentRequestSchema = z.object({
+  topic: z.string().min(3).max(120),
+  module: z.string().min(2).max(80),
+  description: z.string().min(10).max(1_000),
+  details: z.string().max(8_000).optional(),
+  audience: z.string().max(300).default('Cliente em trial sem treinamento'),
+  productRoute: z.string().regex(/^\/(?!\/)[a-z0-9/_-]*$/).optional(),
+  tangoUrl: z.string().url().optional(),
+  requestedBy: requestedBySchema,
 });
 
 const textResult = (value, isError = false) => ({
@@ -77,6 +97,38 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       return textResult(result);
     } catch (error) {
       await auditOperation(root, { actor: requestedBy, operation: 'docs_product_context', target, result: 'failure' });
+      return textResult({ error: error instanceof Error ? error.message : String(error) }, true);
+    }
+  });
+
+  server.registerTool('docs_plan_content', {
+    description: 'Planeja FAQ, tutorial e ações com contexto do produto, suporte e documentação; pergunta quando faltam fatos.',
+    inputSchema: contentRequestSchema,
+  }, async ({ requestedBy, ...request }) => {
+    const target = auditTarget(request.module, request.topic);
+    await auditOperation(root, { actor: requestedBy, operation: 'docs_plan_content', target, result: 'attempt' });
+    try {
+      const result = await planContent(root, request);
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_plan_content', target, result: result.status });
+      return textResult(result);
+    } catch (error) {
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_plan_content', target, result: 'failure' });
+      return textResult({ error: error instanceof Error ? error.message : String(error) }, true);
+    }
+  });
+
+  server.registerTool('docs_generate_package', {
+    description: 'Gera FAQ, tutorial e ações guiadas sem vídeo a partir do plano validado; não escreve arquivos.',
+    inputSchema: contentRequestSchema,
+  }, async ({ requestedBy, ...request }) => {
+    const target = auditTarget(request.module, request.topic);
+    await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_package', target, result: 'attempt' });
+    try {
+      const result = await generateContentPackage(root, request);
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_package', target, result: result.status });
+      return textResult(result);
+    } catch (error) {
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_package', target, result: 'failure' });
       return textResult({ error: error instanceof Error ? error.message : String(error) }, true);
     }
   });
