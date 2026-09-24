@@ -12,6 +12,18 @@ const realArticle = await readArticle(new URL('../', import.meta.url).pathname, 
 const realRaw = await readFile(new URL('../content/docs/api/crm/funis-e-etapas.mdx', import.meta.url), 'utf8');
 assert.equal(validateArticle(realArticle).valid, true, 'artigo real com dono do token: administradores deve validar');
 assert.equal((await submitContentPackage(root, [realArticle], 'dry_run', 'user:tester')).status, 'dry_run', 'artigo real deve passar no dry_run');
+const leakedAliases = [
+  'AWS_SECRET_ACCESS_KEY="alphaBetaGammaDeltaEpsilon"',
+  'JWT_SECRET_KEY="bravoCharlieDeltaEchoFoxtrot"',
+  'private_key="charlieDeltaEchoFoxtrotGolf"',
+  'DB_PASS="deltaEchoFoxtrotGolfHotel"',
+  'credentials="echoFoxtrotGolfHotelIndia"',
+];
+for (const leaked of leakedAliases) {
+  const unsafe = { ...realArticle, body: `${realArticle.body}\n\n${leaked}` };
+  assert.ok(validateArticle(unsafe).issues.some((issue) => /credencial/i.test(issue)), `${leaked.split('=')[0]} deve falhar validateArticle`);
+  await assert.rejects(submitContentPackage(root, [unsafe], 'dry_run', 'user:tester'), /credencial/i);
+}
 assert.equal(validateArticle({ ...article('docs/teste/rota', 'Rota segura'), productActions: [{ id: 'abrir-rota', label: 'Abrir rota', route: '//externo' }] }).valid, false);
 for (const [field, value] of [['title', 'Contato (11) 98765-4321'], ['description', 'Procedimento com CPF 123.456.789-09 que jamais pode ser publicado.'], ['body', `${body} Ligue para 11987654321.`]]) {
   const unsafe = { ...article('docs/teste/pii', 'Guia seguro'), [field]: value };
@@ -62,6 +74,10 @@ globalThis.fetch = async (url, init = {}) => {
   throw Error(`Unexpected method: ${method}`);
 };
 try {
+  for (const leaked of leakedAliases) {
+    await assert.rejects(submitContentPackage(root, [{ ...realArticle, body: `${realArticle.body}\n\n${leaked}` }], 'pull_request', 'user:tester'), /credencial/i);
+  }
+  assert.equal(pulls, 0, 'aliases de credencial não podem chegar a refs ou PR');
   await assert.rejects(submitContentPackage(root, [{ ...article('docs/teste/pii', 'Guia seguro'), body: `${body} Ligue para (11) 98765-4321.` }], 'pull_request', 'user:tester'), /dado pessoal/i);
   await assert.rejects(submitContentPackage(root, [{ ...article('docs/teste/pii', 'Guia seguro'), productActions: [{ ...trustedAction, label: 'Ligue para (11) 98765-4321' }] }], 'pull_request', 'user:tester'), /dado pessoal/i);
   await assert.rejects(submitContentPackage(root, [openAiSecret], 'pull_request', 'user:tester'), /credencial/i);
@@ -82,7 +98,7 @@ try {
   assert.equal(mutations.length, before);
   assert.equal((await readdir(root)).includes('.drafts'), false);
   const audit = (await readFile(join(root, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
-  assert.deepEqual(audit.map(({ result }) => result), ['attempt', 'failure', 'attempt', 'failure', 'attempt', 'failure', 'attempt', 'external_request', 'success']);
+  assert.deepEqual(audit.map(({ result }) => result), [...leakedAliases.flatMap(() => ['attempt', 'failure']), 'attempt', 'failure', 'attempt', 'failure', 'attempt', 'failure', 'attempt', 'external_request', 'success']);
   assert.ok(audit.every(({ actor }) => actor === 'user:tester'));
   assert.doesNotMatch(JSON.stringify(audit), /mock-token|Novo guia|artigo antigo/);
   const updated = await submitContentPackage(root, [realArticle], 'pull_request', 'user:tester');
