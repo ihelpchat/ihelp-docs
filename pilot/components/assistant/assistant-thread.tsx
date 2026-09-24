@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { AlertCircle, ArrowRight, Check, ChevronRight, Copy, MessageCircle, Play, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchContext } from 'fumadocs-ui/contexts/search';
@@ -34,6 +35,48 @@ function Avatar() {
   return <span className="ih-ai-avatar" aria-hidden="true"><Sparkles /></span>;
 }
 
+function MediaGuide({ reply, openMedia, setOpenMedia }: {
+  reply: AssistantReply;
+  openMedia: string | null;
+  setOpenMedia: (path: string | null) => void;
+}) {
+  const sources = reply.sources.filter((source) => source.media);
+  if (!sources.length) return null;
+  return (
+    <section className="ih-ai-media-guide" aria-label="Vídeos e guias deste procedimento">
+      <div className="ih-ai-media-guide-copy">
+        <strong>Quer ver como funciona antes de começar?</strong>
+        <p>Temos {sources.length === 1 ? 'um vídeo ou guia que mostra' : 'vídeos e guias que mostram'} este processo. Você pode assistir aqui ou continuar pelo passo a passo abaixo.</p>
+      </div>
+      {sources.map((source) => {
+        const media = source.media!;
+        const expanded = openMedia === source.path;
+        return (
+          <div className="ih-ai-media-guide-item" key={source.path}>
+            <span className="ih-pill">{media.kind === 'tango' ? 'Tango' : 'Vídeo'}</span>
+            {media.embedUrl ? (
+              <button type="button" onClick={() => setOpenMedia(expanded ? null : source.path)} aria-expanded={expanded}>
+                <Play aria-hidden="true" />{media.kind === 'tango' ? 'Abrir guia interativo' : 'Assistir vídeo'}
+              </button>
+            ) : (
+              <a href={media.url} target="_blank" rel="noreferrer noopener">Abrir no Tango</a>
+            )}
+            {expanded && media.embedUrl ? (
+              <div className="ih-ai-media">
+                {media.kind === 'video' && media.embedUrl.startsWith('/') ? (
+                  <video controls preload="metadata" aria-label={`Vídeo: ${source.title}`}><source src={media.embedUrl} /></video>
+                ) : (
+                  <iframe src={media.embedUrl} title={`${media.kind === 'tango' ? 'Tango' : 'Vídeo'}: ${source.title}`} loading="lazy" sandbox="allow-scripts allow-same-origin allow-popups allow-top-navigation-by-user-activation" allowFullScreen />
+                )}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
 function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, { role: 'ai' }>; last: boolean; compact: boolean }) {
   const { feedback, rate, ask, busy, closeDrawer } = useAssistant();
   const { copied, copy } = useCopy();
@@ -64,6 +107,7 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
             ))}
           </div>
         ) : null}
+        <MediaGuide reply={reply} openMedia={openMedia} setOpenMedia={setOpenMedia} />
         {reply.steps.length ? (
           <ol className="ih-ai-steps">
             {reply.steps.map((step, index) => (
@@ -71,6 +115,9 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
                 <span aria-hidden="true">{index + 1}</span>
                 <div>
                   <p>{step.text}</p>
+                  {step.image ? (
+                    <Image className="ih-ai-step-image" src={step.image.src} alt={step.image.alt} width={960} height={540} loading="lazy" />
+                  ) : null}
                   {step.action && productActionUrl(step.action.route, step.action.id, step.action.target) ? (
                     <a className="ih-ai-product-action" href={productActionUrl(step.action.route, step.action.id, step.action.target) ?? undefined} target="_blank" rel="noreferrer noopener">
                       {step.action.label}<ArrowRight aria-hidden="true" />
@@ -107,27 +154,6 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
                     </span>
                     <ChevronRight aria-hidden="true" />
                   </Link>
-                  {source.media ? (
-                    <div className="ih-ai-media-action">
-                      <span className="ih-pill">{source.media.kind === 'tango' ? 'Tango' : 'Vídeo'}</span>
-                      {source.media.embedUrl ? (
-                        <button type="button" onClick={() => setOpenMedia(openMedia === source.path ? null : source.path)} aria-expanded={openMedia === source.path}>
-                          <Play aria-hidden="true" />{source.media.kind === 'tango' ? 'Ver Tango' : 'Ver vídeo'}
-                        </button>
-                      ) : (
-                        <a href={source.media.url} target="_blank" rel="noreferrer noopener">Abrir no Tango</a>
-                      )}
-                      {openMedia === source.path && source.media.embedUrl ? (
-                        <div className="ih-ai-media">
-                          {source.media.kind === 'video' && source.media.embedUrl.startsWith('/') ? (
-                            <video controls preload="metadata" aria-label={`Vídeo: ${source.title}`}><source src={source.media.embedUrl} /></video>
-                          ) : (
-                            <iframe src={source.media.embedUrl} title={`${source.media.kind === 'tango' ? 'Tango' : 'Vídeo'}: ${source.title}`} loading="lazy" sandbox="allow-scripts allow-same-origin allow-popups allow-top-navigation-by-user-activation" allowFullScreen />
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
                 </li>
               ))}
             </ul>
@@ -160,6 +186,7 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
         </div>
         {last && !busy && reply.suggestions.length ? (
           <div className="ih-ai-follow">
+            <p>Posso continuar com você:</p>
             {reply.suggestions.map((suggestion) => (
               <button type="button" key={suggestion} onClick={() => ask(suggestion)}>
                 {compact ? null : <ArrowRight aria-hidden="true" />}

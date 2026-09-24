@@ -68,6 +68,69 @@ assert.deepEqual(beginnerReply.steps[0], {
 });
 assert.doesNotMatch(beginnerReply.steps[0].action.label, /importar contatos/i, 'CTA não pode prometer a importação quando só abre Contatos');
 
+const guidedRequests = [];
+const guidedClient = {
+  responses: {
+    create: async (request) => {
+      guidedRequests.push(request);
+      return {
+        model: 'gpt-test',
+        output_text: JSON.stringify({
+          answer: 'Vamos criar seu primeiro robô juntos.',
+          sections: [],
+          steps: [],
+          code: null,
+          sources: ['/docs/sobre-o-sistema/robo-de-atendimento'],
+          suggestions: [],
+          resolution: 'complete',
+          found: true,
+        }),
+      };
+    },
+  },
+};
+const guidedReply = await answerQuestion(testRoot, 'como criar um chatbot?', { client: guidedClient });
+assert.equal(guidedRequests[0].reasoning.effort, 'medium', 'perguntas guiadas precisam de raciocínio suficiente para usar a fonte inteira');
+assert.match(guidedRequests[0].input.at(-1).content, /PASSOS DOCUMENTADOS:/);
+assert.match(guidedRequests[0].input.at(-1).content, /TELAS DOCUMENTADAS:/);
+assert.match(guidedRequests[0].input.at(-1).content, /MÍDIA DISPONÍVEL: vídeo/i);
+assert.ok(guidedReply.steps.length >= 5, 'resumo raso do modelo deve herdar o passo a passo documentado');
+assert.deepEqual(guidedReply.steps[0].image, {
+  src: '/img/help/q4tBz2R7cevwT94eUQKB.png',
+  alt: 'Tela do iHelp: Como criar um novo robô',
+});
+assert.ok(guidedReply.suggestions.some((suggestion) => /passo a passo/i.test(suggestion)), 'resposta procedural deve convidar continuação guiada');
+
+const continuedReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
+  client: guidedClient,
+  history: [
+    { role: 'user', content: 'Como criar um chatbot?' },
+    { role: 'assistant', content: 'Vamos criar juntos.\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento' },
+  ],
+});
+assert.match(guidedRequests[1].input.at(-1).content, /FONTE 1: Robô de Atendimento/, 'continuação curta deve recuperar a fonte usada na conversa');
+assert.equal(continuedReply.steps.length, 1, 'continuação guiada deve entregar uma etapa pequena por vez');
+assert.ok(continuedReply.suggestions.some((suggestion) => /concluí|encontrei/i.test(suggestion)), 'continuação guiada deve perguntar pelo resultado do passo');
+
+const screenshotClient = {
+  responses: {
+    create: async () => ({
+      model: 'gpt-test',
+      output_text: JSON.stringify({
+        answer: 'Abra a criação do robô.', sections: [],
+        steps: [
+          { text: 'Clique em Criar novo robô.', actionId: null, imagePath: '/img/help/q4tBz2R7cevwT94eUQKB.png' },
+          { text: 'Ignore esta imagem inventada.', actionId: null, imagePath: '/img/help/inventada.png' },
+        ],
+        code: null, sources: ['/docs/sobre-o-sistema/robo-de-atendimento'], suggestions: [], resolution: 'complete', found: true,
+      }),
+    }),
+  },
+};
+const screenshotReply = await answerQuestion(testRoot, 'como criar um robô', { client: screenshotClient });
+assert.equal(screenshotReply.steps[0].image?.src, '/img/help/q4tBz2R7cevwT94eUQKB.png');
+assert.equal(screenshotReply.steps[1].image, undefined, 'imagem que não pertence à fonte não pode chegar à interface');
+
 const keyedSteps = (texts) => parseAnswer(JSON.stringify({ answer: 'Veja os passos.', steps: texts.map((text) => ({ text, actionId: null })) })).steps.map(({ text }) => text);
 assert.deepEqual(keyedSteps(['Abra Contatos no menu lateral.', 'Acesse Contatos pelo menu lateral.']), ['Abra Contatos no menu lateral.']);
 assert.deepEqual(keyedSteps(['Abra o item 1 no menu lateral.', 'Acesse o item 2 pelo menu lateral.']), ['Abra o item 1 no menu lateral.', 'Acesse o item 2 pelo menu lateral.']);

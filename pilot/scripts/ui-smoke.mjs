@@ -56,7 +56,7 @@ const mockReply = {
   answer: 'Abra a conversa e use a opção Transferir no painel do contato.\n\nO histórico vai junto.',
   sections: [{ title: 'Antes de começar', items: ['Confirme o departamento de destino.'] }],
   steps: [
-    { text: 'Abra a conversa.' },
+    { text: 'Abra a conversa.', image: { src: '/img/help/q4tBz2R7cevwT94eUQKB.png', alt: 'Tela do atendimento' } },
     { text: 'Clique em Transferir.', action: { id: 'importar-contatos', label: 'Abrir Contatos', route: '/reports', target: 'contacts-more-options' } },
     { text: 'Escolha o destino e confirme.', action: { id: 'acao-inventada', label: 'Abrir Contatos', route: '/contact', target: 'contacts-more-options' } },
     { text: 'Abra Contatos.', action: { id: 'importar-contatos', label: 'Importar contatos automaticamente', route: '/contact', target: 'contacts-more-options' } },
@@ -120,6 +120,7 @@ async function testAssistant(context, errors) {
   errors.splice(0, errors.length, ...errors.filter((item) => !/502|Failed to load resource/.test(item)));
   await page.getByRole('button', { name: 'Tentar de novo' }).click();
   await page.locator('.ih-ai-steps li').first().waitFor();
+  assert.ok(await page.locator('.ih-ai-step-image[src="/img/help/q4tBz2R7cevwT94eUQKB.png"]').count(), 'Print documentado não apareceu junto da etapa');
   assert.equal(await page.locator('.ih-ai-product-action').count(), 1, 'Somente action allowlisted pode virar CTA');
   assert.equal(await page.locator('.ih-ai-product-action').textContent(), 'Abrir a tela Contatos', 'Label inventado pelo endpoint não pode chegar ao CTA');
   assert.equal(await page.locator('.ih-ai-sections section').count(), 1);
@@ -127,9 +128,12 @@ async function testAssistant(context, errors) {
   assert.match(await supportCta.getAttribute('href'), /wa\.me\/551730422307\?text=/);
   assert.ok(await page.getByText('Ver resposta completa').count(), 'Fonte sem CTA de artigo');
   assert.ok(await page.getByText('Vídeo').count(), 'Mídia real sem badge');
-  await page.getByRole('button', { name: 'Ver vídeo' }).first().click();
+  const mediaGuide = page.locator('.ih-ai-media-guide').first();
+  assert.match(await mediaGuide.textContent(), /vídeo.*passo a passo|passo a passo.*vídeo/i, 'Vídeo não foi oferecido dentro da orientação');
+  assert.ok(await mediaGuide.evaluate((element) => Boolean(element.compareDocumentPosition(document.querySelector('.ih-ai-steps')) & Node.DOCUMENT_POSITION_FOLLOWING)), 'Vídeo deve aparecer antes do passo a passo');
+  await page.getByRole('button', { name: 'Assistir vídeo' }).first().click();
   assert.ok(await page.locator('.ih-ai-media video source[src="/videos/atendimento.mp4"]').count(), 'Vídeo não abriu in-page');
-  await page.getByRole('button', { name: 'Ver vídeo' }).last().click();
+  await page.getByRole('button', { name: 'Assistir vídeo' }).last().click();
   assert.ok(await page.locator('.ih-ai-media iframe[src="https://www.tella.tv/video/faq-como-alterar-sua-senha-no-ihelp-1-8jwf/embed"]').count(), 'Tella real não abriu in-page');
   assert.equal(await page.locator('.ih-ai-error').count(), 0, 'Erro deveria sumir após tentar de novo');
   assert.equal(await page.locator('.ih-ai-steps li').count(), 4);
@@ -143,6 +147,8 @@ async function testAssistant(context, errors) {
   await page.waitForFunction(() => document.querySelectorAll('.ih-ai-steps').length === 2);
   assert.equal(requests.at(-1).scope, 'API');
   assert.ok(requests.at(-1).history.length >= 2, 'Histórico não foi enviado');
+  assert.match(requests.at(-1).history.at(-1).content, /1\. Abra a conversa\./, 'Histórico precisa levar os passos anteriores');
+  assert.match(requests.at(-1).history.at(-1).content, /Fonte usada: \/docs\/sobre-o-sistema\/atendimento/, 'Histórico precisa levar a fonte para continuar a conversa');
   await page.getByRole('button', { name: 'Resposta útil' }).last().click();
   await page.getByText('Obrigado pelo retorno').waitFor();
 
