@@ -202,6 +202,21 @@ assert.deepEqual(
   ['Concluí este passo', 'Preciso de ajuda'],
   'continuação guiada deve oferecer confirmações simples para um iniciante',
 );
+const verboseGuideClient = { responses: { create: async () => ({
+  model: 'gpt-test', output_text: JSON.stringify({
+    answer: 'Vamos por etapas.', sections: [],
+    steps: [
+      { text: fullRobotSteps[0], actionId: 'abrir-robos', imagePath: null },
+      { text: fullRobotSteps[1], actionId: null, imagePath: null },
+    ],
+    code: null, sources: ['/docs/sobre-o-sistema/robo-de-atendimento'], suggestions: [], resolution: 'complete', found: true,
+  }),
+}) } };
+const boundedGuideReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
+  client: verboseGuideClient,
+  history: [guidedHistory[0], { role: 'assistant', content: 'Fonte usada: /docs/sobre-o-sistema/robo-de-atendimento' }],
+});
+assert.equal(boundedGuideReply.steps.length, 1, 'guia limita a uma ação mesmo quando o modelo oferece várias');
 
 const changedTopicRequests = [];
 const changedTopicClient = {

@@ -499,7 +499,9 @@ export async function answerQuestion(root, question, options = {}) {
           imagePath: null,
         }))
       : (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
-    : guideFinished ? [] : progressStep ? [progressStep] : parsed.steps.length ? parsed.steps : documentedFallback;
+    : guideFinished ? [] : progressStep ? [progressStep] : continuation
+      ? (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
+      : parsed.steps.length ? parsed.steps : documentedFallback;
   const modelUsedValidatedImage = responseSteps.some(({ imagePath }) => availableImages.has(imagePath));
   const shouldFallbackImages = (procedure || continuation) && !overviewProcedure && !modelUsedValidatedImage;
   const fallbackImages = shouldFallbackImages
