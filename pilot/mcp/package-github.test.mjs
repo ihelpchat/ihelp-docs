@@ -24,12 +24,20 @@ const leakedAliases = [
   'dbPass="administradores"',
   'secretKey="administradores"',
   'GITHUB_TOKEN=ABCDEFGHIJKLMNOPQRSTUVWX',
+  'passwd="Sup3rS3cret!"',
+  'senha_admin="Adm!n2024#x"',
+  'SECRET_KEY_BASE=abcdef0123456789abcdef0123456789',
+  'PWD="Sup3rS3cret!"',
+  'AdminPassWd="Sup3rS3cret!"',
 ];
 for (const leaked of leakedAliases) {
   const unsafe = { ...realArticle, body: `${realArticle.body}\n\n${leaked}` };
   assert.ok(validateArticle(unsafe).issues.some((issue) => /credencial/i.test(issue)), `${leaked.split('=')[0]} deve falhar validateArticle`);
   await assert.rejects(submitContentPackage(root, [unsafe], 'dry_run', 'user:tester'), /credencial/i);
 }
+const descriptiveArticle = { ...realArticle, body: `${realArticle.body}\n\nadmin_password_hint="Sup3rS3cret!"\nsecret_name="Sup3rS3cret!"` };
+assert.equal(validateArticle(descriptiveArticle).valid, true, 'campos descritivos não podem ser tratados como credenciais');
+assert.equal((await submitContentPackage(await mkdtemp(join(tmpdir(), 'ihelp-descriptive-')), [descriptiveArticle], 'dry_run', 'user:tester')).status, 'dry_run');
 assert.equal(validateArticle({ ...article('docs/teste/rota', 'Rota segura'), productActions: [{ id: 'abrir-rota', label: 'Abrir rota', route: '//externo' }] }).valid, false);
 for (const [field, value] of [['title', 'Contato (11) 98765-4321'], ['description', 'Procedimento com CPF 123.456.789-09 que jamais pode ser publicado.'], ['body', `${body} Ligue para 11987654321.`]]) {
   const unsafe = { ...article('docs/teste/pii', 'Guia seguro'), [field]: value };
