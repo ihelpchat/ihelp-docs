@@ -76,8 +76,8 @@ const guidedClient = {
       return {
         model: 'gpt-test',
         output_text: JSON.stringify({
-          answer: 'Vamos criar seu primeiro robô juntos.',
-          sections: [],
+          answer: 'Basta criar uma saudação e encaminhar para um atendente. Use o bloco Condição para ramificar.',
+          sections: [{ title: 'O caminho', items: ['Saudação', 'Condição', 'Encaminhamento'] }],
           steps: [],
           code: null,
           sources: ['/docs/sobre-o-sistema/robo-de-atendimento'],
@@ -96,9 +96,19 @@ assert.match(guidedRequests[0].input.at(-1).content, /TELAS DOCUMENTADAS:/);
 assert.match(guidedRequests[0].input.at(-1).content, /MÍDIA DISPONÍVEL: vídeo/i);
 assert.match(guidedRequests[0].input[0].content, /visão geral conversacional/i, 'pedido amplo deve iniciar com visão geral, sem despejar o manual');
 assert.match(guidedRequests[0].input[0].content, /explique.*termo/i, 'resposta para iniciante deve explicar termos do produto quando aparecem');
-assert.equal(guidedReply.steps.length, 1, 'primeira resposta ampla deve mostrar somente a ação para começar');
+assert.equal(guidedReply.steps.length, 3, 'primeira resposta ampla deve mostrar os três passos iniciais documentados');
+assert.match(guidedReply.steps[0].text, /Robôs[\s\S]*Criar novo Robô/i);
+assert.match(guidedReply.steps[1].text, /Título do Robô/i);
+assert.match(guidedReply.steps[2].text, /Canais[\s\S]*número[\s\S]*Adicionar robô/i);
+assert.match(guidedReply.answer, /Menu de opções/i, 'visão geral deve explicar a possibilidade de ramificação');
+assert.match(guidedReply.answer, /(?:caminhos|ramifica|árvore)/i);
+assert.match(guidedReply.answer, /(?:mais simples|exemplo básico)/i, 'saudação e encaminhamento são apenas um exemplo');
+assert.doesNotMatch(JSON.stringify(guidedReply), /Condição|filtro/i, 'bloco inativo não pode aparecer na resposta');
+assert.ok(guidedReply.answer.length < 300, 'introdução deve permanecer curta');
+assert.equal(guidedReply.steps[0].action?.id, 'abrir-robos');
 assert.equal(guidedReply.steps[0].action?.route, '/bot', 'primeira ação deve levar diretamente à tela correta');
 assert.equal(guidedReply.steps[0].action?.target, 'robots-create', 'ação deve carregar o alvo do tour no app');
+assert.equal(`/bot?ihelpGuide=${guidedReply.steps[0].action.id}`, '/bot?ihelpGuide=abrir-robos');
 assert.deepEqual(
   guidedReply.suggestions.slice(0, 2),
   ['Pode me guiar etapa por etapa', 'Quero ver todos os passos'],
@@ -212,6 +222,7 @@ assert.match(robotArticle, /Canais[\s\S]{0,180}números/i, 'guia precisa explica
 assert.match(robotArticle, /Gatilho[\s\S]{0,220}inicia/i, 'guia precisa explicar o que é gatilho');
 assert.match(robotArticle, /Departamento[\s\S]{0,260}fila/i, 'guia precisa explicar a diferença de destino para iniciantes');
 assert.match(robotArticle, /<ProductAction id="abrir-robos"/i, 'guia precisa levar a pessoa diretamente para a tela de robôs');
+assert.match(robotArticle, /Menu de opções[\s\S]{0,240}(?:ramifica|árvore|caminhos)/i, 'artigo deve explicar a ramificação para iniciantes');
 const robotScreenshotPaths = new Set([...robotArticle.matchAll(/!\[[^\]]*\]\((\/img\/[^)]+)\)/g)].map((match) => match[1]));
 assert.ok(omittedScreenshotReply.steps.some((step) => step.image), 'quando o modelo omitir todas as telas, o servidor deve anexar um print relevante');
 assert.ok(
