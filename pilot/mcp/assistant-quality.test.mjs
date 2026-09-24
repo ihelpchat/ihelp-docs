@@ -152,6 +152,7 @@ assert.doesNotMatch(changedTopicRequests[0].input[0].content, /MODO: acompanhame
 assert.match(changedTopicRequests[0].input[0].content, /MODO: visão geral conversacional/i, 'novo procedimento amplo deve iniciar uma nova visão geral');
 assert.equal(changedTopicReply.steps.length, 1, 'procedimento em prosa deve fornecer a primeira ação mesmo se o modelo omitir steps');
 assert.match(changedTopicReply.steps[0].text, /antes de|prepare|acesse/i, 'fallback deve começar por uma ação documentada da campanha');
+assert.equal(changedTopicReply.steps[0].image, undefined, 'fallback não pode associar um print só pela posição no artigo');
 assert.deepEqual(
   changedTopicReply.suggestions,
   ['Pode me guiar etapa por etapa', 'Quero ver todos os passos', 'Como preparo a planilha?'],
@@ -269,6 +270,7 @@ assert.equal(wrongSource.steps[0].action, undefined, 'ação de outra fonte não
 const actionComponent = await readFile(join(projectRoot, 'components/product-action.tsx'), 'utf8');
 assert.doesNotMatch(actionComponent, /exatamente na tela deste passo/i, 'CTA ainda promete abertura exata antes da integração no app');
 assert.doesNotMatch(actionComponent, /Abre a tela Contatos no iHelp/i, 'descrição do CTA não pode ficar presa à ação de Contatos');
-assert.match(actionComponent, /destaca onde começar/i, 'CTA deve explicar o comportamento comum do tour no app');
+assert.doesNotMatch(actionComponent, /destaca onde começar/i, 'CTA público não pode prometer tour antes do handler chegar ao app');
+assert.match(actionComponent, /Abre.*no iHelp/i, 'CTA deve explicar apenas a navegação já disponível em produção');
 
 console.log("Claricia para iniciantes passou.");
