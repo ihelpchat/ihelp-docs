@@ -41,6 +41,28 @@ const laterDecline = await ask('agora não', [...decision, { role: 'user', conte
   { role: 'assistant', content: `${undecided.answer}\nFonte usada: ${path}` }]);
 assert.deepEqual(laterDecline.steps.map(({ text }) => text), [all.steps[15].text]);
 
+const diagnosis = await ask('não encontrei', decision);
+assert.deepEqual(diagnosis.steps, []);
+assert.match(diagnosis.answer, /CRM.*menu lateral/i);
+const diagnosing = [...decision, { role: 'user', content: 'não encontrei' },
+  { role: 'assistant', content: `${diagnosis.answer}\nFonte usada: ${path}` }];
+for (const phrase of ['sim', 'não']) {
+  const reply = await ask(phrase, diagnosing);
+  assert.deepEqual(reply.steps, [], `diagnóstico não escolhe automação: ${phrase}`);
+  assert.equal(reply.sources[0]?.path, path, `fonte do diagnóstico: ${phrase}`);
+  assert.notEqual(reply.answer, 'Vamos para a próxima ação.');
+}
+const diagnosisYes = await ask('sim', diagnosing);
+const resumeHistory = [...diagnosing, { role: 'user', content: 'sim' },
+  { role: 'assistant', content: `${diagnosisYes.answer}\nFonte usada: ${path}` }];
+const resume = await ask('sim', resumeHistory);
+assert.deepEqual(resume.steps, [], 'confirmação da etapa ainda não escolhe automação');
+assert.equal(resume.answer, undecided.answer, 'diagnóstico resolvido reabre o prompt explícito');
+const promptedAgain = [...resumeHistory, { role: 'user', content: 'sim' },
+  { role: 'assistant', content: `${resume.answer}\nFonte usada: ${path}` }];
+assert.deepEqual((await ask('sim', promptedAgain)).steps.map(({ text }) => text), [all.steps[8].text]);
+assert.deepEqual((await ask('sem automação', promptedAgain)).steps.map(({ text }) => text), [all.steps[15].text]);
+
 const finalStep = await ask('concluí', atStep(16));
 assert.deepEqual(finalStep.steps, []);
 assert.match(finalStep.answer, /quadro|pipeline/i);
