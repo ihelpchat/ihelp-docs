@@ -4,7 +4,7 @@ import { getIhelpContext } from './product-context-service.mjs';
 import { readArticle } from './editorial-standard.mjs';
 import { catalogAction } from './product-actions.mjs';
 
-function normalizeCatalogLabel(action) {
+export function normalizeCatalogLabel(action) {
   const trusted = catalogAction(action.id);
   return trusted && action.route === trusted.route && action.target === trusted.target
     ? { ...action, label: trusted.label }
@@ -165,7 +165,7 @@ export async function generateContentPackage(root, request, options = {}) {
   if (parsed.status !== 'ready') return { ...parsed, articles: [], existing, model: response.model };
   const articles = parsed.articles.map((article) => ({
     ...article,
-    productActions: article.productActions.map((action) => normalizeCatalogLabel({ ...action, ...(action.target ? {} : { target: undefined }) })),
+    productActions: article.productActions.map(normalizeCatalogLabel),
     ...(request.tangoUrl && article.contentType === 'tutorial' ? { tangoUrl: request.tangoUrl } : {}),
   }));
   const invalid = articles.map((article) => ({ path: article.path, ...validateArticle(article) })).filter(({ valid }) => !valid);
