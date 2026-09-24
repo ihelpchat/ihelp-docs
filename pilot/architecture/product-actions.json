@@ -1,5 +1,6 @@
 {
   "importar-contatos": {
+    "label": "Abrir a tela Contatos",
     "route": "/contact",
     "target": "contacts-more-options"
   }

@@ -69,12 +69,11 @@ function safeAction(value: unknown): AssistantProductAction | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const action = value as Record<string, unknown>;
   if (typeof action.id !== 'string' || !/^[a-z0-9][a-z0-9-]{2,63}$/.test(action.id)) return undefined;
-  if (typeof action.label !== 'string' || action.label.length < 3 || action.label.length > 80) return undefined;
   if (typeof action.route !== 'string' || !/^\/(?!\/)[a-z0-9/_-]*$/.test(action.route)) return undefined;
   const target = typeof action.target === 'string' && /^[a-z][a-z0-9-]{2,63}$/.test(action.target) ? action.target : undefined;
-  const allowed = (allowedActions as Record<string, { route: string; target: string }>)[action.id];
+  const allowed = (allowedActions as Record<string, { label: string; route: string; target: string }>)[action.id];
   if (!allowed || action.route !== allowed.route || target !== allowed.target) return undefined;
-  return { id: action.id, label: action.label, route: action.route, ...(target ? { target } : {}) };
+  return { id: action.id, label: allowed.label, route: action.route, ...(target ? { target } : {}) };
 }
 
 function steps(value: unknown): AssistantStep[] {

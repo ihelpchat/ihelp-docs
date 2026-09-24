@@ -59,6 +59,7 @@ const mockReply = {
     { text: 'Abra a conversa.' },
     { text: 'Clique em Transferir.', action: { id: 'importar-contatos', label: 'Abrir Contatos', route: '/reports', target: 'contacts-more-options' } },
     { text: 'Escolha o destino e confirme.', action: { id: 'acao-inventada', label: 'Abrir Contatos', route: '/contact', target: 'contacts-more-options' } },
+    { text: 'Abra Contatos.', action: { id: 'importar-contatos', label: 'Importar contatos automaticamente', route: '/contact', target: 'contacts-more-options' } },
   ],
   code: { language: 'bash', content: 'curl -H "Authorization: Bearer $IHELP_TOKEN" https://apiv3.ihelpchat.com/api/v2/customers/search' },
   sources: [
@@ -119,7 +120,8 @@ async function testAssistant(context, errors) {
   errors.splice(0, errors.length, ...errors.filter((item) => !/502|Failed to load resource/.test(item)));
   await page.getByRole('button', { name: 'Tentar de novo' }).click();
   await page.locator('.ih-ai-steps li').first().waitFor();
-  assert.equal(await page.locator('.ih-ai-product-action').count(), 0, 'Action do endpoint sem allowlist não pode virar CTA');
+  assert.equal(await page.locator('.ih-ai-product-action').count(), 1, 'Somente action allowlisted pode virar CTA');
+  assert.equal(await page.locator('.ih-ai-product-action').textContent(), 'Abrir a tela Contatos', 'Label inventado pelo endpoint não pode chegar ao CTA');
   assert.equal(await page.locator('.ih-ai-sections section').count(), 1);
   const supportCta = page.getByRole('link', { name: 'Falar com o atendimento' }).last();
   assert.match(await supportCta.getAttribute('href'), /wa\.me\/551730422307\?text=/);
@@ -130,7 +132,7 @@ async function testAssistant(context, errors) {
   await page.getByRole('button', { name: 'Ver vídeo' }).last().click();
   assert.ok(await page.locator('.ih-ai-media iframe[src="https://www.tella.tv/video/faq-como-alterar-sua-senha-no-ihelp-1-8jwf/embed"]').count(), 'Tella real não abriu in-page');
   assert.equal(await page.locator('.ih-ai-error').count(), 0, 'Erro deveria sumir após tentar de novo');
-  assert.equal(await page.locator('.ih-ai-steps li').count(), 3);
+  assert.equal(await page.locator('.ih-ai-steps li').count(), 4);
   assert.equal(await page.locator('.ih-ai-code pre').count(), 1);
   assert.equal(await page.locator('.ih-ai-panel-list li').count(), 2, 'Painel de fontes incompleto');
   assert.equal(requests.at(-1).scope, 'Tudo');
