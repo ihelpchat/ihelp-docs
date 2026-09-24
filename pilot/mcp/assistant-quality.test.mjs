@@ -94,12 +94,16 @@ assert.equal(guidedRequests[0].reasoning.effort, 'medium', 'perguntas guiadas pr
 assert.match(guidedRequests[0].input.at(-1).content, /PASSOS DOCUMENTADOS:/);
 assert.match(guidedRequests[0].input.at(-1).content, /TELAS DOCUMENTADAS:/);
 assert.match(guidedRequests[0].input.at(-1).content, /MÍDIA DISPONÍVEL: vídeo/i);
-assert.ok(guidedReply.steps.length >= 5, 'resumo raso do modelo deve herdar o passo a passo documentado');
-assert.deepEqual(guidedReply.steps[0].image, {
-  src: '/img/help/q4tBz2R7cevwT94eUQKB.png',
-  alt: 'Tela do iHelp: Como criar um novo robô',
-});
-assert.ok(guidedReply.suggestions.some((suggestion) => /passo a passo/i.test(suggestion)), 'resposta procedural deve convidar continuação guiada');
+assert.match(guidedRequests[0].input[0].content, /visão geral conversacional/i, 'pedido amplo deve iniciar com visão geral, sem despejar o manual');
+assert.match(guidedRequests[0].input[0].content, /explique.*termo/i, 'resposta para iniciante deve explicar termos do produto quando aparecem');
+assert.equal(guidedReply.steps.length, 1, 'primeira resposta ampla deve mostrar somente a ação para começar');
+assert.equal(guidedReply.steps[0].action?.route, '/bot', 'primeira ação deve levar diretamente à tela correta');
+assert.equal(guidedReply.steps[0].action?.target, 'robots-create', 'ação deve carregar o alvo do tour no app');
+assert.deepEqual(
+  guidedReply.suggestions.slice(0, 2),
+  ['Pode me guiar etapa por etapa', 'Quero ver todos os passos'],
+  'resposta ampla deve sempre oferecer guia progressivo ou procedimento completo',
+);
 
 const continuedReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
   client: guidedClient,
@@ -110,7 +114,60 @@ const continuedReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
 });
 assert.match(guidedRequests[1].input.at(-1).content, /FONTE 1: Robô de Atendimento/, 'continuação curta deve recuperar a fonte usada na conversa');
 assert.equal(continuedReply.steps.length, 1, 'continuação guiada deve entregar uma etapa pequena por vez');
-assert.ok(continuedReply.suggestions.some((suggestion) => /concluí|encontrei/i.test(suggestion)), 'continuação guiada deve perguntar pelo resultado do passo');
+assert.deepEqual(
+  continuedReply.suggestions,
+  ['Encontrei o botão', 'Não encontrei esse botão'],
+  'continuação guiada deve oferecer confirmações simples para um iniciante',
+);
+
+const changedTopicRequests = [];
+const changedTopicClient = {
+  responses: {
+    create: async (request) => {
+      changedTopicRequests.push(request);
+      return {
+        model: 'gpt-test',
+        output_text: JSON.stringify({
+          answer: 'Vamos preparar sua primeira campanha.',
+          sections: [],
+          steps: [],
+          code: null,
+          sources: ['/docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha'],
+          suggestions: ['Como preparo a planilha?'],
+          resolution: 'complete',
+          found: true,
+        }),
+      };
+    },
+  },
+};
+const changedTopicReply = await answerQuestion(testRoot, 'Pode explicar como criar uma campanha?', {
+  client: changedTopicClient,
+  history: [
+    { role: 'user', content: 'Como criar um robô?' },
+    { role: 'assistant', content: 'Fonte usada: /docs/sobre-o-sistema/robo-de-atendimento' },
+  ],
+});
+assert.doesNotMatch(changedTopicRequests[0].input[0].content, /MODO: acompanhamento guiado/i, 'troca de assunto não pode continuar o guia anterior');
+assert.match(changedTopicRequests[0].input[0].content, /MODO: visão geral conversacional/i, 'novo procedimento amplo deve iniciar uma nova visão geral');
+assert.equal(changedTopicReply.steps.length, 1, 'procedimento em prosa deve fornecer a primeira ação mesmo se o modelo omitir steps');
+assert.match(changedTopicReply.steps[0].text, /antes de|prepare|acesse/i, 'fallback deve começar por uma ação documentada da campanha');
+assert.equal(changedTopicReply.steps[0].image, undefined, 'fallback não pode associar um print só pela posição no artigo');
+assert.deepEqual(
+  changedTopicReply.suggestions,
+  ['Pode me guiar etapa por etapa', 'Quero ver todos os passos', 'Como preparo a planilha?'],
+  'sugestões da visão geral devem combinar progressão padrão com o assunto atual',
+);
+assert.doesNotMatch(
+  continuedReply.answer,
+  /Na lista de Robôs, clique em “Criar novo Robô”/i,
+  'a introdução não deve repetir a instrução exibida no passo',
+);
+
+const fullGuideReply = await answerQuestion(testRoot, 'mostre todos os passos para criar um robô', { client: guidedClient });
+assert.match(guidedRequests[2].input[0].content, /passo a passo completo/i, 'pedido explícito deve ativar o modo detalhado');
+assert.ok(fullGuideReply.steps.length >= 5, 'modo detalhado deve recuperar o procedimento documentado completo');
+assert.ok(fullGuideReply.steps.some((step) => step.image), 'modo detalhado deve incluir telas documentadas relevantes');
 
 const screenshotClient = {
   responses: {
@@ -127,7 +184,7 @@ const screenshotClient = {
     }),
   },
 };
-const screenshotReply = await answerQuestion(testRoot, 'como criar um robô', { client: screenshotClient });
+const screenshotReply = await answerQuestion(testRoot, 'mostre todos os passos para criar um robô', { client: screenshotClient });
 assert.equal(screenshotReply.steps[0].image?.src, '/img/help/q4tBz2R7cevwT94eUQKB.png');
 assert.equal(screenshotReply.steps[1].image, undefined, 'imagem que não pertence à fonte não pode chegar à interface');
 
@@ -147,8 +204,14 @@ const omittedScreenshotClient = {
     }),
   },
 };
-const omittedScreenshotReply = await answerQuestion(testRoot, 'como criar um chatbot?', { client: omittedScreenshotClient });
+const omittedScreenshotReply = await answerQuestion(testRoot, 'mostre todos os passos para criar um robô', { client: omittedScreenshotClient });
 const robotArticle = await readFile(join(testRoot, 'content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx'), 'utf8');
+assert.match(robotArticle, /Encaminhar atendimento/i, 'guia básico precisa ensinar um destino funcional para o fluxo');
+assert.match(robotArticle, /Salvar[\s\S]{0,240}Publicar/i, 'guia precisa explicar a diferença entre salvar e publicar');
+assert.match(robotArticle, /Canais[\s\S]{0,180}números/i, 'guia precisa explicar o que são canais');
+assert.match(robotArticle, /Gatilho[\s\S]{0,220}inicia/i, 'guia precisa explicar o que é gatilho');
+assert.match(robotArticle, /Departamento[\s\S]{0,260}fila/i, 'guia precisa explicar a diferença de destino para iniciantes');
+assert.match(robotArticle, /<ProductAction id="abrir-robos"/i, 'guia precisa levar a pessoa diretamente para a tela de robôs');
 const robotScreenshotPaths = new Set([...robotArticle.matchAll(/!\[[^\]]*\]\((\/img\/[^)]+)\)/g)].map((match) => match[1]));
 assert.ok(omittedScreenshotReply.steps.some((step) => step.image), 'quando o modelo omitir todas as telas, o servidor deve anexar um print relevante');
 assert.ok(
@@ -206,5 +269,8 @@ const wrongSource = await answerQuestion(testRoot, 'importar contatos', { client
 assert.equal(wrongSource.steps[0].action, undefined, 'ação de outra fonte não pode acompanhar a fonte citada');
 const actionComponent = await readFile(join(projectRoot, 'components/product-action.tsx'), 'utf8');
 assert.doesNotMatch(actionComponent, /exatamente na tela deste passo/i, 'CTA ainda promete abertura exata antes da integração no app');
+assert.doesNotMatch(actionComponent, /Abre a tela Contatos no iHelp/i, 'descrição do CTA não pode ficar presa à ação de Contatos');
+assert.doesNotMatch(actionComponent, /destaca onde começar/i, 'CTA público não pode prometer tour antes do handler chegar ao app');
+assert.match(actionComponent, /Abre.*no iHelp/i, 'CTA deve explicar apenas a navegação já disponível em produção');
 
 console.log("Claricia para iniciantes passou.");

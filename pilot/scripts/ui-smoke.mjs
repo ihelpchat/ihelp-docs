@@ -121,6 +121,7 @@ async function testAssistant(context, errors) {
   await page.getByRole('button', { name: 'Tentar de novo' }).click();
   await page.locator('.ih-ai-steps li').first().waitFor();
   assert.ok(await page.locator('.ih-ai-step-image[src="/img/help/q4tBz2R7cevwT94eUQKB.png"]').count(), 'Print documentado não apareceu junto da etapa');
+  assert.ok(await page.locator('.ih-ai-step-visual').count(), 'Prints precisam ser interativos, sem alongar a conversa inteira');
   assert.equal(await page.locator('.ih-ai-product-action').count(), 1, 'Somente action allowlisted pode virar CTA');
   assert.equal(await page.locator('.ih-ai-product-action').textContent(), 'Abrir a tela Contatos', 'Label inventado pelo endpoint não pode chegar ao CTA');
   assert.equal(await page.locator('.ih-ai-sections section').count(), 1);
@@ -391,6 +392,39 @@ try {
     await mobilePage.goto(`${baseUrl}${path}`, { waitUntil: 'networkidle' });
     await assertNoHorizontalOverflow(mobilePage, `mobile ${path}`);
   }
+
+  await mockAssistant(mobilePage);
+  await mobilePage.goto(`${baseUrl}/assistente/`, { waitUntil: 'networkidle' });
+  const mobileAssistantEnabled = (await mobilePage.locator('.ih-app').getAttribute('data-assistant')) === 'on';
+  if (mobileAssistantEnabled) {
+    await mobilePage.getByRole('textbox', { name: 'Pergunta para o assistente' }).fill('Como criar um robô?');
+    await mobilePage.keyboard.press('Enter');
+    await mobilePage.locator('.ih-ai-steps').waitFor();
+    const mobileScroll = await mobilePage.locator('.ih-ai-scroll').boundingBox();
+    const mobileQuestion = await mobilePage.locator('.ih-ai-user').last().boundingBox();
+    assert.ok(
+      mobileScroll && mobileQuestion && mobileQuestion.y >= mobileScroll.y && mobileQuestion.y < mobileScroll.y + mobileScroll.height / 2,
+      'Depois de responder, a conversa deve começar pela pergunta, não pular para o rodapé',
+    );
+  } else {
+    await mobilePage.locator('.ih-ai-starters button').first().click();
+    await mobilePage.getByText('Assistente não conectado').waitFor();
+  }
+  const mobileFooter = await mobilePage.locator('.ih-ai-footer').boundingBox();
+  const mobileComposer = await mobilePage.locator('.ih-ai-composer').boundingBox();
+  const mobileNewChat = await mobilePage.getByRole('button', { name: 'Nova conversa' }).boundingBox();
+  assert.ok(mobileFooter && mobileFooter.height < 200, `Rodapé do chat ocupa ${mobileFooter?.height}px no celular`);
+  assert.ok(mobileComposer && mobileComposer.x >= 0 && mobileComposer.x + mobileComposer.width <= 390, 'Composer sai da tela no celular');
+  assert.ok(mobileNewChat && mobileNewChat.x >= 0 && mobileNewChat.x + mobileNewChat.width <= 390, 'Nova conversa sai da tela no celular');
+  const scopeMetrics = await mobilePage.locator('.ih-ai-scopes > div').evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }));
+  assert.ok(scopeMetrics.scrollHeight <= scopeMetrics.clientHeight + 2, 'Filtros do celular quebraram em várias linhas');
+  if (mobileAssistantEnabled) {
+    const visual = mobilePage.locator('.ih-ai-step-visual').first();
+    assert.equal(await visual.getAttribute('open'), null, 'Print deve começar recolhido no celular');
+    await visual.locator('summary').click();
+    assert.ok(await visual.locator('.ih-ai-step-image').isVisible(), 'Print do passo não abriu no celular');
+  }
+  await assertNoHorizontalOverflow(mobilePage, 'mobile conversa da Claricia');
 
   await testMcpSetup(mobilePage);
 

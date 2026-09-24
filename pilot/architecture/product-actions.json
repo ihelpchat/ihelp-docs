@@ -3,5 +3,10 @@
     "label": "Abrir a tela Contatos",
     "route": "/contact",
     "target": "contacts-more-options"
+  },
+  "abrir-robos": {
+    "label": "Abrir a tela Robôs",
+    "route": "/bot",
+    "target": "robots-create"
   }
 }

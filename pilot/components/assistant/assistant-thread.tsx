@@ -35,6 +35,15 @@ function Avatar() {
   return <span className="ih-ai-avatar" aria-hidden="true"><Sparkles /></span>;
 }
 
+function StepVisual({ image }: { image: NonNullable<AssistantReply['steps'][number]['image']> }) {
+  return (
+    <details className="ih-ai-step-visual">
+      <summary>Ver onde clicar</summary>
+      <Image className="ih-ai-step-image" src={image.src} alt={image.alt} width={960} height={540} loading="lazy" />
+    </details>
+  );
+}
+
 function MediaGuide({ reply, openMedia, setOpenMedia }: {
   reply: AssistantReply;
   openMedia: string | null;
@@ -97,6 +106,7 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
         <div className="ih-ai-text">
           {paragraphs.map((text, index) => <p key={index}>{text}</p>)}
         </div>
+        <MediaGuide reply={reply} openMedia={openMedia} setOpenMedia={setOpenMedia} />
         {reply.sections.length ? (
           <div className="ih-ai-sections">
             {reply.sections.map((section) => (
@@ -107,7 +117,6 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
             ))}
           </div>
         ) : null}
-        <MediaGuide reply={reply} openMedia={openMedia} setOpenMedia={setOpenMedia} />
         {reply.steps.length ? (
           <ol className="ih-ai-steps">
             {reply.steps.map((step, index) => (
@@ -115,9 +124,7 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
                 <span aria-hidden="true">{index + 1}</span>
                 <div>
                   <p>{step.text}</p>
-                  {step.image ? (
-                    <Image className="ih-ai-step-image" src={step.image.src} alt={step.image.alt} width={960} height={540} loading="lazy" />
-                  ) : null}
+                  {step.image ? <StepVisual image={step.image} /> : null}
                   {step.action && productActionUrl(step.action.route, step.action.id, step.action.target) ? (
                     <a className="ih-ai-product-action" href={productActionUrl(step.action.route, step.action.id, step.action.target) ?? undefined} target="_blank" rel="noreferrer noopener">
                       {step.action.label}<ArrowRight aria-hidden="true" />
