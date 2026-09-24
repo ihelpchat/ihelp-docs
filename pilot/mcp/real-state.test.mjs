@@ -136,4 +136,38 @@ const humanMessage = supportMessageFor(maliciousUiReply);
 assert.match(humanMessage, /problema no aplicativo ou incidente/);
 assert.match(humanMessage, /plano informado: expirado/i);
 assert.doesNotMatch(humanMessage, /a@b.com|sk-secret|bug_incident|documented_guide|reported_stuck|\{|\}/);
+
+for (const { request, module, path, label, intent } of [
+  { request: 'não tenho permissão para criar campanha', module: 'campaigns', path: '/docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha', label: 'Campanhas', intent: 'campaigns' },
+  { request: 'não tenho permissão para conectar canal', module: 'channels', path: '/docs/sobre-o-sistema/configuracoes/canais', label: 'Canais', intent: 'connect_channel' },
+  { request: 'não tenho acesso ao usuário', module: 'users', path: '/docs/sobre-o-sistema/configuracoes/gerenciamento-de-usuarios', label: 'Usuários', intent: 'manage_users' },
+]) {
+  const widgetContext = { surface: 'app', module };
+  const initialHistory = [
+    { role: 'user', content: request },
+    { role: 'assistant', content: `Fonte usada: ${path}` },
+  ];
+  const guided = await ask('não encontrei', { history: initialHistory, widgetContext });
+  assert.match(guided.answer, new RegExp(label), `${request}: diagnóstico deve seguir o objeto`);
+  assert.equal(guided.diagnosis.cause, 'permission', `${request}: sintoma explícito deve ser preservado`);
+  assert.equal(guided.steps.length, 0, 'diagnóstico não repete o tutorial');
+  const escalation = await ask('preciso de ajuda', { history: [
+    ...initialHistory, { role: 'user', content: 'não encontrei' },
+    { role: 'assistant', content: `${guided.answer}\nFonte usada: ${path}` },
+  ], widgetContext });
+  assert.equal(escalation.escalation.intent, intent, `${request}: escalonamento deve seguir o objeto`);
+  assert.equal(escalation.escalation.diagnosis, 'permission');
+  const cta = supportMessageFor(normalizeReply(escalation));
+  assert.match(cta, new RegExp({ campaigns: 'campanhas', connect_channel: 'conectar canal', manage_users: 'gerenciar usuários' }[intent], 'i'));
+  assert.match(cta, /questão de permissão/i);
+  assert.doesNotMatch(cta, /bug_incident|permission|documented_guide|reported_stuck|\{|\}|@|sk-/);
+}
+assert.match((await ask('não encontrei', { history: [
+  { role: 'user', content: 'não tenho permissão para criar campanha' },
+  { role: 'assistant', content: 'Fonte usada: /docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha' },
+], widgetContext: { surface: 'app', module: 'users' } })).answer, /Campanhas/, 'módulo público divergente não sobrepõe objeto explícito');
+assert.match((await ask('não encontrei', { history: [
+  { role: 'user', content: 'não tenho permissão' },
+  { role: 'assistant', content: 'Fonte usada: /docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha' },
+], widgetContext: { surface: 'app', module: 'campaigns' } })).answer, /Campanhas/, 'módulo seguro só ajuda quando objeto não foi informado');
 console.log('Estado real, guia e escalonamento: contratos passaram.');
