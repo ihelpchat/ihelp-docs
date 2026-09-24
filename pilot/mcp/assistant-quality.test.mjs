@@ -81,7 +81,7 @@ const guidedClient = {
           steps: [],
           code: null,
           sources: ['/docs/sobre-o-sistema/robo-de-atendimento'],
-          suggestions: [],
+          suggestions: ['Quer que eu acompanhe você...'],
           resolution: 'complete',
           found: true,
         }),
@@ -101,6 +101,7 @@ assert.match(guidedReply.steps[0].text, /Robôs[\s\S]*Criar novo Robô/i);
 assert.match(guidedReply.steps[1].text, /Título do Robô/i);
 assert.match(guidedReply.steps[2].text, /Canais[\s\S]*número[\s\S]*Adicionar robô/i);
 assert.match(guidedReply.answer, /Menu de opções/i, 'visão geral deve explicar a possibilidade de ramificação');
+assert.match(guidedReply.answer, /^Você pode montar um robô como uma árvore de atendimento:/, 'visão deve começar pela possibilidade do produto');
 assert.match(guidedReply.answer, /(?:caminhos|ramifica|árvore)/i);
 assert.match(guidedReply.answer, /(?:mais simples|exemplo básico)/i, 'saudação e encaminhamento são apenas um exemplo');
 assert.doesNotMatch(JSON.stringify(guidedReply), /Condição|filtro/i, 'bloco inativo não pode aparecer na resposta');
@@ -110,11 +111,11 @@ assert.equal(guidedReply.steps[0].action?.id, 'abrir-robos');
 assert.equal(guidedReply.steps[0].action?.route, '/bot', 'primeira ação deve levar diretamente à tela correta');
 assert.equal(guidedReply.steps[0].action?.target, 'robots-create', 'ação deve carregar o alvo do tour no app');
 assert.equal(`/bot?ihelpGuide=${guidedReply.steps[0].action.id}`, '/bot?ihelpGuide=abrir-robos');
-assert.deepEqual(
-  guidedReply.suggestions.slice(0, 2),
-  ['Pode me guiar etapa por etapa', 'Quero ver todos os passos'],
-  'resposta ampla deve sempre oferecer guia progressivo ou procedimento completo',
-);
+assert.deepEqual(guidedReply.suggestions, [
+  'Pode me guiar etapa por etapa',
+  'Quero ver todos os passos',
+  'Quero montar um menu com opções',
+], 'visão ampla deve trazer a terceira sugestão da fonte, sem sugestão do modelo');
 
 const shownSteps = guidedReply.steps.map((step, index) => `${index + 1}. ${step.text}`).join('\n');
 const guidedHistory = [
