@@ -78,6 +78,8 @@ assert.deepEqual(keyedSteps(['Abra o botão OK.', 'Acesse o botão Ir.']), ['Abr
 assert.deepEqual(keyedSteps(['Abra UI.', 'Acesse Ir.']), ['Abra UI.', 'Acesse Ir.']);
 assert.deepEqual(keyedSteps(['Abra o plano A.', 'Acesse o plano B.']), ['Abra o plano A.', 'Acesse o plano B.']);
 assert.deepEqual(keyedSteps(['Abra o seletor A.', 'Acesse o seletor B.']), ['Abra o seletor A.', 'Acesse o seletor B.']);
+assert.deepEqual(keyedSteps(['Abra a coluna A.', 'Acesse a coluna E.', 'Abra a coluna O.']), ['Abra a coluna A.', 'Acesse a coluna E.', 'Abra a coluna O.']);
+assert.deepEqual(keyedSteps(['Abra a coluna A.', 'Acesse coluna A.']), ['Abra a coluna A.'], 'artigo minúsculo a permanece descartável');
 assert.deepEqual(keyedSteps(['Abra a opção A.', 'Acesse opção A.']), ['Abra a opção A.']);
 
 const trustedAction = { id: 'importar-contatos', ...allowedActions['importar-contatos'] };
