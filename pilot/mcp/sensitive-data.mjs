@@ -12,9 +12,8 @@ const CREDENTIALS = [
   /(?<![A-Za-z0-9])(?:sk|gh[pousr]|github_pat)_[A-Za-z0-9_-]{20,}/iu,
   /(?<![A-Za-z0-9])AIza[0-9A-Za-z_-]{30,}/u,
 ];
-const CREDENTIAL_PAIR = /(?<![\p{L}\p{N}_])(["']?)((?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:api[_-]?key|password|senha|secret|token))\1\s*[:=]\s*("[^"\n]+"|'[^'\n]+'|[^\s,;}\]]+)/giu;
-const CREDENTIAL_KEY = /(?:api[_-]?key|password|senha|secret|token)$/iu;
-const BARE_CREDENTIAL_KEY = /^(?:password|senha|secret|token)$/iu;
+const CREDENTIAL_PAIR = /(?<![\p{L}\p{N}_])(["']?)((?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:api[_-]?key|password|senha|secret|token)|(?:[A-Za-z_][A-Za-z0-9_-]*[_-])?(?:key|pass|credentials))\1\s*[:=]\s*("[^"\n]+"|'[^'\n]+'|[^\s,;}\]]+)/giu;
+const STRONG_KEY_SEGMENTS = new Set(['api', 'auth', 'access', 'secret', 'private', 'credential']);
 const PLACEHOLDER = /^(?:\$[A-Z_][A-Z0-9_]*|\$\{[A-Z_][A-Z0-9_]*\}|null|true|false|undefined|string|number|[A-Z_]+)$/u;
 
 function entropy(value) {
@@ -35,11 +34,23 @@ function secretLike(value) {
     || (value.length >= 24 && entropy(value) >= 3.7);
 }
 
+function credentialKeyStrength(key) {
+  const words = key.replace(/([a-z0-9])([A-Z])/gu, '$1_$2').toLocaleLowerCase('en-US').split(/[_-]+/u);
+  const last = words.at(-1);
+  if (['token', 'secret', 'password', 'senha'].includes(last)) return words.length > 1 ? 'strong' : 'weak';
+  if (last === 'pass') return words.length > 1 ? 'strong' : 'weak';
+  if (last === 'credentials') return words.length > 1 ? 'strong' : 'weak';
+  if (last === 'key') return words.slice(0, -1).some((word) => STRONG_KEY_SEGMENTS.has(word)) ? 'strong' : 'weak';
+  if (/(?:api[_-]?key|password|senha|secret|token)$/iu.test(key)) return 'strong';
+  return 'none';
+}
+
 function credentialPairs(value) {
   return [...String(value ?? '').matchAll(CREDENTIAL_PAIR)].filter(([, , key, rawValue]) => {
-    if (!CREDENTIAL_KEY.test(key)) return false;
+    const strength = credentialKeyStrength(key);
+    if (strength === 'none') return false;
     const raw = rawValue.replace(/^["']|["']$/gu, '');
-    return raw.length >= 6 && !PLACEHOLDER.test(raw) && (!BARE_CREDENTIAL_KEY.test(key) || secretLike(raw));
+    return raw.length >= 6 && !PLACEHOLDER.test(raw) && (strength === 'strong' || secretLike(raw));
   });
 }
 
