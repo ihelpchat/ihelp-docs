@@ -9,6 +9,7 @@ const STOP_WORDS = new Set([
   'a', 'ao', 'aos', 'as', 'como', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'eu',
   'me', 'meu', 'na', 'nas', 'no', 'nos', 'o', 'os', 'para', 'por', 'que', 'se', 'um', 'uma',
 ]);
+const MAX_GUIDE_STEPS = 20;
 
 function normalize(value) {
   return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
@@ -63,7 +64,7 @@ function documentedStepImagesOf(raw, screenshots) {
     const numbered = line.match(/^\s*(\d+)\.\s+/);
     if (numbered) stepIndex = Number(numbered[1]) - 1;
     const image = line.match(/!\[[^\]]*\]\((\/img\/[A-Za-z0-9._/-]+\.(?:png|jpe?g|webp|gif))\)/i)?.[1];
-    if (stepIndex >= 0 && stepIndex < 12 && image && allowed.has(image) && !images[stepIndex]) {
+    if (stepIndex >= 0 && stepIndex < MAX_GUIDE_STEPS && image && allowed.has(image) && !images[stepIndex]) {
       images[stepIndex] = image;
     }
   }
@@ -100,7 +101,7 @@ function documentedStepsOf(raw) {
   const numbered = [...raw.matchAll(/^\s*\d+\.\s+(.+)$/gm)]
     .map(([, text]) => cleanText(text.replace(/!\[[^\]]*\]\([^)]*\)/g, '')))
     .filter(Boolean)
-    .slice(0, 12);
+    .slice(0, MAX_GUIDE_STEPS);
   if (numbered.length) return numbered;
   const proceduralStart = /^(?:antes de|ap[oó]s|acesse|abra|clique|crie|configure|defina|digite|escolha|habilite|insira|selecione|na (?:primeira|pr[oó]xima|etapa|tela|[uú]ltima)|primeiro disparo|n[uú]mero de disparo|em intervalo|voc[eê] ver[aá]|clicando)\b/i;
   return raw
@@ -108,7 +109,7 @@ function documentedStepsOf(raw) {
     .split(/\n+/)
     .map((line) => cleanText(line.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/^#+\s*/, '')))
     .filter((line) => proceduralStart.test(line))
-    .slice(0, 12);
+    .slice(0, MAX_GUIDE_STEPS);
 }
 
 function attributesOf(tag) {
@@ -342,7 +343,7 @@ export function parseAnswer(outputText) {
             .map((section) => ({ title: cleanText(section.title), items: section.items.map(cleanText).filter(Boolean).slice(0, 5) }))
             .filter((section) => section.title && section.items.length)
         : [],
-      steps: Array.isArray(json.steps) ? uniqueSteps(json.steps.map(normalizeStep).filter(Boolean)).slice(0, 12) : [],
+      steps: Array.isArray(json.steps) ? uniqueSteps(json.steps.map(normalizeStep).filter(Boolean)).slice(0, MAX_GUIDE_STEPS) : [],
       code: json.code && typeof json.code.content === 'string' && json.code.content.trim()
         ? { language: cleanText(json.code.language) || 'código', content: String(json.code.content).trim() }
         : null,
@@ -511,7 +512,7 @@ export async function answerQuestion(root, question, options = {}) {
     ? { text: fallbackSource.documentedSteps[nextIndex], actionId: nextIndex === 0 ? fallbackSource.productActions[0]?.id ?? null : null, imagePath: fallbackSource.stepImages[nextIndex] ?? null }
     : null;
   const documentedFallback = (procedure || continuation) && !parsed.steps.length
-    ? (fallbackSource?.documentedSteps ?? []).slice(0, continuation ? 1 : overviewProcedure ? initialStepCount : 12).map((text, index) => ({
+    ? (fallbackSource?.documentedSteps ?? []).slice(0, continuation ? 1 : overviewProcedure ? initialStepCount : MAX_GUIDE_STEPS).map((text, index) => ({
         text,
         actionId: overviewProcedure && index === 0 ? fallbackSource?.productActions[0]?.id ?? null : null,
         imagePath: null,

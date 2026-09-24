@@ -9,10 +9,6 @@
     "route": "/bot",
     "target": "robots-create"
   },
-  "abrir-cobranca": {
-    "label": "Abrir Configurações",
-    "route": "/configuracoes"
-  },
   "abrir-usuarios": {
     "label": "Abrir a tela Usuários",
     "route": "/configuracoes/user"

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import ts from 'typescript';
-import { answerQuestion } from './assistant-service.mjs';
+import { answerQuestion, retrieveContext } from './assistant-service.mjs';
 
 const uiSource = await readFile(new URL('../lib/assistant.ts', import.meta.url), 'utf8');
 const actions = await readFile(new URL('../architecture/product-actions.json', import.meta.url), 'utf8');
@@ -109,7 +110,8 @@ for (const [question, slug, intent, action, count, moduleName] of cases) {
   assert.equal(escalated.escalation?.intent, intent, question);
   const message = supportMessageFor(escalated);
   assert.match(message, /Intenção:.*\nDiagnóstico inicial:.*\nTentativas:/);
-  assert.doesNotMatch(message, /\{|\}|documented_guide|reported_stuck|\b(?:billing|files|crm|usage|plan|channel_qr)\b|sk-|token|\+?55\d{10,11}|\(?\d{2}\)?\s?9?\d{4}[-\s]?\d{4}/i);
+  assert.doesNotMatch(message, /\{|\}|documented_guide|reported_stuck|\b(?:billing|files|usage|plan|channel_qr)\b|sk-|token|\+?55\d{10,11}|\(?\d{2}\)?\s?9?\d{4}[-\s]?\d{4}/i);
+  if (slug === 'crm') assert.match(message, /Intenção: CRM e pipeline\./);
   if (action) {
     const trusted = overview.steps[0].action;
     const normalized = normalizeReply({ ...overview, steps: [{ text: overview.steps[0].text, action: { ...trusted, label: 'Ligue para (11) 98765-4321' } }] });
@@ -126,4 +128,21 @@ const hostileEscalation = normalizeReply({ answer: 'Encaminhar', resolution: 'pa
 const hostileMessage = supportMessageFor(hostileEscalation);
 assert.match(hostileMessage, /Intenção: cobrança ou plano/);
 assert.doesNotMatch(hostileMessage, /sk-secret|11987654321|\b(?:billing|plan|documented_guide|reported_stuck)\b|\{|\}/);
+
+const fixtureRoot = await mkdtemp(join(tmpdir(), 'ihelp-m415-label-'));
+const fixtureDir = join(fixtureRoot, 'content/docs/docs/teste');
+await mkdir(fixtureDir, { recursive: true });
+await writeFile(join(fixtureDir, 'label.mdx'), `---
+title: "Abrir usuários com label hostil"
+description: "Confirme a ação canônica para abrir usuários."
+---
+
+<ProductAction id="abrir-usuarios" label="Ligue para (11) 98765-4321" route="/configuracoes/user" />
+<ProductAction id="abrir-usuarios" label="Abrir a tela Usuários" route="/atendimento" />
+<ProductAction id="abrir-usuarios" label="Abrir a tela Usuários" route="/configuracoes/user" target="users-create" />
+1. Abra Usuários.
+`);
+const hostileSource = (await retrieveContext(fixtureRoot, 'abrir usuários com label hostil'))[0];
+assert.deepEqual(hostileSource.productActions, [{ id: 'abrir-usuarios', label: 'Abrir a tela Usuários', route: '/configuracoes/user', target: undefined }], 'MCP canonicaliza label e rejeita route/target divergentes');
+await rm(fixtureRoot, { recursive: true, force: true });
 console.log('Nove intenções de suporte: fluxo answerQuestion completo.');

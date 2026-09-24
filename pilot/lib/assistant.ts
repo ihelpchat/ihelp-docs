@@ -148,7 +148,7 @@ function safeAction(value: unknown): AssistantProductAction | undefined {
 
 function steps(value: unknown): AssistantStep[] {
   if (!Array.isArray(value)) return [];
-  return value.slice(0, 12).flatMap((item) => {
+  return value.slice(0, 20).flatMap((item) => {
     if (typeof item === 'string' && item.trim()) return [{ text: item.trim() }];
     if (!item || typeof item !== 'object' || typeof (item as { text?: unknown }).text !== 'string') return [];
     const raw = item as { text: string; action?: unknown; image?: unknown };

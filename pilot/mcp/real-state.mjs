@@ -81,7 +81,7 @@ export function diagnosticQuestion(question, context, diagnosis = diagnoseState(
     files: 'Atendimento', crm: 'CRM', get_help: 'a área que você procura',
   }[intent];
   if (diagnosis.cause === 'sensitive_action') return 'Qual alteração você precisa solicitar ao atendimento?';
-  if (diagnosis.cause === 'plan') return 'A tela de Plano e cobrança mostra algum aviso sobre limite ou vencimento?';
+  if (intent === 'billing') return 'Qual item você precisa conferir com o atendimento: plano, limite, fatura ou pagamento?';
   if (diagnosis.cause === 'channel_qr') return 'Na tela de Canais, aparece um QR code ou um aviso de desconexão?';
   if (diagnosis.cause === 'meta_coexistence') return 'Na tela de Canais, aparece algum aviso da Meta ou de coexistência?';
   if (diagnosis.cause === 'configuration') return `Na tela de ${moduleName}, qual opção ou aviso aparece?`;
