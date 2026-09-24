@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { answerQuestion } from './assistant-service.mjs';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { answerQuestion, retrieveContext } from './assistant-service.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const path = '/docs/principais-motivos-de-suporte/crm';
@@ -63,6 +66,47 @@ const promptedAgain = [...resumeHistory, { role: 'user', content: 'sim' },
   { role: 'assistant', content: `${resume.answer}\nFonte usada: ${path}` }];
 assert.deepEqual((await ask('sim', promptedAgain)).steps.map(({ text }) => text), [all.steps[8].text]);
 assert.deepEqual((await ask('sem automação', promptedAgain)).steps.map(({ text }) => text), [all.steps[15].text]);
+
+const blocked = await ask('não', diagnosing);
+assert.deepEqual(blocked.steps, []);
+assert.equal(blocked.sources[0]?.path, path);
+assert.match(blocked.answer, /diga [“"']?encontrei[”"']?/i);
+assert.match(blocked.answer, /aviso/i);
+const blockedHistory = [...diagnosing, { role: 'user', content: 'não' },
+  { role: 'assistant', content: `${blocked.answer}\nFonte usada: ${path}` }];
+for (const phrase of ['encontrei', 'consegui', 'concluí', 'agora apareceu']) {
+  const recovered = await ask(phrase, blockedHistory);
+  assert.deepEqual(recovered.steps, [], `retomada sem reinício: ${phrase}`);
+  assert.equal(recovered.sources[0]?.path, path, `fonte preservada: ${phrase}`);
+  assert.equal(recovered.answer, undecided.answer, `prompt explícito: ${phrase}`);
+  const recoveryHistory = [...blockedHistory, { role: 'user', content: phrase },
+    { role: 'assistant', content: `${recovered.answer}\nFonte usada: ${path}` }];
+  assert.deepEqual((await ask('sim', recoveryHistory)).steps.map(({ text }) => text), [all.steps[8].text], `ramo sim: ${phrase}`);
+  assert.deepEqual((await ask('não', recoveryHistory)).steps.map(({ text }) => text), [all.steps[15].text], `ramo não: ${phrase}`);
+}
+for (const phrase of ['sim', 'não']) {
+  const ambiguous = await ask(phrase, blockedHistory);
+  assert.deepEqual(ambiguous.steps, [], `resposta ambígua no bloqueio: ${phrase}`);
+  assert.equal(ambiguous.answer, blocked.answer, `clarificação preserva estado: ${phrase}`);
+  assert.equal(ambiguous.sources[0]?.path, path);
+  const stillBlocked = [...blockedHistory, { role: 'user', content: phrase },
+    { role: 'assistant', content: `${ambiguous.answer}\nFonte usada: ${path}` }];
+  assert.equal((await ask('encontrei', stillBlocked)).answer, undecided.answer, `recuperação após ambiguidade: ${phrase}`);
+}
+
+const isolated = await mkdtemp(join(tmpdir(), 'ihelp-crm-branch-'));
+try {
+  const guidePath = join(isolated, 'content/docs/docs/principais-motivos-de-suporte/crm.mdx');
+  await mkdir(join(isolated, 'content/docs/docs/principais-motivos-de-suporte'), { recursive: true });
+  const originalGuide = await readFile(new URL('../content/docs/docs/principais-motivos-de-suporte/crm.mdx', import.meta.url), 'utf8');
+  for (const invalid of ['8:8:16', '8:9:17', '0:9:16', 'xyz', '-1:9:16']) {
+    await writeFile(guidePath, originalGuide.replace('assistantOptionalBranch: "8:9:16"', `assistantOptionalBranch: "${invalid}"`));
+    const [source] = await retrieveContext(isolated, 'Como criar pipeline no CRM?');
+    assert.equal(source.optionalBranch, null, `metadado inválido ignorado: ${invalid}`);
+  }
+} finally {
+  await rm(isolated, { recursive: true, force: true });
+}
 
 const finalStep = await ask('concluí', atStep(16));
 assert.deepEqual(finalStep.steps, []);
