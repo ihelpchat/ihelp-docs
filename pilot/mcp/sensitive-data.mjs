@@ -9,14 +9,16 @@ const CREDENTIALS = [
   /(?:Authorization:\s*)?Bearer\s+[A-Za-z0-9._~+/-]{12,}/iu,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/iu,
   /(?<![A-Za-z0-9])sk-(?:proj-)?[A-Za-z0-9_-]{20,}/iu,
-  /(?<![A-Za-z0-9])(?:sk|ghp|gho|github_pat)_[A-Za-z0-9_-]{20,}/iu,
+  /(?<![A-Za-z0-9])(?:sk|gh[pousr]|github_pat)_[A-Za-z0-9_-]{20,}/iu,
   /(?<![A-Za-z0-9])AIza[0-9A-Za-z_-]{30,}/u,
 ];
-const CREDENTIAL_PAIR = /(?<![\p{L}\p{N}_])["']?(?:api[_-]?key|password|senha|secret|token)["']?\s*[:=]\s*(?:"[^"\n]+"|'[^'\n]+'|[^\s,;}\]]+)/giu;
+const CREDENTIAL_PAIR = /(?<![\p{L}\p{N}_])(["']?)((?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:api[_-]?key|password|senha|secret|token))\1\s*[:=]\s*(?:"[^"\n]+"|'[^'\n]+'|[^\s,;}\]]+)/giu;
+const CREDENTIAL_KEY = /(?:api[_-]?key|password|senha|secret|token)$/iu;
 const PLACEHOLDER = /^(?:\$[A-Z_][A-Z0-9_]*|\$\{[A-Z_][A-Z0-9_]*\}|null|true|false|undefined|string|number|[A-Z_]+)$/u;
 
 function credentialPairs(value) {
-  return [...String(value ?? '').matchAll(CREDENTIAL_PAIR)].filter(([pair]) => {
+  return [...String(value ?? '').matchAll(CREDENTIAL_PAIR)].filter(([pair, , key]) => {
+    if (!CREDENTIAL_KEY.test(key)) return false;
     const raw = pair.replace(/^.*?[:=]\s*/u, '').replace(/^["']|["']$/gu, '');
     return raw.length >= 6 && !PLACEHOLDER.test(raw);
   });
