@@ -195,12 +195,12 @@ function normalizeStep(step) {
 function instructionKey(value) {
   const navigation = new Set(['abra', 'acesse', 'entre', 'va', 'navegue', 'comece', 'inicie', 'abrindo', 'acessando', 'indo']);
   const prepositions = new Set(['pelo', 'pela', 'pelos', 'pelas', 'ate']);
-  const selectorNouns = new Set(['opcao', 'seletor', 'alternativa', 'item', 'plano', 'botao', 'campo', 'etapa']);
+  const selectorNouns = new Set(['opcao', 'seletor', 'alternativa', 'item', 'plano', 'botao', 'campo', 'etapa', 'coluna']);
   const tokens = String(value).match(/[\p{L}\p{N}]+/gu) ?? [];
   return tokens.flatMap((raw, index) => {
     const token = normalize(raw);
     const previous = normalize(tokens[index - 1] ?? '');
-    const explicitSelector = /^[AB]$/.test(raw) && selectorNouns.has(previous);
+    const explicitSelector = /^[A-Z]$/.test(raw) && selectorNouns.has(previous);
     if (explicitSelector) return [`seletor${token}`];
     if (navigation.has(token) || prepositions.has(token) || STOP_WORDS.has(token)) return [];
     return [token];
