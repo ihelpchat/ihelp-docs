@@ -34,6 +34,14 @@ function escapeYaml(value) {
   return JSON.stringify(value.replaceAll('\r', '').trim());
 }
 
+function publicArticleText(article) {
+  const fields = [article.path, article.title, article.description, article.source, article.contentType, article.body, article.tangoUrl];
+  for (const action of Array.isArray(article.productActions) ? article.productActions : []) {
+    fields.push(action?.id, action?.label, action?.route, action?.target);
+  }
+  return fields.filter((value) => typeof value === 'string').join('\n');
+}
+
 function safeContentPath(root, contentPath) {
   if (!SAFE_PATH.test(contentPath) || contentPath.includes('..') || contentPath.endsWith('/')) {
     throw new Error('path deve começar com docs/, tutoriais/, api/ ou blog/ e usar apenas slug seguro');
@@ -59,7 +67,7 @@ export function validateArticle(article) {
   if (/ihelpchat\.github\.io\/ihelp-docs/i.test(article.body ?? '')) issues.push('links legados não são permitidos');
   if (/^## Tutorial Guiado$/m.test(article.body ?? '')) issues.push('use um Tango público no campo tangoUrl em vez de rodapé genérico');
   if (/^#{2,6}\s+\*\*/m.test(article.body ?? '')) issues.push('headings não devem usar negrito redundante');
-  const publicText = `${article.title ?? ''}\n${article.description ?? ''}\n${article.body ?? ''}`;
+  const publicText = publicArticleText(article);
   if (SECRET_PATTERNS.some((pattern) => pattern.test(publicText))) issues.push('possível credencial detectada');
   if (containsPersonalData(publicText)) issues.push('possível dado pessoal detectado');
   if (article.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(article.tangoUrl)) {
@@ -312,8 +320,11 @@ function safeArticleList(articles, deletes = []) {
     if (paths.has(article.path)) throw new SubmitArticleError('INVALID_PACKAGE', `Path duplicado no pacote: ${article.path}`);
     paths.add(article.path);
     safeContentPath(process.cwd(), article.path);
-    if (containsPersonalData(`${article.title ?? ''}\n${article.description ?? ''}\n${article.body ?? ''}`)) {
+    if (containsPersonalData(publicArticleText(article))) {
       throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém possível dado pessoal');
+    }
+    if (SECRET_PATTERNS.some((pattern) => pattern.test(publicArticleText(article)))) {
+      throw new SubmitArticleError('CREDENTIAL', 'Artigo contém possível credencial');
     }
     return { article, rendered: renderArticle(article) };
   });

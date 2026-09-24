@@ -101,7 +101,7 @@ export async function searchProductContext(topic, module, provided = {}) {
     if (data.encoding !== 'base64' || typeof data.content !== 'string') continue;
     const content = Buffer.from(data.content.replaceAll('\n', ''), 'base64').toString('utf8');
     const textScore = terms.reduce((score, term) => score + (normalize(content).includes(term) ? 3 : 0), candidate.score);
-    matches.push({ path: candidate.path, score: textScore, excerpt: excerptOf(content, terms) });
+    matches.push({ path: redactPersonalData(candidate.path), score: textScore, excerpt: excerptOf(content, terms) });
   }
   return {
     available: true,
