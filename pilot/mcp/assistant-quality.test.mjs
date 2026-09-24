@@ -3,6 +3,8 @@ import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { answerQuestion } from './assistant-service.mjs';
+import { renderArticle, validateArticle } from './content-service.mjs';
+import allowedActions from '../architecture/product-actions.json' with { type: 'json' };
 
 const projectRoot = new URL('../', import.meta.url).pathname;
 const testRoot = await mkdtemp(join(tmpdir(), 'ihelp-docs-quality-'));
@@ -36,8 +38,9 @@ const beginnerClient = {
           sections: [],
           steps: [
             { text: 'Abra Contatos no menu lateral.', actionId: 'importar-contatos' },
-            { text: 'Abra Contatos no menu lateral.', actionId: 'importar-contatos' },
+            { text: 'Acesse Contatos pelo menu lateral.', actionId: 'importar-contatos' },
             { text: 'Clique em Mais opções e escolha Importar contatos.', actionId: null },
+            { text: 'Acesse Contatos pelo menu lateral e escolha Exportar.', actionId: null },
           ],
           code: null,
           sources: ['/docs/teste/importar-contatos'],
@@ -50,7 +53,8 @@ const beginnerClient = {
   },
 };
 const beginnerReply = await answerQuestion(testRoot, 'como importar contatos', { client: beginnerClient });
-assert.equal(beginnerReply.steps.length, 2, 'passos repetidos devem ser consolidados');
+assert.equal(beginnerReply.steps.length, 3, 'verbos equivalentes devem consolidar o mesmo destino sem apagar resultado diferente');
+assert.match(beginnerReply.steps[2].text, /Exportar/, 'ação com resultado diferente deve permanecer');
 assert.doesNotMatch(beginnerReply.answer, /comece abrindo contatos no menu lateral/i, 'answer não pode repetir a instrução do primeiro passo');
 assert.ok(beginnerReply.answer.trim(), 'a conclusão precisa continuar legível após deduplicar');
 assert.deepEqual(beginnerReply.steps[0], {
@@ -63,6 +67,26 @@ assert.deepEqual(beginnerReply.steps[0], {
   },
 });
 assert.doesNotMatch(beginnerReply.steps[0].action.label, /importar contatos/i, 'CTA não pode prometer a importação quando só abre Contatos');
+
+const trustedAction = { id: 'importar-contatos', ...allowedActions['importar-contatos'] };
+const articleWithAction = {
+  path: 'docs/teste/acao-confiavel', title: 'Ação confiável',
+  description: 'Procedimento seguro para abrir a tela de Contatos na documentação do iHelp.',
+  source: 'produto', contentType: 'tutorial',
+  body: 'Abra Contatos pelo menu lateral e confira a lista antes de continuar. Veja as opções disponíveis na tela e escolha a operação que precisa realizar. Revise o resultado mostrado pelo produto antes de confirmar qualquer mudança. Se alguma informação estiver incorreta, volte para a lista e faça a correção necessária. Ao terminar, pesquise um contato para confirmar que a tela apresenta os dados esperados. Repita a consulta com outro contato se precisar comparar os resultados.',
+  productActions: [trustedAction],
+};
+assert.equal(validateArticle(articleWithAction).valid, true, 'ação idêntica ao catálogo deve ser aceita');
+for (const action of [
+  { ...trustedAction, id: 'acao-inventada' },
+  { ...trustedAction, route: '/reports' },
+  { ...trustedAction, target: 'wrong-target' },
+  { ...trustedAction, label: 'Importar contatos automaticamente' },
+]) {
+  const invalid = { ...articleWithAction, productActions: [action] };
+  assert.equal(validateArticle(invalid).valid, false, `ação divergente deve falhar: ${JSON.stringify(action)}`);
+  assert.throws(() => renderArticle(invalid), /productActions/, 'ação inválida não pode ser renderizada');
+}
 
 const modelWithAction = (actionId, path) => ({ responses: { create: async () => ({
   model: 'gpt-test', output_text: JSON.stringify({ answer: 'Abra Contatos.', sections: [], steps: [{ text: 'Abra Contatos.', actionId }], code: null, sources: [path], suggestions: [], resolution: 'complete', found: true }),

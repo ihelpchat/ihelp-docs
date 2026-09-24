@@ -3,6 +3,14 @@ import { searchContent, validateArticle } from './content-service.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
 import { readArticle } from './editorial-standard.mjs';
 import { containsPersonalData, redactPersonalData } from './sensitive-data.mjs';
+import { catalogAction } from './product-actions.mjs';
+
+function normalizeCatalogLabel(action) {
+  const trusted = catalogAction(action.id);
+  return trusted && action.route === trusted.route && action.target === trusted.target
+    ? { ...action, label: trusted.label }
+    : action;
+}
 
 const actionSchema = {
   type: 'object',
@@ -143,7 +151,7 @@ export async function planContent(root, request, options = {}) {
     { role: 'user', content: requestText(request, existing, productContext) },
   ], options));
   const parsed = parseJson(response);
-  return { ...parsed, existing, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path }) => `${repository}:${redactContext(path)}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
+  return { ...parsed, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path }) => `${repository}:${redactContext(path)}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
 }
 
 export async function generateContentPackage(root, request, options = {}) {
@@ -173,7 +181,7 @@ export async function generateContentPackage(root, request, options = {}) {
   if (parsed.status !== 'ready') return { ...parsed, articles: [], existing, model: response.model };
   const articles = parsed.articles.map((article) => ({
     ...article,
-    productActions: article.productActions.map((action) => ({ ...action, ...(action.target ? {} : { target: undefined }) })),
+    productActions: article.productActions.map((action) => normalizeCatalogLabel({ ...action, ...(action.target ? {} : { target: undefined }) })),
     ...(request.tangoUrl && article.contentType === 'tutorial' ? { tangoUrl: request.tangoUrl } : {}),
   }));
   const invalid = articles.map((article) => ({ path: article.path, ...validateArticle(article) })).filter(({ valid }) => !valid);

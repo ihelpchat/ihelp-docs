@@ -2,6 +2,7 @@ import { lstat, mkdir, open, readFile, readdir, realpath } from 'node:fs/promise
 import { constants } from 'node:fs';
 import { basename, join, normalize, relative } from 'node:path';
 import { containsPersonalData } from './sensitive-data.mjs';
+import { isCatalogAction } from './product-actions.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -82,6 +83,7 @@ export function validateArticle(article) {
     if (typeof action?.label !== 'string' || action.label.trim().length < 3 || action.label.trim().length > 80) issues.push('productActions.label inválido');
     if (!SAFE_PRODUCT_ROUTE.test(action?.route ?? '')) issues.push('productActions.route inválida');
     if (action?.target && !SAFE_TARGET.test(action.target)) issues.push('productActions.target inválido');
+    if (!isCatalogAction(action)) issues.push('productActions deve corresponder exatamente ao catálogo confiável');
   }
   if ((article.productActions?.length ?? 0) > 12) issues.push('productActions aceita no máximo 12 ações');
   return { valid: issues.length === 0, issues };
