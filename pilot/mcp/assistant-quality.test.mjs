@@ -72,6 +72,9 @@ for (const [slug, route, target] of [['rota-divergente', '/reports', 'contacts-m
   const reply = await answerQuestion(testRoot, slug.replace('-', ' '), { client: modelWithAction('importar-contatos', `/docs/teste/${slug}`) });
   assert.equal(reply.steps[0].action, undefined, `${slug} não pode virar ação`);
 }
+await writeFile(join(actionDir, 'sem-acao.mdx'), `---\ntitle: "Importar contatos sem ação"\ndescription: "Artigo de importação sem CTA de produto."\nsource: produto\ncontentType: faq\n---\n\nAbra Contatos e veja as opções de importação.\n`);
+const wrongSource = await answerQuestion(testRoot, 'importar contatos', { client: modelWithAction('importar-contatos', '/docs/teste/sem-acao') });
+assert.equal(wrongSource.steps[0].action, undefined, 'ação de outra fonte não pode acompanhar a fonte citada');
 const actionComponent = await readFile(join(projectRoot, 'components/product-action.tsx'), 'utf8');
 assert.doesNotMatch(actionComponent, /exatamente na tela deste passo/i, 'CTA ainda promete abertura exata antes da integração no app');
 

@@ -56,9 +56,9 @@ const mockReply = {
   answer: 'Abra a conversa e use a opção Transferir no painel do contato.\n\nO histórico vai junto.',
   sections: [{ title: 'Antes de começar', items: ['Confirme o departamento de destino.'] }],
   steps: [
-    { text: 'Abra a conversa.', action: { id: 'abrir-atendimento', label: 'Ir para Atendimento', route: '/atendimento', target: 'attendance-list' } },
-    { text: 'Clique em Transferir.' },
-    { text: 'Escolha o destino e confirme.' },
+    { text: 'Abra a conversa.' },
+    { text: 'Clique em Transferir.', action: { id: 'importar-contatos', label: 'Abrir Contatos', route: '/reports', target: 'contacts-more-options' } },
+    { text: 'Escolha o destino e confirme.', action: { id: 'acao-inventada', label: 'Abrir Contatos', route: '/contact', target: 'contacts-more-options' } },
   ],
   code: { language: 'bash', content: 'curl -H "Authorization: Bearer $IHELP_TOKEN" https://apiv3.ihelpchat.com/api/v2/customers/search' },
   sources: [
@@ -119,7 +119,7 @@ async function testAssistant(context, errors) {
   errors.splice(0, errors.length, ...errors.filter((item) => !/502|Failed to load resource/.test(item)));
   await page.getByRole('button', { name: 'Tentar de novo' }).click();
   await page.locator('.ih-ai-steps li').first().waitFor();
-  assert.match(await page.getByRole('link', { name: 'Ir para Atendimento' }).first().getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/atendimento\?ihelpGuide=abrir-atendimento$/);
+  assert.equal(await page.locator('.ih-ai-product-action').count(), 0, 'Action do endpoint sem allowlist não pode virar CTA');
   assert.equal(await page.locator('.ih-ai-sections section').count(), 1);
   const supportCta = page.getByRole('link', { name: 'Falar com o atendimento' }).last();
   assert.match(await supportCta.getAttribute('href'), /wa\.me\/551730422307\?text=/);
@@ -354,6 +354,11 @@ try {
   await testNavigation(page);
   await testAssistant(desktop, errors);
   await testMcpSetup(page);
+
+  await page.goto(`${baseUrl}/docs/sobre-o-sistema/agenda-de-contatos/`, { waitUntil: 'networkidle' });
+  const productAction = page.getByRole('link', { name: /Abrir a tela Contatos/i }).last();
+  assert.match(await productAction.getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/contact\?ihelpGuide=importar-contatos$/);
+  assert.match(await productAction.textContent(), /Abre a tela Contatos no iHelp/);
 
   assert.deepEqual(errors, [], `Erros no navegador:\n${errors.join('\n')}`);
   await desktop.close();
