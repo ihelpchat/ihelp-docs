@@ -230,10 +230,13 @@ async function testMcpSetup(page) {
   const command = page.locator('[data-mcp-command]');
   assert.match(await command.textContent(), /ihelp-docs-assistant-production\.up\.railway\.app\/mcp/);
   assert.match(await command.textContent(), /teste-seguro-123/);
+  assert.match(await page.locator('[data-mcp-steps]').textContent(), /Reabra o Claude Code/);
 
   await page.getByRole('button', { name: 'Codex' }).click();
   assert.match(await command.textContent(), /codex mcp add ihelp-docs/);
   assert.match(await command.textContent(), /IHELP_DOCS_MCP_TOKEN/);
+  assert.match(await page.locator('[data-mcp-steps]').textContent(), /Reabra o Orca ou o Codex/);
+  assert.equal(await page.locator('[data-mcp-steps] li').count(), 5, 'Passo a passo MCP incompleto');
   await assertNoHorizontalOverflow(page, 'configuração MCP');
 }
 
