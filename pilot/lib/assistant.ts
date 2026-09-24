@@ -145,7 +145,7 @@ export function normalizeReply(data: unknown): AssistantReply {
         Boolean(item) && typeof (item as { title?: unknown }).title === 'string' && typeof (item as { path?: unknown }).path === 'string' && /^\/(?!\/)[a-z0-9/_-]+$/i.test((item as { path?: string }).path ?? ''))
       .slice(0, 4)
       .map((item) => ({ title: item.title, path: item.path, kind: kindOf(item.path), excerpt: typeof item.excerpt === 'string' ? item.excerpt : undefined, media: safeMedia(item.media) })),
-    suggestions: strings(raw.suggestions, 3),
+    suggestions: strings(raw.suggestions, 5),
     resolution,
     found: resolution !== 'not_found' && raw.found !== false,
   };

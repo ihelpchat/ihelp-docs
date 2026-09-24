@@ -2,6 +2,17 @@ const FIELDS = ['assistantQuestion', 'assistantOverview', 'assistantInitialSteps
 const ACTION = /\b(?:abra|acesse|clique|escolha|selecione|confira|verifique|corrija|configure|crie|digite|insira|envie|importe|pesquise|revise|localize|inicie|conclua|adicione)\b/i;
 const normalized = (value) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g, ' ').trim();
 
+export function parseAssistantSuggestions(value) {
+  if (typeof value !== 'string') return [];
+  if (value.trimStart().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string') ? parsed : [];
+    } catch { return []; }
+  }
+  return value.split('|').map((item) => item.trim());
+}
+
 export function conversationalIssues(article) {
   const issues = [];
   if (!FIELDS.some((field) => Object.hasOwn(article, field))) return issues;

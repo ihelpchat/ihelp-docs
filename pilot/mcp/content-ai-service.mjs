@@ -3,13 +3,25 @@ import { searchContent, validateArticle } from './content-service.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
 import { readArticle } from './editorial-standard.mjs';
 import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
-import { catalogAction, catalogActions } from './product-actions.mjs';
+import { catalogAction, catalogActions, isCatalogAction } from './product-actions.mjs';
 
 export function normalizeCatalogLabel(action) {
   const trusted = catalogAction(action.id);
   return trusted && action.route === trusted.route && action.target === trusted.target
     ? { ...action, label: trusted.label }
     : action;
+}
+
+function confirmedAction(action, request, plan, productContext) {
+  if (!isCatalogAction(action)) return false;
+  const inPlan = Array.isArray(plan.suggestedActions) && plan.suggestedActions.some((suggested) =>
+    suggested?.id === action.id && suggested.route === action.route && suggested.target === action.target);
+  const inRequest = request.productRoute === action.route;
+  const inCoverage = Array.isArray(productContext.coverage) && productContext.coverage.some((item) =>
+    item.module?.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
+      === request.module.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
+      && Array.isArray(item.productRoutes) && item.productRoutes.includes(action.route));
+  return inPlan || inRequest || inCoverage;
 }
 
 const actionSchema = {
@@ -188,7 +200,13 @@ export async function generateContentPackage(root, request, options = {}) {
     productActions: article.productActions.map(normalizeCatalogLabel),
     ...(request.tangoUrl && article.contentType === 'tutorial' ? { tangoUrl: request.tangoUrl } : {}),
   }));
-  const invalid = articles.map((article) => ({ path: article.path, ...validateArticle(article) })).filter(({ valid }) => !valid);
+  const invalid = articles.map((article) => {
+    const validation = validateArticle(article);
+    const issues = [...validation.issues, ...article.productActions
+      .filter((action) => !confirmedAction(action, request, plan, productContext))
+      .map((action) => `productActions ${action.id} não confirmada para o pedido e módulo`)];
+    return { path: article.path, valid: issues.length === 0, issues };
+  }).filter(({ valid }) => !valid);
   if (invalid.length) {
     return {
       status: 'needs_information',

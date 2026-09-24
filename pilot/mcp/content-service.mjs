@@ -107,7 +107,10 @@ export function renderArticle(article) {
     `<ProductAction id=${escapeYaml(action.id)} label=${escapeYaml(action.label)} route=${escapeYaml(action.route)}${action.target ? ` target=${escapeYaml(action.target)}` : ''} />`
   ).join('\n');
   const actionBlock = actions ? `\n\n${actions}` : '';
-  const conversation = article.assistantQuestion ? `assistantQuestion: ${escapeYaml(article.assistantQuestion)}\nassistantOverview: ${escapeYaml(article.assistantOverview)}\nassistantInitialSteps: ${article.assistantInitialSteps}\nassistantSuggestions: ${escapeYaml(article.assistantSuggestions.join(' | '))}\n` : '';
+  const serializedSuggestions = article.assistantSuggestions?.some((item) => item.includes('|'))
+    ? JSON.stringify(article.assistantSuggestions)
+    : escapeYaml(article.assistantSuggestions?.join(' | ') ?? '');
+  const conversation = article.assistantQuestion ? `assistantQuestion: ${escapeYaml(article.assistantQuestion)}\nassistantOverview: ${escapeYaml(article.assistantOverview)}\nassistantInitialSteps: ${article.assistantInitialSteps}\nassistantSuggestions: ${serializedSuggestions}\n` : '';
   return `---\ntitle: ${escapeYaml(article.title)}\ndescription: ${escapeYaml(article.description)}\nsource: ${article.source}\ncontentType: ${article.contentType}\n${conversation}---\n\n${article.body.trim()}${actionBlock}${tutorial}\n`;
 }
 
