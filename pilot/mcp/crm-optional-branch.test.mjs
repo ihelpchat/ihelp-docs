@@ -113,6 +113,7 @@ assert.deepEqual(finalStep.steps, []);
 assert.match(finalStep.answer, /quadro|pipeline/i);
 
 assert.notDeepEqual((await ask('não', atStep(7))).steps.map(({ text }) => text), [all.steps[15].text]);
+assert.notEqual((await ask('encontrei', atStep(7))).answer, undecided.answer, 'retomada não ativa fora da etapa 8');
 for (const [question, slug] of [
   ['Como gerenciar usuário e acesso?', 'usuario-acesso'],
   ['Como reconectar canal pelo QR?', 'reconectar-canal-qr'],
@@ -130,6 +131,9 @@ for (const [question, slug] of [
   const no = await ask('não quero automação', history);
   assert.notEqual(no.sources[0]?.path, path, `intenção preservada: ${slug}`);
   assert.notDeepEqual(no.steps.map(({ text }) => text), [all.steps[15].text], `sem salto: ${slug}`);
+  const recoveryOutsideCrm = await ask('encontrei', history);
+  assert.notEqual(recoveryOutsideCrm.sources[0]?.path, path, `retomada isolada: ${slug}`);
+  assert.notEqual(recoveryOutsideCrm.answer, undecided.answer, `sem prompt CRM: ${slug}`);
   const otherDiagnosis = await ask('não encontrei', history);
   const afterDiagnosis = await ask('sim', [...history, { role: 'user', content: 'não encontrei' },
     { role: 'assistant', content: `${otherDiagnosis.answer}\nFonte usada: ${otherPath}` }]);

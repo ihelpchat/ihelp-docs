@@ -222,6 +222,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       optionalBranch: optionalBranchOf(raw, documentedSteps.length),
       assistantOptionalPrompt: frontmatterValue(raw, 'assistantOptionalPrompt'),
       assistantOptionalResumePrompt: frontmatterValue(raw, 'assistantOptionalResumePrompt'),
+      assistantOptionalBlockedPrompt: frontmatterValue(raw, 'assistantOptionalBlockedPrompt'),
       assistantSuccess: frontmatterValue(raw, 'assistantSuccess'),
       productActions: productActionsOf(raw),
       score,
@@ -410,6 +411,11 @@ function optionalChoice(question) {
   return null;
 }
 
+function optionalRecovery(question) {
+  const value = normalize(question).replace(/[^a-z0-9]+/g, ' ').trim();
+  return /^(?:encontrei|consegui|conclui(?: (?:este )?passo)?|agora apareceu)$/.test(value);
+}
+
 function optionalDecisionIndex(history, documentedSteps) {
   for (const item of history.toReversed()) {
     if (item.role !== 'assistant') continue;
@@ -447,6 +453,7 @@ export async function answerQuestion(root, question, options = {}) {
   const procedure = proceduralQuestion(question);
   const generalContinuation = guidedContinuation(question, history);
   const choice = optionalChoice(question);
+  const recovery = optionalRecovery(question);
   let continuation = generalContinuation;
   const detailedProcedure = detailedProcedureQuestion(question);
   let overviewProcedure = procedure
@@ -455,7 +462,7 @@ export async function answerQuestion(root, question, options = {}) {
     && !detailedProcedure;
   const preferredPaths = sourcePathsFromHistory(history);
   let sources = await retrieveContext(root, question, 6, {
-    scope, page, preferredPaths, requiredPath: generalContinuation || choice ? preferredPaths.at(-1) : undefined,
+    scope, page, preferredPaths, requiredPath: generalContinuation || choice || recovery ? preferredPaths.at(-1) : undefined,
   });
   const priorGuide = sources.find((source) => source.path === preferredPaths.at(-1) && source.documentedSteps.length);
   const optionalBranch = priorGuide?.optionalBranch;
@@ -464,19 +471,24 @@ export async function answerQuestion(root, question, options = {}) {
     guidedStepIndex(history, priorGuide.documentedSteps) === optionalBranch.decision
     || (priorGuide.assistantOptionalPrompt && normalize(activeText) === normalize(priorGuide.assistantOptionalPrompt))
   );
-  const activeDiagnosis = Boolean(optionalBranch) && activeText
+  const activeDiagnosis = !activeChoice && Boolean(optionalBranch) && activeText
     && normalize(activeText) === normalize(diagnosticQuestion(priorGuide.assistantQuestion, widgetContext))
     && optionalDecisionIndex(history, priorGuide.documentedSteps) === optionalBranch.decision;
-  const activeResume = Boolean(optionalBranch && priorGuide.assistantOptionalResumePrompt)
+  const activeResume = !activeChoice && Boolean(optionalBranch && priorGuide.assistantOptionalResumePrompt)
     && normalize(activeText) === normalize(priorGuide.assistantOptionalResumePrompt);
-  if (choice && (activeChoice || activeDiagnosis || activeResume)) continuation = true;
+  const activeBlocked = !activeChoice && Boolean(optionalBranch && priorGuide.assistantOptionalBlockedPrompt)
+    && normalize(activeText) === normalize(priorGuide.assistantOptionalBlockedPrompt);
+  if ((choice && (activeChoice || activeDiagnosis || activeResume || activeBlocked)) || (recovery && activeBlocked)) continuation = true;
   const exactGuide = sources.find((source) => source.assistantQuestion && (
     normalize(source.assistantQuestion) === normalize(question.trim())
     || (detailedProcedure && normalize(question).replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '') === normalize(source.assistantQuestion))
   ));
   if (exactGuide?.assistantOverview && !continuation && !detailedProcedure) overviewProcedure = true;
   const historyGuide = continuation ? priorGuide : undefined;
-  if (continuation && originalQuestion === question && historyGuide?.assistantQuestion) originalQuestion = historyGuide.assistantQuestion;
+  if (continuation && historyGuide?.assistantQuestion
+    && (originalQuestion === question || optionalChoice(originalQuestion) || optionalRecovery(originalQuestion))) {
+    originalQuestion = historyGuide.assistantQuestion;
+  }
   const diagnosis = diagnoseState(originalQuestion, widgetContext);
   if (exactGuide || historyGuide) sources = [exactGuide || historyGuide];
   if (!sources.length) {
@@ -555,6 +567,7 @@ export async function answerQuestion(root, question, options = {}) {
   const foundButton = /^encontrei (?:o |esse )?botao\b/.test(intent);
   const startGuide = /^(?:sim(?: (?:pode )?me (?:guiar|ajudar))?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?)$/.test(intent);
   const diagnosticFollowup = Boolean(choice && (activeDiagnosis || activeResume));
+  const blockedFollowup = Boolean(activeBlocked && (choice || recovery));
   const progressIndex = continuation && fallbackSource
     ? activeChoice && fallbackSource === priorGuide
       ? optionalBranch.decision
@@ -565,7 +578,7 @@ export async function answerQuestion(root, question, options = {}) {
     : startGuide || progressIndex < 0 ? 0 : needsHelp ? progressIndex : progressIndex + 1;
   const guideFinished = continuation && !needsHelp && !startGuide && progressIndex >= 0
     && progressIndex === fallbackSource?.documentedSteps.length - 1;
-  const progressStep = continuation && fallbackSource && !guideFinished && !choicePending && !diagnosticFollowup && nextIndex < fallbackSource.documentedSteps.length
+  const progressStep = continuation && fallbackSource && !guideFinished && !choicePending && !diagnosticFollowup && !blockedFollowup && nextIndex < fallbackSource.documentedSteps.length
     ? { text: fallbackSource.documentedSteps[nextIndex], actionId: nextIndex === 0 ? fallbackSource.productActions[0]?.id ?? null : null, imagePath: fallbackSource.stepImages[nextIndex] ?? null }
     : null;
   const documentedFallback = (procedure || continuation) && !parsed.steps.length
@@ -583,7 +596,7 @@ export async function answerQuestion(root, question, options = {}) {
           imagePath: overviewSource.stepImages[index] ?? null,
         }))
       : (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
-    : guideFinished || choicePending || diagnosticFollowup ? [] : progressStep ? [progressStep] : continuation
+    : guideFinished || choicePending || diagnosticFollowup || blockedFollowup ? [] : progressStep ? [progressStep] : continuation
       ? (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
       : parsed.steps.length ? parsed.steps : documentedFallback;
   const attemptedHelp = history.some((item) => item.role === 'user' && /^(?:ainda )?n[aã]o encontrei\b|^preciso de ajuda\b/i.test(item.content.trim()));
@@ -606,6 +619,7 @@ export async function answerQuestion(root, question, options = {}) {
     : new Map();
   const suggestions = guideFinished
     ? []
+    : blockedFollowup ? recovery ? ['Quero automação', 'Sem automação'] : ['Encontrei', 'Preciso de ajuda']
     : diagnosticFollowup ? choice === 'decline' ? ['Preciso de ajuda']
       : activeResume ? ['Quero automação', 'Sem automação'] : ['Sim', 'Não']
     : choicePending ? ['Quero automação', 'Sem automação']
@@ -625,9 +639,10 @@ export async function answerQuestion(root, question, options = {}) {
       : questionForDiagnosis
       : withoutRepeatedInstructions(overviewSource
       ? overviewSource.assistantOverview
+      : blockedFollowup ? recovery ? fallbackSource.assistantOptionalPrompt : fallbackSource.assistantOptionalBlockedPrompt
       : diagnosticFollowup ? choice === 'accept'
         ? activeResume ? fallbackSource.assistantOptionalPrompt : fallbackSource.assistantOptionalResumePrompt
-        : 'Entendi. Diga o que aparece na tela ou qual aviso você vê para eu orientar o próximo passo.'
+        : fallbackSource.assistantOptionalBlockedPrompt
       : choicePending ? fallbackSource.assistantOptionalPrompt || 'Você quer fazer a etapa opcional agora ou seguir sem ela?'
       : guideFinished ? fallbackSource.assistantSuccess || (/salvar/i.test(fallbackSource.documentedSteps.at(-1)) && /publicar/i.test(fallbackSource.documentedSteps.at(-1))
         ? 'Você concluiu as etapas documentadas. Publicar coloca o robô online; Salvar guarda o robô inativo.'
@@ -637,7 +652,7 @@ export async function answerQuestion(root, question, options = {}) {
         : startGuide && !activeChoice ? 'Vamos começar pelo primeiro passo.' : 'Vamos para a próxima ação.'
       : parsed.answer, safeSteps)
       || (continuation ? 'Vamos por uma ação de cada vez.' : 'Siga os passos abaixo e me diga onde precisar de ajuda.'),
-    sections: needsHelp || overviewSource || progressStep || guideFinished || choicePending || diagnosticFollowup ? [] : parsed.sections,
+    sections: needsHelp || overviewSource || progressStep || guideFinished || choicePending || diagnosticFollowup || blockedFollowup ? [] : parsed.sections,
     steps: safeSteps.map(({ text, actionId, imagePath }, index) => {
       const safeImagePath = modelUsedValidatedImage
         ? imagePath
