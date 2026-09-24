@@ -25,7 +25,7 @@ const article = {
   description: 'Aprenda a importar contatos e conferir o resultado na lista do iHelp.',
   source: 'produto', contentType: 'tutorial', body,
   productActions: [contactAction],
-  assistantQuestion: 'Como importar contatos?',
+  assistantQuestion: 'Como criar uma lista de contatos?',
   assistantOverview: 'Abra Contatos, escolha Importar contatos em Mais opções e confira a planilha antes de concluir.',
   assistantInitialSteps: 3, assistantSuggestions: suggestions,
 };
