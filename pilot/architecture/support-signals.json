@@ -1,0 +1,22 @@
+{
+  "source": "Análise agregada de 252 conversas reais de suporte da empresa iHelp, sem dados pessoais",
+  "period": "2026-08-10 a 2026-09-09",
+  "rules": [
+    "Dúvida de uso e configuração pode virar FAQ, tutorial e guia no produto.",
+    "Instabilidade, bug, mensagem não entregue e bloqueio ativo da Meta exigem diagnóstico ou atendimento; não inventar tutorial como solução.",
+    "Quando a resposta depende da conta, coletar o contexto necessário e encaminhar ao atendimento.",
+    "Priorizar linguagem de iniciante e explicar termos como se a pessoa tivesse acabado de entrar no trial."
+  ],
+  "categories": [
+    {"category":"Reconexão de número e canal","conversations":42,"selfService":"partial","guidance":"Ensinar QR Code, dispositivos pareados, teste em 4G e deixar claro que reconectar não apaga o histórico."},
+    {"category":"Criar e gerenciar usuários","conversations":27,"selfService":"high","guidance":"Cobrir criação, departamento, limite do plano, troca, desativação, remoção, e-mail e senha."},
+    {"category":"Instabilidade e bugs da plataforma","conversations":22,"selfService":"low","guidance":"Escalar rapidamente e coletar tela, horário, módulo e comportamento observado."},
+    {"category":"Mensagens não chegam ou atrasam","conversations":16,"selfService":"low","guidance":"Diagnosticar canal, saldo, janela e status antes de orientar; escalar quando houver falha de entrega."},
+    {"category":"Permissões, acessos e departamentos","conversations":12,"selfService":"partial","guidance":"Explicar pré-requisitos, perfil necessário e efeito de cada permissão."},
+    {"category":"Configurar chatbot","conversations":12,"selfService":"high","guidance":"Ensinar palavras-chave, saudações, ausência, teste e publicação."},
+    {"category":"Gestão de contatos","conversations":8,"selfService":"high","guidance":"Cobrir importação, formatos aceitos, mapeamento, telefone internacional, deduplicação e validação do resultado."},
+    {"category":"Campanhas e disparos","conversations":7,"selfService":"partial","guidance":"Explicar planilha, template, revisão e confirmação do envio sem prometer entrega."},
+    {"category":"CRM e pipeline","conversations":6,"selfService":"partial","guidance":"Explicar conceitos antes do passo a passo e indicar permissões necessárias."},
+    {"category":"Relatórios de atendimento","conversations":4,"selfService":"partial","guidance":"Explicar filtros, significado das colunas, exportação e limitações."}
+  ]
+}

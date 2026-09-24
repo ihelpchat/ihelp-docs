@@ -1,8 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod/v4';
-import { getInventory, isSafeRequestedBy, searchContent, SubmitArticleError, submitArticle, validateArticle } from './content-service.mjs';
+import { createHash } from 'node:crypto';
+import { auditOperation, getInventory, isSafeRequestedBy, searchContent, SubmitArticleError, submitArticle, validateArticle } from './content-service.mjs';
 import { auditContent, readArticle } from './editorial-standard.mjs';
+import { getIhelpContext } from './product-context-service.mjs';
+
+const requestedBySchema = z.string().refine(isSafeRequestedBy, 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
+const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
 
 const articleSchema = z.object({
   path: z.string().describe('Caminho sem extensão, começando com docs/, api/ ou blog/'),
@@ -55,6 +60,26 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     description: 'Valida metadados, caminho, conteúdo, Tango e vazamento de credenciais sem gravar nada.',
     inputSchema: articleSchema,
   }, async (article) => textResult(validateArticle(article)));
+
+  server.registerTool('docs_product_context', {
+    description: 'Consulta código frontend e backend, cobertura editorial e sinais agregados do suporte sem modificar repositórios.',
+    inputSchema: z.object({
+      topic: z.string().min(3).max(120),
+      module: z.string().min(2).max(80),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ topic, module, requestedBy }) => {
+    const target = auditTarget(module, topic);
+    await auditOperation(root, { actor: requestedBy, operation: 'docs_product_context', target, result: 'attempt' });
+    try {
+      const result = await getIhelpContext(root, topic, module);
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_product_context', target, result: result.matches.length ? 'success' : 'unavailable' });
+      return textResult(result);
+    } catch (error) {
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_product_context', target, result: 'failure' });
+      return textResult({ error: error instanceof Error ? error.message : String(error) }, true);
+    }
+  });
 
   server.registerTool('docs_submit_article', {
     description: 'Envia conteúdo validado como draft local ou abre pull request no GitHub. Nunca faz merge ou deploy.',

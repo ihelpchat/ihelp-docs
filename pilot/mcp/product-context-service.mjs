@@ -1,0 +1,149 @@
+const treeCache = new Map();
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+const CACHE_MS = 5 * 60_000;
+const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|cs)$/;
+const PINNED_PATHS = new Set([
+  'src/components/core/components/Router/utils/pagesData.tsx',
+  'src/components/ui/components/NavBar/index.tsx',
+]);
+const ALIASES = {
+  atendimento: ['attendance', 'chat'],
+  contatos: ['contact', 'contacts'],
+  contato: ['contact', 'contacts'],
+  tarefas: ['task', 'tasks'],
+  tarefa: ['task', 'tasks'],
+  campanhas: ['campaign', 'campaigns'],
+  campanha: ['campaign', 'campaigns'],
+  configuracoes: ['configuration', 'settings'],
+  usuarios: ['user', 'users'],
+  usuario: ['user', 'users'],
+  relatorios: ['report', 'reports'],
+  relatorio: ['report', 'reports'],
+  importar: ['import'],
+  exportar: ['export'],
+};
+
+function normalize(value) {
+  return String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
+}
+
+function termsOf(topic, module) {
+  const base = `${topic} ${module}`.split(/[^\p{L}\p{N}]+/u).map(normalize).filter((term) => term.length > 2);
+  return [...new Set(base.flatMap((term) => [term, ...(ALIASES[term] ?? [])]))];
+}
+
+async function githubJson(path, options) {
+  const response = await options.fetch(`https://api.github.com${path}`, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${options.token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  });
+  if (!response.ok) throw new Error(`GitHub API ${response.status} rejeitou consulta do produto`);
+  return response.json();
+}
+
+async function treeOf(options) {
+  const key = `${options.repository}@${options.ref}`;
+  const cached = treeCache.get(key);
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached.paths;
+  const data = await githubJson(`/repos/${options.repository}/git/trees/${encodeURIComponent(options.ref)}?recursive=1`, options);
+  const paths = (data.tree ?? [])
+    .filter((entry) => entry.type === 'blob' && typeof entry.path === 'string' && SOURCE_FILE.test(entry.path) && !/(?:^|\/)(?:node_modules|bin|obj|dist)\//.test(entry.path))
+    .map((entry) => entry.path);
+  treeCache.set(key, { at: Date.now(), paths });
+  return paths;
+}
+
+function pathScore(path, terms) {
+  const value = normalize(path);
+  return terms.reduce((score, term) => score + (value.includes(term) ? 8 : 0), PINNED_PATHS.has(path) ? 20 : 0);
+}
+
+function excerptOf(content, terms) {
+  const lines = content.split('\n');
+  const indexes = [];
+  lines.forEach((line, index) => {
+    const value = normalize(line);
+    if (terms.some((term) => value.includes(term))) indexes.push(index);
+  });
+  const redact = (value) => value
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email removido]')
+    .replace(/\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{20,}\b/gi, '[segredo removido]')
+    .replace(/(?:Bearer\s+)[A-Za-z0-9._-]{20,}/gi, 'Bearer [segredo removido]')
+    .replace(/((?:apiKey|password|secret|token)\s*[:=]\s*["'])[A-Za-z0-9._-]{12,}(["'])/gi, '$1[segredo removido]$2');
+  if (!indexes.length) return redact(lines.slice(0, 80).join('\n').slice(0, 6_000));
+  const selected = new Set();
+  for (const index of indexes.slice(0, 20)) for (let line = Math.max(0, index - 3); line <= Math.min(lines.length - 1, index + 5); line += 1) selected.add(line);
+  return redact([...selected].toSorted((left, right) => left - right).map((index) => `${index + 1}: ${lines[index]}`).join('\n').slice(0, 8_000));
+}
+
+export async function searchProductContext(topic, module, provided = {}) {
+  const options = {
+    fetch: provided.fetch ?? globalThis.fetch,
+    token: provided.token ?? process.env.GITHUB_TOKEN,
+    repository: provided.repository ?? process.env.PRODUCT_GITHUB_REPOSITORY ?? 'ihelpchat/front-react',
+    ref: provided.ref ?? process.env.PRODUCT_GITHUB_REF ?? 'master',
+  };
+  if (!options.token) return { available: false, repository: options.repository, ref: options.ref, matches: [], reason: 'GITHUB_TOKEN não configurado' };
+  const terms = termsOf(topic, module);
+  const paths = await treeOf(options);
+  const candidates = paths
+    .map((path) => ({ path, score: pathScore(path, terms) }))
+    .filter(({ score }) => score > 0)
+    .toSorted((left, right) => right.score - left.score)
+    .slice(0, 16);
+  const matches = [];
+  for (const candidate of candidates) {
+    const data = await githubJson(`/repos/${options.repository}/contents/${encodeURIComponent(candidate.path).replaceAll('%2F', '/')}?ref=${encodeURIComponent(options.ref)}`, options);
+    if (data.encoding !== 'base64' || typeof data.content !== 'string') continue;
+    const content = Buffer.from(data.content.replaceAll('\n', ''), 'base64').toString('utf8');
+    const textScore = terms.reduce((score, term) => score + (normalize(content).includes(term) ? 3 : 0), candidate.score);
+    matches.push({ path: candidate.path, score: textScore, excerpt: excerptOf(content, terms) });
+  }
+  return {
+    available: true,
+    repository: options.repository,
+    ref: options.ref,
+    matches: matches.toSorted((left, right) => right.score - left.score).slice(0, 8).map(({ path, excerpt }) => ({ path, excerpt })),
+  };
+}
+
+export async function getIhelpContext(root, topic, module, provided = {}) {
+  const token = provided.token ?? process.env.GITHUB_TOKEN;
+  const fetcher = provided.fetch ?? globalThis.fetch;
+  const repositories = provided.repositories ?? [
+    { repository: process.env.PRODUCT_GITHUB_REPOSITORY ?? 'ihelpchat/front-react', ref: process.env.PRODUCT_GITHUB_REF ?? 'master', role: 'Interface, rotas, permissões visíveis e textos de botões' },
+    { repository: process.env.BACKEND_GITHUB_REPOSITORY ?? 'ihelpchat/olah-ihelp', ref: process.env.BACKEND_GITHUB_REF ?? 'master', role: 'Regras de negócio, APIs, permissões e validações' },
+  ];
+  const code = [];
+  for (const source of repositories) {
+    const result = await searchProductContext(topic, module, { fetch: fetcher, token, repository: source.repository, ref: source.ref }).catch((error) => ({ available: false, repository: source.repository, ref: source.ref, matches: [], reason: error.message }));
+    code.push({ ...result, role: source.role });
+  }
+  const supportSignals = JSON.parse(await readFile(join(root, 'architecture/support-signals.json'), 'utf8'));
+  const coverage = JSON.parse(await readFile(join(root, 'architecture/coverage-matrix.json'), 'utf8'));
+  const terms = termsOf(topic, module);
+  const relevantSupport = supportSignals.categories
+    .map((item) => ({ ...item, score: terms.reduce((score, term) => score + (normalize(`${item.category} ${item.guidance}`).includes(term) ? 1 : 0), 0) }))
+    .filter(({ score }) => score > 0)
+    .toSorted((left, right) => right.score - left.score)
+    .slice(0, 5)
+    .map(({ score: _score, ...item }) => item);
+  const relevantCoverage = coverage.filter((item) => terms.some((term) => normalize(item.module).includes(term) || (ALIASES[normalize(item.module)] ?? []).includes(term)));
+  return {
+    code,
+    support: {
+      source: supportSignals.source,
+      period: supportSignals.period,
+      categories: relevantSupport,
+      rules: supportSignals.rules,
+    },
+    coverage: relevantCoverage,
+    matches: code.flatMap((source) => source.matches.map((match) => ({ ...match, repository: source.repository, ref: source.ref, role: source.role }))),
+    repository: code[0]?.repository ?? repositories[0].repository,
+    ref: code[0]?.ref ?? repositories[0].ref,
+  };
+}
