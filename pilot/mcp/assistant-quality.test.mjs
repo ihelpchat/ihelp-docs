@@ -22,6 +22,7 @@ assert.doesNotMatch(internalReply.answer, /documentaç|Node\.js|Git/i);
 
 const actionDir = join(testRoot, 'content/docs/docs/teste');
 await mkdir(actionDir, { recursive: true });
+await writeFile(join(actionDir, 'busca-central.mdx'), `---\ntitle: "Busca da Central"\ndescription: "Preciso de ajuda com busca da Central."\nsource: produto\ncontentType: faq\n---\n\nPreciso de ajuda: use a busca da Central.\n`);
 await writeFile(join(actionDir, 'sugestoes.mdx'), `---\ntitle: "Roteiro editorial de sugestões"\ndescription: "Teste das sugestões do assistente."\nassistantSuggestions: "Primeira dúvida | Segunda dúvida | Primeira dúvida"\n---\n\nRoteiro editorial de sugestões.\n`);
 const suggestionSource = (await retrieveContext(testRoot, 'roteiro editorial de sugestões'))
   .find((source) => source.path === '/docs/teste/sugestoes');
@@ -143,6 +144,7 @@ const afterFirstReply = await answerQuestion(testRoot, 'Concluí este passo', {
   history: [guidedHistory[0], { role: 'assistant', content: `1. ${restartedReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
 });
 assert.match(afterFirstReply.steps[0].text, /Título do Robô/i, 'confirmação no guia avança uma ação');
+assert.equal(afterFirstReply.steps[0].image?.src, '/img/help/Vc7GpOtHK4rebqsNycJs.png', 'Título usa o screenshot do formulário, não a lista de Robôs');
 assert.deepEqual(afterFirstReply.suggestions, guideSuggestions);
 const fieldHelp = await answerQuestion(testRoot, 'Preciso de ajuda', {
   client: guidedClient,
@@ -160,6 +162,8 @@ assert.equal(stuckReply.steps[0].text, restartedReply.steps[0].text, 'ajuda deve
 assert.equal(stuckReply.steps[0].action?.id, 'abrir-robos', 'ajuda ao travar deve manter CTA contextual');
 assert.deepEqual(stuckReply.steps[0].image, restartedReply.steps[0].image, 'ajuda deve manter screenshot contextual');
 assert.match(stuckReply.answer, /Se sua tela estiver diferente, diga o que apareceu/i);
+assert.match(stuckReply.answer, /(?:botão|campo|controle)[\s\S]*texto/i, 'ajuda pergunta qual controle ou texto aparece');
+assert.match(stuckReply.answer, /imagem/i, 'ajuda orienta usar o screenshot disponível');
 
 let currentGuideReply = restartedReply;
 for (let stepIndex = 1; stepIndex < 8; stepIndex += 1) {
@@ -186,7 +190,56 @@ const finishedReply = await answerQuestion(testRoot, 'Concluí este passo', {
   history: [guidedHistory[0], { role: 'assistant', content: `1. ${currentGuideReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
 });
 assert.deepEqual(finishedReply.steps, [], 'após Salvar/Publicar o guia não reinicia no primeiro passo');
+assert.match(finishedReply.answer, /Publicar[\s\S]*online/i);
+assert.match(finishedReply.answer, /Salvar[\s\S]*inativo/i);
 assert.doesNotMatch(JSON.stringify(finishedReply), /Testar robô|status Ativo/i);
+for (const alias of ['Concluí', 'feito', 'terminei', 'pronto', 'preenchi os campos']) {
+  const aliasReply = await answerQuestion(testRoot, alias, {
+    client: guidedClient,
+    history: [guidedHistory[0], { role: 'assistant', content: `1. ${currentGuideReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
+  });
+  assert.deepEqual(aliasReply.steps, [], `${alias}: último passo não pode reiniciar`);
+  assert.match(aliasReply.answer, /Publicar[\s\S]*online/i, `${alias}: conclusão deve ser grounded`);
+  assert.match(aliasReply.answer, /Salvar[\s\S]*inativo/i, `${alias}: conclusão deve distinguir salvar`);
+  assert.doesNotMatch(JSON.stringify(aliasReply), /Ativar robô|status Ativo/i);
+}
+
+const hostileGuideClient = { responses: { create: async (request) => {
+  const helping = /Pergunta: Preciso de ajuda/.test(request.input.at(-1).content);
+  return { model: 'gpt-test', output_text: JSON.stringify({
+    answer: helping ? 'Use a busca da Central.' : 'Ativar robô deixa o status Ativo.',
+    sections: [],
+    steps: [
+      { text: 'Abra Robôs e depois me diga se encontrou o botão.', actionId: null, imagePath: null },
+      { text: 'Clique em Testar robô.', actionId: null, imagePath: null },
+    ],
+    code: null,
+    sources: [helping ? '/docs/teste/busca-central' : '/docs/sobre-o-sistema/robo-de-atendimento'],
+    suggestions: [], resolution: 'complete', found: true,
+  }) };
+} } };
+const hostileHistory = [guidedHistory[0], { role: 'assistant', content: 'Fonte usada: /docs/sobre-o-sistema/robo-de-atendimento' }];
+let hostileReply = await answerQuestion(testRoot, 'sim, pode me guiar', { client: hostileGuideClient, history: hostileHistory });
+assert.deepEqual(hostileReply.steps.map(({ text }) => text), [fullRobotSteps[0]], 'entrada no guia usa passo documental mesmo sem histórico numerado');
+assert.equal(hostileReply.steps[0].action?.id, 'abrir-robos');
+assert.equal(hostileReply.steps[0].image?.src, '/img/help/q4tBz2R7cevwT94eUQKB.png');
+const hostileHelp = await answerQuestion(testRoot, 'Preciso de ajuda', {
+  client: hostileGuideClient,
+  history: [hostileHistory[0], { role: 'assistant', content: `1. ${hostileReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
+});
+assert.deepEqual(hostileHelp.steps.map(({ text }) => text), [fullRobotSteps[0]], 'ajuda não aceita passo reescrito pelo modelo');
+assert.equal(hostileHelp.steps[0].action?.id, 'abrir-robos');
+assert.equal(hostileHelp.steps[0].image?.src, '/img/help/q4tBz2R7cevwT94eUQKB.png');
+assert.deepEqual(hostileHelp.sources.map(({ path }) => path), ['/docs/sobre-o-sistema/robo-de-atendimento'], 'ajuda mantém fonte do histórico');
+assert.doesNotMatch(hostileHelp.answer, /busca da Central|Ativar robô/i);
+for (let index = 1; index < fullRobotSteps.length; index += 1) {
+  hostileReply = await answerQuestion(testRoot, 'Concluí este passo', {
+    client: hostileGuideClient,
+    history: [hostileHistory[0], { role: 'assistant', content: `1. ${hostileReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
+  });
+  assert.deepEqual(hostileReply.steps.map(({ text }) => text), [fullRobotSteps[index]], `modelo não pode dividir/pular o passo ${index + 1}`);
+}
+assert.match(hostileReply.steps[0].text, /Salvar[\s\S]*Publicar/i);
 
 const continuedReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
   client: guidedClient,
@@ -311,6 +364,20 @@ assert.match(robotArticle, /Gatilho[\s\S]{0,220}inicia/i, 'guia precisa explicar
 assert.match(robotArticle, /Departamento[\s\S]{0,260}fila/i, 'guia precisa explicar a diferença de destino para iniciantes');
 assert.match(robotArticle, /<ProductAction id="abrir-robos"/i, 'guia precisa levar a pessoa diretamente para a tela de robôs');
 assert.match(robotArticle, /Menu de opções[\s\S]{0,240}(?:ramifica|árvore|caminhos)/i, 'artigo deve explicar a ramificação para iniciantes');
+const menuPath = '/docs/sobre-o-sistema/menu-de-opcoes-do-robo';
+const menuQuestion = 'Quero montar um menu com opções';
+const menuSources = await retrieveContext(testRoot, menuQuestion);
+assert.equal(menuSources[0]?.path, menuPath, 'pergunta editorial exata deve priorizar o procedimento do Menu de opções');
+const menuArticle = await readFile(join(testRoot, 'content/docs', `${menuPath.slice(1)}.mdx`), 'utf8');
+assert.match(menuArticle, /Adicionar bloco[\s\S]*Menu de opções/i);
+assert.match(menuArticle, /título do bloco[\s\S]*Bloco de pergunta/i);
+assert.match(menuArticle, /Adicionar opção \+[\s\S]*rótulo/i);
+assert.match(menuArticle, /Adicionar bloco[\s\S]*ramificaç[õo]es[\s\S]*Publicar/i);
+assert.match(menuArticle, /\/img\/help\/mBfKLzgI06X5bYCR0z2i\.png/);
+assert.doesNotMatch(menuArticle, /Condição|Testar robô/i);
+const menuReply = await answerQuestion(testRoot, menuQuestion, { client: guidedClient });
+assert.deepEqual(menuReply.sources.map(({ path }) => path), [menuPath], 'resposta exata não mistura o guia genérico');
+assert.match(menuReply.steps[0].text, /Menu de opções/i);
 const robotScreenshotPaths = new Set([...robotArticle.matchAll(/!\[[^\]]*\]\((\/img\/[^)]+)\)/g)].map((match) => match[1]));
 assert.ok(omittedScreenshotReply.steps.some((step) => step.image), 'quando o modelo omitir todas as telas, o servidor deve anexar um print relevante');
 assert.ok(
