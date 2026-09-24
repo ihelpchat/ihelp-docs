@@ -3,7 +3,7 @@ import { getIhelpContext, searchProductContext } from './product-context-service
 
 const files = {
   'src/components/core/components/Router/utils/pagesData.tsx': 'export const pages = [{ path: "/contact", title: "Contatos" }];',
-  'src/components/pages/Contacts/ContactsList/index.tsx': '<button aria-label="Mais opções">...</button><button>Importar Contatos</button>',
+  'src/components/pages/Contacts/ContactsList/index.tsx': '<button aria-label="Mais opções">...</button><button>Importar Contatos</button> // suporte: (11) 98765-4321; CPF 123.456.789-09',
   'src/components/pages/Tasks/index.tsx': '<h1>Tarefas</h1>',
 };
 const fakeFetch = async (url) => {
@@ -27,6 +27,7 @@ assert.equal(context.ref, 'master');
 assert.match(JSON.stringify(context.matches), /\/contact/);
 assert.match(JSON.stringify(context.matches), /Importar Contatos/);
 assert.ok(context.matches.every(({ path }) => path.startsWith('src/')));
+assert.doesNotMatch(JSON.stringify(context.matches), /98765-4321|123\.456\.789-09/, 'telefone e CPF do codebase não podem chegar ao prompt');
 
 const backendFiles = {
   'Comzada.Application/Controllers/V2/ContactsController.cs': 'public class ContactsController { public void ImportContacts() {} private string token = "abcdefghijklmnop123456"; }',

@@ -8,6 +8,10 @@ const root = await mkdtemp(join(tmpdir(), 'ihelp-package-github-'));
 const body = 'Abra Contatos no menu lateral. Confira a lista antes de continuar. Selecione a opção de importar. Revise o arquivo escolhido e confirme as colunas. Corrija as linhas inválidas antes de concluir. Aguarde o resultado aparecer na tela. Pesquise um contato recém cadastrado para confirmar o sucesso. Se o contato não aparecer, revise o número e repita apenas a linha corrigida. Este procedimento mantém os demais contatos já cadastrados na conta.';
 const article = (path, title) => ({ path, title, description: 'Procedimento completo para orientar a pessoa na documentação do iHelp.', source: 'produto', contentType: 'tutorial', body });
 assert.equal(validateArticle({ ...article('docs/teste/rota', 'Rota segura'), productActions: [{ id: 'abrir-rota', label: 'Abrir rota', route: '//externo' }] }).valid, false);
+for (const [field, value] of [['title', 'Contato (11) 98765-4321'], ['description', 'Procedimento com CPF 123.456.789-09 que jamais pode ser publicado.'], ['body', `${body} Ligue para 11987654321.`]]) {
+  const unsafe = { ...article('docs/teste/pii', 'Guia seguro'), [field]: value };
+  assert.equal(validateArticle(unsafe).valid, false, `${field} com telefone ou CPF deve ser rejeitado`);
+}
 const base = new Map([
   ['pilot/content/docs/docs/meta.json', '{"pages":["contatos"]}\n'],
   ['pilot/content/docs/tutoriais/meta.json', '{"pages":["index"]}\n'],
@@ -39,6 +43,8 @@ globalThis.fetch = async (url, init = {}) => {
   throw Error(`Unexpected method: ${method}`);
 };
 try {
+  await assert.rejects(submitContentPackage(root, [{ ...article('docs/teste/pii', 'Guia seguro'), body: `${body} Ligue para (11) 98765-4321.` }], 'pull_request', 'user:tester'), /dado pessoal/i);
+  assert.equal(pulls, 0, 'PII não pode abrir PR');
   const result = await submitContentPackage(root, [article('docs/contatos/novo', 'Novo guia'), article('docs/contatos/guia', 'Guia atualizado'), article('tutoriais/contatos/primeiro', 'Primeiro tutorial')], 'pull_request', 'user:tester', ['docs/contatos/antigo']);
   assert.equal(result.status, 'pull_request');
   assert.equal(pulls, 1);
@@ -55,7 +61,7 @@ try {
   assert.equal(mutations.length, before);
   assert.equal((await readdir(root)).includes('.drafts'), false);
   const audit = (await readFile(join(root, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
-  assert.deepEqual(audit.map(({ result }) => result), ['attempt', 'external_request', 'success']);
+  assert.deepEqual(audit.map(({ result }) => result), ['attempt', 'failure', 'attempt', 'external_request', 'success']);
   assert.ok(audit.every(({ actor }) => actor === 'user:tester'));
   assert.doesNotMatch(JSON.stringify(audit), /mock-token|Novo guia|artigo antigo/);
   await assert.rejects(submitContentPackage(root, [], 'pull_request', 'user:tester', ['docs/contatos/inexistente']), /não encontrado/i);
