@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { submitContentPackage, validateArticle } from './content-service.mjs';
+import { renderArticle, submitContentPackage, validateArticle } from './content-service.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'ihelp-package-github-'));
 const body = 'Abra Contatos no menu lateral. Confira a lista antes de continuar. Selecione a opção de importar. Revise o arquivo escolhido e confirme as colunas. Corrija as linhas inválidas antes de concluir. Aguarde o resultado aparecer na tela. Pesquise um contato recém cadastrado para confirmar o sucesso. Se o contato não aparecer, revise o número e repita apenas a linha corrigida. Este procedimento mantém os demais contatos já cadastrados na conta.';
@@ -12,6 +12,15 @@ for (const [field, value] of [['title', 'Contato (11) 98765-4321'], ['descriptio
   const unsafe = { ...article('docs/teste/pii', 'Guia seguro'), [field]: value };
   assert.equal(validateArticle(unsafe).valid, false, `${field} com telefone ou CPF deve ser rejeitado`);
 }
+const trustedAction = { id: 'importar-contatos', label: 'Abrir a tela Contatos', route: '/contact', target: 'contacts-more-options' };
+for (const [field, value] of [['path', 'docs/teste/11987654321'], ['tangoUrl', 'https://app.tango.us/app/workflow/11987654321'], ['productActions', [{ ...trustedAction, id: 'telefone-11987654321' }]], ['productActions', [{ ...trustedAction, label: 'Ligue para (11) 98765-4321' }]], ['productActions', [{ ...trustedAction, label: 'CPF 123.456.789-09' }]], ['productActions', [{ ...trustedAction, route: '/contact/11987654321' }]], ['productActions', [{ ...trustedAction, target: 'telefone-11987654321' }]]]) {
+  const unsafe = { ...article('docs/teste/pii', 'Guia seguro'), [field]: value };
+  assert.ok(validateArticle(unsafe).issues.some((issue) => /dado pessoal/i.test(issue)), `${field} com PII precisa entrar na inspeção`);
+  assert.throws(() => renderArticle(unsafe), /dado pessoal/i, `${field} com PII não pode ser renderizado`);
+}
+const secretLabel = { ...article('docs/teste/segredo', 'Guia seguro'), productActions: [{ ...trustedAction, label: 'ghp_abcdefghijklmnopqrst' }] };
+assert.ok(validateArticle(secretLabel).issues.some((issue) => /credencial/i.test(issue)), 'segredo em label precisa entrar na inspeção');
+assert.throws(() => renderArticle(secretLabel), /credencial/i);
 const base = new Map([
   ['pilot/content/docs/docs/meta.json', '{"pages":["contatos"]}\n'],
   ['pilot/content/docs/tutoriais/meta.json', '{"pages":["index"]}\n'],
@@ -44,6 +53,7 @@ globalThis.fetch = async (url, init = {}) => {
 };
 try {
   await assert.rejects(submitContentPackage(root, [{ ...article('docs/teste/pii', 'Guia seguro'), body: `${body} Ligue para (11) 98765-4321.` }], 'pull_request', 'user:tester'), /dado pessoal/i);
+  await assert.rejects(submitContentPackage(root, [{ ...article('docs/teste/pii', 'Guia seguro'), productActions: [{ ...trustedAction, label: 'Ligue para (11) 98765-4321' }] }], 'pull_request', 'user:tester'), /dado pessoal/i);
   assert.equal(pulls, 0, 'PII não pode abrir PR');
   const result = await submitContentPackage(root, [article('docs/contatos/novo', 'Novo guia'), article('docs/contatos/guia', 'Guia atualizado'), article('tutoriais/contatos/primeiro', 'Primeiro tutorial')], 'pull_request', 'user:tester', ['docs/contatos/antigo']);
   assert.equal(result.status, 'pull_request');
@@ -61,7 +71,7 @@ try {
   assert.equal(mutations.length, before);
   assert.equal((await readdir(root)).includes('.drafts'), false);
   const audit = (await readFile(join(root, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
-  assert.deepEqual(audit.map(({ result }) => result), ['attempt', 'failure', 'attempt', 'external_request', 'success']);
+  assert.deepEqual(audit.map(({ result }) => result), ['attempt', 'failure', 'attempt', 'failure', 'attempt', 'external_request', 'success']);
   assert.ok(audit.every(({ actor }) => actor === 'user:tester'));
   assert.doesNotMatch(JSON.stringify(audit), /mock-token|Novo guia|artigo antigo/);
   await assert.rejects(submitContentPackage(root, [], 'pull_request', 'user:tester', ['docs/contatos/inexistente']), /não encontrado/i);

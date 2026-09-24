@@ -13,6 +13,7 @@ await cp(join(projectRoot, 'content'), join(testRoot, 'content'), { recursive: t
 const aiClient = {
   responses: {
     create: async (request) => {
+      assert.doesNotMatch(request.input.at(-1).content, /11987654321|123\.456\.789-09/, 'PII no path não pode entrar no prompt');
       if (request.text.format.name === 'plano_documentacao') {
         return { model: 'gpt-test', output_text: JSON.stringify({
           status: 'ready',
@@ -34,7 +35,7 @@ const aiClient = {
             source: 'produto',
             contentType: 'faq',
             body: 'Abra o menu Contatos e confira se a planilha contém nome e telefone. No canto superior direito, abra Mais opções e selecione Importar contatos. Escolha o arquivo, confira o mapeamento das colunas e avance para validar os dados. Corrija linhas inválidas antes de concluir. Ao finalizar, confirme se os contatos aparecem na lista. Se algum item não entrar, confira o código do país e tente novamente com apenas as linhas corrigidas. Esse processo mantém os contatos válidos e mostra o andamento da importação na própria tela.',
-            productActions: [{ id: 'importar-contatos', label: 'Ir para importar contatos', route: '/contact', target: 'contacts-more-options' }],
+            productActions: [{ id: 'importar-contatos', label: 'Abrir a tela Contatos', route: '/contact', target: 'contacts-more-options' }],
           },
           {
             path: 'tutoriais/contatos/importar-contatos',
@@ -43,7 +44,7 @@ const aiClient = {
             source: 'produto',
             contentType: 'tutorial',
             body: 'Antes de começar, deixe a planilha pronta com nome e telefone. Abra Contatos pelo menu lateral. No canto superior direito, abra Mais opções e escolha Importar contatos. Selecione o arquivo e confira as colunas reconhecidas. Ajuste o mapeamento quando necessário e avance para a validação. Revise as linhas sinalizadas e corrija os dados antes de confirmar. Inicie a importação e acompanhe o progresso na tela. Quando terminar, pesquise um contato da planilha para confirmar que o cadastro foi criado corretamente. Caso algum contato não apareça, revise o telefone e o código do país.',
-            productActions: [{ id: 'importar-contatos', label: 'Começar no iHelp', route: '/contact', target: 'contacts-more-options' }],
+            productActions: [{ id: 'importar-contatos', label: 'Abrir a tela Contatos', route: '/contact', target: 'contacts-more-options' }],
           },
         ],
       }) };
@@ -63,6 +64,10 @@ await assert.rejects(generateContentPackage(testRoot, { ...request, details: 'Au
 const plan = await planContent(testRoot, request, { client: aiClient });
 assert.equal(plan.status, 'ready');
 assert.equal(plan.suggestedActions[0].route, '/contact');
+await planContent(testRoot, request, { client: aiClient, productContext: {
+  code: [], matches: [{ repository: 'ihelpchat/front-react', ref: 'test', role: 'frontend', path: 'src/Contacts/CPF-123.456.789-09-phone-11987654321.tsx', excerpt: 'Tela Contatos' }],
+  support: { categories: [], rules: [] }, coverage: [],
+} });
 const generated = await generateContentPackage(testRoot, request, { client: aiClient });
 assert.equal(generated.articles.length, 2);
 assert.deepEqual(generated.articles.map(({ contentType }) => contentType), ['faq', 'tutorial']);
