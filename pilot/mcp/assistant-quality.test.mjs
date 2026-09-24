@@ -161,7 +161,7 @@ const stuckReply = await answerQuestion(testRoot, 'Preciso de ajuda', {
 assert.equal(stuckReply.steps[0].text, restartedReply.steps[0].text, 'ajuda deve retomar exatamente a etapa atual');
 assert.equal(stuckReply.steps[0].action?.id, 'abrir-robos', 'ajuda ao travar deve manter CTA contextual');
 assert.deepEqual(stuckReply.steps[0].image, restartedReply.steps[0].image, 'ajuda deve manter screenshot contextual');
-assert.match(stuckReply.answer, /Se sua tela estiver diferente, diga o que apareceu/i);
+assert.match(stuckReply.answer, /Qual botão, campo ou texto aparece na sua tela/i);
 assert.match(stuckReply.answer, /(?:botão|campo|controle)[\s\S]*texto/i, 'ajuda pergunta qual controle ou texto aparece');
 assert.match(stuckReply.answer, /imagem/i, 'ajuda orienta usar o screenshot disponível');
 
@@ -193,9 +193,16 @@ assert.deepEqual(finishedReply.steps, [], 'após Salvar/Publicar o guia não rei
 assert.match(finishedReply.answer, /Publicar[\s\S]*online/i);
 assert.match(finishedReply.answer, /Salvar[\s\S]*inativo/i);
 assert.doesNotMatch(JSON.stringify(finishedReply), /Testar robô|status Ativo/i);
+const falseActivationClient = { responses: { create: async () => ({
+  model: 'gpt-test', output_text: JSON.stringify({
+    answer: 'Clique em Ativar robô para deixar o status Ativo.', sections: [],
+    steps: [{ text: 'Clique em Ativar robô.', actionId: null, imagePath: null }],
+    code: null, sources: ['/docs/sobre-o-sistema/robo-de-atendimento'], suggestions: [], resolution: 'complete', found: true,
+  }),
+}) } };
 for (const alias of ['Concluí', 'feito', 'terminei', 'pronto', 'preenchi os campos']) {
   const aliasReply = await answerQuestion(testRoot, alias, {
-    client: guidedClient,
+    client: falseActivationClient,
     history: [guidedHistory[0], { role: 'assistant', content: `1. ${currentGuideReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
   });
   assert.deepEqual(aliasReply.steps, [], `${alias}: último passo não pode reiniciar`);
@@ -357,6 +364,7 @@ const omittedScreenshotClient = {
 };
 const omittedScreenshotReply = await answerQuestion(testRoot, 'mostre todos os passos para criar um robô', { client: omittedScreenshotClient });
 const robotArticle = await readFile(join(testRoot, 'content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx'), 'utf8');
+assert.equal([...robotArticle.matchAll(/\/img\/help\/Vc7GpOtHK4rebqsNycJs\.png/g)].length, 1, 'screenshot do formulário aparece uma só vez no artigo');
 assert.match(robotArticle, /Encaminhar atendimento/i, 'guia básico precisa ensinar um destino funcional para o fluxo');
 assert.match(robotArticle, /Salvar[\s\S]{0,240}Publicar/i, 'guia precisa explicar a diferença entre salvar e publicar');
 assert.match(robotArticle, /Canais[\s\S]{0,180}números/i, 'guia precisa explicar o que são canais');
@@ -372,12 +380,13 @@ const menuArticle = await readFile(join(testRoot, 'content/docs', `${menuPath.sl
 assert.match(menuArticle, /Adicionar bloco[\s\S]*Menu de opções/i);
 assert.match(menuArticle, /título do bloco[\s\S]*Bloco de pergunta/i);
 assert.match(menuArticle, /Adicionar opção \+[\s\S]*rótulo/i);
-assert.match(menuArticle, /Adicionar bloco[\s\S]*ramificaç[õo]es[\s\S]*Publicar/i);
+assert.match(menuArticle, /Adicionar bloco[\s\S]*ramificaç[\s\S]*Publicar/i);
 assert.match(menuArticle, /\/img\/help\/mBfKLzgI06X5bYCR0z2i\.png/);
 assert.doesNotMatch(menuArticle, /Condição|Testar robô/i);
 const menuReply = await answerQuestion(testRoot, menuQuestion, { client: guidedClient });
 assert.deepEqual(menuReply.sources.map(({ path }) => path), [menuPath], 'resposta exata não mistura o guia genérico');
-assert.match(menuReply.steps[0].text, /Menu de opções/i);
+assert.match(menuReply.answer, /Menu de opções/i);
+assert.match(menuReply.steps[1].text, /Menu de opções/i);
 const robotScreenshotPaths = new Set([...robotArticle.matchAll(/!\[[^\]]*\]\((\/img\/[^)]+)\)/g)].map((match) => match[1]));
 assert.ok(omittedScreenshotReply.steps.some((step) => step.image), 'quando o modelo omitir todas as telas, o servidor deve anexar um print relevante');
 assert.ok(

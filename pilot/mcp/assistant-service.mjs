@@ -154,7 +154,7 @@ export function kindOf(path) {
   return 'Ajuda';
 }
 
-export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo', page, preferredPaths = [] } = {}) {
+export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo', page, preferredPaths = [], requiredPath } = {}) {
   const contentRoot = join(root, 'content/docs');
   const normalizedQuestion = normalize(question);
   const terms = [...new Set(normalizedQuestion.split(/[^a-z0-9]+/).filter((term) => term.length > 2 && !STOP_WORDS.has(term)))];
@@ -192,6 +192,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       description,
       path,
       body: body.slice(0, 12_000),
+      assistantQuestion: frontmatterValue(raw, 'assistantQuestion'),
       assistantOverview: frontmatterValue(raw, 'assistantOverview'),
       assistantInitialSteps: Math.min(3, Math.max(1, Number(frontmatterValue(raw, 'assistantInitialSteps')) || 1)),
       assistantSuggestions: [...new Set(frontmatterValue(raw, 'assistantSuggestions').split('|')
@@ -204,7 +205,11 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       score,
     });
   }
-  return ranked.toSorted((left, right) => right.score - left.score).slice(0, limit);
+  const ordered = ranked.toSorted((left, right) => right.score - left.score);
+  const required = requiredPath && ordered.find((source) => source.path === requiredPath);
+  return required
+    ? [required, ...ordered.filter((source) => source !== required)].slice(0, limit)
+    : ordered.slice(0, limit);
 }
 
 const ANSWER_SCHEMA = {
@@ -399,7 +404,13 @@ export async function answerQuestion(root, question, options = {}) {
     && /\b(?:criar|configurar|montar)\b/i.test(normalize(question))
     && !continuation
     && !detailedProcedure;
-  const sources = await retrieveContext(root, question, 6, { scope, page, preferredPaths: sourcePathsFromHistory(history) });
+  const preferredPaths = sourcePathsFromHistory(history);
+  let sources = await retrieveContext(root, question, 6, {
+    scope, page, preferredPaths, requiredPath: continuation ? preferredPaths.at(-1) : undefined,
+  });
+  const exactGuide = sources.find((source) => source.assistantQuestion && normalize(source.assistantQuestion) === normalize(question.trim()));
+  const historyGuide = continuation && sources.find((source) => source.path === preferredPaths.at(-1) && source.documentedSteps.length);
+  if (exactGuide || historyGuide) sources = [exactGuide || historyGuide];
   if (!sources.length) {
     return {
       answer: 'Esse procedimento ainda não está documentado. Nosso time de atendimento pode orientar você e concluir o próximo passo pelo WhatsApp.',
@@ -473,15 +484,15 @@ export async function answerQuestion(root, question, options = {}) {
   const intent = normalize(question).replace(/[^a-z0-9]+/g, ' ').trim();
   const stuck = /^(?:ainda )?nao encontrei\b/.test(intent);
   const needsHelp = intent === 'preciso de ajuda' || stuck;
-  const completedStep = intent === 'conclui este passo';
+  const completedStep = /^(?:conclui(?: este passo)?|feito|terminei|pronto|preenchi(?: .*)?)$/.test(intent);
   const foundButton = /^encontrei (?:o |esse )?botao\b/.test(intent);
   const startGuide = /^(?:sim(?: (?:pode )?me (?:guiar|ajudar))?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?)$/.test(intent);
   const progressIndex = continuation && fallbackSource
     ? guidedStepIndex(history, fallbackSource.documentedSteps, needsHelp || foundButton || startGuide)
     : -1;
-  const nextIndex = startGuide || needsHelp ? progressIndex : progressIndex + 1;
-  const guideFinished = continuation && completedStep && progressIndex === fallbackSource?.documentedSteps.length - 1;
-  const progressStep = continuation && progressIndex >= 0 && nextIndex < fallbackSource.documentedSteps.length
+  const nextIndex = startGuide || progressIndex < 0 ? 0 : needsHelp ? progressIndex : progressIndex + 1;
+  const guideFinished = continuation && completedStep && progressIndex >= 0 && progressIndex === fallbackSource?.documentedSteps.length - 1;
+  const progressStep = continuation && fallbackSource && !guideFinished && nextIndex < fallbackSource.documentedSteps.length
     ? { text: fallbackSource.documentedSteps[nextIndex], actionId: nextIndex === 0 ? fallbackSource.productActions[0]?.id ?? null : null, imagePath: fallbackSource.stepImages[nextIndex] ?? null }
     : null;
   const documentedFallback = (procedure || continuation) && !parsed.steps.length
@@ -503,7 +514,7 @@ export async function answerQuestion(root, question, options = {}) {
       ? (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
       : parsed.steps.length ? parsed.steps : documentedFallback;
   const modelUsedValidatedImage = responseSteps.some(({ imagePath }) => availableImages.has(imagePath));
-  const shouldFallbackImages = (procedure || continuation) && !overviewProcedure && !modelUsedValidatedImage;
+  const shouldFallbackImages = procedure && !continuation && !overviewProcedure && !modelUsedValidatedImage;
   const fallbackImages = shouldFallbackImages
     ? relevantScreenshotMap(responseSteps, fallbackSource?.screenshots ?? [])
     : new Map();
@@ -524,9 +535,11 @@ export async function answerQuestion(root, question, options = {}) {
   return {
     answer: withoutRepeatedInstructions(overviewSource
       ? overviewSource.assistantOverview
-      : guideFinished ? 'Você chegou ao fim das etapas documentadas.'
+      : guideFinished ? /salvar/i.test(fallbackSource.documentedSteps.at(-1)) && /publicar/i.test(fallbackSource.documentedSteps.at(-1))
+        ? 'Você concluiu as etapas documentadas. Publicar coloca o robô online; Salvar guarda o robô inativo.'
+        : 'Você chegou ao fim das etapas documentadas.'
       : progressStep ? needsHelp
-        ? ['Vamos resolver esta etapa.', helpImage ? 'Veja a imagem do passo abaixo.' : 'Confira o passo abaixo.', helpAction ? 'Use o atalho para abrir a tela.' : '', 'Se sua tela estiver diferente, diga o que apareceu.'].filter(Boolean).join(' ')
+        ? ['Vamos resolver esta etapa.', helpImage ? 'Veja a imagem do passo abaixo.' : 'Confira o passo abaixo.', helpAction ? 'Use o atalho para abrir a tela.' : '', 'Qual botão, campo ou texto aparece na sua tela?'].filter(Boolean).join(' ')
         : 'Vamos para a próxima ação.'
       : parsed.answer, responseSteps)
       || (continuation ? 'Vamos por uma ação de cada vez.' : 'Siga os passos abaixo e me diga onde precisar de ajuda.'),
