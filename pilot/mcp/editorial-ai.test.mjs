@@ -13,7 +13,7 @@ await cp(join(projectRoot, 'content'), join(testRoot, 'content'), { recursive: t
 const aiClient = {
   responses: {
     create: async (request) => {
-      assert.doesNotMatch(request.input.at(-1).content, /11987654321|123\.456\.789-09/, 'PII no path não pode entrar no prompt');
+      assert.doesNotMatch(request.input.at(-1).content, /11987654321|123\.456\.789-09|sk-proj-abcdefghijklmnop1234567890/, 'PII e sk-proj não podem entrar no prompt');
       if (request.text.format.name === 'plano_documentacao') {
         return { model: 'gpt-test', output_text: JSON.stringify({
           status: 'ready',
@@ -65,7 +65,7 @@ const plan = await planContent(testRoot, request, { client: aiClient });
 assert.equal(plan.status, 'ready');
 assert.equal(plan.suggestedActions[0].route, '/contact');
 await planContent(testRoot, request, { client: aiClient, productContext: {
-  code: [], matches: [{ repository: 'ihelpchat/front-react', ref: 'test', role: 'frontend', path: 'src/Contacts/CPF-123.456.789-09-phone-11987654321.tsx', excerpt: 'Tela Contatos' }],
+  code: [], matches: [{ repository: 'ihelpchat/front-react', ref: 'test', role: 'frontend', path: 'src/Contacts/CPF-123.456.789-09-phone-11987654321.tsx', excerpt: 'Tela Contatos // sk-proj-abcdefghijklmnop1234567890' }],
   support: { categories: [], rules: [] }, coverage: [],
 } });
 const generated = await generateContentPackage(testRoot, request, { client: aiClient });

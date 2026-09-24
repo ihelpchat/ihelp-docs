@@ -21,6 +21,9 @@ for (const [field, value] of [['path', 'docs/teste/11987654321'], ['tangoUrl', '
 const secretLabel = { ...article('docs/teste/segredo', 'Guia seguro'), productActions: [{ ...trustedAction, label: 'ghp_abcdefghijklmnopqrst' }] };
 assert.ok(validateArticle(secretLabel).issues.some((issue) => /credencial/i.test(issue)), 'segredo em label precisa entrar na inspeção');
 assert.throws(() => renderArticle(secretLabel), /credencial/i);
+const openAiSecret = { ...article('docs/teste/segredo-openai', 'Guia sk-proj-abcdefghijklmnop1234567890') };
+assert.ok(validateArticle(openAiSecret).issues.some((issue) => /credencial/i.test(issue)), 'sk-proj no título derivado da PR precisa ser barrado');
+assert.throws(() => renderArticle(openAiSecret), /credencial/i);
 const base = new Map([
   ['pilot/content/docs/docs/meta.json', '{"pages":["contatos"]}\n'],
   ['pilot/content/docs/tutoriais/meta.json', '{"pages":["index"]}\n'],
@@ -54,6 +57,7 @@ globalThis.fetch = async (url, init = {}) => {
 try {
   await assert.rejects(submitContentPackage(root, [{ ...article('docs/teste/pii', 'Guia seguro'), body: `${body} Ligue para (11) 98765-4321.` }], 'pull_request', 'user:tester'), /dado pessoal/i);
   await assert.rejects(submitContentPackage(root, [{ ...article('docs/teste/pii', 'Guia seguro'), productActions: [{ ...trustedAction, label: 'Ligue para (11) 98765-4321' }] }], 'pull_request', 'user:tester'), /dado pessoal/i);
+  await assert.rejects(submitContentPackage(root, [openAiSecret], 'pull_request', 'user:tester'), /credencial/i);
   assert.equal(pulls, 0, 'PII não pode abrir PR');
   const result = await submitContentPackage(root, [article('docs/contatos/novo', 'Novo guia'), article('docs/contatos/guia', 'Guia atualizado'), article('tutoriais/contatos/primeiro', 'Primeiro tutorial')], 'pull_request', 'user:tester', ['docs/contatos/antigo']);
   assert.equal(result.status, 'pull_request');
@@ -71,7 +75,7 @@ try {
   assert.equal(mutations.length, before);
   assert.equal((await readdir(root)).includes('.drafts'), false);
   const audit = (await readFile(join(root, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
-  assert.deepEqual(audit.map(({ result }) => result), ['attempt', 'failure', 'attempt', 'failure', 'attempt', 'external_request', 'success']);
+  assert.deepEqual(audit.map(({ result }) => result), ['attempt', 'failure', 'attempt', 'failure', 'attempt', 'failure', 'attempt', 'external_request', 'success']);
   assert.ok(audit.every(({ actor }) => actor === 'user:tester'));
   assert.doesNotMatch(JSON.stringify(audit), /mock-token|Novo guia|artigo antigo/);
   await assert.rejects(submitContentPackage(root, [], 'pull_request', 'user:tester', ['docs/contatos/inexistente']), /não encontrado/i);

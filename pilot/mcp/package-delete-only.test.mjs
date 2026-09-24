@@ -10,10 +10,12 @@ const files = new Map([
   ['pilot/content/docs/docs/contatos/antigo.mdx', 'artigo antigo'],
 ]);
 const calls = [];
+let fetchCount = 0;
 const originalFetch = globalThis.fetch;
 const originalToken = process.env.GITHUB_TOKEN;
 process.env.GITHUB_TOKEN = 'mock-token';
 globalThis.fetch = async (url, init = {}) => {
+  fetchCount += 1;
   const path = new URL(url).pathname;
   const method = init.method ?? 'GET';
   if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: 'base-sha' } }) };
@@ -35,6 +37,10 @@ globalThis.fetch = async (url, init = {}) => {
 };
 
 try {
+  for (const path of ['docs/contatos/cpf12345678909', 'docs/contatos/contato11987654321x']) {
+    await assert.rejects(submitContentPackage(root, [], 'pull_request', 'user:tester', [path]), /dado pessoal/i);
+    assert.equal(fetchCount, 0, 'delete com dado sensível não pode acessar GitHub');
+  }
   const result = await submitContentPackage(root, [], 'pull_request', 'user:tester', ['docs/contatos/antigo']);
   assert.equal(result.status, 'pull_request');
   assert.deepEqual(result.articles, []);
