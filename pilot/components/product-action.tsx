@@ -1,5 +1,6 @@
 import { ArrowUpRight } from 'lucide-react';
 import { productActionUrl } from '@/lib/links';
+import allowedActions from '@/architecture/product-actions.json';
 
 type ProductActionProps = {
   id: string;
@@ -8,9 +9,10 @@ type ProductActionProps = {
   target?: string;
 };
 
-export function ProductAction({ id, label, route, target }: ProductActionProps) {
+export function ProductAction({ id, route, target }: ProductActionProps) {
   const href = productActionUrl(route, id, target);
   if (!href) return null;
+  const label = (allowedActions as Record<string, { label: string }>)[id].label;
   return (
     <a className="ih-product-action" href={href} target="_blank" rel="noreferrer noopener">
       <span>

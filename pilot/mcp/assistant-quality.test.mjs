@@ -51,15 +51,18 @@ const beginnerClient = {
 };
 const beginnerReply = await answerQuestion(testRoot, 'como importar contatos', { client: beginnerClient });
 assert.equal(beginnerReply.steps.length, 2, 'passos repetidos devem ser consolidados');
+assert.doesNotMatch(beginnerReply.answer, /comece abrindo contatos no menu lateral/i, 'answer não pode repetir a instrução do primeiro passo');
+assert.ok(beginnerReply.answer.trim(), 'a conclusão precisa continuar legível após deduplicar');
 assert.deepEqual(beginnerReply.steps[0], {
   text: 'Abra Contatos no menu lateral.',
   action: {
     id: 'importar-contatos',
-    label: 'Ir para importar contatos',
+    label: 'Abrir a tela Contatos',
     route: '/contact',
     target: 'contacts-more-options',
   },
 });
+assert.doesNotMatch(beginnerReply.steps[0].action.label, /importar contatos/i, 'CTA não pode prometer a importação quando só abre Contatos');
 
 const modelWithAction = (actionId, path) => ({ responses: { create: async () => ({
   model: 'gpt-test', output_text: JSON.stringify({ answer: 'Abra Contatos.', sections: [], steps: [{ text: 'Abra Contatos.', actionId }], code: null, sources: [path], suggestions: [], resolution: 'complete', found: true }),
