@@ -29,7 +29,7 @@ const guide = {
   assistantInitialSteps: 3,
   assistantSuggestions: ['Como corrigir linhas inválidas?', 'Como confirmar os contatos importados?'],
 };
-const request = { topic: 'Importar contatos', module: 'Contatos', description: 'Ensinar a importar uma planilha de contatos com segurança.' };
+const request = { topic: 'Importar contatos', module: 'Contatos', description: 'Ensinar a importar uma planilha de contatos com segurança.', productRoute: '/contact' };
 const aiClient = { responses: { create: async (input) => {
   assert.deepEqual(['assistantQuestion', 'assistantOverview', 'assistantInitialSteps', 'assistantSuggestions'].filter((key) => input.text.format.schema.properties.articles.items.required.includes(key)), ['assistantQuestion', 'assistantOverview', 'assistantInitialSteps', 'assistantSuggestions']);
   assert.match(input.input[0].content, /catálogo|ProductAction/i);

@@ -47,7 +47,7 @@ assert.deepEqual((await (async () => {
 const invalidMdx = mdx.replace(/^assistantSuggestions: .*$/m, 'assistantSuggestions: "Como corrigir linhas inválidas? | como corrigir linhas inválidas?"');
 assert.match(auditArticle(invalidMdx, article.path).join(' '), /assistantSuggestions/, 'auditoria precisa rejeitar sugestões duplicadas');
 
-const request = { topic: 'Importar contatos', module: 'Contatos', description: 'Ensinar a importar a primeira planilha de contatos.' };
+const request = { topic: 'Importar contatos', module: 'Contatos', description: 'Ensinar a importar a primeira planilha de contatos.', productRoute: '/contact' };
 const context = { matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] };
 const model = (productActions) => ({ responses: { create: async () => ({ model: 'test', output_text: JSON.stringify({ status: 'ready', summary: 'Pronto.', questions: [], articles: [{ ...article, productActions }] }) }) } });
 const noApproval = await generateContentPackage(root, request, { client: model([robotAction]), plan: { status: 'ready', suggestedActions: [] }, productContext: context });

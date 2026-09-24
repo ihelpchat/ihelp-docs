@@ -12,16 +12,14 @@ export function normalizeCatalogLabel(action) {
     : action;
 }
 
-function confirmedAction(action, request, plan, productContext) {
+function confirmedAction(action, request, productContext) {
   if (!isCatalogAction(action)) return false;
-  const inPlan = Array.isArray(plan.suggestedActions) && plan.suggestedActions.some((suggested) =>
-    suggested?.id === action.id && suggested.route === action.route && suggested.target === action.target);
   const inRequest = request.productRoute === action.route;
   const inCoverage = Array.isArray(productContext.coverage) && productContext.coverage.some((item) =>
     item.module?.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
       === request.module.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
       && Array.isArray(item.productRoutes) && item.productRoutes.includes(action.route));
-  return inPlan || inRequest || inCoverage;
+  return inRequest || inCoverage;
 }
 
 const actionSchema = {
@@ -184,7 +182,7 @@ export async function generateContentPackage(root, request, options = {}) {
         'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
         'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
         'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
-        'productActions liga o artigo ao produto. Use somente rotas e targets confirmados no pedido ou no plano. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
+        'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
         'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
         'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
@@ -203,7 +201,7 @@ export async function generateContentPackage(root, request, options = {}) {
   const invalid = articles.map((article) => {
     const validation = validateArticle(article);
     const issues = [...validation.issues, ...article.productActions
-      .filter((action) => !confirmedAction(action, request, plan, productContext))
+      .filter((action) => !confirmedAction(action, request, productContext))
       .map((action) => `productActions ${action.id} não confirmada para o pedido e módulo`)];
     return { path: article.path, valid: issues.length === 0, issues };
   }).filter(({ valid }) => !valid);

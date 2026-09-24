@@ -7,8 +7,8 @@ export function parseAssistantSuggestions(value) {
   if (value.trimStart().startsWith('[')) {
     try {
       const parsed = JSON.parse(value);
-      return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string') ? parsed : [];
-    } catch { return []; }
+      if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) return parsed;
+    } catch { /* Texto legado pode começar com colchetes. */ }
   }
   return value.split('|').map((item) => item.trim());
 }
