@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { searchContent, validateArticle } from './content-service.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
 import { readArticle } from './editorial-standard.mjs';
+import { containsPersonalData, redactPersonalData } from './sensitive-data.mjs';
 
 const actionSchema = {
   type: 'object',
@@ -55,18 +56,17 @@ const PACKAGE_SCHEMA = {
   },
 };
 
-const PRIVATE_DATA = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\+?\d[\d\s().-]{9,}\d/iu;
 const CREDENTIAL = /Authorization:\s*Bearer\s+\S+|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{20,}\b|\b(?:apiKey|password|secret|token)\s*[:=]\s*["']?[A-Za-z0-9._-]{12,}/iu;
 
 function checkRequest(request) {
   const value = Object.values(request).filter((item) => typeof item === 'string').join('\n');
   if (CREDENTIAL.test(value)) throw new Error('O pedido contém possível credencial; remova antes de usar a IA editorial.');
-  if (PRIVATE_DATA.test(value)) throw new Error('O pedido contém possível dado pessoal; remova antes de usar a IA editorial.');
+  if (containsPersonalData(value)) throw new Error('O pedido contém possível dado pessoal; remova antes de usar a IA editorial.');
   if (request.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(request.tangoUrl)) throw new Error('tangoUrl precisa ser uma URL pública oficial do Tango.');
 }
 
 function redactContext(value) {
-  return String(value ?? '').replace(new RegExp(PRIVATE_DATA.source, 'giu'), '[dado removido]').replace(new RegExp(CREDENTIAL.source, 'giu'), '[credencial removida]');
+  return redactPersonalData(value).replace(new RegExp(CREDENTIAL.source, 'giu'), '[credencial removida]');
 }
 
 function clientOf(options) {
@@ -102,7 +102,7 @@ function requestText(request, existing, productContext) {
     request.productRoute ? `Rota confirmada no produto: ${request.productRoute}` : '',
     request.tangoUrl ? `Tango já existente: ${request.tangoUrl}` : '',
     `Documentação publicada semelhante (fonte editorial):\n${existing.length ? existing.map((item) => `- ${item.title} (${item.path}): ${item.description}\n${item.body ?? ''}`).join('\n') : '- Nenhum'}`,
-    `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${item.path}\n${item.excerpt}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
+    `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${item.path}\n${redactContext(item.excerpt)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
     `Regras do suporte:\n${productContext.support?.rules?.map((item) => `- ${item}`).join('\n') ?? '- Nenhuma'}`,
     `Matriz de cobertura:\n${productContext.coverage?.map((item) => `- ${item.module}: ${item.coverage}; rotas=${item.productRoutes.join(', ')}; permissão=${item.permission}`).join('\n') ?? '- Nenhuma correspondência'}`,

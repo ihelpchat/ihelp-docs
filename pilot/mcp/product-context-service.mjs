@@ -1,5 +1,6 @@
 const treeCache = new Map();
 import { readFile } from 'node:fs/promises';
+import { redactPersonalData } from './sensitive-data.mjs';
 import { join } from 'node:path';
 const CACHE_MS = 5 * 60_000;
 const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|cs)$/;
@@ -69,8 +70,7 @@ function excerptOf(content, terms) {
     const value = normalize(line);
     if (terms.some((term) => value.includes(term))) indexes.push(index);
   });
-  const redact = (value) => value
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email removido]')
+  const redact = (value) => redactPersonalData(value)
     .replace(/\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{20,}\b/gi, '[segredo removido]')
     .replace(/(?:Bearer\s+)[A-Za-z0-9._-]{20,}/gi, 'Bearer [segredo removido]')
     .replace(/((?:apiKey|password|secret|token)\s*[:=]\s*["'])[A-Za-z0-9._-]{12,}(["'])/gi, '$1[segredo removido]$2');

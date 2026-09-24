@@ -1,6 +1,7 @@
 import { lstat, mkdir, open, readFile, readdir, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { basename, join, normalize, relative } from 'node:path';
+import { containsPersonalData } from './sensitive-data.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -60,7 +61,7 @@ export function validateArticle(article) {
   if (/^#{2,6}\s+\*\*/m.test(article.body ?? '')) issues.push('headings não devem usar negrito redundante');
   const publicText = `${article.title ?? ''}\n${article.description ?? ''}\n${article.body ?? ''}`;
   if (SECRET_PATTERNS.some((pattern) => pattern.test(publicText))) issues.push('possível credencial detectada');
-  if (/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(publicText) || /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/.test(publicText)) issues.push('possível dado pessoal detectado');
+  if (containsPersonalData(publicText)) issues.push('possível dado pessoal detectado');
   if (article.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(article.tangoUrl)) {
     issues.push('tangoUrl precisa ser uma URL oficial de embed ou workflow do Tango');
   }
@@ -311,6 +312,9 @@ function safeArticleList(articles, deletes = []) {
     if (paths.has(article.path)) throw new SubmitArticleError('INVALID_PACKAGE', `Path duplicado no pacote: ${article.path}`);
     paths.add(article.path);
     safeContentPath(process.cwd(), article.path);
+    if (containsPersonalData(`${article.title ?? ''}\n${article.description ?? ''}\n${article.body ?? ''}`)) {
+      throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém possível dado pessoal');
+    }
     return { article, rendered: renderArticle(article) };
   });
   for (const path of deletes) {
@@ -388,7 +392,7 @@ async function createPackagePullRequest(items, deletes, actor, beforePull) {
   const pull = await githubRequest(`/repos/${owner}/${repo}/pulls`, {
     method: 'POST',
     body: JSON.stringify({
-      title: `docs: pacote ${items[0].article.title}`,
+      title: items.length ? `docs: pacote ${items[0].article.title}` : `docs: remove ${deletes.length === 1 ? deletes[0] : `${deletes.length} artigos`}`,
       head: branch,
       base,
       body: `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`,
