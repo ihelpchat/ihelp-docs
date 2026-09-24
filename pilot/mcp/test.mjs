@@ -47,7 +47,23 @@ const auditEvents = async () => (await readFile(auditFile, 'utf8')).trim().split
 try {
   await client.connect(transport);
   const tools = await client.listTools();
-  assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), ['docs_audit_content', 'docs_generate_package', 'docs_get_article', 'docs_inventory', 'docs_plan_content', 'docs_product_context', 'docs_search', 'docs_submit_article', 'docs_validate_article']);
+  assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
+    'docs_audit_content',
+    'docs_delete_article',
+    'docs_generate_package',
+    'docs_get_article',
+    'docs_inventory',
+    'docs_plan_content',
+    'docs_product_context',
+    'docs_search',
+    'docs_submit_article',
+    'docs_submit_package',
+    'docs_update_article',
+    'docs_validate_article',
+  ]);
+  for (const name of ['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_update_article', 'docs_delete_article', 'docs_submit_article']) {
+    assert.ok(tools.tools.find((tool) => tool.name === name).inputSchema.required.includes('requestedBy'), `${name} sem requestedBy obrigatório`);
+  }
 
   const validation = await client.callTool({ name: 'docs_validate_article', arguments: article });
   assert.match(validation.content[0].text, /"valid": true/);

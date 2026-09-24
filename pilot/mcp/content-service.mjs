@@ -150,7 +150,7 @@ export async function getInventory(root) {
   };
 }
 
-async function githubRequest(path, init = {}) {
+async function githubRequest(path, init = {}, allowNotFound = false) {
   const token = process.env.GITHUB_TOKEN;
   if (!token) throw new SubmitArticleError('GITHUB_NOT_CONFIGURED', 'GITHUB_TOKEN não configurado');
   const response = await fetch(`https://api.github.com${path}`, {
@@ -163,6 +163,7 @@ async function githubRequest(path, init = {}) {
       ...init.headers,
     },
   });
+  if (allowNotFound && response.status === 404) return null;
   if (!response.ok) {
     const status = Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : 'desconhecido';
     throw new SubmitArticleError('GITHUB_HTTP_ERROR', `GitHub API ${status} rejeitou operação`);
@@ -301,4 +302,159 @@ async function submitValidatedArticle(root, article, mode, actor, beforePull) {
   if (mode === 'pull_request') return createPullRequest(article, rendered, actor, beforePull);
   if (mode !== 'draft') throw new Error('mode deve ser draft ou pull_request');
   return createDraft(root, article, rendered);
+}
+
+function safeArticleList(articles, deletes = []) {
+  if (!Array.isArray(articles) || !Array.isArray(deletes) || articles.length + deletes.length < 1 || articles.length + deletes.length > 8) throw new SubmitArticleError('INVALID_PACKAGE', 'O pacote precisa ter entre 1 e 8 operações');
+  const paths = new Set();
+  const upserts = articles.map((article) => {
+    if (paths.has(article.path)) throw new SubmitArticleError('INVALID_PACKAGE', `Path duplicado no pacote: ${article.path}`);
+    paths.add(article.path);
+    safeContentPath(process.cwd(), article.path);
+    return { article, rendered: renderArticle(article) };
+  });
+  for (const path of deletes) {
+    safeContentPath(process.cwd(), path);
+    if (paths.has(path)) throw new SubmitArticleError('INVALID_PACKAGE', `Path duplicado no pacote: ${path}`);
+    paths.add(path);
+  }
+  return upserts;
+}
+
+async function createPackagePullRequest(items, deletes, actor, beforePull) {
+  const repository = process.env.GITHUB_REPOSITORY ?? 'ihelpchat/ihelp-docs';
+  const base = process.env.GITHUB_BASE_BRANCH ?? 'main';
+  const [owner, repo] = repository.split('/');
+  if (!owner || !repo) throw new Error('GITHUB_REPOSITORY inválido');
+  const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(base)}`);
+  const branch = `docs/ia-pacote-${Date.now()}`;
+  await githubRequest(`/repos/${owner}/${repo}/git/refs`, { method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: ref.object.sha }) });
+  const affectedDirectories = new Map();
+  const contentFile = (path) => `pilot/content/docs/${path}.mdx`;
+  const fileAt = (path) => `/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`;
+  const remember = (path, operation) => {
+    const parts = path.split('/');
+    for (let depth = parts.length - 1; depth >= 1; depth -= 1) {
+      if (operation === 'delete' && depth !== parts.length - 1) break;
+      const directory = parts.slice(0, depth).join('/');
+      if (!affectedDirectories.has(directory)) affectedDirectories.set(directory, []);
+      affectedDirectories.get(directory).push({ slug: parts[depth], operation: depth === parts.length - 1 ? operation : 'upsert' });
+    }
+  };
+  for (const { article, rendered } of items) {
+    const filePath = contentFile(article.path);
+    const previous = await githubRequest(fileAt(filePath), {}, true);
+    await githubRequest(`/repos/${owner}/${repo}/contents/${filePath}`, {
+      method: 'PUT',
+      body: JSON.stringify({ message: `docs: atualiza ${article.title}`, content: Buffer.from(rendered).toString('base64'), branch, ...(previous ? { sha: previous.sha } : {}) }),
+    });
+    remember(article.path, 'upsert');
+  }
+  for (const path of deletes) {
+    const filePath = contentFile(path);
+    const previous = await githubRequest(fileAt(filePath), {}, true);
+    if (!previous) throw new SubmitArticleError('ARTICLE_NOT_FOUND', `Artigo não encontrado: ${path}`);
+    await githubRequest(`/repos/${owner}/${repo}/contents/${filePath}`, {
+      method: 'DELETE', body: JSON.stringify({ message: `docs: remove ${path}`, sha: previous.sha, branch }),
+    });
+    remember(path, 'delete');
+  }
+  for (const [directory, changes] of affectedDirectories) {
+    const filePath = `pilot/content/docs/${directory}/meta.json`;
+    const previous = await githubRequest(fileAt(filePath), {}, true);
+    let meta;
+    try {
+      meta = previous ? JSON.parse(Buffer.from(previous.content.replaceAll('\n', ''), 'base64').toString('utf8')) : { pages: [] };
+    } catch {
+      throw new SubmitArticleError('INVALID_META', `meta.json inválido em ${directory}`);
+    }
+    if (!Array.isArray(meta.pages)) throw new SubmitArticleError('INVALID_META', `meta.json sem pages em ${directory}`);
+    const pages = [...meta.pages];
+    for (const { slug, operation } of changes) {
+      const index = pages.indexOf(slug);
+      if (operation === 'delete' && index >= 0) pages.splice(index, 1);
+      if (operation === 'upsert' && index < 0) pages.push(slug);
+    }
+    if (JSON.stringify(pages) !== JSON.stringify(meta.pages)) {
+      meta.pages = pages;
+      await githubRequest(`/repos/${owner}/${repo}/contents/${filePath}`, {
+        method: 'PUT', body: JSON.stringify({ message: `docs: atualiza navegação ${directory}`, content: Buffer.from(`${JSON.stringify(meta, null, 2)}\n`).toString('base64'), branch, ...(previous ? { sha: previous.sha } : {}) }),
+      });
+    }
+  }
+  await beforePull(branch);
+  const submittedAt = new Date().toISOString();
+  const targets = [...items.map(({ article }) => article.path), ...deletes.map((path) => `-${path}`)].join(', ');
+  const pull = await githubRequest(`/repos/${owner}/${repo}/pulls`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `docs: pacote ${items[0].article.title}`,
+      head: branch,
+      base,
+      body: `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`,
+    }),
+  });
+  return { status: 'pull_request', url: pull.html_url, branch, articles: items.map(({ article }) => article.path), deleted: deletes };
+}
+
+export async function submitContentPackage(root, articles, mode = 'draft', requestedBy, deletes = []) {
+  if (!isSafeRequestedBy(requestedBy)) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
+  const actor = isSafeRequestedBy(requestedBy) ? requestedBy : null;
+  const targets = [...(Array.isArray(articles) ? articles.map((article) => article?.path) : []), ...(Array.isArray(deletes) ? deletes : [])].filter((path) => typeof path === 'string' && SAFE_PATH.test(path));
+  const operation = !articles?.length && deletes?.length ? 'docs_delete_article' : 'docs_submit_package';
+  const auditMode = ['draft', 'pull_request'].includes(mode) ? mode : null;
+  if (mode === 'dry_run') {
+    safeArticleList(articles, deletes);
+    return { status: 'dry_run', articles: articles.map(({ path }) => path), deleted: deletes };
+  }
+  await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'attempt' });
+  try {
+    const items = safeArticleList(articles, deletes);
+    let result;
+    if (mode === 'draft') {
+      const drafts = [];
+      for (const { article, rendered } of items) drafts.push(await createDraft(root, article, rendered));
+      for (const path of deletes) {
+        const manifest = { operation: 'delete', path };
+        drafts.push(await createDraft(root, { path: `docs/remocoes/${path.replaceAll('/', '-')}` }, `${JSON.stringify(manifest, null, 2)}\n`));
+      }
+      result = { status: 'draft', articles: drafts };
+    } else if (mode === 'pull_request') {
+      result = await createPackagePullRequest(items, deletes, actor, (branch) => auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'external_request', reference: branch }));
+    } else {
+      throw new SubmitArticleError('INVALID_MODE', 'mode deve ser draft ou pull_request');
+    }
+    await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'success', reference: result.branch });
+    return result;
+  } catch (error) {
+    if (actor) await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'failure' });
+    throw publicSubmitError(error);
+  }
+}
+
+export async function deleteArticle(root, contentPath, mode = 'draft', requestedBy) {
+  if (!isSafeRequestedBy(requestedBy)) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
+  safeContentPath(root, contentPath);
+  if (mode === 'pull_request') return submitContentPackage(root, [], mode, requestedBy, [contentPath]);
+  await auditOperation(root, { actor: requestedBy, operation: 'docs_delete_article', mode, target: contentPath, result: 'attempt' });
+  try {
+    if (mode === 'draft') {
+      const manifest = { path: contentPath, operation: 'delete' };
+      const article = {
+        path: `docs/remocoes/${contentPath.replaceAll('/', '-')}`,
+        title: `Remover ${basename(contentPath)}`,
+        description: `Solicitação versionada para remover o conteúdo ${contentPath} da documentação do iHelp.`,
+        source: 'produto', contentType: 'guia',
+        body: `Esta solicitação registra a remoção do artigo ${contentPath}. Antes de aplicar, confira links internos, navegação e conteúdos que dependem dessa página. A remoção deve acontecer em pull request para preservar o histórico e permitir revisão. Depois da alteração, execute a auditoria completa da documentação e confirme que nenhuma rota interna ficou quebrada. O registro existe apenas para revisão e não remove conteúdo automaticamente neste modo.`,
+      };
+      const draft = await createDraft(root, article, `${JSON.stringify(manifest, null, 2)}\n`);
+      const result = { status: 'draft', ...draft };
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_delete_article', mode, target: contentPath, result: 'success' });
+      return result;
+    }
+    throw new SubmitArticleError('DELETE_REQUIRES_REVIEW', 'A remoção remota deve ser aplicada por pull request após validar dependências');
+  } catch (error) {
+    await auditOperation(root, { actor: requestedBy, operation: 'docs_delete_article', mode, target: contentPath, result: 'failure' });
+    throw publicSubmitError(error);
+  }
 }

@@ -2,19 +2,16 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod/v4';
 import { createHash } from 'node:crypto';
-import { auditOperation, getInventory, isSafeRequestedBy, searchContent, SubmitArticleError, submitArticle, validateArticle } from './content-service.mjs';
+import { auditOperation, deleteArticle, getInventory, isSafeRequestedBy, searchContent, SubmitArticleError, submitArticle, submitContentPackage, validateArticle } from './content-service.mjs';
 import { auditContent, readArticle } from './editorial-standard.mjs';
-import { getIhelpContext } from './product-context-service.mjs';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
-
-const requestedBySchema = z.string().refine(isSafeRequestedBy, 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
-const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
+import { getIhelpContext } from './product-context-service.mjs';
 
 const productActionSchema = z.object({
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]{2,63}$/),
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]{2,63}$/).describe('ID estável do guia, como importar-contatos'),
   label: z.string().min(3).max(80),
-  route: z.string().regex(/^\/(?!\/)[a-z0-9/_-]*$/),
-  target: z.string().regex(/^[a-z][a-z0-9-]{2,63}$/).optional(),
+  route: z.string().regex(/^\/(?!\/)[a-z0-9/_-]*$/).describe('Rota interna do iHelp, como /contact'),
+  target: z.string().regex(/^[a-z][a-z0-9-]{2,63}$/).optional().describe('Valor de data-help-id no produto, sem seletor CSS'),
 });
 
 const articleSchema = z.object({
@@ -28,6 +25,8 @@ const articleSchema = z.object({
   productActions: z.array(productActionSchema).max(12).optional(),
 });
 
+const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
+const requestedBySchema = z.string().refine(isSafeRequestedBy, 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais').describe('ID opaco não sensível, como user:bruno; obrigatório para IA e escrita');
 const contentRequestSchema = z.object({
   topic: z.string().min(3).max(120),
   module: z.string().min(2).max(80),
@@ -82,54 +81,93 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
   }, async (article) => textResult(validateArticle(article)));
 
   server.registerTool('docs_product_context', {
-    description: 'Consulta código frontend e backend, cobertura editorial e sinais agregados do suporte sem modificar repositórios.',
+    description: 'Consulta rotas, menus, textos de botões e componentes reais do front-react para fundamentar o conteúdo antes de escrever.',
     inputSchema: z.object({
       topic: z.string().min(3).max(120),
       module: z.string().min(2).max(80),
       requestedBy: requestedBySchema,
     }),
   }, async ({ topic, module, requestedBy }) => {
-    const target = auditTarget(module, topic);
-    await auditOperation(root, { actor: requestedBy, operation: 'docs_product_context', target, result: 'attempt' });
+    await auditOperation(root, { actor: requestedBy, operation: 'docs_product_context', target: auditTarget(module, topic), result: 'attempt' });
     try {
       const result = await getIhelpContext(root, topic, module);
-      await auditOperation(root, { actor: requestedBy, operation: 'docs_product_context', target, result: result.matches.length ? 'success' : 'unavailable' });
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_product_context', target: auditTarget(module, topic), result: result.matches.length ? 'success' : 'unavailable' });
       return textResult(result);
     } catch (error) {
-      await auditOperation(root, { actor: requestedBy, operation: 'docs_product_context', target, result: 'failure' });
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_product_context', target: auditTarget(module, topic), result: 'failure' });
       return textResult({ error: error instanceof Error ? error.message : String(error) }, true);
     }
   });
 
   server.registerTool('docs_plan_content', {
-    description: 'Planeja FAQ, tutorial e ações com contexto do produto, suporte e documentação; pergunta quando faltam fatos.',
+    description: 'Conversa com a IA editorial: busca duplicidades, aponta informações ausentes, sugere FAQ/tutorial/guia e faz perguntas antes de criar.',
     inputSchema: contentRequestSchema,
   }, async ({ requestedBy, ...request }) => {
-    const target = auditTarget(request.module, request.topic);
-    await auditOperation(root, { actor: requestedBy, operation: 'docs_plan_content', target, result: 'attempt' });
+    await auditOperation(root, { actor: requestedBy, operation: 'docs_plan_content', target: auditTarget(request.module, request.topic), result: 'attempt' });
     try {
       const result = await planContent(root, request);
-      await auditOperation(root, { actor: requestedBy, operation: 'docs_plan_content', target, result: result.status });
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_plan_content', target: auditTarget(request.module, request.topic), result: result.status });
       return textResult(result);
     } catch (error) {
-      await auditOperation(root, { actor: requestedBy, operation: 'docs_plan_content', target, result: 'failure' });
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_plan_content', target: auditTarget(request.module, request.topic), result: 'failure' });
       return textResult({ error: error instanceof Error ? error.message : String(error) }, true);
     }
   });
 
   server.registerTool('docs_generate_package', {
-    description: 'Gera FAQ, tutorial e ações guiadas sem vídeo a partir do plano validado; não escreve arquivos.',
+    description: 'Gera com IA a estrutura completa sem vídeo: FAQ, tutorial para iniciante, passos guiados, ações no produto e dados de navegação; para e pergunta quando faltam fatos.',
     inputSchema: contentRequestSchema,
   }, async ({ requestedBy, ...request }) => {
-    const target = auditTarget(request.module, request.topic);
-    await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_package', target, result: 'attempt' });
+    await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_package', target: auditTarget(request.module, request.topic), result: 'attempt' });
     try {
       const result = await generateContentPackage(root, request);
-      await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_package', target, result: result.status });
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_package', target: auditTarget(request.module, request.topic), result: result.status });
       return textResult(result);
     } catch (error) {
-      await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_package', target, result: 'failure' });
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_package', target: auditTarget(request.module, request.topic), result: 'failure' });
       return textResult({ error: error instanceof Error ? error.message : String(error) }, true);
+    }
+  });
+
+  server.registerTool('docs_submit_package', {
+    description: 'Cria ou atualiza MDX e remove artigos em uma PR; atualiza meta.json de navegação. dry_run apenas valida.',
+    inputSchema: z.object({
+      articles: z.array(articleSchema).max(8).default([]),
+      deletes: z.array(z.string()).max(8).default([]),
+      mode: z.enum(['dry_run', 'draft', 'pull_request']).default('dry_run'),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ articles, deletes, mode, requestedBy }) => {
+    try {
+      return textResult(await submitContentPackage(root, articles, mode, requestedBy, deletes));
+    } catch (error) {
+      return textResult(error instanceof SubmitArticleError ? { error: error.message, code: error.code } : { error: 'Não foi possível enviar o pacote', code: 'SUBMIT_FAILED' }, true);
+    }
+  });
+
+  server.registerTool('docs_delete_article', {
+    description: 'Remove um artigo por PR com atualização de meta.json, ou cria um draft de revisão.',
+    inputSchema: z.object({
+      path: z.string().describe('Caminho sem extensão'),
+      mode: z.enum(['draft', 'pull_request']).default('draft'),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ path, mode, requestedBy }) => {
+    try {
+      return textResult(await deleteArticle(root, path, mode, requestedBy));
+    } catch (error) {
+      return textResult(error instanceof SubmitArticleError ? { error: error.message, code: error.code } : { error: 'Não foi possível registrar a remoção', code: 'DELETE_FAILED' }, true);
+    }
+  });
+
+  server.registerTool('docs_update_article', {
+    description: 'Atualiza artigo e meta.json em pull request, sem merge nem deploy.',
+    inputSchema: articleSchema.extend({ requestedBy: requestedBySchema }),
+  }, async ({ requestedBy, ...article }) => {
+    try {
+      return textResult(await submitContentPackage(root, [article], 'pull_request', requestedBy));
+    } catch (error) {
+      return textResult(error instanceof SubmitArticleError ? { error: error.message, code: error.code } : { error: 'Não foi possível atualizar o artigo', code: 'SUBMIT_FAILED' }, true);
     }
   });
 
@@ -137,7 +175,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     description: 'Envia conteúdo validado como draft local ou abre pull request no GitHub. Nunca faz merge ou deploy.',
     inputSchema: articleSchema.extend({
       mode: z.enum(['draft', 'pull_request']).default('draft'),
-      requestedBy: z.string().refine(isSafeRequestedBy, 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais').describe('ID opaco não sensível, como service:docs-bot; obrigatório para escrita'),
+      requestedBy: requestedBySchema,
     }),
   }, async ({ mode, requestedBy, ...article }) => {
     try {

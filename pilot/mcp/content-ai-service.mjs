@@ -55,6 +55,20 @@ const PACKAGE_SCHEMA = {
   },
 };
 
+const PRIVATE_DATA = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\+?\d[\d\s().-]{9,}\d/iu;
+const CREDENTIAL = /Authorization:\s*Bearer\s+\S+|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{20,}\b|\b(?:apiKey|password|secret|token)\s*[:=]\s*["']?[A-Za-z0-9._-]{12,}/iu;
+
+function checkRequest(request) {
+  const value = Object.values(request).filter((item) => typeof item === 'string').join('\n');
+  if (CREDENTIAL.test(value)) throw new Error('O pedido contém possível credencial; remova antes de usar a IA editorial.');
+  if (PRIVATE_DATA.test(value)) throw new Error('O pedido contém possível dado pessoal; remova antes de usar a IA editorial.');
+  if (request.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(request.tangoUrl)) throw new Error('tangoUrl precisa ser uma URL pública oficial do Tango.');
+}
+
+function redactContext(value) {
+  return String(value ?? '').replace(new RegExp(PRIVATE_DATA.source, 'giu'), '[dado removido]').replace(new RegExp(CREDENTIAL.source, 'giu'), '[credencial removida]');
+}
+
 function clientOf(options) {
   if (options.client) return options.client;
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
@@ -106,11 +120,12 @@ async function related(root, request) {
   return Promise.all(found.slice(0, 4).map(async (item) => {
     const path = item.path.replace(/^\//, '');
     const article = await readArticle(root, path).catch(() => null);
-    return { ...item, ...(article ? { body: article.body.slice(0, 4_000) } : {}) };
+    return { ...item, title: redactContext(item.title), description: redactContext(item.description), ...(article ? { body: redactContext(article.body.slice(0, 4_000)) } : {}) };
   }));
 }
 
 export async function planContent(root, request, options = {}) {
+  checkRequest(request);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module).catch(() => ({ repository: 'ihelpchat/front-react', ref: 'master', matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
   const response = await clientOf(options).responses.create(baseRequest('plano_documentacao', PLAN_SCHEMA, [
@@ -132,6 +147,7 @@ export async function planContent(root, request, options = {}) {
 }
 
 export async function generateContentPackage(root, request, options = {}) {
+  checkRequest(request);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module).catch(() => ({ repository: 'ihelpchat/front-react', ref: 'master', matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
   const plan = options.plan ?? await planContent(root, request, options);

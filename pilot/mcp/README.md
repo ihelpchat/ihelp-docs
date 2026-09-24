@@ -10,10 +10,14 @@ O servidor permite que uma IA consulte a base, valide conteúdo e envie um FAQ/t
 - `docs_audit_content`: verifica toda a base contra o padrão editorial.
 - `docs_validate_article`: valida schema, caminhos, Tango e possíveis segredos.
 - `docs_submit_article`: cria draft local ou pull request e exige `requestedBy`.
+- `docs_product_context`: consulta frontend e backend no GitHub, além de sinais agregados de suporte e cobertura editorial.
+- `docs_plan_content` e `docs_generate_package`: planejam e geram FAQ, tutorial e ações guiadas sem vídeo.
+- `docs_submit_package`: aceita `articles` para create/update e `deletes` para remoção, com `mode: dry_run | draft | pull_request`; na PR atualiza MDX e os `meta.json` afetados.
+- `docs_update_article` e `docs_delete_article`: atualizam ou removem por PR revisável.
 
 ## Migração dos clientes de escrita
 
-Todo cliente que chama `docs_submit_article` deve enviar `requestedBy` antes de atualizar o servidor. Use somente um identificador opaco e não sensível no formato `user:<id>` ou `service:<id>` (3 a 64 caracteres minúsculos, dígitos, `_` ou `-` após o prefixo), por exemplo `service:docs-bot`. Nunca use nome, email, token ou outro dado pessoal. Chamadas sem o campo ou com valor inválido são rejeitadas; `docs_inventory`, `docs_search`, `docs_get_article`, `docs_audit_content` e `docs_validate_article` continuam sem ator. As respostas de draft e pull request mantêm seus campos atuais.
+Todo cliente que chama ferramentas de IA ou escrita deve enviar `requestedBy` antes de atualizar o servidor. Use somente um identificador opaco e não sensível no formato `user:<id>` ou `service:<id>` (3 a 64 caracteres minúsculos, dígitos, `_` ou `-` após o prefixo), por exemplo `service:docs-bot`. Nunca use nome, email, token ou outro dado pessoal. Chamadas sem o campo ou com valor inválido são rejeitadas; `docs_inventory`, `docs_search`, `docs_get_article`, `docs_audit_content` e `docs_validate_article` continuam sem ator.
 
 Exemplo seguro de argumentos para escrita (junto dos demais campos obrigatórios do artigo):
 
