@@ -38,14 +38,14 @@ function secretLike(value) {
 }
 
 function credentialKeyStrength(key) {
-  const words = key.replace(/([a-z0-9])([A-Z])/gu, '$1_$2').toLocaleLowerCase('en-US').split(/[_-]+/u);
+  const words = key.replace(/([a-z0-9])([A-Z])/gu, '$1_$2').toLocaleLowerCase('en-US').split(/[_-]+/u).map((word) => word.replace(/\d+$/u, ''));
   const last = words.at(-1);
   if (DESCRIPTIVE_SUFFIXES.has(last)) return 'none';
   if (['token', 'secret', 'password', 'senha'].includes(last)) return words.length > 1 ? 'strong' : 'weak';
   if (last === 'pass') return words.length > 1 ? 'strong' : 'weak';
   if (last === 'credentials') return words.length > 1 ? 'strong' : 'weak';
   if (last === 'key') return words.slice(0, -1).some((word) => STRONG_KEY_SEGMENTS.has(word)) ? 'strong' : 'weak';
-  const folded = key.replace(/[_-]/gu, '').toLocaleLowerCase('en-US');
+  const folded = words.join('');
   if (folded.endsWith('key') && [...STRONG_KEY_SEGMENTS].some((word) => folded.slice(0, -3).endsWith(word))) return 'strong';
   if (/(?:api[_-]?key|password|senha|secret|token)$/iu.test(key)) return 'strong';
   if (words.some((word) => CREDENTIAL_SEGMENTS.has(word))) return 'weak';
