@@ -74,9 +74,17 @@ export function AssistantScreen() {
 
   useEffect(() => {
     const node = scroller.current;
-    // Só acompanha o fim da conversa quando há conversa; a tela vazia fica no topo.
-    if (node && (messages.length || busy)) node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
-  }, [messages.length, busy]);
+    if (!node || (!messages.length && !busy)) return;
+    const last = messages.at(-1);
+    if (last?.role === 'user' || busy) {
+      node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
+      return;
+    }
+    // Quando chega a resposta, volta ao início desta interação para a pessoa ler em ordem.
+    const questions = node.querySelectorAll<HTMLElement>('.ih-ai-user');
+    const question = questions.item(questions.length - 1);
+    if (question) node.scrollTo({ top: Math.max(0, question.offsetTop - 16) });
+  }, [messages, busy]);
 
   return (
     <div className="ih-ai-screen">
@@ -115,7 +123,7 @@ export function AssistantScreen() {
                 ))}
               </div>
               {messages.length ? (
-                <button type="button" className="ih-ai-new" onClick={newChat}><Plus aria-hidden="true" />Nova conversa</button>
+                <button type="button" className="ih-ai-new" aria-label="Nova conversa" onClick={newChat}><Plus aria-hidden="true" /><span>Nova conversa</span></button>
               ) : null}
             </div>
             <AssistantComposer placeholder="Pergunte sobre atendimento, campanhas, API, tutoriais…" autoFocus />

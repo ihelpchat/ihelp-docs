@@ -19,31 +19,49 @@ O fluxo do chatbot começa com uma mensagem do cliente, ativando o atendimento. 
 
 ## Como criar um novo robô
 
-1. Para criar um novo fluxo de robô, clique em **“Criar novo robô”**.
+Você pode montar um primeiro fluxo funcional com uma mensagem de boas-vindas e o encaminhamento para um departamento. Para começar, abra **Robôs** no menu do iHelp.
+
+<ProductAction id="abrir-robos" label="Abrir a tela Robôs" route="/bot" target="robots-create" />
+
+1. No menu do iHelp, abra **Robôs**. Na lista, clique em **“Criar novo Robô”**.
 
 ![Tela do iHelp: Como criar um novo robô](/img/help/q4tBz2R7cevwT94eUQKB.png)
 
-2. Na nova janela digite o titulo do robô de atendimento, e escolha os canais a que ele pertence. Após os dados preenchidos, clique em “Adicionar Robô”
+2. Em **“Adicionar um novo Robô”**, preencha **“Título do Robô”** com um nome fácil de reconhecer, como “Boas-vindas”.
+
+3. Em **“Canais”**, clique no **“+”** e selecione pelo menos um número. Canais são os números de WhatsApp nos quais esse robô atenderá. Depois, clique em **“Adicionar robô”**. O iHelp abrirá a tela de criação do fluxo.
 
 ![Tela do iHelp: Como criar um novo robô](/img/help/Vc7GpOtHK4rebqsNycJs.png)
 
-3. Nesta tela você poderá criar um novo fluxo de atendimento.
+4. No bloco **“Iniciar Fluxo”**, confira o gatilho, que é o acontecimento que inicia o robô. Para um robô de primeiro contato, mantenha **“Mensagem do Cliente”**: assim, o fluxo começa quando o cliente envia uma mensagem.
 
 ![Tela do iHelp: Como criar um novo robô](/img/help/ak3BAzibQe6Ix157Ouwl.png)
 
-4. Clique no “+” no meio da tela
+5. Clique no botão **“+”** abaixo de **“Iniciar Fluxo”**. A janela **“Adicionar bloco”** será aberta.
 
 ![Tela do iHelp: Como criar um novo robô](/img/help/maThsp6oIsur9uVCylHP.png)
 
-5. Uma nova janela irá abrir, onde você poderá escolher qual ação irá ocorrer.
+6. Para criar uma saudação, escolha **“Mensagem simples”**. Preencha **“Título da mensagem”**, escreva a saudação no campo **“Crie uma mensagem...”**, use o botão laranja para inserir a mensagem e clique em **“Adicionar bloco”**.
 
 ![Tela do iHelp: Como criar um novo robô](/img/help/LGLg6AJYP75yyWe4FD71.png)
 
-**Mensagem simples:** Uma mensagem será enviada para o cliente quando o “Gatilho” ocorrer.
+![Tela do iHelp: Mensagem simples](/img/help/PSCvUykFMxHzOHNddPJd.png)
 
-**Menu de opções:** Você poderá criar um menu de opções para o cliente escolher, cada resposta pode também leva-lo a um departamento/usuário diferente, ou até a uma ação.
+7. Abaixo do bloco criado, clique em **“Clique aqui para finalizar o fluxo”**. Escolha **“Encaminhar atendimento”**. Use **“Departamento”** para colocar o cliente na fila de uma equipe, como Vendas; use **“Atendente”** para enviar diretamente a uma pessoa específica. Selecione o destino e clique em **“Adicionar bloco”**.
 
-**Ação**: Quando você definiu o que irá ocorrer quando o cliente clica em alguma opção, por exemplo: No menu opções ele selecionou o departamento de vendas, então você adiciona uma ação “Encaminhar departamento” e ele será redirecionado.
+![Tela do iHelp: Ações disponíveis no fluxo](/img/help/V1UmN3W0H1nDNQJcwwOx.png)
+
+8. Confira se o fluxo começa em **“Iniciar Fluxo”**, passa pela mensagem e termina no encaminhamento escolhido. Use **“Salvar”** para guardar um robô ainda inativo; use **“Publicar”** quando quiser colocar o fluxo online.
+
+![Tela do iHelp: Salvar ou publicar o robô](/img/help/PJa3jnEjfcR7uSX0naA2.png)
+
+## Qual bloco escolher?
+
+**Mensagem simples:** envia uma ou mais mensagens quando o gatilho ocorrer. É a opção mais direta para uma saudação.
+
+**Menu de opções:** mostra escolhas para o cliente. Cada opção pode continuar para outra mensagem, encaminhar para um departamento ou executar uma ação.
+
+**Ação:** executa o destino do fluxo, como **“Encaminhar atendimento”**, **“Finalizar atendimento”** ou **“Recomeçar atendimento”**.
 
 ## Como editar um robô já existente
 
