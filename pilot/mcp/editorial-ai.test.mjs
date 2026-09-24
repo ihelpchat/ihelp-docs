@@ -58,6 +58,8 @@ const request = {
   details: 'A tela atual fica em /contact e a importação começa no menu Mais opções.',
   audience: 'Cliente em trial sem treinamento',
 };
+await assert.rejects(planContent(testRoot, { ...request, details: 'Cliente bruno@example.com perguntou sobre a importação.' }, { client: { responses: { create: async () => { throw new Error('modelo foi chamado'); } } } }), /dado pessoal/i);
+await assert.rejects(generateContentPackage(testRoot, { ...request, details: 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456' }, { client: { responses: { create: async () => { throw new Error('modelo foi chamado'); } } } }), /credencial/i);
 const plan = await planContent(testRoot, request, { client: aiClient });
 assert.equal(plan.status, 'ready');
 assert.equal(plan.suggestedActions[0].route, '/contact');
