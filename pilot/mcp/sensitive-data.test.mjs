@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { containsSensitiveData, redactSensitiveData } from './sensitive-data.mjs';
+import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 
 const cases = [
   ['email', 'contato@example.com'],
@@ -29,6 +29,7 @@ const cases = [
 for (const [name, value] of cases) {
   assert.equal(containsSensitiveData(value), true, `${name} precisa ser detectado`);
   assert.equal(redactSensitiveData(value).includes(value), false, `${name} precisa ser redigido`);
+  if (name === 'GitHub gho_') assert.equal(sensitiveKinds(value).credential, true, 'gho_ é credencial mesmo com dígitos parecidos com telefone');
 }
 for (const value of ['docs/contatos/antigo', 'Abra a opção A', 'ID de teste 12', 'token de acesso', 'senha do usuário', 'apiKey inválida', 'token=$IHELP_TOKEN']) {
   assert.equal(containsSensitiveData(value), false, `${value} não deve ser redigido`);
