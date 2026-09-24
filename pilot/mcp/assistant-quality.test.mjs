@@ -131,6 +131,31 @@ const screenshotReply = await answerQuestion(testRoot, 'como criar um robô', { 
 assert.equal(screenshotReply.steps[0].image?.src, '/img/help/q4tBz2R7cevwT94eUQKB.png');
 assert.equal(screenshotReply.steps[1].image, undefined, 'imagem que não pertence à fonte não pode chegar à interface');
 
+const omittedScreenshotClient = {
+  responses: {
+    create: async () => ({
+      model: 'gpt-test',
+      output_text: JSON.stringify({
+        answer: 'Vamos criar o robô juntos.', sections: [],
+        steps: [
+          { text: 'Acesse o menu Robô.', actionId: null, imagePath: null },
+          { text: 'Clique em Criar novo robô.', actionId: null, imagePath: null },
+          { text: 'Defina o nome do robô.', actionId: null, imagePath: null },
+        ],
+        code: null, sources: ['/docs/sobre-o-sistema/robo-de-atendimento'], suggestions: [], resolution: 'complete', found: true,
+      }),
+    }),
+  },
+};
+const omittedScreenshotReply = await answerQuestion(testRoot, 'como criar um chatbot?', { client: omittedScreenshotClient });
+const robotArticle = await readFile(join(testRoot, 'content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx'), 'utf8');
+const robotScreenshotPaths = new Set([...robotArticle.matchAll(/!\[[^\]]*\]\((\/img\/[^)]+)\)/g)].map((match) => match[1]));
+assert.ok(omittedScreenshotReply.steps.some((step) => step.image), 'quando o modelo omitir todas as telas, o servidor deve anexar um print relevante');
+assert.ok(
+  omittedScreenshotReply.steps.every((step) => !step.image || robotScreenshotPaths.has(step.image.src)),
+  'fallback de telas continua restrito aos arquivos da fonte recuperada',
+);
+
 const keyedSteps = (texts) => parseAnswer(JSON.stringify({ answer: 'Veja os passos.', steps: texts.map((text) => ({ text, actionId: null })) })).steps.map(({ text }) => text);
 assert.deepEqual(keyedSteps(['Abra Contatos no menu lateral.', 'Acesse Contatos pelo menu lateral.']), ['Abra Contatos no menu lateral.']);
 assert.deepEqual(keyedSteps(['Abra o item 1 no menu lateral.', 'Acesse o item 2 pelo menu lateral.']), ['Abra o item 1 no menu lateral.', 'Acesse o item 2 pelo menu lateral.']);

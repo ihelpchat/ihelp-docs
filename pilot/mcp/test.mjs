@@ -289,7 +289,9 @@ globalThis.fetch = async (url) => {
     scope: 'Ajuda e FAQ',
     page: { path: '/docs/sobre-o-sistema/atendimento', title: 'Atendimento' },
   });
-  assert.deepEqual(structured.steps, [{ text: 'Abra a conversa' }, { text: 'Clique em Transferir' }]);
+  assert.deepEqual(structured.steps.map(({ text }) => text), ['Abra a conversa', 'Clique em Transferir']);
+  assert.equal(structured.steps[0].image, undefined, 'print sem relação com o passo não deve ser anexado');
+  assert.equal(structured.steps[1].image?.src, '/img/help/TF6MYvmZ3HfuYCFQsx4v.png', 'print relevante deve acompanhar o passo correspondente');
   assert.deepEqual(structured.sections, [{ title: 'Antes de começar', items: ['Confirme o departamento de destino'] }]);
   assert.equal(structured.resolution, 'partial');
   assert.deepEqual(structured.sources.map((source) => source.path), ['/docs/sobre-o-sistema/atendimento']);
