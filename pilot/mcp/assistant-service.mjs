@@ -3,6 +3,7 @@ import { join, relative } from 'node:path';
 import OpenAI from 'openai';
 import { catalogAction } from './product-actions.mjs';
 import { parseAssistantSuggestions } from './conversational-contract.mjs';
+import { sanitizeWidgetContext, diagnoseState, diagnosticQuestion, escalationFor } from './real-state.mjs';
 
 const STOP_WORDS = new Set([
   'a', 'ao', 'aos', 'as', 'como', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'eu',
@@ -398,6 +399,9 @@ export async function answerQuestion(root, question, options = {}) {
     };
   }
   const history = sanitizeHistory(options.history);
+  const widgetContext = sanitizeWidgetContext(options.widgetContext);
+  const originalQuestion = history.find((item) => item.role === 'user')?.content ?? question;
+  const diagnosis = diagnoseState(originalQuestion, widgetContext);
   const procedure = proceduralQuestion(question);
   const continuation = guidedContinuation(question, history);
   const detailedProcedure = detailedProcedureQuestion(question);
@@ -508,19 +512,30 @@ export async function answerQuestion(root, question, options = {}) {
       ? overviewSource.documentedSteps.slice(0, initialStepCount).map((step, index) => ({
           text: step,
           actionId: index === 0 ? overviewSource.productActions[0]?.id ?? null : null,
-          imagePath: null,
+          imagePath: overviewSource.stepImages[index] ?? null,
         }))
       : (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
     : guideFinished ? [] : progressStep ? [progressStep] : continuation
       ? (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
       : parsed.steps.length ? parsed.steps : documentedFallback;
-  const modelUsedValidatedImage = responseSteps.some(({ imagePath }) => availableImages.has(imagePath));
+  const attemptedHelp = history.some((item) => item.role === 'user' && /^(?:ainda )?n[aã]o encontrei\b|^preciso de ajuda\b/i.test(item.content.trim()));
+  const escalate = needsHelp && attemptedHelp;
+  const questionForDiagnosis = diagnosticQuestion(originalQuestion, widgetContext, diagnosis);
+  const safeSteps = needsHelp ? [] : detailedProcedure && fallbackSource
+    ? fallbackSource.documentedSteps.map((text, index) => ({
+        text, actionId: index === 0 ? fallbackSource.productActions[0]?.id ?? null : null,
+        imagePath: fallbackSource.stepImages[index] ?? null,
+      }))
+    : responseSteps;
+  if (!needsHelp && safeSteps[0] && fallbackSource?.productActions[0]
+    && (overviewProcedure || detailedProcedure || progressStep?.text === fallbackSource.documentedSteps[0])) {
+    safeSteps[0] = { ...safeSteps[0], actionId: fallbackSource.productActions[0].id };
+  }
+  const modelUsedValidatedImage = safeSteps.some(({ imagePath }) => availableImages.has(imagePath));
   const shouldFallbackImages = procedure && !continuation && !overviewProcedure && !modelUsedValidatedImage;
   const fallbackImages = shouldFallbackImages
-    ? relevantScreenshotMap(responseSteps, fallbackSource?.screenshots ?? [])
+    ? relevantScreenshotMap(safeSteps, fallbackSource?.screenshots ?? [])
     : new Map();
-  const helpImage = progressStep && (availableImages.has(progressStep.imagePath) || fallbackImages.has(0));
-  const helpAction = progressStep && availableActions.has(progressStep.actionId);
   const suggestions = guideFinished
     ? []
     : continuation
@@ -534,18 +549,21 @@ export async function answerQuestion(root, question, options = {}) {
           : [];
 
   return {
-    answer: withoutRepeatedInstructions(overviewSource
+    answer: needsHelp ? escalate
+      ? 'Vou encaminhar seu caso ao atendimento com o estado informado e as tentativas já feitas.'
+      : questionForDiagnosis
+      : withoutRepeatedInstructions(overviewSource
       ? overviewSource.assistantOverview
       : guideFinished ? /salvar/i.test(fallbackSource.documentedSteps.at(-1)) && /publicar/i.test(fallbackSource.documentedSteps.at(-1))
         ? 'Você concluiu as etapas documentadas. Publicar coloca o robô online; Salvar guarda o robô inativo.'
         : 'Você chegou ao fim das etapas documentadas.'
       : progressStep ? needsHelp
-        ? ['Vamos resolver esta etapa.', helpImage ? 'Veja a imagem do passo abaixo.' : 'Confira o passo abaixo.', helpAction ? 'Use o atalho para abrir a tela.' : '', 'Qual botão, campo ou texto aparece na sua tela?'].filter(Boolean).join(' ')
+        ? questionForDiagnosis
         : startGuide ? 'Vamos começar pelo primeiro passo.' : 'Vamos para a próxima ação.'
-      : parsed.answer, responseSteps)
+      : parsed.answer, safeSteps)
       || (continuation ? 'Vamos por uma ação de cada vez.' : 'Siga os passos abaixo e me diga onde precisar de ajuda.'),
-    sections: overviewSource || progressStep || guideFinished ? [] : parsed.sections,
-    steps: responseSteps.map(({ text, actionId, imagePath }, index) => {
+    sections: needsHelp || overviewSource || progressStep || guideFinished ? [] : parsed.sections,
+    steps: safeSteps.map(({ text, actionId, imagePath }, index) => {
       const safeImagePath = modelUsedValidatedImage
         ? imagePath
         : fallbackImages.get(index)?.src;
@@ -557,9 +575,11 @@ export async function answerQuestion(root, question, options = {}) {
     }),
     code: historyGuide ? null : parsed.code,
     sources: used.map(({ title, path, description, media }) => ({ title, path, kind: kindOf(path), excerpt: description, ...(media ? { media } : {}) })),
-    suggestions,
-    resolution: historyGuide ? 'complete' : parsed.resolution,
+    suggestions: escalate ? [] : needsHelp ? ['Preciso de ajuda'] : suggestions,
+    resolution: escalate ? 'partial' : historyGuide ? 'complete' : parsed.resolution,
     found: historyGuide ? true : parsed.found,
+    diagnosis,
+    ...(escalate ? { escalation: escalationFor(originalQuestion, diagnosis, widgetContext, history) } : {}),
     model: response.model,
   };
 }

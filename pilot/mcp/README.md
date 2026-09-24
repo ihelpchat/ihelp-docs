@@ -49,6 +49,19 @@ DOCS_MCP_API_KEY=... OPENAI_API_KEY=... ASSISTANT_ALLOWED_ORIGINS=https://docs.e
 
 O endpoint `/mcp` exige `Authorization: Bearer <DOCS_MCP_API_KEY>`. O endpoint público `/assistant` aceita somente perguntas curtas, aplica rate limit, envia apenas trechos recuperados da documentação e chama a OpenAI com `store: false`. A chave permanece exclusivamente no servidor.
 
+### Contexto opcional do widget
+
+`POST /assistant` aceita `widgetContext` além de `question`, `history`, `scope` e `page`. Clientes antigos podem omiti-lo. Exemplo:
+
+```json
+{"question":"como criar um chatbot?","widgetContext":{"surface":"app","route":"/bot","module":"robots","screen":"list","role":"agent","permissions":["robots.read"],"plan":"trial","channels":[{"kind":"whatsapp","state":"connected"}],"credit":"available","templates":"none","incidents":[]}}
+```
+
+O contrato usa somente enums em `mcp/real-state.mjs`: `surface` (`faq`, `app`), `module`, `screen`, `role`, `permissions`, `plan`, `channels` (`kind`, `state`), `credit`, `templates` e `incidents`. `route` aceita apenas rotas do catálogo de ProductActions. Campos desconhecidos, texto livre, URL com query, telefone, identificadores e tokens invalidam o contexto inteiro; ele é ignorado, e a pergunta continua funcionando. Há limites de 1.500 caracteres serializados, 12 permissões, 5 canais e 5 incidentes. O contexto é uma indicação read-only fornecida pelo cliente, sem autoridade para liberar ações ou confirmar estado de backend.
+
+A resposta inclui `diagnosis.cause` e, após tentativa guiada sem resolução, `escalation` com `intent`, `diagnosis`, `state` validado e `attempts` em enums. A interface monta o CTA de atendimento com esses campos, sem copiar a pergunta ou o histórico. A integração no widget do iHelp deve enviar apenas os estados já presentes na UI; esta entrega não altera o widget.
+O estado enviado pelo cliente serve apenas como hint relacionado à intenção: não suprime passos, screenshots, fontes ou ProductActions autorizadas e não comprova plano, permissão ou incidente. Apenas uma ação do usuário ou confirmação por fonte confiável poderia justificar um bloqueio futuro.
+
 Antes de revisar um conteúdo, a IA deve buscar duplicidades com `docs_search`, carregar a versão integral com `docs_get_article`, validar o resultado e enviá-lo como draft ou pull request. `npm run content:audit` aplica as mesmas regras à base completa; `npm run content:migrate` importa o legado e já executa a normalização editorial.
 
 Em produção, a próxima evolução do MCP é trocar a chave compartilhada por OAuth e identidade por usuário.
