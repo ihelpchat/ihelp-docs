@@ -14,6 +14,8 @@ const CREDENTIALS = [
 ];
 const CREDENTIAL_PAIR = /(?<![\p{L}\p{N}_])(["']?)([A-Za-z_][A-Za-z0-9_-]*)\1\s*[:=]\s*("[^"\n]+"|'[^'\n]+'|[^\s,;}\]]+)/giu;
 const STRONG_KEY_SEGMENTS = new Set(['api', 'auth', 'access', 'secret', 'private', 'credential']);
+const CREDENTIAL_SEGMENTS = new Set(['token', 'secret', 'password', 'passwd', 'pwd', 'senha', 'pass', 'key', 'credential', 'credentials']);
+const DESCRIPTIVE_SUFFIXES = new Set(['hint', 'description', 'count', 'name', 'label', 'type', 'enabled', 'example']);
 const PLACEHOLDER = /^(?:\$[A-Z_][A-Z0-9_]*|\$\{[A-Z_][A-Z0-9_]*\})$/u;
 const NON_SECRET_LITERAL = /^(?:null|true|false|undefined|string|number)$/iu;
 
@@ -38,6 +40,7 @@ function secretLike(value) {
 function credentialKeyStrength(key) {
   const words = key.replace(/([a-z0-9])([A-Z])/gu, '$1_$2').toLocaleLowerCase('en-US').split(/[_-]+/u);
   const last = words.at(-1);
+  if (DESCRIPTIVE_SUFFIXES.has(last)) return 'none';
   if (['token', 'secret', 'password', 'senha'].includes(last)) return words.length > 1 ? 'strong' : 'weak';
   if (last === 'pass') return words.length > 1 ? 'strong' : 'weak';
   if (last === 'credentials') return words.length > 1 ? 'strong' : 'weak';
@@ -45,6 +48,8 @@ function credentialKeyStrength(key) {
   const folded = key.replace(/[_-]/gu, '').toLocaleLowerCase('en-US');
   if (folded.endsWith('key') && [...STRONG_KEY_SEGMENTS].some((word) => folded.slice(0, -3).endsWith(word))) return 'strong';
   if (/(?:api[_-]?key|password|senha|secret|token)$/iu.test(key)) return 'strong';
+  if (words.some((word) => CREDENTIAL_SEGMENTS.has(word))) return 'weak';
+  if (/(?:passwd|pwd|credentials?)$/u.test(folded)) return 'weak';
   return 'none';
 }
 
