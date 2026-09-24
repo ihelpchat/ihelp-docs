@@ -1,0 +1,13 @@
+# O serviço Railway executa somente o MCP/assistente. Assets e build do frontend ficam na Vercel.
+app
+components
+lib
+public
+scripts
+.next
+.vercel
+out
+node_modules
+.drafts
+coverage
+*.tsbuildinfo

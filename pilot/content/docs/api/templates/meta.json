@@ -1,0 +1,11 @@
+{
+  "title": "Templates",
+  "pages": [
+    "index",
+    "pegar-id-do-template",
+    "regras-da-meta-e-logs-de-erro",
+    "template-criar-novo-chat",
+    "template-enviar-chat-existente",
+    "template-json-body"
+  ]
+}

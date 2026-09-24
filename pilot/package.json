@@ -1,0 +1,51 @@
+{
+  "name": "pilot",
+  "version": "0.0.32",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "start": "serve out",
+    "types:check": "next typegen && tsc --noEmit",
+    "lint": "eslint",
+    "qa:ui": "node scripts/ui-smoke.mjs",
+    "qa:visual": "node scripts/visual-fidelity.mjs",
+    "content:migrate": "node scripts/migrate-content.mjs && node scripts/normalize-content.mjs",
+    "content:normalize": "node scripts/normalize-content.mjs",
+    "content:audit": "node scripts/audit-content.mjs",
+    "content:validate": "node scripts/validate-coverage.mjs",
+    "mcp:start": "node mcp/server.mjs",
+    "mcp:http": "node mcp/http.mjs",
+    "mcp:test": "node mcp/test.mjs",
+    "qa:visual:baseline": "node scripts/visual/design-baseline.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "cn": "^0.3.0",
+    "fumadocs-core": "16.15.13",
+    "fumadocs-mdx": "15.4.3",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@16.15.13",
+    "lucide-react": "^1.47.0",
+    "next": "16.3.5",
+    "openai": "^7.22.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/mdx": "^2.0.14",
+    "@types/node": "^26.6.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "16.3.5",
+    "playwright-core": "1.63.0",
+    "postcss": "^8.5.28",
+    "serve": "^14.2.6",
+    "tailwindcss": "^4.3.3",
+    "typescript": "6.0.3"
+  }
+}

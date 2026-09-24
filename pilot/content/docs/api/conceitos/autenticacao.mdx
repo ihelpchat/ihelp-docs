@@ -1,0 +1,43 @@
+---
+title: "Autenticação"
+description: "Envie uma credencial dedicada no header Authorization em todas as requisições feitas à API do iHelp."
+source: api
+contentType: referencia
+---
+
+Todas as requisições à API do iHelp devem ser autenticadas com um Bearer token. Gere uma credencial própria para a integração e use-a somente no servidor.
+
+## Header obrigatório
+
+| Header | Valor |
+| --- | --- |
+| `Authorization` | `Bearer <token>` |
+
+```http
+Authorization: Bearer $IHELP_TOKEN
+```
+
+O prefixo `Bearer` e o espaço antes do token são obrigatórios. Não inclua aspas ao montar o header.
+
+## Exemplo de requisição
+
+```bash
+curl --request GET
+
+  --url https://apiv3.ihelpchat.com/api/v2/configurations/departments
+
+  --header "Authorization: Bearer $IHELP_TOKEN"
+```
+
+## Como armazenar o token
+
+- Salve a credencial em uma variável de ambiente ou em um gerenciador de segredos.
+- Nunca coloque o token em JavaScript executado no navegador, aplicativo distribuído ou repositório Git.
+- Não registre o valor completo em logs, prints ou mensagens de suporte.
+- Use uma credencial diferente para cada integração sempre que possível.
+
+Ainda não possui uma credencial? Veja [como obter um token](/api/conceitos/obter-token).
+
+## Quando a autenticação falhar
+
+Confira se o header foi enviado, se há um espaço após `Bearer` e se o token continua válido. Ao acionar o suporte, envie o endpoint, o horário e a resposta recebida, mas nunca o token.

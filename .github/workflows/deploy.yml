@@ -3,6 +3,7 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -17,7 +18,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build Docusaurus
+    name: Build Next.js + Fumadocs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,20 +26,35 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
+          cache-dependency-path: pilot/package-lock.json
       - name: Install dependencies
         run: npm ci
+        working-directory: pilot
+      - name: Validate content coverage
+        run: npm run content:validate
+        working-directory: pilot
+      - name: Test MCP
+        run: npm run mcp:test
+        working-directory: pilot
+      - name: Typecheck and lint
+        run: npm run types:check && npm run lint
+        working-directory: pilot
       - name: Build website
         run: npm run build
+        working-directory: pilot
+        env:
+          NEXT_PUBLIC_BASE_PATH: /ihelp-docs
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build
+          path: pilot/out
 
   deploy:
     name: Deploy to GitHub Pages
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

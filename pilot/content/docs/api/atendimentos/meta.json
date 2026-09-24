@@ -1,0 +1,12 @@
+{
+  "title": "Atendimentos",
+  "pages": [
+    "buscar-atendimento-por-telefone",
+    "buscar-chats-em-massa",
+    "buscar-historico-de-mensagens",
+    "buscar-metadados",
+    "pegar-ids-departamento-canal",
+    "resumir-conversa",
+    "transcrever-audio"
+  ]
+}

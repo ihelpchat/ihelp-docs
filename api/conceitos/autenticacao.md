@@ -3,13 +3,16 @@ title: "Autenticação"
 sidebar_position: 1
 ---
 
-Todas as requisições devem incluir:
+Todas as requisições devem incluir uma credencial de integração emitida para uso no servidor.
 
 | Header | Valor |
 |--------|-------|
-| `Authorization` | `Bearer <token>` |
+| `Authorization` | `Bearer <SUA_CREDENCIAL>` |
 
-**Exemplo:**
+**Exemplo seguro:**
+
+```http
+Authorization: Bearer <SUA_CREDENCIAL>
 ```
-Authorization: Bearer pElSfpElSpElSfejnqA9mI5fejnqA9mI5epElSfejnqA9mI5jnqA9mI5
-```
+
+Nunca publique a credencial na documentação, no frontend ou em capturas de tela. Em produção, carregue-a por uma variável de ambiente ou secret manager.

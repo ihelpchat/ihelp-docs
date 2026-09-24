@@ -1,0 +1,6 @@
+{
+  "title": "Referência da API",
+  "description": "Autenticação, endpoints e exemplos",
+  "root": true,
+  "pages": ["index", "conceitos", "atendimentos", "mensagens", "templates", "crm"]
+}

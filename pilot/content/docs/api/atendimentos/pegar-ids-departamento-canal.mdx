@@ -1,0 +1,54 @@
+---
+title: "IDs de departamento, canal e cliente"
+description: "Consulte departamentos, canais e clientes para obter os identificadores exigidos por outros endpoints da API do iHelp."
+source: api
+contentType: referencia
+method: GET
+endpoint: /configurations/departments
+---
+
+Algumas operações da API exigem IDs internos. Consulte cada recurso antes de montar a requisição principal e guarde somente o identificador necessário.
+
+## Listar departamentos
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/configurations/departments
+```
+
+## Listar canais
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/configurations/channels
+```
+
+## Buscar cliente pelo telefone
+
+Informe o telefone com código do país e DDD, somente com números.
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/customers/search?searchText=551788889999&quantidade=20&skip=0
+```
+
+## Identificadores retornados
+
+O resultado da busca de clientes reúne IDs usados em outras operações:
+
+```json
+{
+  "dados": [
+    {
+      "id": 123456,
+      "ativo": true,
+      "canalId": 1,
+      "departamentoId": 5,
+      "chatId": "000000000000000000000000",
+      "contato": {
+        "id": 654321,
+        "nome": "Contato de exemplo"
+      }
+    }
+  ]
+}
+```
+
+Use `departamentoId` e `canalId` apenas no mesmo ambiente e conta em que foram consultados. Se a busca não retornar dados, revise o telefone e a paginação antes de concluir que o cliente não existe.

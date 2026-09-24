@@ -1,0 +1,6 @@
+{
+  "title": "Tutoriais",
+  "description": "Passo a passo visual com Tango",
+  "root": true,
+  "pages": ["index"]
+}

@@ -1,0 +1,4 @@
+{
+  "title": "Mensagens",
+  "pages": ["mensagem-comum", "enviar-midia", "mensagem-em-grupo", "[Menu de lista](/api/menus-de-lista)"]
+}
