@@ -46,7 +46,7 @@ async function readJson(request) {
   return JSON.parse(raw || '{}');
 }
 
-const httpServer = createServer(async (request, response) => {
+export const httpServer = createServer(async (request, response) => {
   cors(request, response);
   const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
   if (request.method === 'OPTIONS') {

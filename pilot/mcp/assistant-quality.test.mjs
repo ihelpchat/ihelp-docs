@@ -328,8 +328,10 @@ const changedTopicReply = await answerQuestion(testRoot, 'Pode explicar como cri
 assert.doesNotMatch(changedTopicRequests[0].input[0].content, /MODO: acompanhamento guiado/i, 'troca de assunto não pode continuar o guia anterior');
 assert.match(changedTopicRequests[0].input[0].content, /MODO: visão geral conversacional/i, 'novo procedimento amplo deve iniciar uma nova visão geral');
 assert.equal(changedTopicReply.steps.length, 1, 'procedimento em prosa deve fornecer a primeira ação mesmo se o modelo omitir steps');
-assert.match(changedTopicReply.steps[0].text, /antes de|prepare|acesse/i, 'fallback deve começar por uma ação documentada da campanha');
-assert.equal(changedTopicReply.steps[0].image, undefined, 'fallback não pode associar um print só pela posição no artigo');
+assert.match(changedTopicReply.steps[0].text, /abra campanhas.*nova campanha/i, 'guia deve começar pela primeira ação documentada');
+assert.equal(changedTopicReply.steps[0].action?.id, 'abrir-campanhas');
+assert.equal(changedTopicReply.steps[0].image?.src, '/img/help/hlPVE1pICUAOU19G5Kgc.png', 'print comprovado acompanha a ação correta');
+assert.equal(changedTopicReply.sources[0]?.path, '/docs/principais-motivos-de-suporte/campanhas');
 assert.deepEqual(
   changedTopicReply.suggestions,
   ['Pode me guiar etapa por etapa', 'Quero ver todos os passos'],
