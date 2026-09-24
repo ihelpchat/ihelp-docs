@@ -8,12 +8,14 @@ type ProductActionProps = {
   target?: string;
 };
 
-export function ProductAction({ id, label, route }: ProductActionProps) {
+export function ProductAction({ id, label, route, target }: ProductActionProps) {
+  const href = productActionUrl(route, id, target);
+  if (!href) return null;
   return (
-    <a className="ih-product-action" href={productActionUrl(route, id)} target="_blank" rel="noreferrer noopener">
+    <a className="ih-product-action" href={href} target="_blank" rel="noreferrer noopener">
       <span>
         <strong>{label}</strong>
-        <small>Abra o iHelp exatamente na tela deste passo</small>
+        <small>Abre a tela Contatos no iHelp; use o menu de três pontos para importar.</small>
       </span>
       <ArrowUpRight aria-hidden="true" />
     </a>
