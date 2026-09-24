@@ -74,6 +74,11 @@ assert.deepEqual(keyedSteps(['Abra o item 1 no menu lateral.', 'Acesse o item 2 
 assert.deepEqual(keyedSteps(['Abra a opção A.', 'Acesse a opção B.']), ['Abra a opção A.', 'Acesse a opção B.']);
 assert.deepEqual(keyedSteps(['Abra a opção A.', 'Acesse opção A.']), ['Abra a opção A.'], 'artigo a não deve virar seletor');
 assert.deepEqual(keyedSteps(['Abra Contatos e escolha Importar.', 'Acesse Contatos e escolha Exportar.']), ['Abra Contatos e escolha Importar.', 'Acesse Contatos e escolha Exportar.']);
+assert.deepEqual(keyedSteps(['Abra o botão OK.', 'Acesse o botão Ir.']), ['Abra o botão OK.', 'Acesse o botão Ir.']);
+assert.deepEqual(keyedSteps(['Abra UI.', 'Acesse Ir.']), ['Abra UI.', 'Acesse Ir.']);
+assert.deepEqual(keyedSteps(['Abra o plano A.', 'Acesse o plano B.']), ['Abra o plano A.', 'Acesse o plano B.']);
+assert.deepEqual(keyedSteps(['Abra o seletor A.', 'Acesse o seletor B.']), ['Abra o seletor A.', 'Acesse o seletor B.']);
+assert.deepEqual(keyedSteps(['Abra a opção A.', 'Acesse opção A.']), ['Abra a opção A.']);
 
 const trustedAction = { id: 'importar-contatos', ...allowedActions['importar-contatos'] };
 const articleWithAction = {
