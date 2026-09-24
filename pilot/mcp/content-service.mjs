@@ -1,7 +1,7 @@
 import { lstat, mkdir, open, readFile, readdir, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { basename, join, normalize, relative } from 'node:path';
-import { containsPersonalData } from './sensitive-data.mjs';
+import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 import { isCatalogAction } from './product-actions.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
@@ -24,13 +24,6 @@ function publicSubmitError(error) {
   if (error?.code === 'EEXIST') return new SubmitArticleError('DRAFT_EXISTS', 'Draft já existe');
   return new SubmitArticleError('SUBMIT_FAILED', 'Não foi possível enviar o artigo');
 }
-const SECRET_PATTERNS = [
-  /Authorization:\s*Bearer\s+[A-Za-z0-9._-]{20,}/i,
-  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
-  /(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{20,}/i,
-  /AIza[0-9A-Za-z_-]{30,}/,
-];
-
 function escapeYaml(value) {
   return JSON.stringify(value.replaceAll('\r', '').trim());
 }
@@ -41,6 +34,13 @@ function publicArticleText(article) {
     fields.push(action?.id, action?.label, action?.route, action?.target);
   }
   return fields.filter((value) => typeof value === 'string').join('\n');
+}
+
+function rejectSensitive(value) {
+  if (!containsSensitiveData(value)) return;
+  const kinds = sensitiveKinds(value);
+  if (kinds.credential) throw new SubmitArticleError('CREDENTIAL', 'Artigo contém possível credencial');
+  if (kinds.personal) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém possível dado pessoal');
 }
 
 function safeContentPath(root, contentPath) {
@@ -69,8 +69,9 @@ export function validateArticle(article) {
   if (/^## Tutorial Guiado$/m.test(article.body ?? '')) issues.push('use um Tango público no campo tangoUrl em vez de rodapé genérico');
   if (/^#{2,6}\s+\*\*/m.test(article.body ?? '')) issues.push('headings não devem usar negrito redundante');
   const publicText = publicArticleText(article);
-  if (SECRET_PATTERNS.some((pattern) => pattern.test(publicText))) issues.push('possível credencial detectada');
-  if (containsPersonalData(publicText)) issues.push('possível dado pessoal detectado');
+  const sensitive = sensitiveKinds(publicText);
+  if (sensitive.credential) issues.push('possível credencial detectada');
+  if (sensitive.personal) issues.push('possível dado pessoal detectado');
   if (article.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(article.tangoUrl)) {
     issues.push('tangoUrl precisa ser uma URL oficial de embed ou workflow do Tango');
   }
@@ -187,6 +188,10 @@ async function createPullRequest(article, rendered, actor, beforePull) {
   const base = process.env.GITHUB_BASE_BRANCH ?? 'main';
   const [owner, repo] = repository.split('/');
   if (!owner || !repo) throw new Error('GITHUB_REPOSITORY inválido');
+  const submittedAt = new Date().toISOString();
+  const title = `docs: ${article.title}`;
+  const body = `Conteúdo enviado pelo MCP de documentação. Revise precisão, permissões, privacidade e links antes do merge.\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_article; target=${article.path}; mode=pull_request.`;
+  rejectSensitive(`${title}\n${body}`);
   const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(base)}`);
   const slug = basename(article.path);
   const branch = `docs/ia-${slug}-${Date.now()}`;
@@ -197,14 +202,13 @@ async function createPullRequest(article, rendered, actor, beforePull) {
     body: JSON.stringify({ message: `docs: adiciona ${article.title}`, content: Buffer.from(rendered).toString('base64'), branch }),
   });
   await beforePull(branch);
-  const submittedAt = new Date().toISOString();
   const pull = await githubRequest(`/repos/${owner}/${repo}/pulls`, {
     method: 'POST',
     body: JSON.stringify({
-      title: `docs: ${article.title}`,
+      title,
       head: branch,
       base,
-      body: `Conteúdo enviado pelo MCP de documentação. Revise precisão, permissões, privacidade e links antes do merge.\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_article; target=${article.path}; mode=pull_request.`,
+      body,
     }),
   });
   return { status: 'pull_request', url: pull.html_url, branch, filePath };
@@ -219,7 +223,7 @@ async function appendAudit(root, actor, mode, target, result, reference) {
   try {
     const stat = await file.stat();
     if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0) throw new Error('arquivo de audit inseguro');
-    const line = `${JSON.stringify({ at: new Date().toISOString(), actor, operation: 'docs_submit_article', mode, target, result, ...(reference ? { reference } : {}) })}\n`;
+    const line = `${JSON.stringify({ at: new Date().toISOString(), actor, operation: 'docs_submit_article', mode, target: typeof target === 'string' ? redactSensitiveData(target) : target, result, ...(reference ? { reference } : {}) })}\n`;
     const { bytesWritten } = await file.write(line);
     if (bytesWritten !== Buffer.byteLength(line)) throw new Error('registro de audit incompleto');
     await file.sync();
@@ -238,7 +242,8 @@ export async function auditOperation(root, { actor, operation, mode = null, targ
   try {
     const stat = await file.stat();
     if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0) throw new Error('arquivo de audit inseguro');
-    const line = `${JSON.stringify({ at: new Date().toISOString(), actor, operation, mode, target, result, ...(reference ? { reference } : {}) })}\n`;
+    const safeTarget = Array.isArray(target) ? target.map(redactSensitiveData) : typeof target === 'string' ? redactSensitiveData(target) : target;
+    const line = `${JSON.stringify({ at: new Date().toISOString(), actor, operation, mode, target: safeTarget, result, ...(reference ? { reference } : {}) })}\n`;
     await file.writeFile(line);
     await file.sync();
   } finally {
@@ -256,7 +261,7 @@ export async function submitArticle(root, article, mode = 'draft', requestedBy) 
 
 async function submitArticleAudited(root, article, mode, requestedBy) {
   const actor = isSafeRequestedBy(requestedBy) ? requestedBy : null;
-  const target = typeof article.path === 'string' && SAFE_PATH.test(article.path) && !article.path.endsWith('/') ? article.path : null;
+  const target = typeof article.path === 'string' && SAFE_PATH.test(article.path) && !article.path.endsWith('/') ? redactSensitiveData(article.path) : null;
   const safeMode = mode === 'draft' || mode === 'pull_request' ? mode : null;
   await appendAudit(root, actor, safeMode, target, 'attempt');
   let result;
@@ -319,18 +324,14 @@ function safeArticleList(articles, deletes = []) {
   if (!Array.isArray(articles) || !Array.isArray(deletes) || articles.length + deletes.length < 1 || articles.length + deletes.length > 8) throw new SubmitArticleError('INVALID_PACKAGE', 'O pacote precisa ter entre 1 e 8 operações');
   const paths = new Set();
   const upserts = articles.map((article) => {
+    rejectSensitive(publicArticleText(article));
     if (paths.has(article.path)) throw new SubmitArticleError('INVALID_PACKAGE', `Path duplicado no pacote: ${article.path}`);
     paths.add(article.path);
     safeContentPath(process.cwd(), article.path);
-    if (containsPersonalData(publicArticleText(article))) {
-      throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém possível dado pessoal');
-    }
-    if (SECRET_PATTERNS.some((pattern) => pattern.test(publicArticleText(article)))) {
-      throw new SubmitArticleError('CREDENTIAL', 'Artigo contém possível credencial');
-    }
     return { article, rendered: renderArticle(article) };
   });
   for (const path of deletes) {
+    rejectSensitive(path);
     safeContentPath(process.cwd(), path);
     if (paths.has(path)) throw new SubmitArticleError('INVALID_PACKAGE', `Path duplicado no pacote: ${path}`);
     paths.add(path);
@@ -343,6 +344,11 @@ async function createPackagePullRequest(items, deletes, actor, beforePull) {
   const base = process.env.GITHUB_BASE_BRANCH ?? 'main';
   const [owner, repo] = repository.split('/');
   if (!owner || !repo) throw new Error('GITHUB_REPOSITORY inválido');
+  const submittedAt = new Date().toISOString();
+  const targets = [...items.map(({ article }) => article.path), ...deletes.map((path) => `-${path}`)].join(', ');
+  const title = items.length ? `docs: pacote ${items[0].article.title}` : `docs: remove ${deletes.length === 1 ? deletes[0] : `${deletes.length} artigos`}`;
+  const body = `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`;
+  rejectSensitive(`${title}\n${body}`);
   const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(base)}`);
   const branch = `docs/ia-pacote-${Date.now()}`;
   await githubRequest(`/repos/${owner}/${repo}/git/refs`, { method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: ref.object.sha }) });
@@ -400,15 +406,13 @@ async function createPackagePullRequest(items, deletes, actor, beforePull) {
     }
   }
   await beforePull(branch);
-  const submittedAt = new Date().toISOString();
-  const targets = [...items.map(({ article }) => article.path), ...deletes.map((path) => `-${path}`)].join(', ');
   const pull = await githubRequest(`/repos/${owner}/${repo}/pulls`, {
     method: 'POST',
     body: JSON.stringify({
-      title: items.length ? `docs: pacote ${items[0].article.title}` : `docs: remove ${deletes.length === 1 ? deletes[0] : `${deletes.length} artigos`}`,
+      title,
       head: branch,
       base,
-      body: `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`,
+      body,
     }),
   });
   return { status: 'pull_request', url: pull.html_url, branch, articles: items.map(({ article }) => article.path), deleted: deletes };
@@ -417,7 +421,7 @@ async function createPackagePullRequest(items, deletes, actor, beforePull) {
 export async function submitContentPackage(root, articles, mode = 'draft', requestedBy, deletes = []) {
   if (!isSafeRequestedBy(requestedBy)) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
   const actor = isSafeRequestedBy(requestedBy) ? requestedBy : null;
-  const targets = [...(Array.isArray(articles) ? articles.map((article) => article?.path) : []), ...(Array.isArray(deletes) ? deletes : [])].filter((path) => typeof path === 'string' && SAFE_PATH.test(path));
+  const targets = [...(Array.isArray(articles) ? articles.map((article) => article?.path) : []), ...(Array.isArray(deletes) ? deletes : [])].filter((path) => typeof path === 'string' && SAFE_PATH.test(path)).map(redactSensitiveData);
   const operation = !articles?.length && deletes?.length ? 'docs_delete_article' : 'docs_submit_package';
   const auditMode = ['draft', 'pull_request'].includes(mode) ? mode : null;
   if (mode === 'dry_run') {
@@ -451,6 +455,7 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
 
 export async function deleteArticle(root, contentPath, mode = 'draft', requestedBy) {
   if (!isSafeRequestedBy(requestedBy)) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
+  rejectSensitive(contentPath);
   safeContentPath(root, contentPath);
   if (mode === 'pull_request') return submitContentPackage(root, [], mode, requestedBy, [contentPath]);
   await auditOperation(root, { actor: requestedBy, operation: 'docs_delete_article', mode, target: contentPath, result: 'attempt' });

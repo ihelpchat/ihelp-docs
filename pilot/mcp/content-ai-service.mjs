@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { searchContent, validateArticle } from './content-service.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
 import { readArticle } from './editorial-standard.mjs';
-import { containsPersonalData, redactPersonalData } from './sensitive-data.mjs';
+import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 import { catalogAction } from './product-actions.mjs';
 
 function normalizeCatalogLabel(action) {
@@ -64,17 +64,14 @@ const PACKAGE_SCHEMA = {
   },
 };
 
-const CREDENTIAL = /Authorization:\s*Bearer\s+\S+|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{20,}\b|\b(?:apiKey|password|secret|token)\s*[:=]\s*["']?[A-Za-z0-9._-]{12,}/iu;
-
 function checkRequest(request) {
   const value = Object.values(request).filter((item) => typeof item === 'string').join('\n');
-  if (CREDENTIAL.test(value)) throw new Error('O pedido contém possível credencial; remova antes de usar a IA editorial.');
-  if (containsPersonalData(value)) throw new Error('O pedido contém possível dado pessoal; remova antes de usar a IA editorial.');
+  if (containsSensitiveData(value)) {
+    const kinds = sensitiveKinds(value);
+    if (kinds.credential) throw new Error('O pedido contém possível credencial; remova antes de usar a IA editorial.');
+    if (kinds.personal) throw new Error('O pedido contém possível dado pessoal; remova antes de usar a IA editorial.');
+  }
   if (request.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(request.tangoUrl)) throw new Error('tangoUrl precisa ser uma URL pública oficial do Tango.');
-}
-
-function redactContext(value) {
-  return redactPersonalData(value).replace(new RegExp(CREDENTIAL.source, 'giu'), '[credencial removida]');
 }
 
 function clientOf(options) {
@@ -110,11 +107,11 @@ function requestText(request, existing, productContext) {
     request.productRoute ? `Rota confirmada no produto: ${request.productRoute}` : '',
     request.tangoUrl ? `Tango já existente: ${request.tangoUrl}` : '',
     `Documentação publicada semelhante (fonte editorial):\n${existing.length ? existing.map((item) => `- ${item.title} (${item.path}): ${item.description}\n${item.body ?? ''}`).join('\n') : '- Nenhum'}`,
-    `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${redactContext(item.path)}\n${redactContext(item.excerpt)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
+    `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${redactSensitiveData(item.path)}\n${redactSensitiveData(item.excerpt)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
     `Regras do suporte:\n${productContext.support?.rules?.map((item) => `- ${item}`).join('\n') ?? '- Nenhuma'}`,
     `Matriz de cobertura:\n${productContext.coverage?.map((item) => `- ${item.module}: ${item.coverage}; rotas=${item.productRoutes.join(', ')}; permissão=${item.permission}`).join('\n') ?? '- Nenhuma correspondência'}`,
-  ].filter(Boolean).join('\n');
+  ].filter(Boolean).map(redactSensitiveData).join('\n');
 }
 
 async function related(root, request) {
@@ -128,7 +125,7 @@ async function related(root, request) {
   return Promise.all(found.slice(0, 4).map(async (item) => {
     const path = item.path.replace(/^\//, '');
     const article = await readArticle(root, path).catch(() => null);
-    return { ...item, title: redactContext(item.title), description: redactContext(item.description), ...(article ? { body: redactContext(article.body.slice(0, 4_000)) } : {}) };
+    return { ...item, title: redactSensitiveData(item.title), description: redactSensitiveData(item.description), ...(article ? { body: redactSensitiveData(article.body.slice(0, 4_000)) } : {}) };
   }));
 }
 
@@ -151,7 +148,7 @@ export async function planContent(root, request, options = {}) {
     { role: 'user', content: requestText(request, existing, productContext) },
   ], options));
   const parsed = parseJson(response);
-  return { ...parsed, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path }) => `${repository}:${redactContext(path)}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
+  return { ...parsed, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path }) => `${repository}:${redactSensitiveData(path)}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
 }
 
 export async function generateContentPackage(root, request, options = {}) {
@@ -175,7 +172,7 @@ export async function generateContentPackage(root, request, options = {}) {
         'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
       ].join(' '),
     },
-    { role: 'user', content: `${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(plan)}` },
+    { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(plan)}`) },
   ], options));
   const parsed = parseJson(response);
   if (parsed.status !== 'ready') return { ...parsed, articles: [], existing, model: response.model };
