@@ -1,0 +1,50 @@
+---
+title: "CRM e pipeline"
+description: "Crie uma pipeline para organizar oportunidades e confira seus estágios."
+source: produto
+contentType: guia
+assistantQuestion: "Como criar pipeline no CRM?"
+assistantOverview: "CRM organiza oportunidades. Uma pipeline é um quadro com estágios que mostram o andamento de cada oportunidade. Abra Pipeline para começar."
+assistantInitialSteps: 1
+assistantOptionalBranch: "8:9:16"
+assistantOptionalPrompt: "Você quer configurar automação agora ou criar a pipeline sem automação?"
+assistantOptionalResumePrompt: "Você conseguiu clicar em Próximo e chegar à escolha de automação?"
+assistantOptionalBlockedPrompt: "Se ainda estiver bloqueado, descreva o aviso ou o que aparece no menu. Quando chegar à escolha de automação, diga “encontrei”."
+assistantSuccess: "A pipeline está criada quando o novo quadro aparece na lista e seus estágios podem ser abertos."
+---
+
+CRM é a área que organiza oportunidades. Uma pipeline reúne essas oportunidades em estágios, como início e fechamento.
+
+## Pré-requisitos
+
+- Ter acesso ao CRM.
+- Definir um nome e o objetivo do quadro que quer criar.
+
+<ProductAction id="abrir-crm" label="Abrir a tela Pipeline do CRM" route="/crm/pipeline" />
+
+1. Abra Pipeline no CRM.
+2. Clique em Nova Pipeline.
+3. Preencha nome, responsável, descrição, ícone e cor da pipeline.
+4. Escolha a visibilidade: Pública, Departamento ou Privada.
+5. Defina a trava de contato: ativada para um card por contato ou desativada para permitir vários cards.
+6. Clique em Próximo.
+7. Escolha um modelo de estágios ou comece em branco.
+8. Clique em Próximo. Se não quiser automação, pule os passos opcionais e vá para Criar Pipeline.
+9. Se quiser automação opcional, clique em Criar automação.
+10. Selecione o gatilho que criará cards automaticamente.
+11. Clique em Adicionar condição.
+12. Defina o valor da condição escolhida.
+13. Clique em Adicionar ação.
+14. Selecione Criar Card.
+15. Selecione o estágio em que o card será criado.
+16. Clique em Criar Pipeline e confira o novo quadro na lista.
+
+## Como confirmar
+
+O novo quadro aparece na lista e seus estágios podem ser abertos. A automação só deve ser considerada pronta se você a configurou e testou separadamente.
+
+## Se não funcionar
+
+Se não conseguir criar o quadro ou não o enxergar depois, informe a etapa e o aviso ao atendimento. Confira primeiro a visibilidade escolhida para a pipeline.
+
+Leia também: [Como criar uma nova Pipeline](/docs/sobre-o-sistema/crm/como-criar-uma-nova-pipeline)

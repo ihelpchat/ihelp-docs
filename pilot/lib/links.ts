@@ -6,7 +6,7 @@ export const ihelpAppUrl = process.env.NEXT_PUBLIC_IHELP_APP_URL?.replace(/\/$/,
 
 export function productActionUrl(route: string, guideId: string, target?: string) {
   if (!/^\/(?!\/)[a-z0-9/_-]*$/.test(route)) return null;
-  const allowed = (allowedActions as Record<string, { route: string; target: string }>)[guideId];
+  const allowed = (allowedActions as Record<string, { route: string; target?: string }>)[guideId];
   if (!allowed || allowed.route !== route || allowed.target !== target) return null;
   const url = new URL(route, `${ihelpAppUrl}/`);
   url.searchParams.set('ihelpGuide', guideId);

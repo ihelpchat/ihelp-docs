@@ -9,6 +9,7 @@ const STOP_WORDS = new Set([
   'a', 'ao', 'aos', 'as', 'como', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'eu',
   'me', 'meu', 'na', 'nas', 'no', 'nos', 'o', 'os', 'para', 'por', 'que', 'se', 'um', 'uma',
 ]);
+const MAX_GUIDE_STEPS = 20;
 
 function normalize(value) {
   return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
@@ -63,7 +64,7 @@ function documentedStepImagesOf(raw, screenshots) {
     const numbered = line.match(/^\s*(\d+)\.\s+/);
     if (numbered) stepIndex = Number(numbered[1]) - 1;
     const image = line.match(/!\[[^\]]*\]\((\/img\/[A-Za-z0-9._/-]+\.(?:png|jpe?g|webp|gif))\)/i)?.[1];
-    if (stepIndex >= 0 && stepIndex < 12 && image && allowed.has(image) && !images[stepIndex]) {
+    if (stepIndex >= 0 && stepIndex < MAX_GUIDE_STEPS && image && allowed.has(image) && !images[stepIndex]) {
       images[stepIndex] = image;
     }
   }
@@ -100,7 +101,7 @@ function documentedStepsOf(raw) {
   const numbered = [...raw.matchAll(/^\s*\d+\.\s+(.+)$/gm)]
     .map(([, text]) => cleanText(text.replace(/!\[[^\]]*\]\([^)]*\)/g, '')))
     .filter(Boolean)
-    .slice(0, 12);
+    .slice(0, MAX_GUIDE_STEPS);
   if (numbered.length) return numbered;
   const proceduralStart = /^(?:antes de|ap[oó]s|acesse|abra|clique|crie|configure|defina|digite|escolha|habilite|insira|selecione|na (?:primeira|pr[oó]xima|etapa|tela|[uú]ltima)|primeiro disparo|n[uú]mero de disparo|em intervalo|voc[eê] ver[aá]|clicando)\b/i;
   return raw
@@ -108,7 +109,16 @@ function documentedStepsOf(raw) {
     .split(/\n+/)
     .map((line) => cleanText(line.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/^#+\s*/, '')))
     .filter((line) => proceduralStart.test(line))
-    .slice(0, 12);
+    .slice(0, MAX_GUIDE_STEPS);
+}
+
+function optionalBranchOf(raw, stepCount) {
+  const match = frontmatterValue(raw, 'assistantOptionalBranch').match(/^(\d+):(\d+):(\d+)$/);
+  if (!match) return null;
+  const [decision, accept, decline] = match.slice(1).map(Number);
+  return decision >= 1 && decision < accept && accept < decline && decline <= stepCount
+    ? { decision: decision - 1, accept: accept - 1, decline: decline - 1 }
+    : null;
 }
 
 function attributesOf(tag) {
@@ -180,6 +190,9 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
     if (!matches.length && !onPage && !fromConversation) continue;
     const apiQuestion = terms.some((term) => ['api', 'endpoint', 'token', 'bearer', 'curl'].includes(term));
     const sectionBoost = apiQuestion ? (path.startsWith('/api/') ? 8 : 0) : (path.startsWith('/docs/') ? 5 : 0);
+    const guideQuestion = normalize(frontmatterValue(raw, 'assistantQuestion'));
+    const guideRequest = normalizedQuestion.replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '');
+    const guideMatch = guideQuestion && (normalizedQuestion === guideQuestion || guideRequest === guideQuestion);
     const score = matches.length * 5
       + terms.reduce((total, term) => total + (titleText.includes(term) ? 12 : 0) + (descriptionText.includes(term) ? 4 : 0), 0)
       + (bodyText.includes(normalizedQuestion) ? 25 : 0)
@@ -187,8 +200,10 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       // Pergunta feita no painel de uma página: essa página entra primeiro no contexto.
       + (onPage ? 100 : 0)
       // Continuações curtas como “sim, pode me guiar” mantêm a fonte da conversa.
-      + (fromConversation ? 80 : 0);
+      + (fromConversation ? 80 : 0)
+      + (guideMatch ? 200 : 0);
     const screenshots = screenshotsOf(raw);
+    const documentedSteps = documentedStepsOf(raw);
     ranked.push({
       title,
       description,
@@ -196,13 +211,19 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       body: body.slice(0, 12_000),
       assistantQuestion: frontmatterValue(raw, 'assistantQuestion'),
       assistantOverview: frontmatterValue(raw, 'assistantOverview'),
+      assistantResolution: frontmatterValue(raw, 'assistantResolution') === 'partial' ? 'partial' : undefined,
       assistantInitialSteps: Math.min(3, Math.max(1, Number(frontmatterValue(raw, 'assistantInitialSteps')) || 1)),
       assistantSuggestions: [...new Set(parseAssistantSuggestions(frontmatterValue(raw, 'assistantSuggestions'))
         .map(cleanText).filter((item) => item.length > 0 && item.length <= 100))].slice(0, 3),
       media: mediaOf(raw),
       screenshots,
       stepImages: documentedStepImagesOf(raw, screenshots),
-      documentedSteps: documentedStepsOf(raw),
+      documentedSteps,
+      optionalBranch: optionalBranchOf(raw, documentedSteps.length),
+      assistantOptionalPrompt: frontmatterValue(raw, 'assistantOptionalPrompt'),
+      assistantOptionalResumePrompt: frontmatterValue(raw, 'assistantOptionalResumePrompt'),
+      assistantOptionalBlockedPrompt: frontmatterValue(raw, 'assistantOptionalBlockedPrompt'),
+      assistantSuccess: frontmatterValue(raw, 'assistantSuccess'),
       productActions: productActionsOf(raw),
       score,
     });
@@ -337,7 +358,7 @@ export function parseAnswer(outputText) {
             .map((section) => ({ title: cleanText(section.title), items: section.items.map(cleanText).filter(Boolean).slice(0, 5) }))
             .filter((section) => section.title && section.items.length)
         : [],
-      steps: Array.isArray(json.steps) ? uniqueSteps(json.steps.map(normalizeStep).filter(Boolean)).slice(0, 12) : [],
+      steps: Array.isArray(json.steps) ? uniqueSteps(json.steps.map(normalizeStep).filter(Boolean)).slice(0, MAX_GUIDE_STEPS) : [],
       code: json.code && typeof json.code.content === 'string' && json.code.content.trim()
         ? { language: cleanText(json.code.language) || 'código', content: String(json.code.content).trim() }
         : null,
@@ -383,6 +404,34 @@ function guidedStepIndex(history, documentedSteps, firstShown = false) {
   return shown.length ? firstShown ? Math.min(...shown) : Math.max(...shown) : -1;
 }
 
+function optionalChoice(question) {
+  const value = normalize(question).replace(/[^a-z0-9]+/g, ' ').trim();
+  if (/^(?:nao(?: quero(?: automacao)?)?|pular(?: automacao)?|sem automacao|agora nao|continuar sem(?: automacao)?)$/.test(value)) return 'decline';
+  if (/^(?:sim|quero automacao)$/.test(value)) return 'accept';
+  return null;
+}
+
+function optionalRecovery(question) {
+  const value = normalize(question).replace(/[^a-z0-9]+/g, ' ').trim();
+  return /^(?:encontrei|consegui|conclui(?: (?:este )?passo)?|agora apareceu)$/.test(value);
+}
+
+function optionalDecisionIndex(history, documentedSteps) {
+  for (const item of history.toReversed()) {
+    if (item.role !== 'assistant') continue;
+    const index = guidedStepIndex([item], documentedSteps);
+    if (index >= 0) return index;
+  }
+  return -1;
+}
+
+function activeAssistantText(history, question) {
+  const last = history.at(-1)?.role === 'user' && normalize(history.at(-1).content) === normalize(question)
+    ? history.at(-2) : history.at(-1);
+  if (last?.role !== 'assistant') return '';
+  return last.content.replace(/^Fonte usada:\s*\/[^\n]+$/gm, '').trim();
+}
+
 function detailedProcedureQuestion(question) {
   return /\b(?:passo a passo|todos os passos|passos completos?|detalhad[oa]|do inicio ao fim|de uma vez)\b/i.test(normalize(question));
 }
@@ -400,21 +449,47 @@ export async function answerQuestion(root, question, options = {}) {
   }
   const history = sanitizeHistory(options.history);
   const widgetContext = sanitizeWidgetContext(options.widgetContext);
-  const originalQuestion = history.find((item) => item.role === 'user')?.content ?? question;
-  const diagnosis = diagnoseState(originalQuestion, widgetContext);
+  let originalQuestion = history.find((item) => item.role === 'user' && !guidedContinuation(item.content, history))?.content ?? question;
   const procedure = proceduralQuestion(question);
-  const continuation = guidedContinuation(question, history);
+  const generalContinuation = guidedContinuation(question, history);
+  const choice = optionalChoice(question);
+  const recovery = optionalRecovery(question);
+  let continuation = generalContinuation;
   const detailedProcedure = detailedProcedureQuestion(question);
-  const overviewProcedure = procedure
+  let overviewProcedure = procedure
     && /\b(?:criar|configurar|montar)\b/i.test(normalize(question))
     && !continuation
     && !detailedProcedure;
   const preferredPaths = sourcePathsFromHistory(history);
   let sources = await retrieveContext(root, question, 6, {
-    scope, page, preferredPaths, requiredPath: continuation ? preferredPaths.at(-1) : undefined,
+    scope, page, preferredPaths, requiredPath: generalContinuation || choice || recovery ? preferredPaths.at(-1) : undefined,
   });
-  const exactGuide = sources.find((source) => source.assistantQuestion && normalize(source.assistantQuestion) === normalize(question.trim()));
-  const historyGuide = continuation && sources.find((source) => source.path === preferredPaths.at(-1) && source.documentedSteps.length);
+  const priorGuide = sources.find((source) => source.path === preferredPaths.at(-1) && source.documentedSteps.length);
+  const optionalBranch = priorGuide?.optionalBranch;
+  const activeText = activeAssistantText(history, question);
+  const activeChoice = Boolean(optionalBranch && activeText) && (
+    guidedStepIndex(history, priorGuide.documentedSteps) === optionalBranch.decision
+    || (priorGuide.assistantOptionalPrompt && normalize(activeText) === normalize(priorGuide.assistantOptionalPrompt))
+  );
+  const activeDiagnosis = !activeChoice && Boolean(optionalBranch) && activeText
+    && normalize(activeText) === normalize(diagnosticQuestion(priorGuide.assistantQuestion, widgetContext))
+    && optionalDecisionIndex(history, priorGuide.documentedSteps) === optionalBranch.decision;
+  const activeResume = !activeChoice && Boolean(optionalBranch && priorGuide.assistantOptionalResumePrompt)
+    && normalize(activeText) === normalize(priorGuide.assistantOptionalResumePrompt);
+  const activeBlocked = !activeChoice && Boolean(optionalBranch && priorGuide.assistantOptionalBlockedPrompt)
+    && normalize(activeText) === normalize(priorGuide.assistantOptionalBlockedPrompt);
+  if ((choice && (activeChoice || activeDiagnosis || activeResume || activeBlocked)) || (recovery && activeBlocked)) continuation = true;
+  const exactGuide = sources.find((source) => source.assistantQuestion && (
+    normalize(source.assistantQuestion) === normalize(question.trim())
+    || (detailedProcedure && normalize(question).replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '') === normalize(source.assistantQuestion))
+  ));
+  if (exactGuide?.assistantOverview && !continuation && !detailedProcedure) overviewProcedure = true;
+  const historyGuide = continuation ? priorGuide : undefined;
+  if (continuation && historyGuide?.assistantQuestion
+    && (originalQuestion === question || optionalChoice(originalQuestion) || optionalRecovery(originalQuestion))) {
+    originalQuestion = historyGuide.assistantQuestion;
+  }
+  const diagnosis = diagnoseState(originalQuestion, widgetContext);
   if (exactGuide || historyGuide) sources = [exactGuide || historyGuide];
   if (!sources.length) {
     return {
@@ -475,7 +550,7 @@ export async function answerQuestion(root, question, options = {}) {
   const chosen = parsed.citations
     ? sources.filter((source) => parsed.citations.includes(source.path) || parsed.citations.includes(source.title))
     : parsed.sources.map((path) => byPath.get(`/${String(path).split(/[?#]/)[0].replace(/^\/+|\/+$/g, '')}`)).filter(Boolean);
-  const selected = (historyGuide ? [historyGuide] : chosen.length ? chosen : parsed.found ? sources.slice(0, 3) : [])
+  const selected = (historyGuide ? [historyGuide] : exactGuide ? [exactGuide] : chosen.length ? chosen : parsed.found ? sources.slice(0, 3) : [])
     .filter((source, index, list) => list.indexOf(source) === index);
   const used = procedure && selected.some((source) => source.documentedSteps.length)
     ? selected.filter((source) => source.documentedSteps.length || source.productActions.length)
@@ -491,17 +566,23 @@ export async function answerQuestion(root, question, options = {}) {
   const needsHelp = intent === 'preciso de ajuda' || stuck;
   const foundButton = /^encontrei (?:o |esse )?botao\b/.test(intent);
   const startGuide = /^(?:sim(?: (?:pode )?me (?:guiar|ajudar))?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?)$/.test(intent);
+  const diagnosticFollowup = Boolean(choice && (activeDiagnosis || activeResume));
+  const blockedFollowup = Boolean(activeBlocked && (choice || recovery));
   const progressIndex = continuation && fallbackSource
-    ? guidedStepIndex(history, fallbackSource.documentedSteps, needsHelp || foundButton || startGuide)
+    ? activeChoice && fallbackSource === priorGuide
+      ? optionalBranch.decision
+      : guidedStepIndex(history, fallbackSource.documentedSteps, needsHelp || foundButton || startGuide)
     : -1;
-  const nextIndex = startGuide || progressIndex < 0 ? 0 : needsHelp ? progressIndex : progressIndex + 1;
+  const choicePending = activeChoice && continuation && !needsHelp && !startGuide && !choice;
+  const nextIndex = activeChoice && choice ? optionalBranch[choice]
+    : startGuide || progressIndex < 0 ? 0 : needsHelp ? progressIndex : progressIndex + 1;
   const guideFinished = continuation && !needsHelp && !startGuide && progressIndex >= 0
     && progressIndex === fallbackSource?.documentedSteps.length - 1;
-  const progressStep = continuation && fallbackSource && !guideFinished && nextIndex < fallbackSource.documentedSteps.length
+  const progressStep = continuation && fallbackSource && !guideFinished && !choicePending && !diagnosticFollowup && !blockedFollowup && nextIndex < fallbackSource.documentedSteps.length
     ? { text: fallbackSource.documentedSteps[nextIndex], actionId: nextIndex === 0 ? fallbackSource.productActions[0]?.id ?? null : null, imagePath: fallbackSource.stepImages[nextIndex] ?? null }
     : null;
   const documentedFallback = (procedure || continuation) && !parsed.steps.length
-    ? (fallbackSource?.documentedSteps ?? []).slice(0, continuation ? 1 : overviewProcedure ? initialStepCount : 12).map((text, index) => ({
+    ? (fallbackSource?.documentedSteps ?? []).slice(0, continuation ? 1 : overviewProcedure ? initialStepCount : MAX_GUIDE_STEPS).map((text, index) => ({
         text,
         actionId: overviewProcedure && index === 0 ? fallbackSource?.productActions[0]?.id ?? null : null,
         imagePath: null,
@@ -515,7 +596,7 @@ export async function answerQuestion(root, question, options = {}) {
           imagePath: overviewSource.stepImages[index] ?? null,
         }))
       : (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
-    : guideFinished ? [] : progressStep ? [progressStep] : continuation
+    : guideFinished || choicePending || diagnosticFollowup || blockedFollowup ? [] : progressStep ? [progressStep] : continuation
       ? (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
       : parsed.steps.length ? parsed.steps : documentedFallback;
   const attemptedHelp = history.some((item) => item.role === 'user' && /^(?:ainda )?n[aã]o encontrei\b|^preciso de ajuda\b/i.test(item.content.trim()));
@@ -538,6 +619,10 @@ export async function answerQuestion(root, question, options = {}) {
     : new Map();
   const suggestions = guideFinished
     ? []
+    : blockedFollowup ? recovery ? ['Quero automação', 'Sem automação'] : ['Encontrei', 'Preciso de ajuda']
+    : diagnosticFollowup ? choice === 'decline' ? ['Preciso de ajuda']
+      : activeResume ? ['Quero automação', 'Sem automação'] : ['Sim', 'Não']
+    : choicePending ? ['Quero automação', 'Sem automação']
     : continuation
     ? ['Concluí este passo', 'Preciso de ajuda']
     : overviewProcedure
@@ -554,15 +639,20 @@ export async function answerQuestion(root, question, options = {}) {
       : questionForDiagnosis
       : withoutRepeatedInstructions(overviewSource
       ? overviewSource.assistantOverview
-      : guideFinished ? /salvar/i.test(fallbackSource.documentedSteps.at(-1)) && /publicar/i.test(fallbackSource.documentedSteps.at(-1))
+      : blockedFollowup ? recovery ? fallbackSource.assistantOptionalPrompt : fallbackSource.assistantOptionalBlockedPrompt
+      : diagnosticFollowup ? choice === 'accept'
+        ? activeResume ? fallbackSource.assistantOptionalPrompt : fallbackSource.assistantOptionalResumePrompt
+        : fallbackSource.assistantOptionalBlockedPrompt
+      : choicePending ? fallbackSource.assistantOptionalPrompt || 'Você quer fazer a etapa opcional agora ou seguir sem ela?'
+      : guideFinished ? fallbackSource.assistantSuccess || (/salvar/i.test(fallbackSource.documentedSteps.at(-1)) && /publicar/i.test(fallbackSource.documentedSteps.at(-1))
         ? 'Você concluiu as etapas documentadas. Publicar coloca o robô online; Salvar guarda o robô inativo.'
-        : 'Você chegou ao fim das etapas documentadas.'
+        : 'Você chegou ao fim das etapas documentadas.')
       : progressStep ? needsHelp
         ? questionForDiagnosis
-        : startGuide ? 'Vamos começar pelo primeiro passo.' : 'Vamos para a próxima ação.'
+        : startGuide && !activeChoice ? 'Vamos começar pelo primeiro passo.' : 'Vamos para a próxima ação.'
       : parsed.answer, safeSteps)
       || (continuation ? 'Vamos por uma ação de cada vez.' : 'Siga os passos abaixo e me diga onde precisar de ajuda.'),
-    sections: needsHelp || overviewSource || progressStep || guideFinished ? [] : parsed.sections,
+    sections: needsHelp || overviewSource || progressStep || guideFinished || choicePending || diagnosticFollowup || blockedFollowup ? [] : parsed.sections,
     steps: safeSteps.map(({ text, actionId, imagePath }, index) => {
       const safeImagePath = modelUsedValidatedImage
         ? imagePath
@@ -576,8 +666,8 @@ export async function answerQuestion(root, question, options = {}) {
     code: historyGuide ? null : parsed.code,
     sources: used.map(({ title, path, description, media }) => ({ title, path, kind: kindOf(path), excerpt: description, ...(media ? { media } : {}) })),
     suggestions: escalate ? [] : needsHelp ? ['Preciso de ajuda'] : suggestions,
-    resolution: escalate ? 'partial' : historyGuide ? 'complete' : parsed.resolution,
-    found: historyGuide ? true : parsed.found,
+    resolution: escalate ? 'partial' : (historyGuide || exactGuide)?.assistantResolution ?? (historyGuide ? 'complete' : parsed.resolution),
+    found: historyGuide || exactGuide ? true : parsed.found,
     diagnosis,
     ...(escalate ? { escalation: escalationFor(originalQuestion, diagnosis, widgetContext, history) } : {}),
     model: response.model,

@@ -8,5 +8,29 @@
     "label": "Abrir a tela Robôs",
     "route": "/bot",
     "target": "robots-create"
+  },
+  "abrir-usuarios": {
+    "label": "Abrir a tela Usuários",
+    "route": "/configuracoes/user"
+  },
+  "abrir-canais": {
+    "label": "Abrir a tela Canais",
+    "route": "/configuracoes/channel"
+  },
+  "abrir-campanhas": {
+    "label": "Abrir a tela Campanhas",
+    "route": "/campanhas"
+  },
+  "abrir-departamentos": {
+    "label": "Abrir a tela Departamentos",
+    "route": "/configuracoes/department"
+  },
+  "abrir-atendimento": {
+    "label": "Abrir a tela Atendimento",
+    "route": "/atendimento"
+  },
+  "abrir-crm": {
+    "label": "Abrir a tela Pipeline do CRM",
+    "route": "/crm/pipeline"
   }
 }
