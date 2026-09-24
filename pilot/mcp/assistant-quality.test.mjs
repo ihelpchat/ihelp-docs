@@ -94,11 +94,8 @@ assert.equal(guidedRequests[0].reasoning.effort, 'medium', 'perguntas guiadas pr
 assert.match(guidedRequests[0].input.at(-1).content, /PASSOS DOCUMENTADOS:/);
 assert.match(guidedRequests[0].input.at(-1).content, /TELAS DOCUMENTADAS:/);
 assert.match(guidedRequests[0].input.at(-1).content, /MÍDIA DISPONÍVEL: vídeo/i);
-assert.ok(guidedReply.steps.length >= 5, 'resumo raso do modelo deve herdar o passo a passo documentado');
-assert.deepEqual(guidedReply.steps[0].image, {
-  src: '/img/help/q4tBz2R7cevwT94eUQKB.png',
-  alt: 'Tela do iHelp: Como criar um novo robô',
-});
+assert.match(guidedRequests[0].input[0].content, /visão geral conversacional/i, 'pedido amplo deve iniciar com visão geral, sem despejar o manual');
+assert.equal(guidedReply.steps.length, 0, 'primeira resposta ampla deve convidar a pessoa para o guia, sem despejar todos os passos');
 assert.ok(guidedReply.suggestions.some((suggestion) => /passo a passo/i.test(suggestion)), 'resposta procedural deve convidar continuação guiada');
 
 const continuedReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
@@ -111,6 +108,11 @@ const continuedReply = await answerQuestion(testRoot, 'sim, pode me guiar', {
 assert.match(guidedRequests[1].input.at(-1).content, /FONTE 1: Robô de Atendimento/, 'continuação curta deve recuperar a fonte usada na conversa');
 assert.equal(continuedReply.steps.length, 1, 'continuação guiada deve entregar uma etapa pequena por vez');
 assert.ok(continuedReply.suggestions.some((suggestion) => /concluí|encontrei/i.test(suggestion)), 'continuação guiada deve perguntar pelo resultado do passo');
+
+const fullGuideReply = await answerQuestion(testRoot, 'mostre todos os passos para criar um chatbot', { client: guidedClient });
+assert.match(guidedRequests[2].input[0].content, /passo a passo completo/i, 'pedido explícito deve ativar o modo detalhado');
+assert.ok(fullGuideReply.steps.length >= 5, 'modo detalhado deve recuperar o procedimento documentado completo');
+assert.ok(fullGuideReply.steps.some((step) => step.image), 'modo detalhado deve incluir telas documentadas relevantes');
 
 const screenshotClient = {
   responses: {
@@ -149,6 +151,9 @@ const omittedScreenshotClient = {
 };
 const omittedScreenshotReply = await answerQuestion(testRoot, 'como criar um chatbot?', { client: omittedScreenshotClient });
 const robotArticle = await readFile(join(testRoot, 'content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx'), 'utf8');
+assert.match(robotArticle, /Encaminhar atendimento/i, 'guia básico precisa ensinar um destino funcional para o fluxo');
+assert.match(robotArticle, /Salvar[\s\S]{0,240}Publicar/i, 'guia precisa explicar a diferença entre salvar e publicar');
+assert.match(robotArticle, /<ProductAction id="abrir-robos"/i, 'guia precisa levar a pessoa diretamente para a tela de robôs');
 const robotScreenshotPaths = new Set([...robotArticle.matchAll(/!\[[^\]]*\]\((\/img\/[^)]+)\)/g)].map((match) => match[1]));
 assert.ok(omittedScreenshotReply.steps.some((step) => step.image), 'quando o modelo omitir todas as telas, o servidor deve anexar um print relevante');
 assert.ok(
