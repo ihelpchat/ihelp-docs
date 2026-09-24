@@ -1,0 +1,69 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, readdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { submitContentPackage, validateArticle } from './content-service.mjs';
+
+const root = await mkdtemp(join(tmpdir(), 'ihelp-package-github-'));
+const body = 'Abra Contatos no menu lateral. Confira a lista antes de continuar. Selecione a opção de importar. Revise o arquivo escolhido e confirme as colunas. Corrija as linhas inválidas antes de concluir. Aguarde o resultado aparecer na tela. Pesquise um contato recém cadastrado para confirmar o sucesso. Se o contato não aparecer, revise o número e repita apenas a linha corrigida. Este procedimento mantém os demais contatos já cadastrados na conta.';
+const article = (path, title) => ({ path, title, description: 'Procedimento completo para orientar a pessoa na documentação do iHelp.', source: 'produto', contentType: 'tutorial', body });
+assert.equal(validateArticle({ ...article('docs/teste/rota', 'Rota segura'), productActions: [{ id: 'abrir-rota', label: 'Abrir rota', route: '//externo' }] }).valid, false);
+const base = new Map([
+  ['pilot/content/docs/docs/meta.json', '{"pages":["contatos"]}\n'],
+  ['pilot/content/docs/tutoriais/meta.json', '{"pages":["index"]}\n'],
+  ['pilot/content/docs/docs/contatos/meta.json', '{"title":"Contatos","pages":["index","antigo","guia"]}\n'],
+  ['pilot/content/docs/docs/contatos/antigo.mdx', 'artigo antigo'],
+  ['pilot/content/docs/docs/contatos/guia.mdx', 'guia anterior'],
+]);
+const branch = new Map(base);
+const mutations = [];
+const originalFetch = globalThis.fetch;
+const originalToken = process.env.GITHUB_TOKEN;
+process.env.GITHUB_TOKEN = 'mock-token';
+let pulls = 0;
+globalThis.fetch = async (url, init = {}) => {
+  const path = new URL(url).pathname;
+  const method = init.method ?? 'GET';
+  if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: 'base-sha' } }) };
+  if (path.endsWith('/git/refs')) return { ok: true, json: async () => ({}) };
+  if (path.endsWith('/pulls')) { pulls += 1; return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/321' }) }; }
+  const file = decodeURIComponent(path.split('/contents/')[1] ?? '');
+  if (!file) throw Error(`Unexpected GitHub call: ${method} ${path}`);
+  if (method === 'GET') return branch.has(file)
+    ? { ok: true, json: async () => ({ sha: `sha-${file}`, encoding: 'base64', content: Buffer.from(branch.get(file)).toString('base64') }) }
+    : { ok: false, status: 404, json: async () => ({}) };
+  const payload = JSON.parse(init.body);
+  mutations.push({ method, file, payload });
+  if (method === 'PUT') { branch.set(file, Buffer.from(payload.content, 'base64').toString()); return { ok: true, json: async () => ({}) }; }
+  if (method === 'DELETE') { branch.delete(file); return { ok: true, json: async () => ({}) }; }
+  throw Error(`Unexpected method: ${method}`);
+};
+try {
+  const result = await submitContentPackage(root, [article('docs/contatos/novo', 'Novo guia'), article('docs/contatos/guia', 'Guia atualizado'), article('tutoriais/contatos/primeiro', 'Primeiro tutorial')], 'pull_request', 'user:tester', ['docs/contatos/antigo']);
+  assert.equal(result.status, 'pull_request');
+  assert.equal(pulls, 1);
+  assert.ok(mutations.some(({ method, file, payload }) => method === 'PUT' && file.endsWith('/guia.mdx') && payload.sha === 'sha-pilot/content/docs/docs/contatos/guia.mdx'));
+  assert.ok(mutations.some(({ method, file, payload }) => method === 'DELETE' && file.endsWith('/antigo.mdx') && payload.sha));
+  assert.deepEqual(JSON.parse(branch.get('pilot/content/docs/docs/contatos/meta.json')).pages, ['index', 'guia', 'novo']);
+  assert.deepEqual(JSON.parse(branch.get('pilot/content/docs/tutoriais/contatos/meta.json')).pages, ['primeiro']);
+  assert.deepEqual(JSON.parse(branch.get('pilot/content/docs/tutoriais/meta.json')).pages, ['index', 'contatos']);
+  assert.equal(mutations.filter(({ file }) => file.endsWith('/meta.json')).length, 3);
+  await assert.rejects(submitContentPackage(root, [article('docs/contatos/novo', 'Novo guia')], 'pull_request', undefined), /requestedBy/);
+  const before = mutations.length;
+  const dry = await submitContentPackage(root, [article('docs/contatos/futuro', 'Guia futuro')], 'dry_run', 'user:tester');
+  assert.equal(dry.status, 'dry_run');
+  assert.equal(mutations.length, before);
+  assert.equal((await readdir(root)).includes('.drafts'), false);
+  const audit = (await readFile(join(root, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(audit.map(({ result }) => result), ['attempt', 'external_request', 'success']);
+  assert.ok(audit.every(({ actor }) => actor === 'user:tester'));
+  assert.doesNotMatch(JSON.stringify(audit), /mock-token|Novo guia|artigo antigo/);
+  await assert.rejects(submitContentPackage(root, [], 'pull_request', 'user:tester', ['docs/contatos/inexistente']), /não encontrado/i);
+  const failed = (await readFile(join(root, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(failed.slice(-2).map(({ result }) => result), ['attempt', 'failure']);
+} finally {
+  globalThis.fetch = originalFetch;
+  if (originalToken === undefined) delete process.env.GITHUB_TOKEN;
+  else process.env.GITHUB_TOKEN = originalToken;
+}
+console.log('Pacote GitHub: create, update, delete, meta.json e dry-run passaram.');
