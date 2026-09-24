@@ -34,8 +34,11 @@ const plain = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/g
 export function intentOf(question, context) {
   const value = plain(question);
   if (/\b(?:robo|chatbot)\b/.test(value)) return 'create_robot';
+  if (/\b(?:departamento|departamentos|permissoes)\b/.test(value)) return 'departments';
+  if (/\b(?:arquivo|arquivos|anexo|anexos|midia)\b/.test(value)) return 'files';
+  if (/\b(?:crm|pipeline)\b/.test(value)) return 'crm';
   if (/\b(?:campanha|disparo)\b/.test(value)) return 'campaigns';
-  if (/\btemplate\b/.test(value)) return 'templates';
+  if (/\btemplates?\b/.test(value)) return 'templates';
   if (/\b(?:canal|qr|numero|conectar|meta|coexistencia|api oficial)\b/.test(value)) return 'connect_channel';
   if (/\b(?:cobranca|plano|credito|fatura)\b/.test(value)) return 'billing';
   if (/\b(?:usuario|usuarios)\b/.test(value)) return 'manage_users';
@@ -43,6 +46,7 @@ export function intentOf(question, context) {
   const moduleIntent = {
     robots: 'create_robot', campaigns: 'campaigns', templates: 'templates',
     channels: 'connect_channel', billing: 'billing', users: 'manage_users',
+    conversations: 'files', settings: 'departments',
   }[context?.module];
   if (moduleIntent) return moduleIntent;
   return 'get_help';
@@ -56,7 +60,8 @@ export function diagnoseState(question, context) {
   if (/\b(?:erro|falha|travou|bug)\b/.test(value)) return { cause: 'bug_incident' };
   const relevantIncidents = {
     create_robot: ['robot'], manage_users: [], campaigns: ['message_delivery'],
-    templates: [], connect_channel: ['channel_outage', 'message_delivery'], billing: ['billing'], get_help: [],
+    templates: [], connect_channel: ['channel_outage', 'message_delivery'], billing: ['billing'],
+    departments: [], files: ['message_delivery'], crm: [], get_help: [],
   }[intent];
   if (context?.incidents?.some((item) => relevantIncidents.includes(item))) return { cause: 'bug_incident' };
   if (intent === 'connect_channel') {
@@ -72,7 +77,8 @@ export function diagnosticQuestion(question, context, diagnosis = diagnoseState(
   const intent = intentOf(question, context);
   const moduleName = {
     create_robot: 'Robôs', manage_users: 'Usuários', campaigns: 'Campanhas', templates: 'Templates',
-    connect_channel: 'Canais', billing: 'Plano e cobrança', get_help: 'a área que você procura',
+    connect_channel: 'Canais', billing: 'Plano e cobrança', departments: 'Departamentos',
+    files: 'Atendimento', crm: 'CRM', get_help: 'a área que você procura',
   }[intent];
   if (diagnosis.cause === 'sensitive_action') return 'Qual alteração você precisa solicitar ao atendimento?';
   if (diagnosis.cause === 'plan') return 'A tela de Plano e cobrança mostra algum aviso sobre limite ou vencimento?';

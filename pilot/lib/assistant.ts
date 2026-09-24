@@ -28,7 +28,7 @@ export type AssistantImage = { src: string; alt: string };
 export type AssistantStep = { text: string; action?: AssistantProductAction; image?: AssistantImage };
 export type AssistantResolution = 'complete' | 'partial' | 'not_found';
 export type AssistantEscalation = {
-  intent: 'create_robot' | 'manage_users' | 'connect_channel' | 'billing' | 'campaigns' | 'templates' | 'get_help';
+  intent: 'create_robot' | 'manage_users' | 'connect_channel' | 'billing' | 'campaigns' | 'templates' | 'departments' | 'files' | 'crm' | 'get_help';
   diagnosis: 'usage' | 'configuration' | 'permission' | 'plan' | 'channel_qr' | 'meta_coexistence' | 'bug_incident' | 'sensitive_action';
   state?: Record<string, unknown>;
   attempts: ('documented_guide' | 'reported_stuck')[];
@@ -95,7 +95,8 @@ export function supportMessageFor(reply: AssistantReply): string {
   if (!reply.escalation) return 'Olá! Consultei a Central de Ajuda do iHelp e preciso de atendimento.';
   const intentLabels: Record<AssistantEscalation['intent'], string> = {
     create_robot: 'criar robô', manage_users: 'gerenciar usuários', connect_channel: 'conectar canal',
-    billing: 'cobrança ou plano', campaigns: 'campanhas', templates: 'templates', get_help: 'obter ajuda',
+    billing: 'cobrança ou plano', campaigns: 'campanhas', templates: 'templates',
+    departments: 'permissões e departamentos', files: 'arquivos no atendimento', crm: 'CRM e pipeline', get_help: 'obter ajuda',
   };
   const diagnosisLabels: Record<AssistantEscalation['diagnosis'], string> = {
     usage: 'dúvida de uso', configuration: 'possível questão de configuração', permission: 'possível questão de permissão',
@@ -140,7 +141,7 @@ function safeAction(value: unknown): AssistantProductAction | undefined {
   if (typeof action.id !== 'string' || !/^[a-z0-9][a-z0-9-]{2,63}$/.test(action.id)) return undefined;
   if (typeof action.route !== 'string' || !/^\/(?!\/)[a-z0-9/_-]*$/.test(action.route)) return undefined;
   const target = typeof action.target === 'string' && /^[a-z][a-z0-9-]{2,63}$/.test(action.target) ? action.target : undefined;
-  const allowed = (allowedActions as Record<string, { label: string; route: string; target: string }>)[action.id];
+  const allowed = (allowedActions as Record<string, { label: string; route: string; target?: string }>)[action.id];
   if (!allowed || action.route !== allowed.route || target !== allowed.target) return undefined;
   return { id: action.id, label: allowed.label, route: action.route, ...(target ? { target } : {}) };
 }
@@ -185,7 +186,7 @@ function safeMedia(value: unknown): AssistantMedia | undefined {
   return undefined;
 }
 
-const escalationIntents = ['create_robot', 'manage_users', 'connect_channel', 'billing', 'campaigns', 'templates', 'get_help'] as const;
+const escalationIntents = ['create_robot', 'manage_users', 'connect_channel', 'billing', 'campaigns', 'templates', 'departments', 'files', 'crm', 'get_help'] as const;
 const escalationDiagnoses = ['usage', 'configuration', 'permission', 'plan', 'channel_qr', 'meta_coexistence', 'bug_incident', 'sensitive_action'] as const;
 const escalationAttempts = ['documented_guide', 'reported_stuck'] as const;
 function safeEscalation(value: unknown): AssistantEscalation | undefined {

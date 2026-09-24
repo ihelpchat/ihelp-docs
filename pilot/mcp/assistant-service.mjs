@@ -180,6 +180,9 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
     if (!matches.length && !onPage && !fromConversation) continue;
     const apiQuestion = terms.some((term) => ['api', 'endpoint', 'token', 'bearer', 'curl'].includes(term));
     const sectionBoost = apiQuestion ? (path.startsWith('/api/') ? 8 : 0) : (path.startsWith('/docs/') ? 5 : 0);
+    const guideQuestion = normalize(frontmatterValue(raw, 'assistantQuestion'));
+    const guideRequest = normalizedQuestion.replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '');
+    const guideMatch = guideQuestion && (normalizedQuestion === guideQuestion || guideRequest === guideQuestion);
     const score = matches.length * 5
       + terms.reduce((total, term) => total + (titleText.includes(term) ? 12 : 0) + (descriptionText.includes(term) ? 4 : 0), 0)
       + (bodyText.includes(normalizedQuestion) ? 25 : 0)
@@ -187,7 +190,8 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       // Pergunta feita no painel de uma página: essa página entra primeiro no contexto.
       + (onPage ? 100 : 0)
       // Continuações curtas como “sim, pode me guiar” mantêm a fonte da conversa.
-      + (fromConversation ? 80 : 0);
+      + (fromConversation ? 80 : 0)
+      + (guideMatch ? 200 : 0);
     const screenshots = screenshotsOf(raw);
     ranked.push({
       title,
@@ -196,6 +200,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       body: body.slice(0, 12_000),
       assistantQuestion: frontmatterValue(raw, 'assistantQuestion'),
       assistantOverview: frontmatterValue(raw, 'assistantOverview'),
+      assistantResolution: frontmatterValue(raw, 'assistantResolution') === 'partial' ? 'partial' : undefined,
       assistantInitialSteps: Math.min(3, Math.max(1, Number(frontmatterValue(raw, 'assistantInitialSteps')) || 1)),
       assistantSuggestions: [...new Set(parseAssistantSuggestions(frontmatterValue(raw, 'assistantSuggestions'))
         .map(cleanText).filter((item) => item.length > 0 && item.length <= 100))].slice(0, 3),
@@ -400,12 +405,11 @@ export async function answerQuestion(root, question, options = {}) {
   }
   const history = sanitizeHistory(options.history);
   const widgetContext = sanitizeWidgetContext(options.widgetContext);
-  const originalQuestion = history.find((item) => item.role === 'user')?.content ?? question;
-  const diagnosis = diagnoseState(originalQuestion, widgetContext);
+  let originalQuestion = history.find((item) => item.role === 'user' && !guidedContinuation(item.content, history))?.content ?? question;
   const procedure = proceduralQuestion(question);
   const continuation = guidedContinuation(question, history);
   const detailedProcedure = detailedProcedureQuestion(question);
-  const overviewProcedure = procedure
+  let overviewProcedure = procedure
     && /\b(?:criar|configurar|montar)\b/i.test(normalize(question))
     && !continuation
     && !detailedProcedure;
@@ -413,8 +417,14 @@ export async function answerQuestion(root, question, options = {}) {
   let sources = await retrieveContext(root, question, 6, {
     scope, page, preferredPaths, requiredPath: continuation ? preferredPaths.at(-1) : undefined,
   });
-  const exactGuide = sources.find((source) => source.assistantQuestion && normalize(source.assistantQuestion) === normalize(question.trim()));
+  const exactGuide = sources.find((source) => source.assistantQuestion && (
+    normalize(source.assistantQuestion) === normalize(question.trim())
+    || (detailedProcedure && normalize(question).replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '') === normalize(source.assistantQuestion))
+  ));
+  if (exactGuide?.assistantOverview && !continuation && !detailedProcedure) overviewProcedure = true;
   const historyGuide = continuation && sources.find((source) => source.path === preferredPaths.at(-1) && source.documentedSteps.length);
+  if (continuation && originalQuestion === question && historyGuide?.assistantQuestion) originalQuestion = historyGuide.assistantQuestion;
+  const diagnosis = diagnoseState(originalQuestion, widgetContext);
   if (exactGuide || historyGuide) sources = [exactGuide || historyGuide];
   if (!sources.length) {
     return {
@@ -475,7 +485,7 @@ export async function answerQuestion(root, question, options = {}) {
   const chosen = parsed.citations
     ? sources.filter((source) => parsed.citations.includes(source.path) || parsed.citations.includes(source.title))
     : parsed.sources.map((path) => byPath.get(`/${String(path).split(/[?#]/)[0].replace(/^\/+|\/+$/g, '')}`)).filter(Boolean);
-  const selected = (historyGuide ? [historyGuide] : chosen.length ? chosen : parsed.found ? sources.slice(0, 3) : [])
+  const selected = (historyGuide ? [historyGuide] : exactGuide ? [exactGuide] : chosen.length ? chosen : parsed.found ? sources.slice(0, 3) : [])
     .filter((source, index, list) => list.indexOf(source) === index);
   const used = procedure && selected.some((source) => source.documentedSteps.length)
     ? selected.filter((source) => source.documentedSteps.length || source.productActions.length)
@@ -576,8 +586,8 @@ export async function answerQuestion(root, question, options = {}) {
     code: historyGuide ? null : parsed.code,
     sources: used.map(({ title, path, description, media }) => ({ title, path, kind: kindOf(path), excerpt: description, ...(media ? { media } : {}) })),
     suggestions: escalate ? [] : needsHelp ? ['Preciso de ajuda'] : suggestions,
-    resolution: escalate ? 'partial' : historyGuide ? 'complete' : parsed.resolution,
-    found: historyGuide ? true : parsed.found,
+    resolution: escalate ? 'partial' : (historyGuide || exactGuide)?.assistantResolution ?? (historyGuide ? 'complete' : parsed.resolution),
+    found: historyGuide || exactGuide ? true : parsed.found,
     diagnosis,
     ...(escalate ? { escalation: escalationFor(originalQuestion, diagnosis, widgetContext, history) } : {}),
     model: response.model,
