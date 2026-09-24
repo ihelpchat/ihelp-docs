@@ -540,7 +540,7 @@ export async function answerQuestion(root, question, options = {}) {
         : 'Você chegou ao fim das etapas documentadas.'
       : progressStep ? needsHelp
         ? ['Vamos resolver esta etapa.', helpImage ? 'Veja a imagem do passo abaixo.' : 'Confira o passo abaixo.', helpAction ? 'Use o atalho para abrir a tela.' : '', 'Qual botão, campo ou texto aparece na sua tela?'].filter(Boolean).join(' ')
-        : 'Vamos para a próxima ação.'
+        : startGuide ? 'Vamos começar pelo primeiro passo.' : 'Vamos para a próxima ação.'
       : parsed.answer, responseSteps)
       || (continuation ? 'Vamos por uma ação de cada vez.' : 'Siga os passos abaixo e me diga onde precisar de ajuda.'),
     sections: overviewSource || progressStep || guideFinished ? [] : parsed.sections,
