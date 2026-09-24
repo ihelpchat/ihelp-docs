@@ -61,7 +61,7 @@ function productActionsOf(raw) {
       && (!target || /^[a-z][a-z0-9-]{2,63}$/.test(target))
       && allowedActions[id]?.route === route
       && allowedActions[id]?.target === target)
-    .map(({ id, label, route, target }) => ({ id, label, route, ...(target ? { target } : {}) }));
+    .map(({ id, route, target }) => ({ id, label: allowedActions[id].label, route, ...(target ? { target } : {}) }));
 }
 
 async function walk(root) {
@@ -202,6 +202,21 @@ function uniqueSteps(steps) {
   });
 }
 
+function withoutRepeatedInstructions(answer, steps) {
+  if (!steps.length) return answer;
+  const instructionTokens = (text) => normalize(text)
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 2 && !STOP_WORDS.has(token) && !['comece', 'abrindo', 'abra', 'acesse', 'acessar'].includes(token));
+  const stepTokens = steps.map(({ text }) => instructionTokens(text));
+  const sentences = answer.split(/(?<=[.!?])\s+|\n{2,}/).filter(Boolean);
+  const unique = sentences.filter((sentence) => {
+    const tokens = instructionTokens(sentence);
+    if (tokens.length < 2) return true;
+    return !stepTokens.some((step) => step.length >= 2 && tokens.filter((token) => step.includes(token)).length / Math.min(tokens.length, step.length) >= 0.8);
+  });
+  return unique.join(' ').trim() || 'Siga os passos abaixo.';
+}
+
 /** Lê a resposta estruturada; se o modelo devolver texto livre, usa o texto como resposta. */
 export function parseAnswer(outputText) {
   const text = String(outputText ?? '').trim();
@@ -307,7 +322,7 @@ export async function answerQuestion(root, question, options = {}) {
   const availableActions = new Map(used.flatMap((source) => source.productActions.map((action) => [action.id, action])));
 
   return {
-    answer: parsed.answer || 'Não consegui gerar uma resposta agora. Tente novamente em instantes.',
+    answer: withoutRepeatedInstructions(parsed.answer, parsed.steps) || 'Não consegui gerar uma resposta agora. Tente novamente em instantes.',
     sections: parsed.sections,
     steps: parsed.steps.map(({ text, actionId }) => ({ text, ...(availableActions.has(actionId) ? { action: availableActions.get(actionId) } : {}) })),
     code: parsed.code,
