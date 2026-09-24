@@ -112,6 +112,15 @@ function documentedStepsOf(raw) {
     .slice(0, MAX_GUIDE_STEPS);
 }
 
+function optionalBranchOf(raw, stepCount) {
+  const match = frontmatterValue(raw, 'assistantOptionalBranch').match(/^(\d+):(\d+):(\d+)$/);
+  if (!match) return null;
+  const [decision, accept, decline] = match.slice(1).map(Number);
+  return decision >= 1 && decision < accept && accept < decline && decline <= stepCount
+    ? { decision: decision - 1, accept: accept - 1, decline: decline - 1 }
+    : null;
+}
+
 function attributesOf(tag) {
   return Object.fromEntries([...tag.matchAll(/([A-Za-z][A-Za-z0-9]*)="([^"]*)"/g)].map((match) => [match[1], match[2]]));
 }
@@ -194,6 +203,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       + (fromConversation ? 80 : 0)
       + (guideMatch ? 200 : 0);
     const screenshots = screenshotsOf(raw);
+    const documentedSteps = documentedStepsOf(raw);
     ranked.push({
       title,
       description,
@@ -208,7 +218,10 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       media: mediaOf(raw),
       screenshots,
       stepImages: documentedStepImagesOf(raw, screenshots),
-      documentedSteps: documentedStepsOf(raw),
+      documentedSteps,
+      optionalBranch: optionalBranchOf(raw, documentedSteps.length),
+      assistantOptionalPrompt: frontmatterValue(raw, 'assistantOptionalPrompt'),
+      assistantSuccess: frontmatterValue(raw, 'assistantSuccess'),
       productActions: productActionsOf(raw),
       score,
     });
@@ -389,6 +402,22 @@ function guidedStepIndex(history, documentedSteps, firstShown = false) {
   return shown.length ? firstShown ? Math.min(...shown) : Math.max(...shown) : -1;
 }
 
+function optionalChoice(question) {
+  const value = normalize(question).replace(/[^a-z0-9]+/g, ' ').trim();
+  if (/^(?:nao(?: quero(?: automacao)?)?|pular(?: automacao)?|sem automacao|agora nao|continuar sem(?: automacao)?)$/.test(value)) return 'decline';
+  if (/^(?:sim|quero automacao)$/.test(value)) return 'accept';
+  return null;
+}
+
+function optionalDecisionIndex(history, documentedSteps) {
+  for (const item of history.toReversed()) {
+    if (item.role !== 'assistant') continue;
+    const index = guidedStepIndex([item], documentedSteps);
+    if (index >= 0) return index;
+  }
+  return -1;
+}
+
 function detailedProcedureQuestion(question) {
   return /\b(?:passo a passo|todos os passos|passos completos?|detalhad[oa]|do inicio ao fim|de uma vez)\b/i.test(normalize(question));
 }
@@ -408,7 +437,9 @@ export async function answerQuestion(root, question, options = {}) {
   const widgetContext = sanitizeWidgetContext(options.widgetContext);
   let originalQuestion = history.find((item) => item.role === 'user' && !guidedContinuation(item.content, history))?.content ?? question;
   const procedure = proceduralQuestion(question);
-  const continuation = guidedContinuation(question, history);
+  const generalContinuation = guidedContinuation(question, history);
+  const choice = optionalChoice(question);
+  let continuation = generalContinuation;
   const detailedProcedure = detailedProcedureQuestion(question);
   let overviewProcedure = procedure
     && /\b(?:criar|configurar|montar)\b/i.test(normalize(question))
@@ -416,14 +447,19 @@ export async function answerQuestion(root, question, options = {}) {
     && !detailedProcedure;
   const preferredPaths = sourcePathsFromHistory(history);
   let sources = await retrieveContext(root, question, 6, {
-    scope, page, preferredPaths, requiredPath: continuation ? preferredPaths.at(-1) : undefined,
+    scope, page, preferredPaths, requiredPath: generalContinuation || choice ? preferredPaths.at(-1) : undefined,
   });
+  const priorGuide = sources.find((source) => source.path === preferredPaths.at(-1) && source.documentedSteps.length);
+  const optionalBranch = priorGuide?.optionalBranch;
+  const atOptionalDecision = Boolean(optionalBranch)
+    && optionalDecisionIndex(history, priorGuide.documentedSteps) === optionalBranch.decision;
+  if (choice && atOptionalDecision) continuation = true;
   const exactGuide = sources.find((source) => source.assistantQuestion && (
     normalize(source.assistantQuestion) === normalize(question.trim())
     || (detailedProcedure && normalize(question).replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '') === normalize(source.assistantQuestion))
   ));
   if (exactGuide?.assistantOverview && !continuation && !detailedProcedure) overviewProcedure = true;
-  const historyGuide = continuation && sources.find((source) => source.path === preferredPaths.at(-1) && source.documentedSteps.length);
+  const historyGuide = continuation ? priorGuide : undefined;
   if (continuation && originalQuestion === question && historyGuide?.assistantQuestion) originalQuestion = historyGuide.assistantQuestion;
   const diagnosis = diagnoseState(originalQuestion, widgetContext);
   if (exactGuide || historyGuide) sources = [exactGuide || historyGuide];
@@ -503,12 +539,16 @@ export async function answerQuestion(root, question, options = {}) {
   const foundButton = /^encontrei (?:o |esse )?botao\b/.test(intent);
   const startGuide = /^(?:sim(?: (?:pode )?me (?:guiar|ajudar))?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?)$/.test(intent);
   const progressIndex = continuation && fallbackSource
-    ? guidedStepIndex(history, fallbackSource.documentedSteps, needsHelp || foundButton || startGuide)
+    ? atOptionalDecision && fallbackSource === priorGuide
+      ? optionalBranch.decision
+      : guidedStepIndex(history, fallbackSource.documentedSteps, needsHelp || foundButton || startGuide)
     : -1;
-  const nextIndex = startGuide || progressIndex < 0 ? 0 : needsHelp ? progressIndex : progressIndex + 1;
+  const choicePending = atOptionalDecision && continuation && !needsHelp && !startGuide && !choice;
+  const nextIndex = atOptionalDecision && choice ? optionalBranch[choice]
+    : startGuide || progressIndex < 0 ? 0 : needsHelp ? progressIndex : progressIndex + 1;
   const guideFinished = continuation && !needsHelp && !startGuide && progressIndex >= 0
     && progressIndex === fallbackSource?.documentedSteps.length - 1;
-  const progressStep = continuation && fallbackSource && !guideFinished && nextIndex < fallbackSource.documentedSteps.length
+  const progressStep = continuation && fallbackSource && !guideFinished && !choicePending && nextIndex < fallbackSource.documentedSteps.length
     ? { text: fallbackSource.documentedSteps[nextIndex], actionId: nextIndex === 0 ? fallbackSource.productActions[0]?.id ?? null : null, imagePath: fallbackSource.stepImages[nextIndex] ?? null }
     : null;
   const documentedFallback = (procedure || continuation) && !parsed.steps.length
@@ -526,7 +566,7 @@ export async function answerQuestion(root, question, options = {}) {
           imagePath: overviewSource.stepImages[index] ?? null,
         }))
       : (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
-    : guideFinished ? [] : progressStep ? [progressStep] : continuation
+    : guideFinished || choicePending ? [] : progressStep ? [progressStep] : continuation
       ? (parsed.steps.length ? parsed.steps : documentedFallback).slice(0, 1)
       : parsed.steps.length ? parsed.steps : documentedFallback;
   const attemptedHelp = history.some((item) => item.role === 'user' && /^(?:ainda )?n[aã]o encontrei\b|^preciso de ajuda\b/i.test(item.content.trim()));
@@ -549,6 +589,7 @@ export async function answerQuestion(root, question, options = {}) {
     : new Map();
   const suggestions = guideFinished
     ? []
+    : choicePending ? ['Quero automação', 'Sem automação']
     : continuation
     ? ['Concluí este passo', 'Preciso de ajuda']
     : overviewProcedure
@@ -565,15 +606,16 @@ export async function answerQuestion(root, question, options = {}) {
       : questionForDiagnosis
       : withoutRepeatedInstructions(overviewSource
       ? overviewSource.assistantOverview
-      : guideFinished ? /salvar/i.test(fallbackSource.documentedSteps.at(-1)) && /publicar/i.test(fallbackSource.documentedSteps.at(-1))
+      : choicePending ? fallbackSource.assistantOptionalPrompt || 'Você quer fazer a etapa opcional agora ou seguir sem ela?'
+      : guideFinished ? fallbackSource.assistantSuccess || (/salvar/i.test(fallbackSource.documentedSteps.at(-1)) && /publicar/i.test(fallbackSource.documentedSteps.at(-1))
         ? 'Você concluiu as etapas documentadas. Publicar coloca o robô online; Salvar guarda o robô inativo.'
-        : 'Você chegou ao fim das etapas documentadas.'
+        : 'Você chegou ao fim das etapas documentadas.')
       : progressStep ? needsHelp
         ? questionForDiagnosis
-        : startGuide ? 'Vamos começar pelo primeiro passo.' : 'Vamos para a próxima ação.'
+        : startGuide && !atOptionalDecision ? 'Vamos começar pelo primeiro passo.' : 'Vamos para a próxima ação.'
       : parsed.answer, safeSteps)
       || (continuation ? 'Vamos por uma ação de cada vez.' : 'Siga os passos abaixo e me diga onde precisar de ajuda.'),
-    sections: needsHelp || overviewSource || progressStep || guideFinished ? [] : parsed.sections,
+    sections: needsHelp || overviewSource || progressStep || guideFinished || choicePending ? [] : parsed.sections,
     steps: safeSteps.map(({ text, actionId, imagePath }, index) => {
       const safeImagePath = modelUsedValidatedImage
         ? imagePath
