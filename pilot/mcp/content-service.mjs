@@ -1,6 +1,7 @@
 import { lstat, mkdir, open, readFile, readdir, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { basename, join, normalize, relative } from 'node:path';
+import { isCatalogAction } from './product-actions.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -55,6 +56,10 @@ export function validateArticle(article) {
   if (/^## Tutorial Guiado$/m.test(article.body ?? '')) issues.push('use um Tango público no campo tangoUrl em vez de rodapé genérico');
   if (/^#{2,6}\s+\*\*/m.test(article.body ?? '')) issues.push('headings não devem usar negrito redundante');
   if (SECRET_PATTERNS.some((pattern) => pattern.test(`${article.body ?? ''}\n${article.description ?? ''}`))) issues.push('possível credencial detectada');
+  if (article.productActions !== undefined && !Array.isArray(article.productActions)) issues.push('productActions precisa ser uma lista');
+  for (const action of Array.isArray(article.productActions) ? article.productActions : []) {
+    if (!isCatalogAction(action)) issues.push('productActions deve corresponder exatamente ao catálogo confiável');
+  }
   if (article.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(article.tangoUrl)) {
     issues.push('tangoUrl precisa ser uma URL oficial de embed ou workflow do Tango');
   }
