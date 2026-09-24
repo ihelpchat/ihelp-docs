@@ -27,6 +27,12 @@ export type AssistantProductAction = { id: string; label: string; route: string;
 export type AssistantImage = { src: string; alt: string };
 export type AssistantStep = { text: string; action?: AssistantProductAction; image?: AssistantImage };
 export type AssistantResolution = 'complete' | 'partial' | 'not_found';
+export type AssistantEscalation = {
+  intent: 'create_robot' | 'manage_users' | 'connect_channel' | 'billing' | 'campaigns' | 'templates' | 'get_help';
+  diagnosis: 'usage' | 'configuration' | 'permission' | 'plan' | 'channel_qr' | 'meta_coexistence' | 'bug_incident' | 'sensitive_action';
+  state?: Record<string, unknown>;
+  attempts: ('documented_guide' | 'reported_stuck')[];
+};
 
 export type AssistantReply = {
   answer: string;
@@ -37,6 +43,7 @@ export type AssistantReply = {
   suggestions: string[];
   resolution: AssistantResolution;
   found: boolean;
+  escalation?: AssistantEscalation;
 };
 
 export type AssistantHistoryItem = { role: 'user' | 'assistant'; content: string };
@@ -46,7 +53,23 @@ export type AssistantRequest = {
   history: AssistantHistoryItem[];
   scope: AssistantScope;
   page?: { path: string; title: string };
+  widgetContext?: Record<string, unknown>;
 };
+
+export function supportMessageFor(reply: AssistantReply): string {
+  if (!reply.escalation) return 'Olá! Consultei a Central de Ajuda do iHelp e preciso de atendimento.';
+  const intentLabels: Record<AssistantEscalation['intent'], string> = {
+    create_robot: 'criar robô', manage_users: 'gerenciar usuários', connect_channel: 'conectar canal',
+    billing: 'cobrança ou plano', campaigns: 'campanhas', templates: 'templates', get_help: 'obter ajuda',
+  };
+  return [
+    'Olá! Preciso de atendimento no iHelp.',
+    `Intenção: ${intentLabels[reply.escalation.intent]}.`,
+    `Diagnóstico inicial: ${reply.escalation.diagnosis}.`,
+    ...(reply.escalation.state ? [`Estado informado pelo widget: ${JSON.stringify(reply.escalation.state)}.`] : []),
+    `Tentativas: ${reply.escalation.attempts.join(', ') || 'nenhuma registrada'}.`,
+  ].join('\n');
+}
 
 export class AssistantError extends Error {
   constructor(message: string, readonly status?: number) {
@@ -117,6 +140,33 @@ function safeMedia(value: unknown): AssistantMedia | undefined {
   return undefined;
 }
 
+const escalationIntents = ['create_robot', 'manage_users', 'connect_channel', 'billing', 'campaigns', 'templates', 'get_help'] as const;
+const escalationDiagnoses = ['usage', 'configuration', 'permission', 'plan', 'channel_qr', 'meta_coexistence', 'bug_incident', 'sensitive_action'] as const;
+const escalationAttempts = ['documented_guide', 'reported_stuck'] as const;
+function safeEscalation(value: unknown): AssistantEscalation | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Record<string, unknown>;
+  if (!escalationIntents.includes(raw.intent as AssistantEscalation['intent']) || !escalationDiagnoses.includes(raw.diagnosis as AssistantEscalation['diagnosis'])) return undefined;
+  const state = raw.state && typeof raw.state === 'object' && !Array.isArray(raw.state) ? raw.state as Record<string, unknown> : undefined;
+  const safeState: Record<string, unknown> = {};
+  if (state) {
+    for (const [key, allowed] of Object.entries({
+      surface: ['faq', 'app'], module: ['robots', 'users', 'channels', 'billing', 'campaigns', 'templates', 'conversations', 'settings'],
+      screen: ['list', 'create', 'edit', 'detail', 'connection', 'qr', 'unknown'], role: ['owner', 'admin', 'manager', 'agent', 'unknown'],
+      plan: ['trial', 'active', 'expired', 'limited', 'unknown'], credit: ['available', 'low', 'empty', 'unknown'],
+      templates: ['none', 'pending', 'approved', 'rejected', 'unknown'],
+    })) if (allowed.includes(state[key] as string)) safeState[key] = state[key];
+    if (Array.isArray(state.permissions)) safeState.permissions = state.permissions.filter((item): item is string => typeof item === 'string' && ['robots.read', 'robots.create', 'users.read', 'users.manage', 'channels.read', 'channels.manage', 'billing.read', 'campaigns.read', 'campaigns.create', 'templates.read', 'templates.manage'].includes(item)).slice(0, 12);
+    if (Array.isArray(state.channels)) safeState.channels = state.channels.slice(0, 5).flatMap((item) => item && typeof item === 'object' && ['whatsapp', 'official_api', 'coexistence'].includes(item.kind) && ['connected', 'disconnected', 'qr_pending', 'blocked', 'syncing', 'unknown'].includes(item.state) ? [{ kind: item.kind, state: item.state }] : []);
+    if (Array.isArray(state.incidents)) safeState.incidents = state.incidents.filter((item): item is string => typeof item === 'string' && ['channel_outage', 'message_delivery', 'billing', 'robot', 'app'].includes(item)).slice(0, 5);
+  }
+  return {
+    intent: raw.intent as AssistantEscalation['intent'], diagnosis: raw.diagnosis as AssistantEscalation['diagnosis'],
+    ...(Object.keys(safeState).length ? { state: safeState } : {}),
+    attempts: Array.isArray(raw.attempts) ? raw.attempts.filter((item): item is AssistantEscalation['attempts'][number] => escalationAttempts.includes(item)).slice(0, 2) : [],
+  };
+}
+
 /** Aceita o formato completo e o antigo ({ answer, sources: { title, path }[] }). */
 export function normalizeReply(data: unknown): AssistantReply {
   const raw = (data ?? {}) as Record<string, unknown>;
@@ -127,6 +177,7 @@ export function normalizeReply(data: unknown): AssistantReply {
   const resolution = raw.resolution === 'partial' || raw.resolution === 'not_found' || raw.resolution === 'complete'
     ? raw.resolution
     : raw.found === false ? 'not_found' : 'complete';
+  const escalation = safeEscalation(raw.escalation);
   return {
     answer,
     sections: Array.isArray(raw.sections)
@@ -148,6 +199,7 @@ export function normalizeReply(data: unknown): AssistantReply {
     suggestions: strings(raw.suggestions, 5),
     resolution,
     found: resolution !== 'not_found' && raw.found !== false,
+    ...(escalation ? { escalation } : {}),
   };
 }
 

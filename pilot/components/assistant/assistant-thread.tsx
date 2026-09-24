@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchContext } from 'fumadocs-ui/contexts/search';
 import { useAssistant, type ChatMessage } from '@/components/assistant/assistant-context';
 import { setPendingQuery } from '@/lib/search-query';
-import type { AssistantReply } from '@/lib/assistant';
+import { supportMessageFor, type AssistantReply } from '@/lib/assistant';
 import { supportUrl } from '@/lib/links';
 import { productActionUrl } from '@/lib/links';
 
@@ -94,7 +94,7 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
   const rating = feedback[message.id];
   const paragraphs = reply.answer.split(/\n{2,}/).map((text) => text.trim()).filter(Boolean);
   const needsSupport = reply.resolution !== 'complete';
-  const supportMessage = `Olá! Consultei a Central de Ajuda do iHelp e preciso de atendimento para: ${message.question}`;
+  const supportMessage = supportMessageFor(reply);
 
   return (
     <div className="ih-ai-row">

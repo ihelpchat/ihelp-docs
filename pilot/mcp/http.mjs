@@ -4,6 +4,7 @@ import { toNodeHandler } from '@modelcontextprotocol/node';
 import { buildServer } from './server.mjs';
 import { answerQuestion } from './assistant-service.mjs';
 import { saveFeedback, summarizeFeedback } from './feedback-service.mjs';
+import { sanitizeWidgetContext } from './real-state.mjs';
 
 const apiKey = process.env.DOCS_MCP_API_KEY;
 if (apiKey && apiKey.length < 24) throw new Error('DOCS_MCP_API_KEY precisa ter ao menos 24 caracteres');
@@ -66,7 +67,7 @@ const httpServer = createServer(async (request, response) => {
       const page = body.page && typeof body.page.path === 'string' && body.page.path.startsWith('/') && body.page.path.length < 300
         ? { path: body.page.path, title: typeof body.page.title === 'string' ? body.page.title.slice(0, 200) : '' }
         : undefined;
-      const result = await answerQuestion(root, question, { history, scope, page });
+      const result = await answerQuestion(root, question, { history, scope, page, widgetContext: sanitizeWidgetContext(body.widgetContext) });
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(result));
     } catch (error) {
       const unavailable = /OPENAI_API_KEY/.test(error.message);

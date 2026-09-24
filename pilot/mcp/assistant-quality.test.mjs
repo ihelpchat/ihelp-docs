@@ -152,20 +152,15 @@ const fieldHelp = await answerQuestion(testRoot, 'Preciso de ajuda', {
   client: guidedClient,
   history: [guidedHistory[0], { role: 'assistant', content: `1. ${afterFirstReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
 });
-assert.equal(fieldHelp.steps[0].text, afterFirstReply.steps[0].text, 'ajuda com campo não avança');
-assert.equal(fieldHelp.steps[0].action, undefined, 'campo sem CTA não deve herdar atalho');
-assert.deepEqual(fieldHelp.steps[0].image, afterFirstReply.steps[0].image, 'ajuda mantém o screenshot contextual do campo');
-assert.doesNotMatch(fieldHelp.answer, /atalho/i, 'ajuda sem CTA não promete atalho');
+assert.equal(fieldHelp.steps.length, 0, 'ajuda com campo pede diagnóstico em vez de repetir etapa');
+assert.match(fieldHelp.answer, /\?$/, 'ajuda faz uma pergunta específica');
 const stuckReply = await answerQuestion(testRoot, 'Preciso de ajuda', {
   client: guidedClient,
   history: [guidedHistory[0], { role: 'assistant', content: `1. ${restartedReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
 });
-assert.equal(stuckReply.steps[0].text, restartedReply.steps[0].text, 'ajuda deve retomar exatamente a etapa atual');
-assert.equal(stuckReply.steps[0].action?.id, 'abrir-robos', 'ajuda ao travar deve manter CTA contextual');
-assert.deepEqual(stuckReply.steps[0].image, restartedReply.steps[0].image, 'ajuda deve manter screenshot contextual');
-assert.match(stuckReply.answer, /Qual botão, campo ou texto aparece na sua tela/i);
-assert.match(stuckReply.answer, /(?:botão|campo|controle)[\s\S]*texto/i, 'ajuda pergunta qual controle ou texto aparece');
-assert.match(stuckReply.answer, /imagem/i, 'ajuda orienta usar o screenshot disponível');
+assert.equal(stuckReply.steps.length, 0, 'ajuda não repete o primeiro passo');
+assert.match(stuckReply.answer, /\?$/, 'ajuda identifica a divergência');
+assert.match(stuckReply.answer, /Robôs no menu lateral/i);
 
 let currentGuideReply = restartedReply;
 for (let stepIndex = 1; stepIndex < 8; stepIndex += 1) {
@@ -183,10 +178,8 @@ const finalHelp = await answerQuestion(testRoot, 'Preciso de ajuda', {
   client: guidedClient,
   history: [guidedHistory[0], { role: 'assistant', content: `1. ${currentGuideReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
 });
-assert.equal(finalHelp.steps[0].text, currentGuideReply.steps[0].text);
-assert.deepEqual(finalHelp.steps[0].image, currentGuideReply.steps[0].image);
-assert.equal(finalHelp.steps[0].action, undefined, 'ajuda no passo final não deve prometer atalho de criação');
-assert.doesNotMatch(finalHelp.answer, /atalho/i, 'sem CTA não deve prometer atalho');
+assert.equal(finalHelp.steps.length, 0, 'ajuda no passo final pede diagnóstico sem repetir');
+assert.match(finalHelp.answer, /\?$/);
 const finishedReply = await answerQuestion(testRoot, 'Concluí este passo', {
   client: guidedClient,
   history: [guidedHistory[0], { role: 'assistant', content: `1. ${currentGuideReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
@@ -213,9 +206,7 @@ const falseFoundHelp = await answerQuestion(testRoot, 'Preciso de ajuda', {
   client: falseFoundClient,
   history: [guidedHistory[0], { role: 'assistant', content: `1. ${restartedReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
 });
-assert.deepEqual(falseFoundHelp.steps.map(({ text }) => text), [fullRobotSteps[0]], 'historyGuide válido prevalece sobre found:false');
-assert.equal(falseFoundHelp.steps[0].action?.id, 'abrir-robos');
-assert.equal(falseFoundHelp.steps[0].image?.src, '/img/help/q4tBz2R7cevwT94eUQKB.png');
+assert.deepEqual(falseFoundHelp.steps, [], 'historyGuide válido leva a diagnóstico sem repetir, mesmo com found:false');
 assert.deepEqual(falseFoundHelp.sources.map(({ path }) => path), ['/docs/sobre-o-sistema/robo-de-atendimento']);
 assert.equal(falseFoundHelp.found, true);
 assert.equal(falseFoundHelp.resolution, 'complete');
@@ -264,9 +255,7 @@ const hostileHelp = await answerQuestion(testRoot, 'Preciso de ajuda', {
   client: hostileGuideClient,
   history: [hostileHistory[0], { role: 'assistant', content: `1. ${hostileReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
 });
-assert.deepEqual(hostileHelp.steps.map(({ text }) => text), [fullRobotSteps[0]], 'ajuda não aceita passo reescrito pelo modelo');
-assert.equal(hostileHelp.steps[0].action?.id, 'abrir-robos');
-assert.equal(hostileHelp.steps[0].image?.src, '/img/help/q4tBz2R7cevwT94eUQKB.png');
+assert.deepEqual(hostileHelp.steps, [], 'ajuda não aceita passo reescrito pelo modelo');
 assert.deepEqual(hostileHelp.sources.map(({ path }) => path), ['/docs/sobre-o-sistema/robo-de-atendimento'], 'ajuda mantém fonte do histórico');
 assert.doesNotMatch(hostileHelp.answer, /busca da Central|Ativar robô/i);
 for (let index = 1; index < fullRobotSteps.length; index += 1) {
@@ -374,7 +363,7 @@ const screenshotClient = {
 };
 const screenshotReply = await answerQuestion(testRoot, 'mostre todos os passos para criar um robô', { client: screenshotClient });
 assert.equal(screenshotReply.steps[0].image?.src, '/img/help/q4tBz2R7cevwT94eUQKB.png');
-assert.equal(screenshotReply.steps[1].image, undefined, 'imagem que não pertence à fonte não pode chegar à interface');
+assert.ok(screenshotReply.steps.every((step) => step.image?.src !== '/img/help/inventada.png'), 'imagem que não pertence à fonte não pode chegar à interface');
 
 const omittedScreenshotClient = {
   responses: {
