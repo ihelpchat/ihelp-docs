@@ -79,8 +79,10 @@ try {
   }
   const individual = await readArticle(root, paths[0]);
   const newPath = 'docs/principais-motivos-de-suporte/novo-guia';
-  const submitted = await call('docs_submit_article', { ...individual, path: newPath, mode: 'pull_request', requestedBy: 'service:roundtrip' });
+  const submitted = await call('docs_submit_article', { ...individual, path: newPath, productActions: [{ id: 'abrir-canais', label: 'Abrir a tela Canais', route: '/configuracoes/channel' }], mode: 'pull_request', requestedBy: 'service:roundtrip' });
   assert.equal(submitted.isError, false, `submit individual: ${submitted.content[0].text}`);
+  const individualMdx = await readFile(join(root, 'remote/pilot/content/docs', `${newPath}.mdx`), 'utf8');
+  assert.equal((individualMdx.match(/<ProductAction\b/g) ?? []).length, 1, 'ProductAction inline e estruturado não podem duplicar');
   const individualMeta = JSON.parse(await readFile(join(root, 'remote/pilot/content/docs/docs/principais-motivos-de-suporte/meta.json')));
   assert.equal(individualMeta.pages.filter((page) => page === 'novo-guia').length, 1, 'submit individual precisa atualizar meta.json pelo pacote');
   const before = await readFile(join(root, 'writes.log'), 'utf8');
