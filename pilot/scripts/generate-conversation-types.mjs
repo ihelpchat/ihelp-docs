@@ -12,6 +12,7 @@ const schemas = {
 };
 const literalUnion = (values) => values.map((value) => JSON.stringify(value)).join(' | ');
 function typeOf(schema, key = '') {
+  if (schema.anyOf) return schema.anyOf.map((item) => typeOf(item)).join(' | ');
   if (schema.const !== undefined) return JSON.stringify(schema.const);
   if (schema.enum) return literalUnion(schema.enum);
   if (key === 'guideId') return 'GuideId';
@@ -24,6 +25,8 @@ function typeOf(schema, key = '') {
     return `{\n${fields.join('\n')}\n}`;
   }
   if (schema.type === 'string') return 'string';
+  if (schema.type === 'boolean') return 'boolean';
+  if (schema.type === 'null') return 'null';
   if (schema.type === 'integer' || schema.type === 'number') return 'number';
   throw new Error(`JSON Schema não suportado: ${JSON.stringify(schema)}`);
 }
