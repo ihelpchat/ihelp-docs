@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { createServer } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,8 +9,16 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 
 const scratch = await mkdtemp(join(tmpdir(), 'claricia-limits-'));
+const fakeOpenAI = createServer((_request, response) => response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
+  id: 'resp_fixture', object: 'response', created_at: 1, model: 'fixture', status: 'completed',
+  output: [{ type: 'message', id: 'msg_fixture', status: 'completed', role: 'assistant',
+    content: [{ type: 'output_text', text: JSON.stringify({ answer: 'Pode continuar.', sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: 'complete', found: true }), annotations: [] }] }],
+})));
+fakeOpenAI.listen(0, '127.0.0.1');
+await once(fakeOpenAI, 'listening');
 process.env.PORT = '0';
 process.env.OPENAI_API_KEY = 'fixture-only';
+process.env.OPENAI_BASE_URL = `http://127.0.0.1:${fakeOpenAI.address().port}/v1`;
 process.env.FEEDBACK_FILE = join(scratch, 'feedback.jsonl');
 process.env.ASSISTANT_IP_LIMIT = '20';
 const { httpServer } = await import('./http.mjs');
@@ -18,7 +27,7 @@ const url = `http://127.0.0.1:${httpServer.address().port}`;
 const post = (path, body, sessionId = 'session-a') => fetch(`${url}${path}`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '192.0.2.40' },
-  body: JSON.stringify({ ...body, sessionId }),
+  body: JSON.stringify({ ...body, sessionId: `test-${sessionId}` }),
 });
 
 try {
@@ -45,6 +54,7 @@ try {
   assert.match((await limited.json()).error, /instante|aguard|tente/i);
 } finally {
   await new Promise((resolve, reject) => httpServer.close((error) => error ? reject(error) : resolve()));
+  await new Promise((resolve, reject) => fakeOpenAI.close((error) => error ? reject(error) : resolve()));
   await rm(scratch, { recursive: true, force: true });
 }
 
