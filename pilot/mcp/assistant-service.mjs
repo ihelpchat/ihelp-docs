@@ -197,7 +197,8 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
     const matches = terms.filter((term) => titleText.includes(term) || descriptionText.includes(term) || bodyText.includes(term));
     if (!matches.length && !onPage && !fromConversation) continue;
     const apiQuestion = terms.some((term) => ['api', 'endpoint', 'token', 'bearer', 'curl'].includes(term));
-    const sectionBoost = apiQuestion ? (path.startsWith('/api/') ? 8 : 0) : (path.startsWith('/docs/') ? 5 : 0);
+    // Pergunta de produto não deve cair na referência da API (o CRM tem uma página por endpoint, muitas com "Criar" no título).
+    const sectionBoost = apiQuestion ? (path.startsWith('/api/') ? 8 : 0) : (path.startsWith('/docs/') ? 5 : path.startsWith('/api/') ? -8 : 0);
     const guideQuestion = normalize(frontmatterValue(raw, 'assistantQuestion'));
     const guideRequest = normalizedQuestion.replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '');
     const guideMatch = guideQuestion && (normalizedQuestion === guideQuestion || guideRequest === guideQuestion);
