@@ -1,0 +1,67 @@
+---
+title: "Excluir item"
+description: "Remove um item do catálogo, deixando-o indisponível para novas propostas."
+source: api
+contentType: referencia
+method: DELETE
+endpoint: /crm/catalog/{id}
+---
+
+Remove um item do catálogo, deixando-o indisponível para novas propostas.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do item no catálogo.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X DELETE "https://apiv3.ihelpchat.com/api/v2/crm/catalog/10" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/catalog/10', {
+  method: 'DELETE',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.delete(
+    "https://apiv3.ihelpchat.com/api/v2/crm/catalog/10",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+DELETE /api/v2/crm/catalog/10 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+```
+
+</CodeTabs>
+
+## Regras
+
+A exclusão é soft delete (marcada como deletada, não removida do banco). Itens já usados em propostas continuam aparecendo nas propostas; o `catalogItemId` vira `null` se o item for excluído depois. Requer **administrador da empresa** e o módulo de propostas ativo.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Usuário não é administrador |
+| 403 | - | Módulo de propostas desligado |
+| 404 | - | Item inexistente ou de outra empresa (sem corpo) |

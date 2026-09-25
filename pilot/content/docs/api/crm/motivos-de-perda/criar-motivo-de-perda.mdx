@@ -1,0 +1,92 @@
+---
+title: "Criar motivo"
+description: "Cria um novo motivo de perda para a empresa. Apenas administradores podem criar."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/loss-reasons
+---
+
+Cria um novo motivo de perda para a empresa. Apenas administradores podem criar.
+
+## Corpo da requisição
+
+<Params>
+<Param name="reason" type="string" required>
+Descrição do motivo, até 200 caracteres. Vazio responde `400`.
+</Param>
+<Param name="isDefault" type="bool">
+Se true, motivo aparece em destaque. Múltiplos podem ser padrão. Padrão false.
+</Param>
+<Param name="orderIndex" type="int">
+Índice de ordenação. Padrão 0.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/loss-reasons" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "reason": "Preço acima do orçamento",
+  "isDefault": false,
+  "orderIndex": 2
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/loss-reasons', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "reason": "Preço acima do orçamento",
+    "isDefault": false,
+    "orderIndex": 2
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/loss-reasons",
+    json={
+        "reason": "Preço acima do orçamento",
+        "isDefault": False,
+        "orderIndex": 2,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/loss-reasons HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "reason": "Preço acima do orçamento",
+  "isDefault": false,
+  "orderIndex": 2
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Motivo vazio ou maior que 200 caracteres |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Usuário não é administrador |

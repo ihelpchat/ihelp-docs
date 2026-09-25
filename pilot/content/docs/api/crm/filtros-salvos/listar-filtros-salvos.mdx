@@ -1,0 +1,65 @@
+---
+title: "Listar filtros"
+description: "Lista os filtros salvos do usuário autenticado em um funil específico, ordenados pelos mais recentes primeiro."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/saved-filters
+---
+
+Lista os filtros salvos do usuário autenticado em um funil específico, ordenados pelos mais recentes primeiro.
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="funnelId" type="int" required>
+ID do funil aos filtros salvos.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl -G https://apiv3.ihelpchat.com/api/v2/crm/saved-filters \
+  --data-urlencode "funnelId=12" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const params = new URLSearchParams({funnelId: '12'});
+
+const res = await fetch(`https://apiv3.ihelpchat.com/api/v2/crm/saved-filters?${params}`, {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/saved-filters",
+    params={
+        "funnelId": 12,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/saved-filters?funnelId=12
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Query `funnelId` ausente ou inválida |
+| 401 | - | Token ausente, inválido ou expirado |

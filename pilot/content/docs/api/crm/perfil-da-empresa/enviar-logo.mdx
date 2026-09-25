@@ -1,0 +1,83 @@
+---
+title: "Enviar logo"
+description: "Envia o logo da empresa para aparecer no cabeçalho das propostas. Aceita PNG ou JPEG de até 2 MB."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/company-profile/logo
+---
+
+Envia o logo da empresa para aparecer no cabeçalho das propostas. Aceita PNG ou JPEG de até 2 MB.
+
+## Formulário (multipart)
+
+<Params>
+<Param name="media" type="file" required>
+Arquivo PNG ou JPEG, até 2 MB.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/company-profile/logo" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -F "media=@logo-acme.png;type=image/png"
+```
+
+```js
+import { openAsBlob } from 'node:fs';
+
+const form = new FormData();
+form.append('media', await openAsBlob('logo-acme.png', { type: 'image/png' }), 'logo-acme.png');
+
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/company-profile/logo', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+  body: form,
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/company-profile/logo",
+    files={"media": ("logo-acme.png", open("logo-acme.png", "rb"), "image/png")},
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/company-profile/logo HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: multipart/form-data; boundary=----ihelp
+
+------ihelp
+Content-Disposition: form-data; name="media"; filename="logo-acme.png"
+
+<conteúdo do arquivo>
+------ihelp--
+```
+
+</CodeTabs>
+
+## Regras
+
+- Apenas administradores da empresa podem enviar. Usuário não-admin recebe `401` sem corpo.
+- O módulo de propostas deve estar ativo. Caso contrário, recebe `403`.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Arquivo inválido, extensão não suportada ou tamanho excedido |
+| 401 | - | Não é administrador da empresa |
+| 403 | - | Módulo de propostas não está ativo |

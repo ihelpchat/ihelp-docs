@@ -1,0 +1,106 @@
+---
+title: "Enviar proposta"
+description: "Envia a proposta como documento no atendimento do contato e muda o status para Enviada."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/proposals/{id}/send
+---
+
+Envia a proposta como documento no atendimento do contato e muda o status para Enviada.
+
+O PDF é enviado como mensagem de documento no atendimento vinculado ao card ou, se não houver, no atendimento mais recente do contato. O link público é gerado automaticamente. A proposta passa para **Enviada (`2`)** se o envio der certo.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da proposta.
+</Param>
+</Params>
+
+## Formulário (multipart)
+
+<Params>
+<Param name="file" type="file" required>
+PDF da proposta. Tipo `application/pdf`, máximo 10 MB.
+</Param>
+<Param name="caption" type="string">
+Legenda da mensagem, até 1000 caracteres. Se vazia ou acima de 1000, usa o texto padrão.
+</Param>
+</Params>
+
+Legenda padrão quando `caption` vem vazio: `Olá, Ana! Segue a proposta PROP-0043. Total: R$ 1.750,00. Válida até 31/10/2026. Detalhes: https://app.ihelpchat.com/proposta/…`
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/proposals/123/send" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -F "file=@proposta-0043.pdf;type=application/pdf" \
+  -F "caption=Olá, Ana! Segue a proposta combinada."
+```
+
+```js
+import { openAsBlob } from 'node:fs';
+
+const form = new FormData();
+form.append('file', await openAsBlob('proposta-0043.pdf', { type: 'application/pdf' }), 'proposta-0043.pdf');
+form.append('caption', 'Olá, Ana! Segue a proposta combinada.');
+
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/proposals/123/send', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+  body: form,
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/proposals/123/send",
+    files={"file": ("proposta-0043.pdf", open("proposta-0043.pdf", "rb"), "application/pdf")},
+    data={"caption": "Olá, Ana! Segue a proposta combinada."},
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/proposals/123/send HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: multipart/form-data; boundary=----ihelp
+
+------ihelp
+Content-Disposition: form-data; name="file"; filename="proposta-0043.pdf"
+
+<conteúdo do arquivo>
+------ihelp
+Content-Disposition: form-data; name="caption"
+
+Olá, Ana! Segue a proposta combinada.
+------ihelp--
+```
+
+</CodeTabs>
+
+## Regras
+
+Antes de enviar, você pode chamar [`GET /proposals/{id}/send-context`](/api/crm/propostas/contexto-de-envio) para saber em qual atendimento a mensagem vai cair e se a janela de 24 h está aberta (para canais de API oficial).
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Card sem atendimento: `O contato deste card ainda não tem atendimento` |
+| 400 | - | Arquivo inválido ou acima de 10 MB: `O PDF deve ter no máximo 10MB.` |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Módulo de propostas desligado |
+| 404 | - | Proposta inexistente ou de outra empresa |

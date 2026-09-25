@@ -1,0 +1,142 @@
+---
+title: "Criar funil"
+description: "Cria um novo funil na empresa, definindo título, descrição e trava de contato. Pode incluir regras e membros na mesma chamada."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/funnel
+---
+
+Cria um novo funil na empresa, definindo título, descrição e trava de contato. Pode incluir regras e membros na mesma chamada.
+
+## Corpo da requisição
+
+<Params>
+<Param name="title" type="string" required>
+Nome do funil
+</Param>
+<Param name="description" type="string" required={false}>
+Descrição do funil
+</Param>
+<Param name="isDefault" type="boolean" required={false}>
+Se deve ser o funil padrão da empresa. Padrão false
+</Param>
+<Param name="contactLock" type="boolean" required={false}>
+Se o mesmo contato pode ter apenas um card ativo. Padrão true
+</Param>
+<Param name="rules" type="array" required={false}>
+Array de regras de automação (CreateFunnelRuleDto)
+</Param>
+<Param name="funnelUsers" type="array" required={false}>
+Array com objetos \{userId: int\} dos usuários com acesso
+</Param>
+</Params>
+
+O criador entra automaticamente com permissão de Admin. As regras são criadas após o funil, então se uma regra for inválida a resposta é 400, mas o funil já foi criado.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/funnel" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "title": "Funil de Parcerias",
+  "description": "Revendas e indicações",
+  "isDefault": false,
+  "contactLock": true,
+  "rules": [],
+  "funnelUsers": [
+    {
+      "userId": 42
+    },
+    {
+      "userId": 57
+    }
+  ]
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnel', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "title": "Funil de Parcerias",
+    "description": "Revendas e indicações",
+    "isDefault": false,
+    "contactLock": true,
+    "rules": [],
+    "funnelUsers": [
+      {
+        "userId": 42
+      },
+      {
+        "userId": 57
+      }
+    ]
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnel",
+    json={
+        "title": "Funil de Parcerias",
+        "description": "Revendas e indicações",
+        "isDefault": False,
+        "contactLock": True,
+        "rules": [],
+        "funnelUsers": [
+            {
+                "userId": 42,
+            },
+            {
+                "userId": 57,
+            },
+        ],
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/funnel HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "title": "Funil de Parcerias",
+  "description": "Revendas e indicações",
+  "isDefault": false,
+  "contactLock": true,
+  "rules": [],
+  "funnelUsers": [
+    {
+      "userId": 42
+    },
+    {
+      "userId": 57
+    }
+  ]
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | `Bad Request` | Dados obrigatórios faltando ou inválidos, ou regra com erro |
+| 401 | `Unauthorized` | Token ausente ou inválido |

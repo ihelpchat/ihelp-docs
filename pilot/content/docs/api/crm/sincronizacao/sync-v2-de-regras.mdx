@@ -1,0 +1,207 @@
+---
+title: "Sync V2 de regras"
+description: "Sincroniza um lote de regras de funis com o servidor (criação, atualização ou exclusão lógica)."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/sync/funnelrule/batch
+---
+
+Sincroniza um lote de regras de funis com o servidor (criação, atualização ou exclusão lógica).
+
+<Callout type="warn" title="Uso interno">
+Este endpoint implementa a sincronização incremental do próprio app iHelp e não faz parte da API de integração.
+</Callout>
+
+## Corpo da requisição
+
+<Params>
+<Param name="[]" type="FunnelRule[]" required>
+Array de regras completas com todos os campos da entidade FunnelRule. IDs de regras existentes atualizam; novos são criados. Campos nulos são preservados.
+</Param>
+</Params>
+
+Regras com `isActive: false` são desativadas (soft delete). Se `id: 0` ou omitido, uma nova regra é criada. O `funnelId` referencia um funil existente.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/sync/funnelrule/batch" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[
+  {
+    "id": 1,
+    "funnelId": 12,
+    "title": "Enviar proposta automaticamente",
+    "trigger": 1,
+    "conditions": [],
+    "actions": [
+      {
+        "type": 1,
+        "targetStageId": 103
+      }
+    ],
+    "isActive": true,
+    "createdDate": "2026-01-15T08:00:00Z",
+    "updatedAt": "2026-09-25T10:30:00Z"
+  },
+  {
+    "id": 2,
+    "funnelId": 12,
+    "title": "Notificar gerente",
+    "trigger": 2,
+    "conditions": [],
+    "actions": [
+      {
+        "type": 2,
+        "userId": 42
+      }
+    ],
+    "isActive": true,
+    "createdDate": "2026-02-20T09:00:00Z",
+    "updatedAt": "2026-09-24T14:15:00Z"
+  }
+]'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/sync/funnelrule/batch', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify([
+    {
+      "id": 1,
+      "funnelId": 12,
+      "title": "Enviar proposta automaticamente",
+      "trigger": 1,
+      "conditions": [],
+      "actions": [
+        {
+          "type": 1,
+          "targetStageId": 103
+        }
+      ],
+      "isActive": true,
+      "createdDate": "2026-01-15T08:00:00Z",
+      "updatedAt": "2026-09-25T10:30:00Z"
+    },
+    {
+      "id": 2,
+      "funnelId": 12,
+      "title": "Notificar gerente",
+      "trigger": 2,
+      "conditions": [],
+      "actions": [
+        {
+          "type": 2,
+          "userId": 42
+        }
+      ],
+      "isActive": true,
+      "createdDate": "2026-02-20T09:00:00Z",
+      "updatedAt": "2026-09-24T14:15:00Z"
+    }
+  ]),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/sync/funnelrule/batch",
+    json=[
+        {
+            "id": 1,
+            "funnelId": 12,
+            "title": "Enviar proposta automaticamente",
+            "trigger": 1,
+            "conditions": [],
+            "actions": [
+                {
+                    "type": 1,
+                    "targetStageId": 103,
+                },
+            ],
+            "isActive": True,
+            "createdDate": "2026-01-15T08:00:00Z",
+            "updatedAt": "2026-09-25T10:30:00Z",
+        },
+        {
+            "id": 2,
+            "funnelId": 12,
+            "title": "Notificar gerente",
+            "trigger": 2,
+            "conditions": [],
+            "actions": [
+                {
+                    "type": 2,
+                    "userId": 42,
+                },
+            ],
+            "isActive": True,
+            "createdDate": "2026-02-20T09:00:00Z",
+            "updatedAt": "2026-09-24T14:15:00Z",
+        },
+    ],
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/sync/funnelrule/batch HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+[
+  {
+    "id": 1,
+    "funnelId": 12,
+    "title": "Enviar proposta automaticamente",
+    "trigger": 1,
+    "conditions": [],
+    "actions": [
+      {
+        "type": 1,
+        "targetStageId": 103
+      }
+    ],
+    "isActive": true,
+    "createdDate": "2026-01-15T08:00:00Z",
+    "updatedAt": "2026-09-25T10:30:00Z"
+  },
+  {
+    "id": 2,
+    "funnelId": 12,
+    "title": "Notificar gerente",
+    "trigger": 2,
+    "conditions": [],
+    "actions": [
+      {
+        "type": 2,
+        "userId": 42
+      }
+    ],
+    "isActive": true,
+    "createdDate": "2026-02-20T09:00:00Z",
+    "updatedAt": "2026-09-24T14:15:00Z"
+  }
+]
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Lista vazia, inválida ou funil referenciado não existe |
+| 401 | - | Token ausente, inválido ou expirado |

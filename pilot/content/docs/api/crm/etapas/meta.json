@@ -1,0 +1,17 @@
+{
+  "title": "Etapas",
+  "pages": [
+    "listar-etapas",
+    "obter-etapa",
+    "obter-primeira-etapa",
+    "criar-etapa",
+    "atualizar-etapa",
+    "editar-campo-da-etapa",
+    "reordenar-etapas",
+    "excluir-etapa",
+    "paginar-cards-da-etapa",
+    "paginar-cards-com-filtro",
+    "definir-campos-obrigatorios",
+    "recalcular-valor-da-etapa"
+  ]
+}

@@ -17,29 +17,27 @@ Todas as rotas de CRM têm o prefixo `/api/v2/crm`.
 
 ## Autenticação
 
-Todos os endpoints exigem um JWT no header `Authorization`, como no restante da API. Veja [Autenticação](/api/conceitos/autenticacao) e [Obter token de usuário](/api/conceitos/obter-token).
+Todos os endpoints exigem um JWT no header `Authorization`, como no restante da API. A única exceção são as duas rotas públicas de [Propostas](/api/crm/propostas/responder-proposta), que o cliente final abre pelo link. Veja [Autenticação](/api/conceitos/autenticacao) e [Obter token de usuário](/api/conceitos/obter-token).
 
 ```
 Authorization: Bearer <TOKEN>
 ```
 
 <Callout type="warn" title="A empresa vem sempre do token">
-Nenhum endpoint de CRM aceita `businessId` no corpo ou na query. Você só enxerga e movimenta dados da sua própria empresa.
+Nenhum endpoint de CRM usa `businessId` do corpo ou da query; se o campo aparecer num corpo, é ignorado. Você só enxerga e movimenta dados da sua própria empresa.
 </Callout>
 
 ## Ordem recomendada de uso
 
 Você precisa dos IDs antes de movimentar. O fluxo natural é:
 
-1. `GET /crm/funnel` - lista os funis, guarde o `id` do funil desejado
-2. `GET /crm/funnel/{id}/with-stages` - lista as etapas daquele funil, guarde o `id` da etapa
+1. [Listar funis](/api/crm/funis/listar-funis) - guarde o `id` do funil desejado
+2. [Funil com etapas](/api/crm/funis/obter-funil-com-etapas) - guarde o `id` da etapa
 3. Movimente:
-   - [Mover card](/api/crm/mover-card) - um card entre etapas do mesmo funil
-   - [Mover em massa](/api/crm/mover-cards-em-massa) - vários cards de uma vez
-   - [Trocar de funil](/api/crm/trocar-de-funil) - mudar o card de funil
-   - [Mover por telefone](/api/crm/mover-por-telefone) - sem precisar do `cardId`
-
-Os dois primeiros passos estão em [Funis e etapas](/api/crm/funis-e-etapas).
+   - [Mover card](/api/crm/movimentacao/mover-card) - um card entre etapas do mesmo funil
+   - [Mover em massa](/api/crm/movimentacao/mover-em-massa) - vários cards de uma vez
+   - [Trocar de funil](/api/crm/movimentacao/trocar-de-funil) - mudar o card de funil
+   - [Mover por telefone](/api/crm/movimentacao/mover-por-telefone) - sem precisar do `cardId`
 
 ## Convenções
 
@@ -77,5 +75,5 @@ Os erros de negócio seguem o formato `{ "error": "...", "message": "..." }`.
 | 409 | *(sem `error`)* | Corpo `{ canMove: false, missingFields, pendingTasks }`, pendências obrigatórias |
 
 <Callout type="info" title="Além da movimentação">
-Esta seção detalha o fluxo de movimentação de cards. Os demais endpoints de CRM (CRUD de cards, funis, etapas, automações, filtros e pipelines) estão listados em [Referência completa](/api/crm/referencia/cards).
+Cada endpoint de CRM tem página própria no menu, agrupada por recurso: funis, etapas, cards, movimentação, pipelines, automações, propostas e os demais. O corpo de filtro usado na listagem, nos KPIs e nas métricas está em [Filtro de cards](/api/crm/filtro-de-cards).
 </Callout>

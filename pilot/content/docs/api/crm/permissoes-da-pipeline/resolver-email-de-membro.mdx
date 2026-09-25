@@ -1,0 +1,91 @@
+---
+title: "Resolver e-mail"
+description: "Resolve um e-mail para um membro da empresa. Usado para autocomplete antes de atualizar permissões."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/pipelines/{id}/permissions/resolve-email
+---
+
+Resolve um e-mail para um membro da empresa. Usado para autocomplete antes de atualizar permissões.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int" required>
+ID da pipeline.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="email" type="string" required>
+E-mail do usuário, case-insensitive.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12/permissions/resolve-email" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "email": "joao@empresa.com.br"
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12/permissions/resolve-email', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "email": "joao@empresa.com.br"
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12/permissions/resolve-email",
+    json={
+        "email": "joao@empresa.com.br",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/pipelines/12/permissions/resolve-email HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "email": "joao@empresa.com.br"
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+Só retorna usuários ativos da mesma empresa. O e-mail é case-insensitive mas deve ser exato.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | E-mail vazio |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem permissão de admin na pipeline |
+| 404 | - | E-mail não encontrado ou usuário não é da mesma empresa |

@@ -1,0 +1,63 @@
+---
+title: "Recalcular valor"
+description: "Recalcula o valor total agregado da etapa somando os valores estimados de todos os cards abertos."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/funnelstage/{stageId}/recalculate-value
+---
+
+Recalcula o valor total agregado da etapa somando os valores estimados de todos os cards abertos.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="stageId" type="int">
+ID da etapa.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101/recalculate-value" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101/recalculate-value', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101/recalculate-value",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/funnelstage/101/recalculate-value HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem acesso ao funil da etapa |
+| 404 | - | Etapa inexistente |

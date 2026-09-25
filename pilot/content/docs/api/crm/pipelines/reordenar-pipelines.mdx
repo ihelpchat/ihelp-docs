@@ -1,0 +1,94 @@
+---
+title: "Reordenar pipelines"
+description: "Persiste a nova ordem das pipelines da empresa. Apenas administradores da empresa podem reordenar."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/pipelines/reorder
+---
+
+Persiste a nova ordem das pipelines da empresa. Apenas administradores da empresa podem reordenar.
+
+## Corpo da requisição
+
+<Params>
+<Param name="orderedIds[]" type="int[]" required>
+Array com IDs de todas as pipelines na ordem desejada.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/pipelines/reorder" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "orderedIds": [
+    12,
+    19,
+    15
+  ]
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/pipelines/reorder', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "orderedIds": [
+      12,
+      19,
+      15
+    ]
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/pipelines/reorder",
+    json={
+        "orderedIds": [
+            12,
+            19,
+            15,
+        ],
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/pipelines/reorder HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "orderedIds": [
+    12,
+    19,
+    15
+  ]
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Payload vazio ou `orderedIds` não informado |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Usuário não é administrador da empresa |

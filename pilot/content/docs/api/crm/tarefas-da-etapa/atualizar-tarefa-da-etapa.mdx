@@ -1,0 +1,119 @@
+---
+title: "Atualizar tarefa"
+description: "Atualiza parcialmente um modelo de tarefa"
+source: api
+contentType: referencia
+method: PATCH
+endpoint: /crm/stages/{stageId}/task-templates/{templateId}
+---
+
+Atualiza parcialmente um modelo de tarefa
+
+## Parâmetros de rota
+
+<Params>
+<Param name="stageId" type="int">
+Identificador da etapa
+</Param>
+<Param name="templateId" type="int">
+Identificador do modelo de tarefa
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="title" type="string" required={false}>
+Novo título
+</Param>
+<Param name="description" type="string" required={false}>
+Nova descrição
+</Param>
+<Param name="type" type="int" required={false}>
+Novo tipo (1=Ligação, 2=WhatsApp, 3=E-mail, 4=Reunião)
+</Param>
+<Param name="dueDays" type="int" required={false}>
+Novo prazo em dias
+</Param>
+<Param name="businessDaysOnly" type="boolean" required={false}>
+Nova configuração de dias úteis
+</Param>
+<Param name="assigneeKind" type="int" required={false}>
+Novo responsável
+</Param>
+<Param name="assigneeUserId" type="int" required={false}>
+Novo usuário específico
+</Param>
+<Param name="required" type="boolean" required={false}>
+Nova configuração de obrigatoriedade
+</Param>
+<Param name="orderIndex" type="int" required={false}>
+Nova posição
+</Param>
+</Params>
+
+Todos os campos são opcionais. Só os enviados serão alterados.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PATCH "https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates/1" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "dueDays": 3,
+  "required": false
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates/1', {
+  method: 'PATCH',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "dueDays": 3,
+    "required": false
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.patch(
+    "https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates/1",
+    json={
+        "dueDays": 3,
+        "required": False,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PATCH /api/v2/crm/stages/101/task-templates/1 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "dueDays": 3,
+  "required": false
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | `Unauthorized` | Token ausente ou inválido |
+| 403 | `Forbidden` | Usuário não tem permissão |
+| 404 | `Template nao encontrado ou dados invalidos` | Modelo de tarefa ou etapa não existem, ou dados inválidos |

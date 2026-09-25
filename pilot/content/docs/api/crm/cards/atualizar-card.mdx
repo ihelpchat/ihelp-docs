@@ -1,0 +1,147 @@
+---
+title: "Atualizar card"
+description: "Atualiza um card existente. Campos omitidos mantêm o valor atual, com uma exceção: a data prevista é apagada se não for reenviada."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/card/{id}
+---
+
+Atualiza um card existente. Campos omitidos mantêm o valor atual, com uma exceção: a data prevista é apagada se não for reenviada.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="title" type="string">
+Título do card. Se omitido, mantém o atual.
+</Param>
+<Param name="description" type="string">
+Descrição. Se omitido, mantém a atual.
+</Param>
+<Param name="estimatedValue" type="decimal">
+Valor estimado em R$. Se omitido, mantém o atual.
+</Param>
+<Param name="stageId" type="int">
+Etapa. Se omitido ou zero, mantém a atual. Para mover de etapa prefira [Mover card](/api/crm/movimentacao/mover-card).
+</Param>
+<Param name="responsibleId" type="int">
+Responsável. Se omitido ou zero, mantém o atual. Usuário restrito não pode trocar proprietário (responde `400`).
+</Param>
+<Param name="contactId" type="int">
+Contato vinculado. Se omitido, mantém o atual. Se enviado, substitui.
+</Param>
+<Param name="priority" type="int">
+`1` Baixa, `2` Média, `3` Alta, `4` Urgente. Se omitido, mantém o atual.
+</Param>
+<Param name="source" type="string">
+Origem: `whatsapp`, `instagram`, `facebook`, `email`, `telegram`, `webchat`. Se omitido, mantém o atual.
+</Param>
+<Param name="temperature" type="string">
+`quente`, `morno` ou `frio`. Se omitido, mantém o atual.
+</Param>
+<Param name="dueDate" type="datetime">
+Data prevista de fechamento (UTC). Se omitido, a data é **apagada**. Reenvie sempre ao editar card com data.
+</Param>
+<Param name="customFields[].customizedFieldId" type="int">
+ID do campo personalizado. Enviados substituem **toda** a coleção.
+</Param>
+<Param name="customFields[].value" type="string">
+Valor do campo em texto.
+</Param>
+</Params>
+
+Enviar `null` em um campo **não** o limpa — o campo é simplesmente ignorado. `dueDate` é a única exceção: omitir `dueDate` apaga a data; reenvie o valor atual quando editar outros campos e quiser preservar a data.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/card/8821" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "estimatedValue": 5200,
+  "responsibleId": 57,
+  "dueDate": "2026-10-15T00:00:00Z"
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "estimatedValue": 5200,
+    "responsibleId": 57,
+    "dueDate": "2026-10-15T00:00:00Z"
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821",
+    json={
+        "estimatedValue": 5200,
+        "responsibleId": 57,
+        "dueDate": "2026-10-15T00:00:00Z",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/card/8821 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "estimatedValue": 5200,
+  "responsibleId": 57,
+  "dueDate": "2026-10-15T00:00:00Z"
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+| Campo | Se omitido | Se enviado |
+|---|---|---|
+| `title`, `description`, `estimatedValue`, `priority`, `source`, `temperature` | Mantém o valor atual | Substitui. Mandar `null` **não** limpa |
+| `stageId`, `responsibleId` | `0` ou omitido mantém | Substitui. Para mudar de etapa prefira [Mover card](/api/crm/movimentacao/mover-card), que checa pendências e grava histórico |
+| `contactId` | Mantém | Substitui |
+| `customFields` | Mantém | Substitui a lista inteira. `[]` apaga todos os valores |
+| `dueDate` | **Apaga a data** | Substitui |
+| `status`, `tags` | Ignorado | Ignorado. Para status use [Alterar status do card](/api/crm/status-e-fechamento/alterar-status-do-card) |
+
+<Callout type="warn" title="dueDate sempre é gravado">
+Se o card tem data prevista e você manda um `PUT` sem `dueDate`, a data é apagada. Reenvie o valor atual sempre que editar.
+</Callout>
+
+O card precisa continuar com um responsável: `responsibleId` zerado responde `400`. Usuário que só vê os próprios cards não pode trocar o responsável (`400` `Você não pode transferir o proprietário deste card.`).
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Responsável zerado, card inelegível para edição, usuário restrito tentando transferir proprietário, ou outro erro de validação |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 404 | - | Card não encontrado ou sem permissão para visualizar |

@@ -1,0 +1,91 @@
+---
+title: "Criar filtro"
+description: "Cria um novo filtro salvo para um funil. A configuração é um JSON serializado de até 10 KB contendo as regras de filtro."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/saved-filters
+---
+
+Cria um novo filtro salvo para um funil. A configuração é um JSON serializado de até 10 KB contendo as regras de filtro.
+
+## Corpo da requisição
+
+<Params>
+<Param name="name" type="string" required>
+Nome do filtro, até 100 caracteres.
+</Param>
+<Param name="filterConfig" type="string" required>
+Configuração do filtro como JSON serializado em texto, até 10 KB. JSON inválido responde `400` com `FilterConfig must be valid JSON.`. Veja [Filtro de cards](/api/crm/filtro-de-cards) para a estrutura.
+</Param>
+<Param name="funnelId" type="int" required>
+ID do funil ao qual o filtro pertence.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/saved-filters" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "Quentes acima de 5 mil",
+  "filterConfig": "{\"filterTree\":{\"op\":\"AND\",\"conditions\":[{\"fieldId\":\"temperature\",\"fieldType\":\"select\",\"op\":\"any\",\"value\":[\"quente\"]},{\"fieldId\":\"estimatedValue\",\"fieldType\":\"number\",\"op\":\"gte\",\"value\":5000}]}}",
+  "funnelId": 12
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/saved-filters', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "name": "Quentes acima de 5 mil",
+    "filterConfig": "{\"filterTree\":{\"op\":\"AND\",\"conditions\":[{\"fieldId\":\"temperature\",\"fieldType\":\"select\",\"op\":\"any\",\"value\":[\"quente\"]},{\"fieldId\":\"estimatedValue\",\"fieldType\":\"number\",\"op\":\"gte\",\"value\":5000}]}}",
+    "funnelId": 12
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/saved-filters",
+    json={
+        "name": "Quentes acima de 5 mil",
+        "filterConfig": "{\"filterTree\":{\"op\":\"AND\",\"conditions\":[{\"fieldId\":\"temperature\",\"fieldType\":\"select\",\"op\":\"any\",\"value\":[\"quente\"]},{\"fieldId\":\"estimatedValue\",\"fieldType\":\"number\",\"op\":\"gte\",\"value\":5000}]}}",
+        "funnelId": 12,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/saved-filters HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "name": "Quentes acima de 5 mil",
+  "filterConfig": "{\"filterTree\":{\"op\":\"AND\",\"conditions\":[{\"fieldId\":\"temperature\",\"fieldType\":\"select\",\"op\":\"any\",\"value\":[\"quente\"]},{\"fieldId\":\"estimatedValue\",\"fieldType\":\"number\",\"op\":\"gte\",\"value\":5000}]}}",
+  "funnelId": 12
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Nome vazio, `filterConfig` inválido ou muito grande, `funnelId` ausente ou inválido, JSON de configuração com sintaxe incorreta |
+| 401 | - | Token ausente, inválido ou expirado |

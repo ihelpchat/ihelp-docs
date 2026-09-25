@@ -1,0 +1,71 @@
+---
+title: "Listar notas"
+description: "Lista todas as anotações do card, incluindo públicas e privadas, com suporte a paginação."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/card/{id}/notes
+---
+
+Lista todas as anotações do card, incluindo públicas e privadas, com suporte a paginação.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+</Params>
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="page" type="int" required={false}>
+Número da página (começa em 1). Se omitido ou sem `pageSize`, retorna a lista completa.
+</Param>
+<Param name="pageSize" type="int" required={false}>
+Quantidade de itens por página.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 404 | - | Card não encontrado ou de outra empresa |

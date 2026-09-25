@@ -1,0 +1,58 @@
+---
+title: "Obter automação"
+description: "Obtém uma automação específica por ID com todos os seus detalhes."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/automation/{id}
+---
+
+Obtém uma automação específica por ID com todos os seus detalhes.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da automação.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/automation/7 \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/automation/7', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/automation/7",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/automation/7
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 404 | - | Automação não existe ou pertence a outra empresa |

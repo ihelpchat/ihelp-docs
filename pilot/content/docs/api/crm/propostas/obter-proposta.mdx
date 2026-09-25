@@ -1,0 +1,63 @@
+---
+title: "Obter proposta"
+description: "Obtém uma proposta completa com todos os itens, campos de contato e condições de pagamento."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/proposals/{id}
+---
+
+Obtém uma proposta completa com todos os itens, campos de contato e condições de pagamento.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da proposta.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/proposals/123 \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/proposals/123', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/proposals/123",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/proposals/123
+```
+
+</CodeTabs>
+
+## Regras
+
+Use este endpoint para obter a proposta completa, normalmente para edição ou visualização. Para listar todas as propostas de um card, use [`GET /proposals/card/{cardId}`](/api/crm/propostas/listar-propostas-do-card).
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 404 | - | Proposta inexistente ou de outra empresa |

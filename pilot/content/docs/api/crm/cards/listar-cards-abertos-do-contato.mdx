@@ -1,0 +1,59 @@
+---
+title: "Cards abertos do contato"
+description: "Lista compacta de cards **abertos** do contato (abertos primeiro, depois ganhos/perdidos). Usada na sidebar CRM da tela de Atendimento."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/contacts/{contactId}/cards
+---
+
+Lista compacta de cards **abertos** do contato (abertos primeiro, depois ganhos/perdidos). Usada na sidebar CRM da tela de Atendimento.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="contactId" type="int">
+ID do contato.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/contacts/3107/cards \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/contacts/3107/cards', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/contacts/3107/cards",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/contacts/3107/cards
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 404 | - | Contato não encontrado |

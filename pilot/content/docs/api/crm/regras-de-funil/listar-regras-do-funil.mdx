@@ -1,0 +1,64 @@
+---
+title: "Regras do funil"
+description: "Lista as regras ativas do funil da sua empresa com seus gatilhos, condições e ações."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/funnelrule/funnel/{funnelId}
+---
+
+Lista as regras ativas do funil da sua empresa com seus gatilhos, condições e ações.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="funnelId" type="int">
+ID do funil.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/funnel/12 \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/funnel/12', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/funnel/12",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/funnel/12
+```
+
+</CodeTabs>
+
+## Regras
+
+<Callout type="warn" title="O que as regras executam hoje">
+Disparam apenas os gatilhos `1` (atendimento novo), `2` (atendimento transferido) e `3` (atendimento encerrado). As condições avaliadas são `field` `1` (usuário), `2` (departamento) e `5` (canal). As ações executadas são `1` (criar card) e `9` (mudar status do card). O restante é aceito no cadastro, mas não tem efeito.
+</Callout>
+
+**Valores de gatilho:** `1` atendimento novo, `2` transferido, `3` encerrado, `4` mudou de departamento, `5` mudou de etapa.
+
+**Valores de condição:** `field` `1` usuário, `2` departamento, `3` valor estimado, `4` status, `5` canal, `6` criado em, `7` atualizado em. **Operadores:** `1` igual, `2` diferente, `3` maior, `4` maior ou igual, `5` menor, `6` menor ou igual, `7` em, `8` fora de, `9` contém, `10` não contém.
+
+**Valores de ação:** `1` criar card, `2` mover card, `3` atribuir responsável, `4` notificar, `5` atualizar campo, `6` webhook, `7` nota, `8` status do atendimento, `9` mudar status do card.

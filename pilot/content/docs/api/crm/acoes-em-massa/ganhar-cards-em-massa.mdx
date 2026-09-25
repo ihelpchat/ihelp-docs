@@ -1,0 +1,94 @@
+---
+title: "Ganhar em massa"
+description: "Marca vários cards como ganhos em uma única requisição, com relatório de sucesso, ignorados e falhas."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/bulk/close-won
+---
+
+Marca vários cards como ganhos em uma única requisição, com relatório de sucesso, ignorados e falhas.
+
+## Corpo da requisição
+
+<Params>
+<Param name="cardIds" type="int[]" required>
+Array de IDs de cards. Deve conter entre 1 e 2000 IDs; fora disso a resposta é `400`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/bulk/close-won" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "cardIds": [
+    8821,
+    8822,
+    8823
+  ]
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/bulk/close-won', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "cardIds": [
+      8821,
+      8822,
+      8823
+    ]
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/bulk/close-won",
+    json={
+        "cardIds": [
+            8821,
+            8822,
+            8823,
+        ],
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/card/bulk/close-won HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "cardIds": [
+    8821,
+    8822,
+    8823
+  ]
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | `cardIds` ausente ou vazio, ou com menos de 1 ou mais de 2000 IDs |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização em um dos funis dos cards |

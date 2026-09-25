@@ -1,0 +1,140 @@
+---
+title: "Criar nota"
+description: "Adiciona uma nova anotação ao card com título, descrição, privacidade e opção de anexo de mídia."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/{id}/notes
+---
+
+Adiciona uma nova anotação ao card com título, descrição, privacidade e opção de anexo de mídia.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="description" type="string" required>
+Corpo da anotação. Vazio responde `400` com `A descrição da anotação é obrigatória`.
+</Param>
+<Param name="title" type="string">
+Título da anotação.
+</Param>
+<Param name="isPrivate" type="bool">
+Se `true`, a anotação não aparece em [Listar notas públicas](/api/crm/notas-e-historico/listar-notas-publicas). Padrão: `false`.
+</Param>
+<Param name="mediaUrl" type="string">
+URL de um anexo já hospedado (imagem, vídeo, etc.).
+</Param>
+<Param name="mediaType" type="string">
+Tipo MIME do anexo (ex.: `image/png`, `video/mp4`).
+</Param>
+<Param name="mediaName" type="string">
+Nome do arquivo.
+</Param>
+<Param name="mediaSize" type="int">
+Tamanho em bytes.
+</Param>
+<Param name="mediaThumbnail" type="string">
+URL da miniatura.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "title": "Ligação de follow-up",
+  "description": "Cliente pediu desconto de 10% para fechar até sexta.",
+  "isPrivate": false,
+  "mediaUrl": "https://assets.ihelpchat.com/medias/print-conversa.png",
+  "mediaType": "image/png",
+  "mediaName": "print-conversa.png",
+  "mediaSize": 184320,
+  "mediaThumbnail": ""
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "title": "Ligação de follow-up",
+    "description": "Cliente pediu desconto de 10% para fechar até sexta.",
+    "isPrivate": false,
+    "mediaUrl": "https://assets.ihelpchat.com/medias/print-conversa.png",
+    "mediaType": "image/png",
+    "mediaName": "print-conversa.png",
+    "mediaSize": 184320,
+    "mediaThumbnail": ""
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes",
+    json={
+        "title": "Ligação de follow-up",
+        "description": "Cliente pediu desconto de 10% para fechar até sexta.",
+        "isPrivate": False,
+        "mediaUrl": "https://assets.ihelpchat.com/medias/print-conversa.png",
+        "mediaType": "image/png",
+        "mediaName": "print-conversa.png",
+        "mediaSize": 184320,
+        "mediaThumbnail": "",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/card/8821/notes HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "title": "Ligação de follow-up",
+  "description": "Cliente pediu desconto de 10% para fechar até sexta.",
+  "isPrivate": false,
+  "mediaUrl": "https://assets.ihelpchat.com/medias/print-conversa.png",
+  "mediaType": "image/png",
+  "mediaName": "print-conversa.png",
+  "mediaSize": 184320,
+  "mediaThumbnail": ""
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+O campo `cardId` no corpo é ignorado: vale o `{id}` da rota. A privacidade (`isPrivate`) é definida apenas na criação e não pode ser alterada em [Atualizar nota](/api/crm/notas-e-historico/atualizar-nota).
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Descrição vazia |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 404 | - | Card não encontrado ou de outra empresa |

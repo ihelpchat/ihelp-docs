@@ -1,0 +1,172 @@
+---
+title: "Sync de notas"
+description: "Sincroniza um lote de notas de um card específico."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/{cardId}/notes/sync/batch
+---
+
+Sincroniza um lote de notas de um card específico.
+
+<Callout type="warn" title="Uso interno">
+Este endpoint implementa a sincronização incremental do próprio app iHelp e não faz parte da API de integração.
+</Callout>
+
+## Parâmetros de rota
+
+<Params>
+<Param name="cardId" type="int">
+ID do card ao qual as notas pertencem.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="[]" type="CardNote[]" required>
+Array de notas completas com todos os campos da entidade CardNote. O `cardId` de cada item é forçado ao cardId da rota. IDs existentes atualizam; novos são criados.
+</Param>
+</Params>
+
+Notas com `isActive: false` são marcadas como removidas (soft delete). Se o card não existe ou pertence a outro usuário (em acesso restrito), a requisição retorna `404`.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes/sync/batch" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[
+  {
+    "id": 101,
+    "cardId": 8821,
+    "title": "Pendência técnica",
+    "description": "Aguardando resposta do cliente",
+    "isPrivate": false,
+    "createdDate": "2026-09-25T11:30:00Z",
+    "createdBy": 42,
+    "isActive": true
+  },
+  {
+    "id": 102,
+    "cardId": 8821,
+    "title": "Memorando interno",
+    "description": "Verificar integração com ERP",
+    "isPrivate": true,
+    "createdDate": "2026-09-25T11:45:00Z",
+    "createdBy": 57,
+    "isActive": true
+  }
+]'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes/sync/batch', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify([
+    {
+      "id": 101,
+      "cardId": 8821,
+      "title": "Pendência técnica",
+      "description": "Aguardando resposta do cliente",
+      "isPrivate": false,
+      "createdDate": "2026-09-25T11:30:00Z",
+      "createdBy": 42,
+      "isActive": true
+    },
+    {
+      "id": 102,
+      "cardId": 8821,
+      "title": "Memorando interno",
+      "description": "Verificar integração com ERP",
+      "isPrivate": true,
+      "createdDate": "2026-09-25T11:45:00Z",
+      "createdBy": 57,
+      "isActive": true
+    }
+  ]),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes/sync/batch",
+    json=[
+        {
+            "id": 101,
+            "cardId": 8821,
+            "title": "Pendência técnica",
+            "description": "Aguardando resposta do cliente",
+            "isPrivate": False,
+            "createdDate": "2026-09-25T11:30:00Z",
+            "createdBy": 42,
+            "isActive": True,
+        },
+        {
+            "id": 102,
+            "cardId": 8821,
+            "title": "Memorando interno",
+            "description": "Verificar integração com ERP",
+            "isPrivate": True,
+            "createdDate": "2026-09-25T11:45:00Z",
+            "createdBy": 57,
+            "isActive": True,
+        },
+    ],
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/card/8821/notes/sync/batch HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+[
+  {
+    "id": 101,
+    "cardId": 8821,
+    "title": "Pendência técnica",
+    "description": "Aguardando resposta do cliente",
+    "isPrivate": false,
+    "createdDate": "2026-09-25T11:30:00Z",
+    "createdBy": 42,
+    "isActive": true
+  },
+  {
+    "id": 102,
+    "cardId": 8821,
+    "title": "Memorando interno",
+    "description": "Verificar integração com ERP",
+    "isPrivate": true,
+    "createdDate": "2026-09-25T11:45:00Z",
+    "createdBy": 57,
+    "isActive": true
+  }
+]
+```
+
+</CodeTabs>
+
+## Regras
+
+Este é o endpoint legado (CardController). Para novo código, prefira [Sync V2 de notas](/api/crm/sincronizacao/sync-v2-de-notas).
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Card não existe neste tenant |
+| 401 | - | Token ausente, inválido ou expirado |
+| 404 | - | Card não encontrado ou pertence a outro usuário (acesso restrito) |

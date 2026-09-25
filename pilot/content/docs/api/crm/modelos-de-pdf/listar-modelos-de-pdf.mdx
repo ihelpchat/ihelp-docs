@@ -1,0 +1,51 @@
+---
+title: "Listar modelos"
+description: "Lista todos os modelos de PDF da empresa, mais recentes primeiro."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/pdf-templates
+---
+
+Lista todos os modelos de PDF da empresa, mais recentes primeiro.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/pdf-templates \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/pdf-templates', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/pdf-templates",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/pdf-templates
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 400 | - | Erro ao listar |

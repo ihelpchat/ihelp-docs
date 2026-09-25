@@ -1,0 +1,60 @@
+---
+title: "Primeira etapa"
+description: "Obtém a primeira etapa ativa do funil (ordem 1)."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/funnelstage/funnel/{funnelId}/first
+---
+
+Obtém a primeira etapa ativa do funil (ordem 1).
+
+## Parâmetros de rota
+
+<Params>
+<Param name="funnelId" type="int">
+ID do funil.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/funnel/12/first \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/funnel/12/first', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/funnel/12/first",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/funnel/12/first
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem acesso ao funil |
+| 404 | - | Funil inexistente ou sem etapas ativas |

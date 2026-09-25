@@ -1,0 +1,169 @@
+---
+title: "Mover card"
+description: "Move um card para outra etapa do mesmo funil, como arrastar o card entre colunas do kanban, com opção de forçar pendências obrigatórias."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/card/{id}/stage/{stageId}
+---
+
+Move um card para outra etapa do mesmo funil, como arrastar o card entre colunas do kanban, com opção de forçar pendências obrigatórias.
+
+Para saber antes se o card pode sair da etapa atual, sem alterar nada, use [Validar movimento](/api/crm/movimentacao/validar-movimento). Para mudar o card de funil, use [Trocar de funil](/api/crm/movimentacao/trocar-de-funil).
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+<Param name="stageId" type="int">
+ID da etapa de destino, do mesmo funil do card.
+</Param>
+</Params>
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="force" type="bool" required={false}>
+`true` confirma o movimento mesmo com pendências obrigatórias. O bypass fica registrado no histórico do card. Padrão `false`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/stage/102?force=false" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/stage/102?force=false', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+const data = await res.json();
+console.log(data);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/stage/102?force=false",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.json())
+```
+
+```http
+PUT /api/v2/crm/card/8821/stage/102?force=false HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+```
+
+</CodeTabs>
+
+## Resposta
+
+<Response status="200 OK">
+
+```json
+{
+  "card": {
+    "id": 8821,
+    "title": "Proposta ACME",
+    "stageId": 102,
+    "estimatedValue": 4500,
+    "status": 1
+  },
+  "sourceStage": {
+    "id": 101,
+    "totalItems": 12,
+    "totalCardValue": 38000
+  },
+  "destinationStage": {
+    "id": 102,
+    "totalItems": 7,
+    "totalCardValue": 29500
+  }
+}
+```
+
+</Response>
+
+`totalItems` é a quantidade de cards na etapa e `totalCardValue` a soma dos valores. Use-os para atualizar cabeçalhos sem refazer consultas.
+
+<Response status="409 Conflict">
+
+```json
+{
+  "canMove": false,
+  "missingFields": [
+    {
+      "key": "email",
+      "label": "E-mail"
+    }
+  ],
+  "pendingTasks": [
+    {
+      "id": 55,
+      "title": "Ligar para o cliente"
+    }
+  ]
+}
+```
+
+</Response>
+
+Pendências obrigatórias: a etapa **atual** exige campos ou tarefas ainda não concluídos. Nada foi movido. Para prosseguir, repita a chamada com `?force=true`.
+
+<Response status="409 Conflict">
+
+```json
+{
+  "error": "stage_inactive",
+  "message": "Não é possível mover para um estágio excluído."
+}
+```
+
+</Response>
+
+<Callout type="warn" title="Não contornável">
+Etapa de destino excluída. Este caso **não** é contornável por `force`.
+</Callout>
+
+## Campos relevantes
+
+<Fields>
+<Field name="card">
+O card já com a etapa nova.
+</Field>
+<Field name="sourceStage">
+Totais atualizados da coluna de origem.
+</Field>
+<Field name="destinationStage">
+Totais atualizados da coluna de destino.
+</Field>
+</Fields>
+
+## Regras
+
+- **Retry é seguro.** Se o card já estiver na etapa de destino, a API responde `200` sem alterar nada.
+- Fluxo recomendado: chame sem `force`; se vier `409` com `canMove: false`, apresente as pendências ao usuário e só então repita com `force=true`.
+- Este endpoint é para movimentação **dentro do mesmo funil**. Para mudar o card de funil, use [Trocar de funil](/api/crm/movimentacao/trocar-de-funil).
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Você tem permissão apenas de visualização nesta pipeline |
+| 404 | - | Card inexistente ou pertencente a outra empresa |
+| 409 | - | Pendências obrigatórias na etapa atual (corpo com `canMove: false`). Contornável com `force=true` |
+| 409 | `stage_inactive` | Etapa de destino excluída. Não contornável por `force` |
+| 409 | `stage_concurrency_conflict` | Conflito de concorrência. Vem com header `Retry-After: 1`, repita a chamada |

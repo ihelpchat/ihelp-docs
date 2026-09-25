@@ -1,0 +1,9 @@
+{
+  "title": "Transportadoras",
+  "pages": [
+    "listar-transportadoras",
+    "criar-transportadora",
+    "atualizar-transportadora",
+    "excluir-transportadora"
+  ]
+}

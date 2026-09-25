@@ -1,0 +1,58 @@
+---
+title: "Cards do responsável"
+description: "Lista todos os cards ativos de um responsável em todos os funis. Se o usuário tem acesso restrito, a rota retorna seus próprios cards."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/card/responsible/{responsibleId}
+---
+
+Lista todos os cards ativos de um responsável em todos os funis. Se o usuário tem acesso restrito, a rota retorna seus próprios cards.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="responsibleId" type="int">
+ID do responsável (usuário).
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/card/responsible/42 \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/responsible/42', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/responsible/42",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/card/responsible/42
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |

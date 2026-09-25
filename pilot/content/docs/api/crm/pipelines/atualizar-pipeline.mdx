@@ -1,0 +1,127 @@
+---
+title: "Atualizar pipeline"
+description: "Atualiza parcialmente uma pipeline. Campos não informados preservam o valor atual. Se regras forem informadas, substituem as existentes."
+source: api
+contentType: referencia
+method: PATCH
+endpoint: /crm/pipelines/{id}
+---
+
+Atualiza parcialmente uma pipeline. Campos não informados preservam o valor atual. Se regras forem informadas, substituem as existentes.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int" required>
+ID da pipeline.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="name" type="string">
+Novo nome, mínimo 2 caracteres, único na empresa.
+</Param>
+<Param name="desc" type="string">
+Nova descrição.
+</Param>
+<Param name="icon" type="string">
+Novo ícone.
+</Param>
+<Param name="color" type="string">
+Nova cor hex.
+</Param>
+<Param name="goalValue" type="string">
+Nova meta de valor. Formato: `R$ 150.000,00`
+</Param>
+<Param name="goalConv" type="string">
+Nova meta de conversão.
+</Param>
+<Param name="lockContact" type="bool">
+Nova trava de contato.
+</Param>
+<Param name="descricaoUltimaMensagem" type="bool">
+Novo comportamento de última mensagem.
+</Param>
+<Param name="visibility" type="string">
+`public`, `team` ou `private`. Inválido responde `400`.
+</Param>
+<Param name="ownerUserId" type="int">
+ID do novo dono. O dono anterior passa a admin.
+</Param>
+<Param name="rules[]" type="object[]">
+Se informado, **substitui todas as regras**. `targetStageIndex` passa a indicar posição entre etapas ativas atuais.
+</Param>
+</Params>
+
+Etapas não são editáveis por este endpoint; use [Editar campo da etapa](/api/crm/etapas/editar-campo-da-etapa). Mudança de `visibility` refaz a lista de membros: `private` deixa só o dono, `team` deixa o dono e pares departamentais, `public` inclui todos os ativos. Quem sai da regra perde acesso, quem entra recebe visualização apenas.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PATCH "https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "Vendas B2B Enterprise",
+  "visibility": "private",
+  "goalValue": "R$ 200.000,00"
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12', {
+  method: 'PATCH',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "name": "Vendas B2B Enterprise",
+    "visibility": "private",
+    "goalValue": "R$ 200.000,00"
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.patch(
+    "https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12",
+    json={
+        "name": "Vendas B2B Enterprise",
+        "visibility": "private",
+        "goalValue": "R$ 200.000,00",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PATCH /api/v2/crm/pipelines/12 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "name": "Vendas B2B Enterprise",
+  "visibility": "private",
+  "goalValue": "R$ 200.000,00"
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Nome vazio, menos de 2 caracteres, duplicado, ou visibilidade inválida |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem permissão de admin na pipeline |
+| 404 | - | Pipeline não encontrada |

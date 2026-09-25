@@ -1,0 +1,122 @@
+---
+title: "Métricas com filtro"
+description: "Métricas por etapa respeitando filtros avançados. Aplicado ao kanban quando filtros complexos estão ativos."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/funnel/{funnelId}/stages/metrics-filtered
+---
+
+Métricas por etapa respeitando filtros avançados. Aplicado ao kanban quando filtros complexos estão ativos.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="funnelId" type="int">
+ID do funil.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="generalText" type="string">
+Busca textual em título, descrição e contato.
+</Param>
+<Param name="status" type="int">
+Status do card (1 Aberto, 2 Em andamento, 3 Ganho, 4 Perdido, 5 Cancelado).
+</Param>
+<Param name="responsibleId" type="int">
+ID do usuário responsável.
+</Param>
+<Param name="stageId" type="int">
+ID da etapa (nota: filtra etapas, não apenas cards).
+</Param>
+<Param name="priority" type="string">
+Prioridade.
+</Param>
+<Param name="filterTree" type="object">
+Árvore de filtros AND/OR. Ver [Filtro de cards](/api/crm/filtro-de-cards).
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/stages/metrics-filtered" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "responsibleId": 42,
+  "filterTree": {
+    "op": "AND",
+    "groups": [],
+    "conditions": []
+  }
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/stages/metrics-filtered', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "responsibleId": 42,
+    "filterTree": {
+      "op": "AND",
+      "groups": [],
+      "conditions": []
+    }
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/stages/metrics-filtered",
+    json={
+        "responsibleId": 42,
+        "filterTree": {
+            "op": "AND",
+            "groups": [],
+            "conditions": [],
+        },
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/funnel/12/stages/metrics-filtered HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "responsibleId": 42,
+  "filterTree": {
+    "op": "AND",
+    "groups": [],
+    "conditions": []
+  }
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Sintaxe inválida no filterTree |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem acesso ao funil |
+| 404 | - | Funil inexistente |

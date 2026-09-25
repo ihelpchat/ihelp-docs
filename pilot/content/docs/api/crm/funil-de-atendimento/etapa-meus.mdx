@@ -1,0 +1,61 @@
+---
+title: "Etapa Meus"
+description: "Obtém a etapa Meus do funil de atendimento"
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/attendancefunnel/stage/my
+---
+
+Obtém a etapa Meus do funil de atendimento
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="page" type="int" required={false}>
+Número da página. Padrão 1
+</Param>
+<Param name="pageSize" type="int" required={false}>
+Quantidade de itens por página. Padrão 20
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/attendancefunnel/stage/my \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/attendancefunnel/stage/my', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/attendancefunnel/stage/my",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/attendancefunnel/stage/my
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | `Unauthorized` | Token ausente ou inválido |

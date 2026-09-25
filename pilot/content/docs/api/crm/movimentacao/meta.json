@@ -1,0 +1,11 @@
+{
+  "title": "Movimentação",
+  "pages": [
+    "validar-movimento",
+    "mover-card",
+    "mover-em-massa",
+    "listar-ids-da-etapa",
+    "trocar-de-funil",
+    "mover-por-telefone"
+  ]
+}

@@ -1,0 +1,82 @@
+---
+title: "Exportar pipeline"
+description: "Exporta a pipeline em CSV (pt-BR) ou Excel com múltiplas abas: KPIs, cards e etapas."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/pipelines/{id}/export
+---
+
+Exporta a pipeline em CSV (pt-BR) ou Excel com múltiplas abas: KPIs, cards e etapas.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int" required>
+ID da pipeline.
+</Param>
+</Params>
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="format" type="string" required={false}>
+`csv` ou `xlsx`. Padrão `xlsx`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl -G https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12/export \
+  --data-urlencode "format=xlsx" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -o vendas-b2b-2026-09-25.xlsx
+```
+
+```js
+import { writeFile } from 'node:fs/promises';
+
+const params = new URLSearchParams({format: 'xlsx'});
+
+const res = await fetch(`https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12/export?${params}`, {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+await writeFile('vendas-b2b-2026-09-25.xlsx', Buffer.from(await res.arrayBuffer()));
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12/export",
+    params={
+        "format": "xlsx",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+open("vendas-b2b-2026-09-25.xlsx", "wb").write(r.content)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12/export?format=xlsx
+```
+
+</CodeTabs>
+
+## Regras
+
+O xlsx inclui abas separadas com KPIs agregados, lista de cards e detalhes das etapas. CSV exporta apenas os cards. O nome do arquivo inclui a data de hoje.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Formato inválido (use csv ou xlsx) ou pipeline muito grande (mais de 10 mil cards) |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem permissão de admin na pipeline |
+| 404 | - | Pipeline não encontrada |

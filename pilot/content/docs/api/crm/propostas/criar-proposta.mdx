@@ -1,0 +1,310 @@
+---
+title: "Criar proposta"
+description: "Cria uma proposta comercial em Rascunho para um card, com itens, descontos, condições de pagamento, frete e modelo de PDF."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/proposals
+---
+
+Cria uma proposta comercial em Rascunho para um card, com itens, descontos, condições de pagamento, frete e modelo de PDF.
+
+A proposta nasce com status `1` (Rascunho) e um número sequencial da empresa, como `PROP-0043`. Nome e preço de cada item são gravados como cópia: editar o item no [catálogo](/api/crm/catalogo/atualizar-item-do-catalogo) depois não muda propostas já salvas.
+
+<Callout type="info" title="Envelope dados">
+A resposta e as mensagens de erro vêm dentro de `dados`. Exemplo de erro: `{ "dados": "Adicione ao menos um item à proposta" }`.
+</Callout>
+
+## Corpo da requisição
+
+<Params>
+<Param name="cardId" type="int" required>
+Card da proposta. O card precisa ter um contato vinculado.
+</Param>
+<Param name="items[].catalogItemId" type="int">
+Item do catálogo de origem. Se informado, precisa ser da sua empresa, senão a resposta é `404` com `Item de catálogo não encontrado`.
+</Param>
+<Param name="items[].name" type="string" required>
+Nome impresso na proposta, até 120 caracteres.
+</Param>
+<Param name="items[].description" type="string">
+Descrição do item.
+</Param>
+<Param name="items[].qty" type="int" required>
+Quantidade, mínimo `1`.
+</Param>
+<Param name="items[].unitPrice" type="decimal">
+Valor unitário em R$, mínimo `0`. Aceita `null`.
+</Param>
+<Param name="items[].discount" type="decimal">
+Desconto em R$ da linha inteira, não por unidade. Vai de `0` a `qty × unitPrice`.
+</Param>
+<Param name="contactFields[].key" type="string" required>
+Identificador do campo do contato, como `email`. Truncado em 60 caracteres.
+</Param>
+<Param name="contactFields[].label" type="string" required>
+Rótulo impresso no documento, como `E-mail`. Truncado em 120 caracteres.
+</Param>
+<Param name="contactFields[].value" type="string">
+Valor impresso ao lado do rótulo.
+</Param>
+<Param name="closedTotal" type="decimal">
+Valor total fechado. Aceita `null`.
+</Param>
+<Param name="discountTotal" type="decimal">
+Desconto em R$ sobre o total, além dos descontos por item. Não pode ser negativo nem maior que o subtotal já descontado. Padrão `0`.
+</Param>
+<Param name="expirationDate" type="datetime">
+Validade da proposta, como data de calendário no horário de Brasília. Não pode ser anterior a hoje.
+</Param>
+<Param name="observations" type="string">
+Observações impressas no documento, até 1000 caracteres.
+</Param>
+<Param name="updatedAt" type="datetime">
+Data de atualização da proposta. Aceita `null`.
+</Param>
+<Param name="paymentMethodId" type="int">
+Forma de pagamento da sua empresa. Sem ela, os campos de pagamento abaixo são descartados.
+</Param>
+<Param name="downPayment" type="decimal">
+Entrada em R$, de `0` até o total da proposta.
+</Param>
+<Param name="installments" type="int">
+Número de parcelas, ajustado ao limite da forma de pagamento: `10` numa forma que aceita até `6` grava `6`.
+</Param>
+<Param name="firstDueDays" type="int">
+Dias até a 1ª parcela, de `0` a `365`.
+</Param>
+<Param name="dueMode" type="int">
+`1` intervalo fixo em dias, `2` dia fixo do mês.
+</Param>
+<Param name="intervalDays" type="int">
+Dias entre parcelas, de `1` a `365`. Usado com `dueMode: 1`.
+</Param>
+<Param name="fixedDueDay" type="int">
+Dia do mês do vencimento, de `1` a `31`. Usado com `dueMode: 2`.
+</Param>
+<Param name="shippingTypeId" type="int">
+Tipo de frete da sua empresa. Sem ele, `deliveryEstimate` e `shippingFee` são descartados.
+</Param>
+<Param name="deliveryEstimate" type="string">
+Previsão de entrega desta proposta, truncada em 120 caracteres.
+</Param>
+<Param name="shippingFee" type="decimal">
+Valor do frete. Só entra no total se o tipo de frete cobrar taxa (`chargesFee: true`).
+</Param>
+<Param name="carrierId" type="int">
+Transportadora da sua empresa.
+</Param>
+<Param name="pdfTemplateId" type="int">
+Modelo de PDF mesclado ao documento.
+</Param>
+</Params>
+
+Os blocos opcionais dependem das chaves do [perfil da empresa](/api/crm/perfil-da-empresa/obter-perfil-da-empresa). Com a chave desligada, os campos do bloco são descartados sem erro:
+
+| Chave no perfil | Campos que dependem dela |
+|---|---|
+| `paymentsEnabled: true` | `paymentMethodId`, `downPayment`, `installments`, `firstDueDays`, `dueMode`, `intervalDays`, `fixedDueDay` |
+| `shippingEnabled: true` | `shippingTypeId`, `deliveryEstimate`, `shippingFee`, `carrierId` |
+| `pdfMergeEnabled: true` | `pdfTemplateId` |
+
+O `discountPct` da [forma de pagamento](/api/crm/formas-de-pagamento/listar-formas-de-pagamento) é copiado para a proposta, mas não altera o `total`.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/proposals" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "cardId": 8821,
+  "items": [
+    {
+      "catalogItemId": 10,
+      "name": "Plano Pro (anual)",
+      "qty": 2,
+      "unitPrice": 800,
+      "discount": 50
+    },
+    {
+      "catalogItemId": null,
+      "name": "Implantação",
+      "qty": 1,
+      "unitPrice": 300,
+      "discount": 0
+    }
+  ],
+  "contactFields": [
+    {
+      "key": "email",
+      "label": "E-mail",
+      "value": "compras@acme.com.br"
+    }
+  ],
+  "discountTotal": 100,
+  "expirationDate": "2026-10-31T00:00:00",
+  "observations": "Valores válidos para pagamento no boleto.",
+  "paymentMethodId": 5,
+  "downPayment": 500,
+  "installments": 3,
+  "firstDueDays": 30,
+  "dueMode": 1,
+  "intervalDays": 30
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/proposals', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "cardId": 8821,
+    "items": [
+      {
+        "catalogItemId": 10,
+        "name": "Plano Pro (anual)",
+        "qty": 2,
+        "unitPrice": 800,
+        "discount": 50
+      },
+      {
+        "catalogItemId": null,
+        "name": "Implantação",
+        "qty": 1,
+        "unitPrice": 300,
+        "discount": 0
+      }
+    ],
+    "contactFields": [
+      {
+        "key": "email",
+        "label": "E-mail",
+        "value": "compras@acme.com.br"
+      }
+    ],
+    "discountTotal": 100,
+    "expirationDate": "2026-10-31T00:00:00",
+    "observations": "Valores válidos para pagamento no boleto.",
+    "paymentMethodId": 5,
+    "downPayment": 500,
+    "installments": 3,
+    "firstDueDays": 30,
+    "dueMode": 1,
+    "intervalDays": 30
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/proposals",
+    json={
+        "cardId": 8821,
+        "items": [
+            {
+                "catalogItemId": 10,
+                "name": "Plano Pro (anual)",
+                "qty": 2,
+                "unitPrice": 800,
+                "discount": 50,
+            },
+            {
+                "catalogItemId": None,
+                "name": "Implantação",
+                "qty": 1,
+                "unitPrice": 300,
+                "discount": 0,
+            },
+        ],
+        "contactFields": [
+            {
+                "key": "email",
+                "label": "E-mail",
+                "value": "compras@acme.com.br",
+            },
+        ],
+        "discountTotal": 100,
+        "expirationDate": "2026-10-31T00:00:00",
+        "observations": "Valores válidos para pagamento no boleto.",
+        "paymentMethodId": 5,
+        "downPayment": 500,
+        "installments": 3,
+        "firstDueDays": 30,
+        "dueMode": 1,
+        "intervalDays": 30,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/proposals HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "cardId": 8821,
+  "items": [
+    {
+      "catalogItemId": 10,
+      "name": "Plano Pro (anual)",
+      "qty": 2,
+      "unitPrice": 800,
+      "discount": 50
+    },
+    {
+      "catalogItemId": null,
+      "name": "Implantação",
+      "qty": 1,
+      "unitPrice": 300,
+      "discount": 0
+    }
+  ],
+  "contactFields": [
+    {
+      "key": "email",
+      "label": "E-mail",
+      "value": "compras@acme.com.br"
+    }
+  ],
+  "discountTotal": 100,
+  "expirationDate": "2026-10-31T00:00:00",
+  "observations": "Valores válidos para pagamento no boleto.",
+  "paymentMethodId": 5,
+  "downPayment": 500,
+  "installments": 3,
+  "firstDueDays": 30,
+  "dueMode": 1,
+  "intervalDays": 30
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+- O total é `subtotal − descontos dos itens − discountTotal + frete`. No exemplo: subtotal `2 × 800 + 1 × 300 = 1900`, descontos dos itens `50`, `discountTotal` `100`, sem frete, total `1750`.
+- O `estimatedValue` do card passa a ser a soma do `total` das propostas dele que não foram excluídas nem rejeitadas. Se o card 8821 valia `4500.00` e esta é a primeira proposta, ele passa a valer `1750.00`.
+- A criação exige o módulo de propostas ativo na empresa.
+- Em funis onde o usuário só vê os próprios cards, criar proposta em card de outra pessoa responde `404` sem corpo.
+- Erro de formato no JSON (tipo errado, corpo vazio) responde `400` no formato padrão do ASP.NET, fora do envelope `dados`.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Validação dos campos, com a mensagem em `dados`: sem itens (`Adicione ao menos um item à proposta`), validade no passado (`A validade não pode ser uma data passada`), desconto maior que a linha, `qty` menor que 1 |
+| 400 | - | Card sem contato: `Vincule um contato ao card para criar propostas` |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Módulo de propostas desligado: `As propostas comerciais não estão habilitadas para esta empresa` |
+| 404 | - | Card, item de catálogo, forma de pagamento, tipo de frete, transportadora ou modelo de PDF inexistente ou de outra empresa, como `Card não encontrado` |

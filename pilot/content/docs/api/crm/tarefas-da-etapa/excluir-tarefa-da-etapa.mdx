@@ -1,0 +1,66 @@
+---
+title: "Excluir tarefa"
+description: "Remove um modelo de tarefa de uma etapa. Responde 204 em sucesso. Tarefas já criadas a partir deste template não são deletadas."
+source: api
+contentType: referencia
+method: DELETE
+endpoint: /crm/stages/{stageId}/task-templates/{templateId}
+---
+
+Remove um modelo de tarefa de uma etapa. Responde 204 em sucesso. Tarefas já criadas a partir deste template não são deletadas.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="stageId" type="int">
+Identificador da etapa
+</Param>
+<Param name="templateId" type="int">
+Identificador do modelo de tarefa
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X DELETE "https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates/1" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates/1', {
+  method: 'DELETE',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.delete(
+    "https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates/1",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+DELETE /api/v2/crm/stages/101/task-templates/1 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | `Unauthorized` | Token ausente ou inválido |
+| 403 | `Forbidden` | Usuário não tem permissão |
+| 404 | `Not Found` | Modelo de tarefa ou etapa não existem |

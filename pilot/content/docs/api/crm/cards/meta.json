@@ -1,0 +1,23 @@
+{
+  "title": "Cards",
+  "pages": [
+    "criar-card",
+    "obter-card",
+    "obter-card-por-idref",
+    "obter-card-completo",
+    "atualizar-card",
+    "excluir-card",
+    "filtrar-cards-do-funil",
+    "carregar-board",
+    "carregar-board-com-filtro",
+    "listar-cards-da-empresa",
+    "listar-cards-da-etapa",
+    "listar-cards-do-responsavel",
+    "listar-cards-do-contato",
+    "listar-cards-abertos-do-contato",
+    "ranking-por-responsavel",
+    "listar-cards-atrasados",
+    "previsao-mensal",
+    "ultimo-atendimento-do-card"
+  ]
+}

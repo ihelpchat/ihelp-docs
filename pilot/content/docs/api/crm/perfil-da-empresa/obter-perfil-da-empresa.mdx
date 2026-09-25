@@ -1,0 +1,51 @@
+---
+title: "Obter perfil"
+description: "Obtém os dados do perfil da empresa: razão social, CNPJ, contato, logo e configurações de propostas."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/company-profile
+---
+
+Obtém os dados do perfil da empresa: razão social, CNPJ, contato, logo e configurações de propostas.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/company-profile \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/company-profile', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/company-profile",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/company-profile
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 400 | - | Erro ao processar o perfil |

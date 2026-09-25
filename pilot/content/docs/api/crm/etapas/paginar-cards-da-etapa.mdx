@@ -1,0 +1,82 @@
+---
+title: "Paginar cards da etapa"
+description: "Lista os cards abertos de uma etapa com paginação, respeitando filtros rápidos."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/funnelstage/{stageId}/cards
+---
+
+Lista os cards abertos de uma etapa com paginação, respeitando filtros rápidos.
+
+Use este endpoint para carregar cards com paginação simples (filtros rápidos apenas). Para filtros avançados com `filterTree`, use [Paginar com filtro](/api/crm/etapas/paginar-cards-com-filtro) com POST.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="stageId" type="int">
+ID da etapa.
+</Param>
+</Params>
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="page" type="int" required={false}>
+Número da página (1-based). Padrão: 1.
+</Param>
+<Param name="pageSize" type="int" required={false}>
+Itens por página. Padrão: 50. Máximo: 500.
+</Param>
+<Param name="generalText" type="string" required={false}>
+Busca textual em título, descrição e contato.
+</Param>
+<Param name="status" type="int" required={false}>
+Status do card (1 Aberto, 2 Em andamento, 3 Ganho, 4 Perdido, 5 Cancelado).
+</Param>
+<Param name="responsibleId" type="int" required={false}>
+ID do usuário responsável.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101/cards \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101/cards', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101/cards",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101/cards
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem acesso ao funil da etapa |
+| 404 | - | Etapa inexistente |

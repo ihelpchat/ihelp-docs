@@ -1,0 +1,67 @@
+---
+title: "Buscar execuções"
+description: "Busca execuções de automações da empresa com filtros por automação, status, data e tipo de entidade."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/automation/executions
+---
+
+Busca execuções de automações da empresa com filtros por automação, status, data e tipo de entidade.
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="automationId" type="int" required={false}>
+Filtrar por ID de automação
+</Param>
+<Param name="status" type="int" required={false}>
+Filtrar por status: `1` sucesso, `2` falha
+</Param>
+<Param name="fromUtc" type="string" required={false}>
+Data inicial em ISO 8601 (ex: `2026-09-01T00:00:00Z`)
+</Param>
+<Param name="toUtc" type="string" required={false}>
+Data final em ISO 8601
+</Param>
+<Param name="entityType" type="int" required={false}>
+Filtrar por tipo de entidade: `1` card, `2` contato
+</Param>
+<Param name="entityId" type="int" required={false}>
+Filtrar por ID da entidade (card ou contato)
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/automation/executions \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/automation/executions', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/automation/executions",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/automation/executions
+```
+
+</CodeTabs>

@@ -1,0 +1,61 @@
+---
+title: "Ligar ou desligar"
+description: "Liga ou desliga uma automação sem modificar seus dados. Sem corpo na requisição."
+source: api
+contentType: referencia
+method: PATCH
+endpoint: /crm/automation/{id}/toggle
+---
+
+Liga ou desliga uma automação sem modificar seus dados. Sem corpo na requisição.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da automação.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PATCH "https://apiv3.ihelpchat.com/api/v2/crm/automation/7/toggle" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/automation/7/toggle', {
+  method: 'PATCH',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.patch(
+    "https://apiv3.ihelpchat.com/api/v2/crm/automation/7/toggle",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PATCH /api/v2/crm/automation/7/toggle HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 404 | - | Automação não existe ou pertence a outra empresa |

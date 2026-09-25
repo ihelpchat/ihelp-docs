@@ -1,0 +1,68 @@
+---
+title: "Excluir modelo"
+description: "Marca um modelo de PDF como inativo. Responde sem corpo."
+source: api
+contentType: referencia
+method: DELETE
+endpoint: /crm/pdf-templates/{id}
+---
+
+Marca um modelo de PDF como inativo. Responde sem corpo.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do modelo de PDF.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X DELETE "https://apiv3.ihelpchat.com/api/v2/crm/pdf-templates/9" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/pdf-templates/9', {
+  method: 'DELETE',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.delete(
+    "https://apiv3.ihelpchat.com/api/v2/crm/pdf-templates/9",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+DELETE /api/v2/crm/pdf-templates/9 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+```
+
+</CodeTabs>
+
+## Regras
+
+- Apenas administradores da empresa podem remover. Usuário não-admin recebe `401` sem corpo.
+- O módulo de propostas deve estar ativo. Caso contrário, recebe `403` sem corpo.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Não é administrador da empresa |
+| 403 | - | Módulo de propostas não está ativo |
+| 404 | - | ID não encontrado ou de outra empresa |

@@ -1,0 +1,93 @@
+---
+title: "Atualizar filtro"
+description: "Atualiza o nome e a configuração de um filtro salvo existente."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/saved-filters/{id}
+---
+
+Atualiza o nome e a configuração de um filtro salvo existente.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do filtro salvo a atualizar.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="name" type="string" required>
+Novo nome do filtro, até 100 caracteres.
+</Param>
+<Param name="filterConfig" type="string" required>
+Nova configuração do filtro como JSON serializado em texto, até 10 KB. JSON inválido responde `400` com `FilterConfig must be valid JSON.`
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/saved-filters/45" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "Quentes acima de 3 mil",
+  "filterConfig": "{\"filterTree\":{\"op\":\"AND\",\"conditions\":[{\"fieldId\":\"temperature\",\"fieldType\":\"select\",\"op\":\"any\",\"value\":[\"quente\"]},{\"fieldId\":\"estimatedValue\",\"fieldType\":\"number\",\"op\":\"gte\",\"value\":3000}]}}"
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/saved-filters/45', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "name": "Quentes acima de 3 mil",
+    "filterConfig": "{\"filterTree\":{\"op\":\"AND\",\"conditions\":[{\"fieldId\":\"temperature\",\"fieldType\":\"select\",\"op\":\"any\",\"value\":[\"quente\"]},{\"fieldId\":\"estimatedValue\",\"fieldType\":\"number\",\"op\":\"gte\",\"value\":3000}]}}"
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/saved-filters/45",
+    json={
+        "name": "Quentes acima de 3 mil",
+        "filterConfig": "{\"filterTree\":{\"op\":\"AND\",\"conditions\":[{\"fieldId\":\"temperature\",\"fieldType\":\"select\",\"op\":\"any\",\"value\":[\"quente\"]},{\"fieldId\":\"estimatedValue\",\"fieldType\":\"number\",\"op\":\"gte\",\"value\":3000}]}}",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/saved-filters/45 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "name": "Quentes acima de 3 mil",
+  "filterConfig": "{\"filterTree\":{\"op\":\"AND\",\"conditions\":[{\"fieldId\":\"temperature\",\"fieldType\":\"select\",\"op\":\"any\",\"value\":[\"quente\"]},{\"fieldId\":\"estimatedValue\",\"fieldType\":\"number\",\"op\":\"gte\",\"value\":3000}]}}"
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Nome vazio, `filterConfig` inválido ou muito grande, JSON de configuração com sintaxe incorreta |
+| 401 | - | Token ausente, inválido ou expirado |
+| 404 | - | Filtro não encontrado ou pertence a outro usuário |

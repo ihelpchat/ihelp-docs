@@ -1,0 +1,82 @@
+---
+title: "Relatório do funil"
+description: "Relatório agregado do funil no período especificado, com cards ganhos, perdidos, faturamento e histórico de etapas."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/funnel/report
+---
+
+Relatório agregado do funil no período especificado, com cards ganhos, perdidos, faturamento e histórico de etapas.
+
+O intervalo entre `startDate` e `endDate` não pode passar de 3 meses. Acima disso a resposta é 400. Datas em ISO 8601 UTC. `includeStageHistory` expande o relatório com transições de etapa.
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="funnelId" type="int" required>
+ID do funil.
+</Param>
+<Param name="startDate" type="datetime" required>
+Data inicial do período em UTC (ISO 8601).
+</Param>
+<Param name="endDate" type="datetime" required>
+Data final do período em UTC (ISO 8601).
+</Param>
+<Param name="includeStageHistory" type="bool" required={false}>
+Se true, inclui histórico de movimentações entre etapas. Padrão: false.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl -G https://apiv3.ihelpchat.com/api/v2/crm/funnel/report \
+  --data-urlencode "funnelId=12" \
+  --data-urlencode "startDate=2026-09-01T00:00:00Z" \
+  --data-urlencode "endDate=2026-09-25T23:59:59Z" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const params = new URLSearchParams({funnelId: '12',startDate: '2026-09-01T00:00:00Z',endDate: '2026-09-25T23:59:59Z'});
+
+const res = await fetch(`https://apiv3.ihelpchat.com/api/v2/crm/funnel/report?${params}`, {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnel/report",
+    params={
+        "funnelId": 12,
+        "startDate": "2026-09-01T00:00:00Z",
+        "endDate": "2026-09-25T23:59:59Z",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/funnel/report?funnelId=12&startDate=2026-09-01T00%3A00%3A00Z&endDate=2026-09-25T23%3A59%3A59Z
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Intervalo maior que 3 meses, datas em formato inválido, ou startDate > endDate |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem acesso ao funil |
+| 404 | - | Funil inexistente |

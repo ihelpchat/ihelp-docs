@@ -1,0 +1,161 @@
+---
+title: "Filtro de cards"
+description: "Monte filtros de cards por status, responsável, datas, tags e campos personalizados, com grupos E/OU aninhados no filterTree."
+source: api
+contentType: referencia
+---
+
+O mesmo corpo de filtro (`CardFilterDto`) é aceito por várias rotas de CRM. Todos os campos são opcionais: `{}` significa "sem filtro".
+
+| Endpoint | Retorno |
+|---|---|
+| [Filtrar cards do funil](/api/crm/cards/filtrar-cards-do-funil) | Cards do funil, paginados |
+| [Carregar board filtrado](/api/crm/cards/carregar-board-com-filtro) | Primeira página de cada etapa do funil |
+| [IDs dos cards da etapa](/api/crm/movimentacao/listar-ids-da-etapa) | Até 2000 IDs de cards abertos da etapa |
+| [Paginar com filtro](/api/crm/etapas/paginar-cards-com-filtro) | Cards da etapa, paginados |
+| [KPIs com filtro](/api/crm/metricas-e-metas/kpis-do-funil-com-filtro) | KPIs do funil |
+| [Métricas com filtro](/api/crm/metricas-e-metas/metricas-por-etapa-com-filtro) | Métricas por etapa |
+
+## Exemplo
+
+Cards com "acme" no texto, do responsável `42`, criados em setembro de 2026, com tag `vip`, 20 por página, mais valiosos primeiro:
+
+```json
+{
+  "generalText": "acme",
+  "responsibleId": 42,
+  "startDate": "2026-09-01T00:00:00Z",
+  "endDate": "2026-09-30T23:59:59Z",
+  "tags": ["vip"],
+  "orderBy": 1,
+  "orderDirection": "desc",
+  "page": 1,
+  "pageSize": 20
+}
+```
+
+## Campos
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `generalText` | string | Busca livre. Na listagem procura em título, descrição, nome e telefone do contato, tags e campos personalizados do contato. Nos KPIs, só em título e descrição |
+| `status` | int | Status exato (ver tabela abaixo). **Se omitido, a listagem esconde ganhos e perdidos** |
+| `stageId` | int | Etapa exata |
+| `responsibleId` | int | Responsável exato. Ignorado quando `assignedToMe` ou `assignedToTeam` é `true` |
+| `startDate` / `endDate` | data | Limites da data de criação do card |
+| `closureDate` | data | Data de fechamento exata |
+| `tags` | string[] | Nomes de tags do contato. Basta ter uma delas |
+| `priority` | string | Prioridade como **texto numérico**: `"1"` a `"4"`. `"High"` não encontra nada |
+| `overdue` | bool | `true` = só cards com tarefa vencida |
+| `onTime` | bool | `true` = só cards sem tarefa vencida |
+| `hasNotes` | bool | Com (`true`) ou sem (`false`) anotações |
+| `isFavorite` | bool | Favoritos do usuário do token |
+| `assignedToMe` | bool | `true` = responsável é o usuário do token |
+| `assignedToTeam` | bool | `true` = tem responsável e não é o usuário do token. Só na listagem |
+| `hasRecentHistory` | bool | Histórico nos últimos 7 dias. Só nos KPIs |
+| `recentInteractionDays` | int | Histórico nos últimos N dias |
+| `channelIn` | int[] | IDs de canal do atendimento. Só nos KPIs; na listagem use `filterTree` com `canalId` |
+| `temperatureIn` | string[] | **Não use.** Nos KPIs responde `400`, na listagem é ignorado. Use `filterTree` com `temperature` |
+| `dateShortcut` | int | Atalho de data. Só nos KPIs |
+| `customFields` | objeto[] | Até 10 filtros de campo personalizado. Ver abaixo |
+| `filterTree` | objeto | Filtro avançado com E/OU aninhados. Ver abaixo |
+| `orderBy` | int | Ordenação. Sem ele, ordena por última atualização |
+| `orderDirection` | string | `"asc"` ordena crescente; qualquer outro valor, decrescente |
+| `page` / `pageSize` | int | Paginação. Padrão `1` e `20` |
+
+### Valores
+
+| `status` | | `orderBy` | | `dateShortcut` | |
+|---|---|---|---|---|---|
+| `1` | Aberto | `0` | Data de criação | `1` | Criados hoje |
+| `2` | Em andamento | `1` | Valor estimado | `2` | Criados nos últimos 7 dias |
+| `3` | Ganho | `2` | Data de fechamento | `3` | Criados nos últimos 30 dias |
+| `4` | Perdido | `3` | Status | `4` | Sem atividade há 7 dias |
+| `5` | Cancelado | `4` | Nome do contato | | |
+| | | `5` | Título | | |
+| | | `6` | Última atualização | | |
+| | | `7` | Prioridade | | |
+
+Prioridade: `1` Baixa, `2` Média, `3` Alta, `4` Urgente.
+
+## `customFields`
+
+```json
+"customFields": [
+  { "customizedFieldId": 7, "operator": "equals", "value": "Sorocaba" },
+  { "customizedFieldId": 9, "operator": "between", "value": "2026-01-01", "valueEnd": "2026-06-30" }
+]
+```
+
+| Campo | Descrição |
+|---|---|
+| `customizedFieldId` | ID do campo personalizado |
+| `operator` | `equals`, `contains`, `before`, `after` ou `between`. Outro valor responde `400` |
+| `value` | Valor comparado. Datas no formato `AAAA-MM-DD` |
+| `valueEnd` | Fim do intervalo, só com `between` |
+
+## `filterTree`
+
+Filtro avançado com grupos E/OU. Cada nó tem suas condições (`conditions`) e subgrupos (`groups`).
+
+| Campo | Descrição |
+|---|---|
+| `op` | `"AND"` ou `"OR"`: como as condições **deste** nó se combinam. Padrão `"AND"` |
+| `connector` | `"AND"` ou `"OR"`: como **este grupo** se liga ao que veio antes dele. Sem valor, usa o `op` do pai |
+| `conditions` | Lista de condições |
+| `groups` | Subgrupos, com a mesma estrutura |
+
+Exemplo: valor a partir de R$ 5.000 **e** criado nos últimos 30 dias **e** (temperatura quente ou morna **ou** prioridade alta/urgente):
+
+```json
+"filterTree": {
+  "op": "AND",
+  "conditions": [
+    { "fieldId": "estimatedValue", "fieldType": "number", "op": "gte", "value": 5000 },
+    { "fieldId": "createdDate", "fieldType": "date", "op": "last", "value": 30 }
+  ],
+  "groups": [
+    {
+      "op": "OR",
+      "connector": "AND",
+      "conditions": [
+        { "fieldId": "temperature", "fieldType": "select", "op": "any", "value": ["quente", "morno"] },
+        { "fieldId": "priority", "fieldType": "select", "op": "any", "value": [3, 4] }
+      ]
+    }
+  ]
+}
+```
+
+Os grupos são aplicados da esquerda para a direita: `(condições do nó) connector (grupo 1) connector (grupo 2)...`.
+
+### Condição
+
+| Campo | Descrição |
+|---|---|
+| `fieldId` | Campo do card (lista abaixo) ou identificador de campo personalizado |
+| `fieldType` | Define quais operadores valem. Padrão `"text"` |
+| `op` | Operador. Diferencia maiúsculas: `notLast`, não `notlast` |
+| `value` | Valor comparado. Array em `any` / `none` |
+| `valueEnd` | Fim do intervalo em `between` |
+
+`fieldId` aceitos: `title`, `description`, `status`, `priority`, `estimatedValue`, `createdDate`, `closureDate`, `dueDate`, `responsibleId`, `stageId`, `source`, `temperature`, `contactId`, `lastActivity` (último histórico, ou a criação se não houver), `canalId` (canal do último atendimento do contato) e `departmentId` (departamento do responsável; só com `op: "any"` e array de IDs). Qualquer outro responde `400` `FieldId nao permitido`.
+
+| `fieldType` | Operadores |
+|---|---|
+| `text` | `eq`, `neq`, `contains`, `ncontains`, `starts`, `ends`, `empty`, `nempty` |
+| `number` | `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `between`, `empty` |
+| `date` | `is`, `before`, `after`, `between`, `last` (últimos N dias), `notLast` (sem nada nos últimos N dias, inclui vazio), `next` (próximos N dias), `today`, `thisweek`, `thismonth`, `empty` |
+| `select` | `any` (está na lista), `none` (fora da lista), `empty` |
+| `boolean` | `true`, `false` (sem `value`) |
+| `user` | `is`, `isnt`, `empty` |
+
+Com `status` no `filterTree`, a listagem deixa de esconder ganhos e perdidos. Para ver só os fechados: `{ "fieldId": "status", "fieldType": "select", "op": "any", "value": [3, 4] }`.
+
+### Campos personalizados no `filterTree`
+
+Use o identificador cadastrado no campo personalizado (o `identifier`, por exemplo `cidade`) em `fieldId` e um destes `fieldType`: `customText`, `customLongText`, `customEmail`, `customPhone`, `customCep`, `customDate`. Operadores: `eq`, `neq`, `contains`, `ncontains`, `starts`, `ends`, `before`, `after`, `between`, `is`, `empty`, `nempty`.
+
+```json
+{ "fieldId": "cidade", "fieldType": "customText", "op": "eq", "value": "Sorocaba" }
+```

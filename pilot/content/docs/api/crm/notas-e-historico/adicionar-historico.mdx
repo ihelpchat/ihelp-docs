@@ -1,0 +1,98 @@
+---
+title: "Adicionar histórico"
+description: "Adiciona um item ao histórico do card com descrição e tipo de evento."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/{id}/history
+---
+
+Adiciona um item ao histórico do card com descrição e tipo de evento.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="description" type="string" required>
+Texto descritivo do evento para o histórico.
+</Param>
+<Param name="type" type="int" required>
+`1` Criação, `2` Mudança de etapa, `3` Mudança de responsável, `4` Atualização, `5` Fechamento, `6` Mudança de status, `7` Exclusão, `8` Ganho, `9` Perdido, `10` Nota adicionada, `11` Nota removida, `12` Restaurado, `13` Mudança de funil.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/history" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "description": "Contrato enviado para assinatura",
+  "type": 4
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/history', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "description": "Contrato enviado para assinatura",
+    "type": 4
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/history",
+    json={
+        "description": "Contrato enviado para assinatura",
+        "type": 4,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/card/8821/history HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "description": "Contrato enviado para assinatura",
+  "type": 4
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+O campo `cardId` no corpo é ignorado: vale o `{id}` da rota. O usuário autenticado é registrado automaticamente como criador do item.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Descrição ausente ou type inválido |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 404 | - | Card não encontrado ou de outra empresa |

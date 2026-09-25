@@ -1,0 +1,156 @@
+---
+title: "Atualizar funil"
+description: "Atualiza um funil existente: título, descrição, trava de contato e lista de membros. Campos omitidos preservam valores atuais."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/funnel/{id}
+---
+
+Atualiza um funil existente: título, descrição, trava de contato e lista de membros. Campos omitidos preservam valores atuais.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+Identificador do funil
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="title" type="string" required={false}>
+Novo nome do funil
+</Param>
+<Param name="description" type="string" required={false}>
+Nova descrição
+</Param>
+<Param name="isDefault" type="boolean" required={false}>
+Ignorado. Use POST /pipelines/\{id\}/set-default
+</Param>
+<Param name="isActive" type="boolean" required={false}>
+Ignorado. Use /archive ou /unarchive
+</Param>
+<Param name="contactLock" type="boolean" required={false}>
+Atualiza se o mesmo contato pode ter múltiplos cards
+</Param>
+<Param name="funnelUsers" type="array" required={false}>
+Array com \{userId: int\}. Substitui toda a lista de membros
+</Param>
+</Params>
+
+Omitir title grava vazio. funnelUsers substitui a lista inteira: quem não estiver perde acesso. Mandar [] remove todos.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/funnel/12" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "title": "Funil de Parcerias 2026",
+  "description": "Revendas, indicações e afiliados",
+  "contactLock": false,
+  "funnelUsers": [
+    {
+      "userId": 42
+    },
+    {
+      "userId": 57
+    },
+    {
+      "userId": 61
+    }
+  ]
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnel/12', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "title": "Funil de Parcerias 2026",
+    "description": "Revendas, indicações e afiliados",
+    "contactLock": false,
+    "funnelUsers": [
+      {
+        "userId": 42
+      },
+      {
+        "userId": 57
+      },
+      {
+        "userId": 61
+      }
+    ]
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnel/12",
+    json={
+        "title": "Funil de Parcerias 2026",
+        "description": "Revendas, indicações e afiliados",
+        "contactLock": False,
+        "funnelUsers": [
+            {
+                "userId": 42,
+            },
+            {
+                "userId": 57,
+            },
+            {
+                "userId": 61,
+            },
+        ],
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/funnel/12 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "title": "Funil de Parcerias 2026",
+  "description": "Revendas, indicações e afiliados",
+  "contactLock": false,
+  "funnelUsers": [
+    {
+      "userId": 42
+    },
+    {
+      "userId": 57
+    },
+    {
+      "userId": 61
+    }
+  ]
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | `Bad Request` | Dados inválidos |
+| 401 | `Unauthorized` | Token ausente ou inválido |
+| 403 | `Forbidden` | Usuário não é Admin ou Owner do funil |
+| 404 | `Not Found` | Funil não existe |

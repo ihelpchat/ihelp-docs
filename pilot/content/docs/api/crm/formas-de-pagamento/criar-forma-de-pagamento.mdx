@@ -1,0 +1,136 @@
+---
+title: "Criar forma de pagamento"
+description: "Cria uma nova forma de pagamento: nome, desconto, parcelamento, prazos e ordem de exibição."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/payment-methods
+---
+
+Cria uma nova forma de pagamento: nome, desconto, parcelamento, prazos e ordem de exibição.
+
+## Corpo da requisição
+
+<Params>
+<Param name="name" type="string" required>
+Nome da forma de pagamento, até 120 caracteres.
+</Param>
+<Param name="discountPct" type="decimal">
+Desconto percentual de `0` a `100`. Informativo: é copiado para a proposta, mas não altera o total.
+</Param>
+<Param name="allowsInstallments" type="bool">
+Se aceita parcelamento.
+</Param>
+<Param name="maxInstallments" type="int">
+De `1` a `24`. Com parcelamento precisa ser ao menos `2`; sem parcelamento precisa ser exatamente `1`. Padrão `1`.
+</Param>
+<Param name="firstDueDays" type="int">
+Dias até a primeira parcela, de `0` a `365`.
+</Param>
+<Param name="dueMode" type="int">
+`1` = intervalo em dias, `2` = dia fixo do mês. Padrão `1`.
+</Param>
+<Param name="intervalDays" type="int">
+Intervalo entre parcelas em dias, de `1` a `365`. Obrigatório com parcelamento e `dueMode: 1`.
+</Param>
+<Param name="fixedDueDay" type="int">
+Dia fixo do mês entre `1` e `31`. Obrigatório com parcelamento e `dueMode: 2`.
+</Param>
+<Param name="sortOrder" type="int">
+Ordem de exibição, mínimo `0`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/payment-methods" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "Boleto",
+  "discountPct": 5,
+  "allowsInstallments": true,
+  "maxInstallments": 6,
+  "firstDueDays": 30,
+  "dueMode": 1,
+  "intervalDays": 30,
+  "sortOrder": 0
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/payment-methods', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "name": "Boleto",
+    "discountPct": 5,
+    "allowsInstallments": true,
+    "maxInstallments": 6,
+    "firstDueDays": 30,
+    "dueMode": 1,
+    "intervalDays": 30,
+    "sortOrder": 0
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/payment-methods",
+    json={
+        "name": "Boleto",
+        "discountPct": 5,
+        "allowsInstallments": True,
+        "maxInstallments": 6,
+        "firstDueDays": 30,
+        "dueMode": 1,
+        "intervalDays": 30,
+        "sortOrder": 0,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/payment-methods HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "name": "Boleto",
+  "discountPct": 5,
+  "allowsInstallments": true,
+  "maxInstallments": 6,
+  "firstDueDays": 30,
+  "dueMode": 1,
+  "intervalDays": 30,
+  "sortOrder": 0
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+- Apenas administradores da empresa podem criar. Usuário não-admin recebe `401` sem corpo.
+- O módulo de propostas deve estar ativo. Caso contrário, recebe `403`.
+- Validação: com parcelamento, `maxInstallments` deve ser `>= 2`; com `dueMode: 1`, `intervalDays` é obrigatório; com `dueMode: 2`, `fixedDueDay` é obrigatório.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Validação falha (nome vazio, valores inválidos, regras de parcelamento) |
+| 401 | - | Não é administrador da empresa |
+| 403 | - | Módulo de propostas não está ativo |

@@ -1,0 +1,120 @@
+---
+title: "Atualizar item"
+description: "Edita um item do catálogo: nome, descrição, tipo, SKU ou preço."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/catalog/{id}
+---
+
+Edita um item do catálogo: nome, descrição, tipo, SKU ou preço.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do item no catálogo.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="name" type="string" required>
+Nome do item, até 120 caracteres.
+</Param>
+<Param name="description" type="string">
+Descrição, até 500 caracteres.
+</Param>
+<Param name="type" type="int" required>
+`1` = Produto, `2` = Serviço.
+</Param>
+<Param name="sku" type="string">
+Código do item, até 40 caracteres. Único por empresa (sem diferenciar maiúsculas).
+</Param>
+<Param name="price" type="decimal" required>
+Preço em R$, mínimo `0`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/catalog/10" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "Plano Pro (anual)",
+  "description": "Até 15 usuários, suporte prioritário",
+  "type": 2,
+  "sku": "PRO-12M",
+  "price": 900
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/catalog/10', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "name": "Plano Pro (anual)",
+    "description": "Até 15 usuários, suporte prioritário",
+    "type": 2,
+    "sku": "PRO-12M",
+    "price": 900
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/catalog/10",
+    json={
+        "name": "Plano Pro (anual)",
+        "description": "Até 15 usuários, suporte prioritário",
+        "type": 2,
+        "sku": "PRO-12M",
+        "price": 900,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/catalog/10 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "name": "Plano Pro (anual)",
+  "description": "Até 15 usuários, suporte prioritário",
+  "type": 2,
+  "sku": "PRO-12M",
+  "price": 900
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+SKU repetido (diferente do atual) responde `409 Conflict`. Atualizar um item do catálogo **não** afeta propostas já salvas; nome e preço de cada proposta são cópias. Requer **administrador da empresa** e o módulo de propostas ativo.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Validação de campos |
+| 401 | - | Usuário não é administrador |
+| 403 | - | Módulo de propostas desligado |
+| 404 | - | Item inexistente ou de outra empresa |
+| 409 | - | SKU já existe em outro item |

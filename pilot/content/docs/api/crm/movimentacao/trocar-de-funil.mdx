@@ -1,0 +1,130 @@
+---
+title: "Trocar de funil"
+description: "Move um card aberto para outro funil, posicionando-o em uma etapa ativa do funil de destino. Opera um card por vez."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/{id}/move-funnel
+---
+
+Move um card aberto para outro funil, posicionando-o em uma etapa ativa do funil de destino. Opera um card por vez.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="targetFunnelId" type="int" required>
+Funil de destino. Precisa ser diferente do funil atual do card.
+</Param>
+<Param name="targetStageId" type="int" required>
+Etapa de destino, obrigatoriamente pertencente ao `targetFunnelId`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/move-funnel" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "targetFunnelId": 15,
+  "targetStageId": 210
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/move-funnel', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "targetFunnelId": 15,
+    "targetStageId": 210
+  }),
+});
+
+const data = await res.json();
+console.log(data);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/move-funnel",
+    json={
+        "targetFunnelId": 15,
+        "targetStageId": 210,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.json())
+```
+
+```http
+POST /api/v2/crm/card/8821/move-funnel HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "targetFunnelId": 15,
+  "targetStageId": 210
+}
+```
+
+</CodeTabs>
+
+## Resposta
+
+<Response status="200 OK">
+
+```json
+{
+  "card": {
+    "id": 8821,
+    "title": "Proposta ACME",
+    "stageId": 210
+  }
+}
+```
+
+</Response>
+
+O card retornado já reflete o funil e a etapa novos.
+
+## Regras
+
+Diferente dos demais endpoints, aqui são exigidos **dois** níveis de acesso:
+
+- No funil de **origem**: administrador da empresa **ou** Admin/Owner da pipeline.
+- No funil de **destino**: administrador da empresa **ou** permissão de edição.
+
+Se qualquer um dos dois faltar, a resposta é `403` com uma mensagem indicando qual lado bloqueou.
+
+- Descubra as etapas válidas com [Funil com etapas](/api/crm/funis/obter-funil-com-etapas) e filtre por `isActive: true` antes de escolher o `targetStageId`.
+- Somente cards com status aberto ou em andamento são elegíveis. Verifique o status antes de chamar para evitar o `409 card_closed`.
+- Esta operação move **um card por vez**. Não existe versão em massa para troca de funil.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | `invalid_target_funnel` | Funil de destino inexistente, inativo, ou igual ao de origem |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem permissão na pipeline de origem ou na de destino |
+| 404 | - | Card inexistente ou pertencente a outra empresa |
+| 409 | `card_closed` | Cards ganhos, perdidos ou cancelados não mudam de funil |
+| 409 | `stage_inactive` | Etapa de destino não pertence ao funil informado, está inativa ou foi excluída |
+| 409 | `contact_lock_conflict` | O funil de destino tem trava de contato e o contato já possui um card ativo lá |
+| 409 | `stage_concurrency_conflict` | Conflito de concorrência, repita a chamada |

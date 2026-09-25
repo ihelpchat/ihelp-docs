@@ -8,8 +8,8 @@ import { readArticle } from './editorial-standard.mjs';
 const root = await mkdtemp(join(tmpdir(), 'ihelp-package-github-'));
 const body = 'Abra Contatos no menu lateral. Confira a lista antes de continuar. Selecione a opção de importar. Revise o arquivo escolhido e confirme as colunas. Corrija as linhas inválidas antes de concluir. Aguarde o resultado aparecer na tela. Pesquise um contato recém cadastrado para confirmar o sucesso. Se o contato não aparecer, revise o número e repita apenas a linha corrigida. Este procedimento mantém os demais contatos já cadastrados na conta.';
 const article = (path, title) => ({ path, title, description: 'Procedimento completo para orientar a pessoa na documentação do iHelp.', source: 'produto', contentType: 'tutorial', body });
-const realArticle = await readArticle(new URL('../', import.meta.url).pathname, 'api/crm/funis-e-etapas');
-const realRaw = await readFile(new URL('../content/docs/api/crm/funis-e-etapas.mdx', import.meta.url), 'utf8');
+const realArticle = await readArticle(new URL('../', import.meta.url).pathname, 'api/crm/funis/listar-funis');
+const realRaw = await readFile(new URL('../content/docs/api/crm/funis/listar-funis.mdx', import.meta.url), 'utf8');
 assert.equal(validateArticle(realArticle).valid, true, 'artigo real com dono do token: administradores deve validar');
 assert.equal((await submitContentPackage(root, [realArticle], 'dry_run', 'user:tester')).status, 'dry_run', 'artigo real deve passar no dry_run');
 const leakedAliases = [
@@ -60,8 +60,9 @@ const openAiSecret = { ...article('docs/teste/segredo-openai', 'Guia sk-proj-abc
 assert.ok(validateArticle(openAiSecret).issues.some((issue) => /credencial/i.test(issue)), 'sk-proj no título derivado da PR precisa ser barrado');
 assert.throws(() => renderArticle(openAiSecret), /credencial/i);
 const base = new Map([
-  ['pilot/content/docs/api/crm/funis-e-etapas.mdx', realRaw],
-  ['pilot/content/docs/api/crm/meta.json', '{"pages":["funis-e-etapas"]}\n'],
+  ['pilot/content/docs/api/crm/funis/listar-funis.mdx', realRaw],
+  ['pilot/content/docs/api/crm/meta.json', '{"pages":["funis"]}\n'],
+  ['pilot/content/docs/api/crm/funis/meta.json', '{"title":"Funis","pages":["listar-funis"]}\n'],
   ['pilot/content/docs/docs/meta.json', '{"pages":["contatos"]}\n'],
   ['pilot/content/docs/tutoriais/meta.json', '{"pages":["index"]}\n'],
   ['pilot/content/docs/docs/contatos/meta.json', '{"title":"Contatos","pages":["index","antigo","guia"]}\n'],
@@ -123,7 +124,7 @@ try {
   assert.doesNotMatch(JSON.stringify(audit), /mock-token|Novo guia|artigo antigo/);
   const updated = await submitContentPackage(root, [realArticle], 'pull_request', 'user:tester');
   assert.equal(updated.status, 'pull_request', 'mesmo caminho de docs_update_article deve aceitar o artigo real');
-  assert.ok(mutations.some(({ method, file, payload }) => method === 'PUT' && file.endsWith('/api/crm/funis-e-etapas.mdx') && payload.sha === 'sha-pilot/content/docs/api/crm/funis-e-etapas.mdx'));
+  assert.ok(mutations.some(({ method, file, payload }) => method === 'PUT' && file.endsWith('/api/crm/funis/listar-funis.mdx') && payload.sha === 'sha-pilot/content/docs/api/crm/funis/listar-funis.mdx'));
   await assert.rejects(submitContentPackage(root, [], 'pull_request', 'user:tester', ['docs/contatos/inexistente']), /não encontrado/i);
   const failed = (await readFile(join(root, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
   assert.deepEqual(failed.slice(-2).map(({ result }) => result), ['attempt', 'failure']);

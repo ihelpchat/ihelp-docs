@@ -11,10 +11,38 @@ import { FaqBody } from '@/components/site/faq';
 import { NewsList } from '@/components/site/news-list';
 import { TutorialsPage } from '@/components/site/tutorials';
 import { formatNewsDate, getNews } from '@/lib/news';
-import { getPageImageUrl } from '@/lib/shared';
+import { getPageImageUrl, withBasePath } from '@/lib/shared';
+import Link from 'next/link';
+
+// URLs antigas do CRM (uma página por endpoint desde set/2026). O GitHub Pages não faz redirect,
+// então cada uma vira uma página estática com meta refresh. A Vercel usa os redirects do vercel.json.
+const moved: Record<string, string> = {
+  'api/crm/funis-e-etapas': '/api/crm/funis/listar-funis',
+  'api/crm/mover-card': '/api/crm/movimentacao/mover-card',
+  'api/crm/mover-cards-em-massa': '/api/crm/movimentacao/mover-em-massa',
+  'api/crm/trocar-de-funil': '/api/crm/movimentacao/trocar-de-funil',
+  'api/crm/mover-por-telefone': '/api/crm/movimentacao/mover-por-telefone',
+  'api/crm/referencia': '/api/crm/visao-geral',
+  'api/crm/referencia/cards': '/api/crm/cards/criar-card',
+  'api/crm/referencia/funis-e-etapas': '/api/crm/funis/listar-funis',
+  'api/crm/referencia/pipelines': '/api/crm/pipelines/criar-pipeline',
+  'api/crm/referencia/automacoes-e-filtros': '/api/crm/automacoes/listar-automacoes',
+};
 
 export default async function Page(props: PageProps<'/[...slug]'>) {
   const params = await props.params;
+  const target = moved[params.slug.join('/')];
+  if (target) {
+    return (
+      <div className="ih-page ih-page-narrow">
+        <meta httpEquiv="refresh" content={`0;url=${withBasePath(target)}/`} />
+        <h1 className="ih-title">Esta página mudou de endereço</h1>
+        <p className="ih-lead">
+          <Link href={target}>Abrir a página nova</Link>
+        </p>
+      </div>
+    );
+  }
   const page = source.getPage(params.slug);
   if (!page) notFound();
 
@@ -100,11 +128,18 @@ export default async function Page(props: PageProps<'/[...slug]'>) {
 }
 
 export async function generateStaticParams() {
-  return source.generateParams();
+  const params = source.generateParams();
+  for (const [from, to] of Object.entries(moved)) {
+    if (source.getPage(from.split('/'))) throw new Error(`Redirect sobre página existente: ${from}`);
+    if (!source.getPage(to.slice(1).split('/'))) throw new Error(`Redirect para página inexistente: ${to}`);
+  }
+  return [...params, ...Object.keys(moved).map((from) => ({ slug: from.split('/') }))];
 }
 
 export async function generateMetadata(props: PageProps<'/[...slug]'>): Promise<Metadata> {
   const params = await props.params;
+  const target = moved[params.slug.join('/')];
+  if (target) return { title: 'Página movida', robots: { index: false }, alternates: { canonical: target } };
   const page = source.getPage(params.slug);
   if (!page) notFound();
 

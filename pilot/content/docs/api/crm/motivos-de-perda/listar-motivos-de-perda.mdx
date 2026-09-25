@@ -1,0 +1,51 @@
+---
+title: "Listar motivos"
+description: "Lista os motivos de perda da empresa, padrão primeiro e depois ordenado por índice de visualização."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/loss-reasons
+---
+
+Lista os motivos de perda da empresa, padrão primeiro e depois ordenado por índice de visualização.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/loss-reasons \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/loss-reasons', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/loss-reasons",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/loss-reasons
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Erro genérico (raro) |
+| 401 | - | Token ausente, inválido ou expirado |

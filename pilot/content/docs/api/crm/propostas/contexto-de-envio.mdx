@@ -1,0 +1,62 @@
+---
+title: "Contexto de envio"
+description: "Obtém informações sobre onde a proposta será enviada e se a janela de 24 h está aberta."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/proposals/{id}/send-context
+---
+
+Obtém informações sobre onde a proposta será enviada e se a janela de 24 h está aberta.
+
+Use este endpoint antes de enviar a proposta para verificar em qual atendimento ela vai cair e se o canal permite envio (janela de 24 h aberta em canais de API oficial).
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da proposta.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/proposals/123/send-context \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/proposals/123/send-context', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/proposals/123/send-context",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/proposals/123/send-context
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Card sem atendimento: `O contato deste card ainda não tem atendimento` |
+| 401 | - | Token ausente, inválido ou expirado |
+| 404 | - | Proposta inexistente ou de outra empresa |

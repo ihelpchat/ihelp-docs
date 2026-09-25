@@ -1,0 +1,328 @@
+---
+title: "Criar pipeline"
+description: "Cria uma pipeline completa com etapas, regras de automação e permissões em uma única transação atômica."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/pipelines
+---
+
+Cria uma pipeline completa com etapas, regras de automação e permissões em uma única transação atômica.
+
+## Corpo da requisição
+
+<Params>
+<Param name="name" type="string" required>
+Nome único na empresa, 2 a 100 caracteres. Repetido responde `400`.
+</Param>
+<Param name="desc" type="string">
+Descrição livre.
+</Param>
+<Param name="icon" type="string">
+Nome do ícone exibido no app (ex.: briefcase).
+</Param>
+<Param name="color" type="string">
+Cor hex da pipeline (ex.: #4F46E5).
+</Param>
+<Param name="ownerUserId" type="int">
+ID do dono. Deve ser usuário da mesma empresa. Inválido ou de outro tenant é trocado pelo usuário do token.
+</Param>
+<Param name="owner" type="string">
+Nome do dono. Ignorado se `ownerUserId` for informado.
+</Param>
+<Param name="visibility" type="string">
+`public` (todos ativos), `team` (quem divide departamento), `private` (só dono e criador). Padrão `team`. Inválido vira `private`.
+</Param>
+<Param name="currency" type="string">
+Aceito mas não é persistido.
+</Param>
+<Param name="goalValue" type="string">
+Meta de valor. Use formato exato: `R$ 150.000,00`
+</Param>
+<Param name="goalConv" type="string">
+Meta de conversão: `25`, `25,5` ou `25%`
+</Param>
+<Param name="lockContact" type="bool">
+Trava de contato: máximo um card aberto por contato. Padrão `true`.
+</Param>
+<Param name="descricaoUltimaMensagem" type="bool">
+Usar última mensagem do atendimento como descrição do card. Padrão `false`.
+</Param>
+<Param name="stages[]" type="object[]" required>
+Ao menos uma etapa.
+</Param>
+<Param name="stages[].name" type="string" required>
+Nome da etapa, até 100 caracteres.
+</Param>
+<Param name="stages[].color" type="string">
+Cor hex. Padrão `#64748B`
+</Param>
+<Param name="rules[]" type="object[]">
+Regras de automação do funil.
+</Param>
+<Param name="rules[].name" type="string" required>
+Nome da regra. Regra sem nome é descartada.
+</Param>
+<Param name="rules[].trigger" type="int">
+`AutomationTriggerTypeEnum`
+</Param>
+<Param name="rules[].enabled" type="bool">
+Se false, regra não dispara.
+</Param>
+<Param name="rules[].conditions[]" type="object[]" required>
+Ao menos uma condição, mesmo em regras desativadas.
+</Param>
+<Param name="rules[].conditions[].field" type="int">
+Campo da condição.
+</Param>
+<Param name="rules[].conditions[].operator" type="int">
+Operador da comparação.
+</Param>
+<Param name="rules[].conditions[].value" type="string">
+Valor esperado.
+</Param>
+<Param name="rules[].actions[]" type="object[]">
+Obrigatório se `enabled=true`, senão pode ser vazio.
+</Param>
+<Param name="rules[].actions[].type" type="int">
+Tipo de ação.
+</Param>
+<Param name="rules[].actions[].targetStageIndex" type="int">
+Índice da etapa de destino (0-based) no array `stages`. Obrigatório para ações de movimento.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/pipelines" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "Vendas B2B",
+  "desc": "Contas acima de 50 funcionários",
+  "icon": "briefcase",
+  "color": "#4F46E5",
+  "ownerUserId": 42,
+  "visibility": "team",
+  "goalValue": "R$ 150.000,00",
+  "goalConv": "25%",
+  "lockContact": true,
+  "descricaoUltimaMensagem": false,
+  "stages": [
+    {
+      "name": "Novo lead",
+      "color": "#4F46E5"
+    },
+    {
+      "name": "Qualificação",
+      "color": "#0EA5E9"
+    },
+    {
+      "name": "Proposta",
+      "color": "#F59E0B"
+    }
+  ],
+  "rules": [
+    {
+      "name": "Todo atendimento novo vira card",
+      "trigger": 1,
+      "enabled": true,
+      "conditions": [
+        {
+          "field": 2,
+          "operator": 1,
+          "value": "15"
+        }
+      ],
+      "actions": [
+        {
+          "type": 1,
+          "targetStageIndex": 0
+        }
+      ]
+    }
+  ]
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/pipelines', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "name": "Vendas B2B",
+    "desc": "Contas acima de 50 funcionários",
+    "icon": "briefcase",
+    "color": "#4F46E5",
+    "ownerUserId": 42,
+    "visibility": "team",
+    "goalValue": "R$ 150.000,00",
+    "goalConv": "25%",
+    "lockContact": true,
+    "descricaoUltimaMensagem": false,
+    "stages": [
+      {
+        "name": "Novo lead",
+        "color": "#4F46E5"
+      },
+      {
+        "name": "Qualificação",
+        "color": "#0EA5E9"
+      },
+      {
+        "name": "Proposta",
+        "color": "#F59E0B"
+      }
+    ],
+    "rules": [
+      {
+        "name": "Todo atendimento novo vira card",
+        "trigger": 1,
+        "enabled": true,
+        "conditions": [
+          {
+            "field": 2,
+            "operator": 1,
+            "value": "15"
+          }
+        ],
+        "actions": [
+          {
+            "type": 1,
+            "targetStageIndex": 0
+          }
+        ]
+      }
+    ]
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/pipelines",
+    json={
+        "name": "Vendas B2B",
+        "desc": "Contas acima de 50 funcionários",
+        "icon": "briefcase",
+        "color": "#4F46E5",
+        "ownerUserId": 42,
+        "visibility": "team",
+        "goalValue": "R$ 150.000,00",
+        "goalConv": "25%",
+        "lockContact": True,
+        "descricaoUltimaMensagem": False,
+        "stages": [
+            {
+                "name": "Novo lead",
+                "color": "#4F46E5",
+            },
+            {
+                "name": "Qualificação",
+                "color": "#0EA5E9",
+            },
+            {
+                "name": "Proposta",
+                "color": "#F59E0B",
+            },
+        ],
+        "rules": [
+            {
+                "name": "Todo atendimento novo vira card",
+                "trigger": 1,
+                "enabled": True,
+                "conditions": [
+                    {
+                        "field": 2,
+                        "operator": 1,
+                        "value": "15",
+                    },
+                ],
+                "actions": [
+                    {
+                        "type": 1,
+                        "targetStageIndex": 0,
+                    },
+                ],
+            },
+        ],
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/pipelines HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "name": "Vendas B2B",
+  "desc": "Contas acima de 50 funcionários",
+  "icon": "briefcase",
+  "color": "#4F46E5",
+  "ownerUserId": 42,
+  "visibility": "team",
+  "goalValue": "R$ 150.000,00",
+  "goalConv": "25%",
+  "lockContact": true,
+  "descricaoUltimaMensagem": false,
+  "stages": [
+    {
+      "name": "Novo lead",
+      "color": "#4F46E5"
+    },
+    {
+      "name": "Qualificação",
+      "color": "#0EA5E9"
+    },
+    {
+      "name": "Proposta",
+      "color": "#F59E0B"
+    }
+  ],
+  "rules": [
+    {
+      "name": "Todo atendimento novo vira card",
+      "trigger": 1,
+      "enabled": true,
+      "conditions": [
+        {
+          "field": 2,
+          "operator": 1,
+          "value": "15"
+        }
+      ],
+      "actions": [
+        {
+          "type": 1,
+          "targetStageIndex": 0
+        }
+      ]
+    }
+  ]
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+A criação é atômica: falha em qualquer ponto (funil, etapa ou regra) desfaz tudo via rollback de transação. Permissões da `visibility` são aplicadas automaticamente: `public` inclui todos os usuários ativos como edit, `team` inclui pares departamentais como edit, `private` deixa apenas o dono e criador.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Nome vazio, menos de 2 caracteres, ou duplicado na empresa; sem etapas; regra ativa sem ações; regra sem condições; targetStageIndex fora do intervalo |
+| 401 | - | Token ausente, inválido ou expirado |

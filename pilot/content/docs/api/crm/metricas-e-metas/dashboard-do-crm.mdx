@@ -1,0 +1,79 @@
+---
+title: "Dashboard do CRM"
+description: "Visão executiva agregada da pipeline no período: KPIs, funis, etapas, conversão e desempenho."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/dashboard
+---
+
+Visão executiva agregada da pipeline no período: KPIs, funis, etapas, conversão e desempenho.
+
+Endpoint principal do dashboard do CRM. O parâmetro `funnelId` aceita um ID numérico (para uma pipeline específica) ou a string `all` (agregado de todas). O intervalo entre `start` e `end` não pode passar de 3 meses; acima disso a resposta é 400.
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="funnelId" type="string|int" required>
+ID do funil (numérico) ou 'all' para agregado de todos os funis.
+</Param>
+<Param name="start" type="datetime" required>
+Data inicial do período em UTC (ISO 8601).
+</Param>
+<Param name="end" type="datetime" required>
+Data final do período em UTC (ISO 8601).
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl -G https://apiv3.ihelpchat.com/api/v2/crm/dashboard \
+  --data-urlencode "funnelId=12" \
+  --data-urlencode "start=2026-09-01T00:00:00Z" \
+  --data-urlencode "end=2026-09-25T23:59:59Z" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const params = new URLSearchParams({funnelId: '12',start: '2026-09-01T00:00:00Z',end: '2026-09-25T23:59:59Z'});
+
+const res = await fetch(`https://apiv3.ihelpchat.com/api/v2/crm/dashboard?${params}`, {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/dashboard",
+    params={
+        "funnelId": "12",
+        "start": "2026-09-01T00:00:00Z",
+        "end": "2026-09-25T23:59:59Z",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/dashboard?funnelId=12&start=2026-09-01T00%3A00%3A00Z&end=2026-09-25T23%3A59%3A59Z
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Intervalo maior que 3 meses, datas em formato inválido, ou start > end |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | funnelId numérico e sem acesso a esse funil |
+| 404 | - | funnelId numérico e funil inexistente |

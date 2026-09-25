@@ -1,0 +1,181 @@
+---
+title: "Criar regra"
+description: "Cria uma nova regra com gatilho, condições e ações. Ações de movimento para outra etapa exigem um ID de etapa de destino válido."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/funnelrule
+---
+
+Cria uma nova regra com gatilho, condições e ações. Ações de movimento para outra etapa exigem um ID de etapa de destino válido.
+
+## Corpo da requisição
+
+<Params>
+<Param name="title" type="string" required>
+Título da regra, até 100 caracteres
+</Param>
+<Param name="trigger" type="int" required>
+Tipo de gatilho: `1` atendimento novo, `2` transferido, `3` encerrado, `4` mudou de departamento, `5` mudou de etapa
+</Param>
+<Param name="funnelId" type="int" required>
+ID do funil. Inexistente responde `400`
+</Param>
+<Param name="conditions" type="array" required>
+Ao menos uma condição. Cada item: `{ "field": int, "operator": int, "value": string | array }`. Basta uma ser verdadeira (OU)
+</Param>
+<Param name="actions" type="array" required>
+Pode ser vazio. Cada item: `{ "type": int, "targetStageId": int, "cardStatus": int }`
+</Param>
+<Param name="isActive" type="bool" required={false}>
+Ignorado na criação (toda regra nasce ativa)
+</Param>
+</Params>
+
+**Ações com `targetStageId`:** Criar card (se vazio, usa a primeira etapa ativa) e mover card (obrigatório, precisa ser do mesmo funil, senão `400`).
+
+**Ações com `cardStatus`:** Valores `1` a `5` como em [Cards](/api/crm/status-e-fechamento/alterar-status-do-card).
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/funnelrule" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "title": "Lead do Comercial vira card",
+  "trigger": 1,
+  "funnelId": 12,
+  "conditions": [
+    {
+      "field": 2,
+      "operator": 1,
+      "value": "15"
+    },
+    {
+      "field": 5,
+      "operator": 1,
+      "value": "8"
+    }
+  ],
+  "actions": [
+    {
+      "type": 1,
+      "targetStageId": 101
+    }
+  ]
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelrule', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "title": "Lead do Comercial vira card",
+    "trigger": 1,
+    "funnelId": 12,
+    "conditions": [
+      {
+        "field": 2,
+        "operator": 1,
+        "value": "15"
+      },
+      {
+        "field": 5,
+        "operator": 1,
+        "value": "8"
+      }
+    ],
+    "actions": [
+      {
+        "type": 1,
+        "targetStageId": 101
+      }
+    ]
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelrule",
+    json={
+        "title": "Lead do Comercial vira card",
+        "trigger": 1,
+        "funnelId": 12,
+        "conditions": [
+            {
+                "field": 2,
+                "operator": 1,
+                "value": "15",
+            },
+            {
+                "field": 5,
+                "operator": 1,
+                "value": "8",
+            },
+        ],
+        "actions": [
+            {
+                "type": 1,
+                "targetStageId": 101,
+            },
+        ],
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/funnelrule HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "title": "Lead do Comercial vira card",
+  "trigger": 1,
+  "funnelId": 12,
+  "conditions": [
+    {
+      "field": 2,
+      "operator": 1,
+      "value": "15"
+    },
+    {
+      "field": 5,
+      "operator": 1,
+      "value": "8"
+    }
+  ],
+  "actions": [
+    {
+      "type": 1,
+      "targetStageId": 101
+    }
+  ]
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+<Callout type="warn" title="O que as regras executam hoje">
+Disparam apenas os gatilhos `1`, `2` e `3`. As condições avaliadas são `field` `1` (usuário), `2` (departamento) e `5` (canal). As ações executadas são `1` (criar card) e `9` (mudar status do card). O restante é aceito no cadastro, mas não tem efeito.
+</Callout>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Funil não encontrado, etapa de destino inválida ou não pertence ao funil |

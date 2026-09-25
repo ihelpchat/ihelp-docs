@@ -1,0 +1,74 @@
+---
+title: "Excluir etapa"
+description: "Desativa uma etapa. Se houver cards abertos, é obrigatório informar uma etapa destino para migrá-los."
+source: api
+contentType: referencia
+method: DELETE
+endpoint: /crm/funnelstage/{id}
+---
+
+Desativa uma etapa. Se houver cards abertos, é obrigatório informar uma etapa destino para migrá-los.
+
+Soft delete: a etapa fica marcada como `isActive: false`. Se a etapa tiver cards e `targetStageId` não for fornecido, responde 409. Exige nível Admin ou Owner no funil, ou ser administrador da empresa.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da etapa a desativar.
+</Param>
+</Params>
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="targetStageId" type="int" required={false}>
+ID da etapa para onde os cards serão movidos. Obrigatório se a etapa tiver cards abertos.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X DELETE "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101?targetStageId=102" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101?targetStageId=102', {
+  method: 'DELETE',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.delete(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101?targetStageId=102",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+DELETE /api/v2/crm/funnelstage/101?targetStageId=102 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem permissão Admin/Owner no funil |
+| 404 | - | Etapa inexistente |
+| 409 | `stage_has_cards` | Etapa tem cards abertos e targetStageId não foi fornecido |

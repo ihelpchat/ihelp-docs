@@ -1,0 +1,17 @@
+{
+  "title": "Pipelines",
+  "pages": [
+    "listar-pipelines",
+    "obter-pipeline",
+    "criar-pipeline",
+    "atualizar-pipeline",
+    "excluir-pipeline",
+    "definir-pipeline-padrao",
+    "arquivar-pipeline",
+    "desarquivar-pipeline",
+    "duplicar-pipeline",
+    "limpar-cards-da-pipeline",
+    "reordenar-pipelines",
+    "exportar-pipeline"
+  ]
+}

@@ -1,0 +1,72 @@
+---
+title: "Execuções da automação"
+description: "Lista as últimas execuções de uma automação específica, com status, duração e mensagens de erro."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/automation/{id}/executions
+---
+
+Lista as últimas execuções de uma automação específica, com status, duração e mensagens de erro.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da automação.
+</Param>
+</Params>
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="take" type="int" required={false}>
+Número máximo de execuções a retornar. Padrão: 100
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl -G https://apiv3.ihelpchat.com/api/v2/crm/automation/7/executions \
+  --data-urlencode "take=50" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const params = new URLSearchParams({take: '50'});
+
+const res = await fetch(`https://apiv3.ihelpchat.com/api/v2/crm/automation/7/executions?${params}`, {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/automation/7/executions",
+    params={
+        "take": 50,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/automation/7/executions?take=50
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 404 | - | Automação não existe ou pertence a outra empresa |

@@ -1,0 +1,11 @@
+{
+  "title": "Catálogo",
+  "pages": [
+    "listar-itens-do-catalogo",
+    "criar-item-do-catalogo",
+    "atualizar-item-do-catalogo",
+    "excluir-item-do-catalogo",
+    "importar-catalogo",
+    "exportar-catalogo"
+  ]
+}

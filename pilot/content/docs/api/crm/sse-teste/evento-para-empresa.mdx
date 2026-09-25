@@ -1,0 +1,128 @@
+---
+title: "Evento para empresa"
+description: "Envia um evento de teste para todos os usuários da empresa via SSE (Server-Sent Events)."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/sse/test/business
+---
+
+Envia um evento de teste para todos os usuários da empresa via SSE (Server-Sent Events).
+
+<Callout type="warn" title="Uso interno">
+Este é um endpoint de teste para eventos em tempo real. Envia eventos em broadcast para toda a empresa do usuário autenticado.
+</Callout>
+
+## Corpo da requisição
+
+<Params>
+<Param name="eventType" type="string" required>
+Tipo do evento, ex.: `pipeline_updated`, `rule_executed`, `sync_completed`. Pode ser qualquer string.
+</Param>
+<Param name="data" type="object" required>
+Payload do evento em objeto JSON. Estrutura arbitrária conforme o tipo de evento.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/sse/test/business" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "eventType": "pipeline_updated",
+  "data": {
+    "pipelineId": 12,
+    "name": "Funil de Vendas",
+    "updatedBy": 42,
+    "timestamp": "2026-09-25T13:20:41Z",
+    "changes": [
+      "name",
+      "icon"
+    ]
+  }
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/sse/test/business', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "eventType": "pipeline_updated",
+    "data": {
+      "pipelineId": 12,
+      "name": "Funil de Vendas",
+      "updatedBy": 42,
+      "timestamp": "2026-09-25T13:20:41Z",
+      "changes": [
+        "name",
+        "icon"
+      ]
+    }
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/sse/test/business",
+    json={
+        "eventType": "pipeline_updated",
+        "data": {
+            "pipelineId": 12,
+            "name": "Funil de Vendas",
+            "updatedBy": 42,
+            "timestamp": "2026-09-25T13:20:41Z",
+            "changes": [
+                "name",
+                "icon",
+            ],
+        },
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/sse/test/business HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "eventType": "pipeline_updated",
+  "data": {
+    "pipelineId": 12,
+    "name": "Funil de Vendas",
+    "updatedBy": 42,
+    "timestamp": "2026-09-25T13:20:41Z",
+    "changes": [
+      "name",
+      "icon"
+    ]
+  }
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+O evento é entregue a todos os usuários da mesma empresa, em todas as suas conexões SSE ativas. Clientes SSE devem estar em conexão ativa com o endpoint Connect para receber o evento.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Body vazio ou inválido |
+| 401 | - | Token ausente, inválido ou expirado |

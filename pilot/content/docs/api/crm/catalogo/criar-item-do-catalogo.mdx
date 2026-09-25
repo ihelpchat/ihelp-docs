@@ -1,0 +1,111 @@
+---
+title: "Criar item do catálogo"
+description: "Cria um item no catálogo de produtos e serviços para uso em propostas."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/catalog
+---
+
+Cria um item no catálogo de produtos e serviços para uso em propostas.
+
+## Corpo da requisição
+
+<Params>
+<Param name="name" type="string" required>
+Nome do item, até 120 caracteres.
+</Param>
+<Param name="description" type="string">
+Descrição, até 500 caracteres.
+</Param>
+<Param name="type" type="int" required>
+`1` = Produto, `2` = Serviço.
+</Param>
+<Param name="sku" type="string">
+Código do item, até 40 caracteres. Único por empresa (sem diferenciar maiúsculas). Omita para gerar sem SKU.
+</Param>
+<Param name="price" type="decimal" required>
+Preço em R$, mínimo `0`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/catalog" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "Plano Pro (anual)",
+  "description": "Até 10 usuários, suporte prioritário",
+  "type": 2,
+  "sku": "PRO-12M",
+  "price": 800
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/catalog', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "name": "Plano Pro (anual)",
+    "description": "Até 10 usuários, suporte prioritário",
+    "type": 2,
+    "sku": "PRO-12M",
+    "price": 800
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/catalog",
+    json={
+        "name": "Plano Pro (anual)",
+        "description": "Até 10 usuários, suporte prioritário",
+        "type": 2,
+        "sku": "PRO-12M",
+        "price": 800,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/catalog HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "name": "Plano Pro (anual)",
+  "description": "Até 10 usuários, suporte prioritário",
+  "type": 2,
+  "sku": "PRO-12M",
+  "price": 800
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+SKU repetido responde `409 Conflict` com `{ "dados": "SKU já usado" }`. Requer **administrador da empresa** e o módulo de propostas ativo.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Validação de campos |
+| 401 | - | Usuário não é administrador |
+| 403 | - | Módulo de propostas desligado |
+| 409 | - | SKU já existe: `SKU já usado` |

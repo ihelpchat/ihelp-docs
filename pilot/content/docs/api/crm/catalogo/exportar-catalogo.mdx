@@ -1,0 +1,73 @@
+---
+title: "Exportar catálogo"
+description: "Exporta o catálogo em formato Excel ou CSV para download."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/catalog/export
+---
+
+Exporta o catálogo em formato Excel ou CSV para download.
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="format" type="string">
+`xlsx` (padrão) ou `csv`.
+</Param>
+<Param name="search" type="string">
+Filtro opcional por nome, descrição ou SKU do item.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/catalog/export \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -o catalogo-2026-09-25.xlsx
+```
+
+```js
+import { writeFile } from 'node:fs/promises';
+
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/catalog/export', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+await writeFile('catalogo-2026-09-25.xlsx', Buffer.from(await res.arrayBuffer()));
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/catalog/export",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+open("catalogo-2026-09-25.xlsx", "wb").write(r.content)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/catalog/export
+```
+
+</CodeTabs>
+
+## Regras
+
+- Formato padrão é `xlsx` (Excel). Use `format=csv` para CSV.
+- `search` filtra por nome, descrição ou SKU (parcial, case-insensitive).
+- Omita `search` para exportar todo o catálogo.
+- Formato inválido responde `400`.
+- Leitura, sem gate de flag: qualquer usuário autenticado pode exportar.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Formato inválido: não é `xlsx` nem `csv`. Mensagem: `Formato inválido. Use csv ou xlsx.` |
+| 401 | - | Token ausente, inválido ou expirado |

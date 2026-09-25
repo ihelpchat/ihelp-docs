@@ -1,0 +1,136 @@
+---
+title: "Reordenar etapas"
+description: "Reordena as etapas do funil alterando suas posições."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/funnelstage/{funnelId}/reorder
+---
+
+Reordena as etapas do funil alterando suas posições.
+
+O array precisa conter exatamente todas as etapas ativas do funil. Faltando ou sobrando alguma, a resposta é 400. Cada posição no array define o novo `order` de cada etapa (0, 1, 2...).
+
+## Parâmetros de rota
+
+<Params>
+<Param name="funnelId" type="int">
+ID do funil.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="[].id" type="int" required>
+ID da etapa.
+</Param>
+<Param name="[].order" type="int" required>
+Posição desejada (não usado internamente; a posição final é a do índice no array).
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/12/reorder" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[
+  {
+    "id": 101,
+    "order": 1
+  },
+  {
+    "id": 103,
+    "order": 2
+  },
+  {
+    "id": 102,
+    "order": 3
+  }
+]'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/12/reorder', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify([
+    {
+      "id": 101,
+      "order": 1
+    },
+    {
+      "id": 103,
+      "order": 2
+    },
+    {
+      "id": 102,
+      "order": 3
+    }
+  ]),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/12/reorder",
+    json=[
+        {
+            "id": 101,
+            "order": 1,
+        },
+        {
+            "id": 103,
+            "order": 2,
+        },
+        {
+            "id": 102,
+            "order": 3,
+        },
+    ],
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/funnelstage/12/reorder HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+[
+  {
+    "id": 101,
+    "order": 1
+  },
+  {
+    "id": 103,
+    "order": 2
+  },
+  {
+    "id": 102,
+    "order": 3
+  }
+]
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Array incompleto, com etapas inexistentes, ou ordem duplicada |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem permissão Admin/Owner no funil |
+| 404 | - | Funil inexistente |

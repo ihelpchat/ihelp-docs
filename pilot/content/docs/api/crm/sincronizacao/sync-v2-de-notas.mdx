@@ -1,0 +1,168 @@
+---
+title: "Sync V2 de notas"
+description: "Sincroniza um lote de notas de cards com o servidor (criação, atualização ou exclusão lógica)."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/sync/cardnote/batch
+---
+
+Sincroniza um lote de notas de cards com o servidor (criação, atualização ou exclusão lógica).
+
+<Callout type="warn" title="Uso interno">
+Este endpoint implementa a sincronização incremental do próprio app iHelp e não faz parte da API de integração. Versão melhorada (V2) da [Sync de notas](/api/crm/sincronizacao/sync-de-notas-do-card).
+</Callout>
+
+## Corpo da requisição
+
+<Params>
+<Param name="[]" type="CardNote[]" required>
+Array de notas completas com todos os campos da entidade CardNote. IDs existentes atualizam; novos são criados. Se o card de uma nota não existe ou pertence a outro usuário (acesso restrito), a nota é descartada; cards inexistentes não recusam o lote inteiro.
+</Param>
+</Params>
+
+Notas com `isActive: false` são marcadas como removidas (soft delete). Se um `cardId` referencia um card inexistente, essa nota é descartada mas não causa erro no lote.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/sync/cardnote/batch" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[
+  {
+    "id": 101,
+    "cardId": 8821,
+    "title": "Pendência técnica",
+    "description": "Aguardando resposta do cliente",
+    "isPrivate": false,
+    "createdDate": "2026-09-25T11:30:00Z",
+    "createdBy": 42,
+    "isActive": true,
+    "updatedAt": "2026-09-25T13:15:00Z"
+  },
+  {
+    "id": 102,
+    "cardId": 8821,
+    "title": "Memorando interno",
+    "description": "Verificar integração com ERP",
+    "isPrivate": true,
+    "createdDate": "2026-09-25T11:45:00Z",
+    "createdBy": 57,
+    "isActive": true,
+    "updatedAt": "2026-09-25T13:16:00Z"
+  }
+]'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/sync/cardnote/batch', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify([
+    {
+      "id": 101,
+      "cardId": 8821,
+      "title": "Pendência técnica",
+      "description": "Aguardando resposta do cliente",
+      "isPrivate": false,
+      "createdDate": "2026-09-25T11:30:00Z",
+      "createdBy": 42,
+      "isActive": true,
+      "updatedAt": "2026-09-25T13:15:00Z"
+    },
+    {
+      "id": 102,
+      "cardId": 8821,
+      "title": "Memorando interno",
+      "description": "Verificar integração com ERP",
+      "isPrivate": true,
+      "createdDate": "2026-09-25T11:45:00Z",
+      "createdBy": 57,
+      "isActive": true,
+      "updatedAt": "2026-09-25T13:16:00Z"
+    }
+  ]),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/sync/cardnote/batch",
+    json=[
+        {
+            "id": 101,
+            "cardId": 8821,
+            "title": "Pendência técnica",
+            "description": "Aguardando resposta do cliente",
+            "isPrivate": False,
+            "createdDate": "2026-09-25T11:30:00Z",
+            "createdBy": 42,
+            "isActive": True,
+            "updatedAt": "2026-09-25T13:15:00Z",
+        },
+        {
+            "id": 102,
+            "cardId": 8821,
+            "title": "Memorando interno",
+            "description": "Verificar integração com ERP",
+            "isPrivate": True,
+            "createdDate": "2026-09-25T11:45:00Z",
+            "createdBy": 57,
+            "isActive": True,
+            "updatedAt": "2026-09-25T13:16:00Z",
+        },
+    ],
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/sync/cardnote/batch HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+[
+  {
+    "id": 101,
+    "cardId": 8821,
+    "title": "Pendência técnica",
+    "description": "Aguardando resposta do cliente",
+    "isPrivate": false,
+    "createdDate": "2026-09-25T11:30:00Z",
+    "createdBy": 42,
+    "isActive": true,
+    "updatedAt": "2026-09-25T13:15:00Z"
+  },
+  {
+    "id": 102,
+    "cardId": 8821,
+    "title": "Memorando interno",
+    "description": "Verificar integração com ERP",
+    "isPrivate": true,
+    "createdDate": "2026-09-25T11:45:00Z",
+    "createdBy": 57,
+    "isActive": true,
+    "updatedAt": "2026-09-25T13:16:00Z"
+  }
+]
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Lista vazia ou inválida |
+| 401 | - | Token ausente, inválido ou expirado |
+| 404 | - | Todas as notas do lote pertencem a cards alheios (acesso restrito) |

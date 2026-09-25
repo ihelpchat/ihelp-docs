@@ -1,0 +1,10 @@
+{
+  "title": "Funil de atendimento",
+  "pages": [
+    "obter-funil-de-atendimento",
+    "etapa-novos",
+    "etapa-meus",
+    "etapa-departamento",
+    "etapa-finalizados"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Permissões da pipeline",
+  "pages": [
+    "listar-permissoes",
+    "atualizar-permissoes",
+    "resolver-email-de-membro"
+  ]
+}

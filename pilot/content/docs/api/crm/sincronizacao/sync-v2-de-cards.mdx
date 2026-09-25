@@ -1,0 +1,219 @@
+---
+title: "Sync V2 de cards"
+description: "Sincroniza um lote de cards com o servidor (criação, atualização, exclusão lógica ou restauração)."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/sync/card/batch
+---
+
+Sincroniza um lote de cards com o servidor (criação, atualização, exclusão lógica ou restauração).
+
+<Callout type="warn" title="Uso interno">
+Este endpoint implementa a sincronização incremental do próprio app iHelp e não faz parte da API de integração. Versão melhorada (V2) da [Sync de cards](/api/crm/sincronizacao/sync-de-cards).
+</Callout>
+
+## Corpo da requisição
+
+<Params>
+<Param name="[]" type="Card[]" required>
+Array de cards completos com todos os campos da entidade Card. IDs de cards existentes atualizam; novos são criados. Campos nulos são preservados. Se o usuário é restrito a funis, cards alheios são ignorados; cards novos herdam o criador como proprietário.
+</Param>
+</Params>
+
+Cards com `id: 0` ou omitido são criados. Se `isActive: false`, marca o card como removido (soft delete). O servidor descarta cards do request que pertencem a outros usuários (no caso de acesso restrito). Usa resolução de visibilidade em lote para melhor performance.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/sync/card/batch" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[
+  {
+    "id": 8821,
+    "idRef": "0b8f7c52-1a3e-4d7f-9f7e-5a0c2d1b9e33",
+    "title": "Proposta ACME",
+    "description": "Interesse no plano anual",
+    "estimatedValue": 4500,
+    "stageId": 101,
+    "responsibleId": 42,
+    "contactId": 3107,
+    "status": 1,
+    "priority": 3,
+    "source": "whatsapp",
+    "temperature": "quente",
+    "dueDate": "2026-10-15T00:00:00Z",
+    "isActive": true,
+    "businessId": 3,
+    "createdDate": "2026-09-25T10:00:00Z",
+    "updatedAt": "2026-09-25T13:20:41Z"
+  },
+  {
+    "id": 0,
+    "title": "Novo lead",
+    "description": "",
+    "estimatedValue": 1200,
+    "stageId": 101,
+    "responsibleId": 0,
+    "contactId": 3107,
+    "status": 1,
+    "priority": null,
+    "source": null,
+    "temperature": null,
+    "dueDate": null,
+    "isActive": true,
+    "businessId": 3
+  }
+]'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/sync/card/batch', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify([
+    {
+      "id": 8821,
+      "idRef": "0b8f7c52-1a3e-4d7f-9f7e-5a0c2d1b9e33",
+      "title": "Proposta ACME",
+      "description": "Interesse no plano anual",
+      "estimatedValue": 4500,
+      "stageId": 101,
+      "responsibleId": 42,
+      "contactId": 3107,
+      "status": 1,
+      "priority": 3,
+      "source": "whatsapp",
+      "temperature": "quente",
+      "dueDate": "2026-10-15T00:00:00Z",
+      "isActive": true,
+      "businessId": 3,
+      "createdDate": "2026-09-25T10:00:00Z",
+      "updatedAt": "2026-09-25T13:20:41Z"
+    },
+    {
+      "id": 0,
+      "title": "Novo lead",
+      "description": "",
+      "estimatedValue": 1200,
+      "stageId": 101,
+      "responsibleId": 0,
+      "contactId": 3107,
+      "status": 1,
+      "priority": null,
+      "source": null,
+      "temperature": null,
+      "dueDate": null,
+      "isActive": true,
+      "businessId": 3
+    }
+  ]),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/sync/card/batch",
+    json=[
+        {
+            "id": 8821,
+            "idRef": "0b8f7c52-1a3e-4d7f-9f7e-5a0c2d1b9e33",
+            "title": "Proposta ACME",
+            "description": "Interesse no plano anual",
+            "estimatedValue": 4500,
+            "stageId": 101,
+            "responsibleId": 42,
+            "contactId": 3107,
+            "status": 1,
+            "priority": 3,
+            "source": "whatsapp",
+            "temperature": "quente",
+            "dueDate": "2026-10-15T00:00:00Z",
+            "isActive": True,
+            "businessId": 3,
+            "createdDate": "2026-09-25T10:00:00Z",
+            "updatedAt": "2026-09-25T13:20:41Z",
+        },
+        {
+            "id": 0,
+            "title": "Novo lead",
+            "description": "",
+            "estimatedValue": 1200,
+            "stageId": 101,
+            "responsibleId": 0,
+            "contactId": 3107,
+            "status": 1,
+            "priority": None,
+            "source": None,
+            "temperature": None,
+            "dueDate": None,
+            "isActive": True,
+            "businessId": 3,
+        },
+    ],
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/sync/card/batch HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+[
+  {
+    "id": 8821,
+    "idRef": "0b8f7c52-1a3e-4d7f-9f7e-5a0c2d1b9e33",
+    "title": "Proposta ACME",
+    "description": "Interesse no plano anual",
+    "estimatedValue": 4500,
+    "stageId": 101,
+    "responsibleId": 42,
+    "contactId": 3107,
+    "status": 1,
+    "priority": 3,
+    "source": "whatsapp",
+    "temperature": "quente",
+    "dueDate": "2026-10-15T00:00:00Z",
+    "isActive": true,
+    "businessId": 3,
+    "createdDate": "2026-09-25T10:00:00Z",
+    "updatedAt": "2026-09-25T13:20:41Z"
+  },
+  {
+    "id": 0,
+    "title": "Novo lead",
+    "description": "",
+    "estimatedValue": 1200,
+    "stageId": 101,
+    "responsibleId": 0,
+    "contactId": 3107,
+    "status": 1,
+    "priority": null,
+    "source": null,
+    "temperature": null,
+    "dueDate": null,
+    "isActive": true,
+    "businessId": 3
+  }
+]
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Lista vazia ou inválida |
+| 401 | - | Token ausente, inválido ou expirado |

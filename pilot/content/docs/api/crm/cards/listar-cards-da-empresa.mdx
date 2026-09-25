@@ -1,0 +1,58 @@
+---
+title: "Cards da empresa"
+description: "Lista todos os cards ativos da empresa em todos os funis acessíveis ao usuário. Sem paginação — retorna até ~2000 cards."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/card/business/{businessId}
+---
+
+Lista todos os cards ativos da empresa em todos os funis acessíveis ao usuário. Sem paginação — retorna até ~2000 cards.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="businessId" type="int">
+ID da empresa (lido do token).
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/card/business/3 \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/business/3', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/business/3",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/card/business/3
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |

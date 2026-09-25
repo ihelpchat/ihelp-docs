@@ -1,0 +1,56 @@
+---
+title: "Listar automações"
+description: "Lista as automações da empresa com seus gatilhos, condições, ações e histórico de execuções."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/automation
+---
+
+Lista as automações da empresa com seus gatilhos, condições, ações e histórico de execuções.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/automation \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/automation', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/automation",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/automation
+```
+
+</CodeTabs>
+
+## Regras
+
+<Callout type="warn" title="O que o motor executa hoje">
+O cadastro aceita todos os gatilhos e ações listados abaixo, mas hoje o motor só executa o gatilho **`32` (card parado na etapa)** com a ação **`3` (disparar webhook)**. Automações com outros gatilhos ou ações são gravadas e não disparam; ações não suportadas aparecem nas execuções como `Unsupported:<tipo>`.
+</Callout>
+
+**Valores de gatilho:** `1` atendimento iniciado, `2` encerrado, `3` transferido, `4` reaberto, `5` mudou de departamento, `6` atribuído, `7` desatribuído, `10` alerta de SLA, `11` SLA estourado, `12` tempo de fila excedido, `13` sem atendente por tempo, `15` contato inativo, `16` atendente inativo, `30` card criado, `31` card movido, **`32` card parado na etapa**, `33` card ganho, `34` card perdido, `35` card cancelado, `36` valor do card alterado, `37` prazo do card próximo, `38` responsável do card alterado, `50` contato criado, `51` contato atualizado, `52` tag adicionada, `53` tag removida, `54` contato inativo há N dias, `70`–`74` campanha (enviada, entregue, lida, respondida, falhou), `90` webhook recebido, `91` horário agendado.
+
+**Valores de ação:** `1` enviar mensagem, `2` enviar template, **`3` disparar webhook**, `4` notificar usuário, `5` notificar departamento, `20` criar atendimento, `21` transferir, `22` encerrar, `23` atribuir, `24` mudar departamento, `25` prioridade do atendimento, `26` acionar bot, `40` criar card, `41` mover card, `42` atualizar card, `43` ganhar card, `44` perder card, `45` nota no card, `46` responsável do card, `60` adicionar tag, `61` remover tag, `62` atualizar campo do contato, `63` adicionar a grupo, `80` adicionar a campanha, `81` remover de campanha.
+
+**Valores de escopo:** `0` Global, `1` Atendimento, `2` CRM, `3` Contato, `4` Campanha.

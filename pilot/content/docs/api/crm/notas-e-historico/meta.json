@@ -1,0 +1,14 @@
+{
+  "title": "Notas e histórico",
+  "pages": [
+    "listar-notas",
+    "listar-notas-publicas",
+    "criar-nota",
+    "atualizar-nota",
+    "excluir-nota",
+    "listar-historico",
+    "adicionar-historico",
+    "listar-atividades",
+    "resumo-do-card"
+  ]
+}

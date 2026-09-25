@@ -1,0 +1,135 @@
+---
+title: "Atualizar tipo de frete"
+description: "Atualiza um tipo de frete: nome, previsão de entrega, valor padrão e transportadora."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/shipping-types/{id}
+---
+
+Atualiza um tipo de frete: nome, previsão de entrega, valor padrão e transportadora.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do tipo de frete.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="name" type="string">
+Nome, até 120 caracteres.
+</Param>
+<Param name="deliveryEstimate" type="string">
+Previsão de entrega, até 120 caracteres.
+</Param>
+<Param name="chargesFee" type="bool">
+Se o valor de frete entra no total.
+</Param>
+<Param name="defaultFee" type="decimal">
+Valor padrão de frete, mínimo `0`.
+</Param>
+<Param name="requiresCarrier" type="bool">
+Se a transportadora é obrigatória.
+</Param>
+<Param name="defaultCarrierId" type="int">
+ID da transportadora sugerida.
+</Param>
+<Param name="sortOrder" type="int">
+Ordem de exibição, mínimo `0`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/shipping-types/1" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "Transportadora",
+  "deliveryEstimate": "7 dias úteis",
+  "chargesFee": true,
+  "defaultFee": 45.9,
+  "requiresCarrier": true,
+  "defaultCarrierId": 4,
+  "sortOrder": 0
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/shipping-types/1', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "name": "Transportadora",
+    "deliveryEstimate": "7 dias úteis",
+    "chargesFee": true,
+    "defaultFee": 45.9,
+    "requiresCarrier": true,
+    "defaultCarrierId": 4,
+    "sortOrder": 0
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/shipping-types/1",
+    json={
+        "name": "Transportadora",
+        "deliveryEstimate": "7 dias úteis",
+        "chargesFee": True,
+        "defaultFee": 45.9,
+        "requiresCarrier": True,
+        "defaultCarrierId": 4,
+        "sortOrder": 0,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/shipping-types/1 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "name": "Transportadora",
+  "deliveryEstimate": "7 dias úteis",
+  "chargesFee": true,
+  "defaultFee": 45.9,
+  "requiresCarrier": true,
+  "defaultCarrierId": 4,
+  "sortOrder": 0
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+- Apenas administradores da empresa podem atualizar. Usuário não-admin recebe `401` sem corpo.
+- O módulo de propostas deve estar ativo. Caso contrário, recebe `403`.
+- ID inexistente ou de outra empresa responde `404`.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Validação falha (transportadora inválida, etc) |
+| 401 | - | Não é administrador da empresa |
+| 403 | - | Módulo de propostas não está ativo |
+| 404 | - | ID não encontrado ou de outra empresa |

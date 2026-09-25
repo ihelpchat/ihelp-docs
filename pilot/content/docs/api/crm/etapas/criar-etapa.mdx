@@ -1,0 +1,108 @@
+---
+title: "Criar etapa"
+description: "Cria uma nova etapa em um funil com título, cor, descrição opcional e posição."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/funnelstage
+---
+
+Cria uma nova etapa em um funil com título, cor, descrição opcional e posição.
+
+Campos obrigatórios: `title`, `color` e `funnelId`. A cor deve estar no formato hexadecimal `#RRGGBB`. Exige nível Admin ou Owner no funil, ou ser administrador da empresa.
+
+## Corpo da requisição
+
+<Params>
+<Param name="title" type="string" required>
+Título da etapa. Máximo 100 caracteres.
+</Param>
+<Param name="color" type="string" required>
+Cor em formato hexadecimal #RRGGBB. Exemplo: #F59E0B
+</Param>
+<Param name="funnelId" type="int" required>
+ID do funil onde a etapa será criada. Funil inexistente responde 400.
+</Param>
+<Param name="description" type="string">
+Descrição da etapa. Máximo 500 caracteres.
+</Param>
+<Param name="order" type="int">
+Posição na sequência. 0 ou omitido coloca no final.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "title": "Negociação",
+  "description": "Proposta enviada, aguardando retorno",
+  "color": "#F59E0B",
+  "order": 0,
+  "funnelId": 12
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelstage', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "title": "Negociação",
+    "description": "Proposta enviada, aguardando retorno",
+    "color": "#F59E0B",
+    "order": 0,
+    "funnelId": 12
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage",
+    json={
+        "title": "Negociação",
+        "description": "Proposta enviada, aguardando retorno",
+        "color": "#F59E0B",
+        "order": 0,
+        "funnelId": 12,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/funnelstage HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "title": "Negociação",
+  "description": "Proposta enviada, aguardando retorno",
+  "color": "#F59E0B",
+  "order": 0,
+  "funnelId": 12
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Título vazio, cor inválida, funil inexistente, ou funnelId fora do intervalo |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem permissão Admin/Owner no funil |

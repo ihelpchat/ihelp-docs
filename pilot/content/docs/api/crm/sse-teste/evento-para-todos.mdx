@@ -1,0 +1,113 @@
+---
+title: "Evento para todos"
+description: "Envia um evento de teste para todos os usuários conectados via SSE (Server-Sent Events). Apenas para administradores."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/sse/test/all
+---
+
+Envia um evento de teste para todos os usuários conectados via SSE (Server-Sent Events). Apenas para administradores.
+
+<Callout type="warn" title="Uso interno">
+Este é um endpoint de teste para eventos em tempo real. Requer role de Administrador. Envia eventos em broadcast para todos os clientes SSE conectados.
+</Callout>
+
+## Corpo da requisição
+
+<Params>
+<Param name="eventType" type="string" required>
+Tipo do evento, ex.: `system_notification`, `maintenance_alert`, `test_broadcast`. Pode ser qualquer string.
+</Param>
+<Param name="data" type="object" required>
+Payload do evento em objeto JSON. Estrutura arbitrária conforme o tipo de evento.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/sse/test/all" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "eventType": "system_notification",
+  "data": {
+    "message": "Sistema em manutenção em 10 minutos",
+    "severity": "warning",
+    "startTime": "2026-09-25T14:00:00Z",
+    "durationMinutes": 30
+  }
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/sse/test/all', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "eventType": "system_notification",
+    "data": {
+      "message": "Sistema em manutenção em 10 minutos",
+      "severity": "warning",
+      "startTime": "2026-09-25T14:00:00Z",
+      "durationMinutes": 30
+    }
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/sse/test/all",
+    json={
+        "eventType": "system_notification",
+        "data": {
+            "message": "Sistema em manutenção em 10 minutos",
+            "severity": "warning",
+            "startTime": "2026-09-25T14:00:00Z",
+            "durationMinutes": 30,
+        },
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/sse/test/all HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "eventType": "system_notification",
+  "data": {
+    "message": "Sistema em manutenção em 10 minutos",
+    "severity": "warning",
+    "startTime": "2026-09-25T14:00:00Z",
+    "durationMinutes": 30
+  }
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+Este endpoint requer autenticação com role `Admin`. O evento é entregue a todos os usuários em todas as suas conexões SSE ativas, independentemente da empresa. Clientes SSE devem estar conectados ao endpoint Connect para receber o evento.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Body vazio ou inválido |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Usuário não tem role de Administrador |

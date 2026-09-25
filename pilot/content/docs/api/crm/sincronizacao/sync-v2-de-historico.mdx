@@ -1,0 +1,200 @@
+---
+title: "Sync V2 de histórico"
+description: "Sincroniza um lote de registros de histórico de cards com o servidor (criação, atualização ou exclusão lógica)."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/sync/cardhistory/batch
+---
+
+Sincroniza um lote de registros de histórico de cards com o servidor (criação, atualização ou exclusão lógica).
+
+<Callout type="warn" title="Uso interno">
+Este endpoint implementa a sincronização incremental do próprio app iHelp e não faz parte da API de integração. Versão melhorada (V2) da [Sync de histórico](/api/crm/sincronizacao/sync-de-historico-do-card).
+</Callout>
+
+## Corpo da requisição
+
+<Params>
+<Param name="[]" type="CardHistory[]" required>
+Array de registros de histórico completos com todos os campos da entidade CardHistory. IDs existentes atualizam; novos são criados. Se o card de um histórico não existe ou pertence a outro usuário (acesso restrito), o histórico é descartado; cards inexistentes não recusam o lote inteiro.
+</Param>
+</Params>
+
+Históricos com `isActive: false` são marcados como removidos (soft delete). Se um `cardId` referencia um card inexistente, esse histórico é descartado mas não causa erro no lote.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/sync/cardhistory/batch" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[
+  {
+    "id": 1,
+    "cardId": 8821,
+    "description": "Movido para Qualificação",
+    "type": 1,
+    "createdDate": "2026-09-25T12:00:00Z",
+    "createdBy": 42,
+    "isActive": true,
+    "updatedAt": "2026-09-25T13:20:00Z"
+  },
+  {
+    "id": 2,
+    "cardId": 8821,
+    "description": "Proposta enviada ao cliente",
+    "type": 2,
+    "createdDate": "2026-09-25T13:00:00Z",
+    "createdBy": 42,
+    "isActive": true,
+    "updatedAt": "2026-09-25T13:20:01Z"
+  },
+  {
+    "id": 3,
+    "cardId": 8821,
+    "description": "Status alterado para Ganho",
+    "type": 3,
+    "createdDate": "2026-09-25T13:30:00Z",
+    "createdBy": 42,
+    "isActive": true,
+    "updatedAt": "2026-09-25T13:20:02Z"
+  }
+]'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/sync/cardhistory/batch', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify([
+    {
+      "id": 1,
+      "cardId": 8821,
+      "description": "Movido para Qualificação",
+      "type": 1,
+      "createdDate": "2026-09-25T12:00:00Z",
+      "createdBy": 42,
+      "isActive": true,
+      "updatedAt": "2026-09-25T13:20:00Z"
+    },
+    {
+      "id": 2,
+      "cardId": 8821,
+      "description": "Proposta enviada ao cliente",
+      "type": 2,
+      "createdDate": "2026-09-25T13:00:00Z",
+      "createdBy": 42,
+      "isActive": true,
+      "updatedAt": "2026-09-25T13:20:01Z"
+    },
+    {
+      "id": 3,
+      "cardId": 8821,
+      "description": "Status alterado para Ganho",
+      "type": 3,
+      "createdDate": "2026-09-25T13:30:00Z",
+      "createdBy": 42,
+      "isActive": true,
+      "updatedAt": "2026-09-25T13:20:02Z"
+    }
+  ]),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/sync/cardhistory/batch",
+    json=[
+        {
+            "id": 1,
+            "cardId": 8821,
+            "description": "Movido para Qualificação",
+            "type": 1,
+            "createdDate": "2026-09-25T12:00:00Z",
+            "createdBy": 42,
+            "isActive": True,
+            "updatedAt": "2026-09-25T13:20:00Z",
+        },
+        {
+            "id": 2,
+            "cardId": 8821,
+            "description": "Proposta enviada ao cliente",
+            "type": 2,
+            "createdDate": "2026-09-25T13:00:00Z",
+            "createdBy": 42,
+            "isActive": True,
+            "updatedAt": "2026-09-25T13:20:01Z",
+        },
+        {
+            "id": 3,
+            "cardId": 8821,
+            "description": "Status alterado para Ganho",
+            "type": 3,
+            "createdDate": "2026-09-25T13:30:00Z",
+            "createdBy": 42,
+            "isActive": True,
+            "updatedAt": "2026-09-25T13:20:02Z",
+        },
+    ],
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/sync/cardhistory/batch HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+[
+  {
+    "id": 1,
+    "cardId": 8821,
+    "description": "Movido para Qualificação",
+    "type": 1,
+    "createdDate": "2026-09-25T12:00:00Z",
+    "createdBy": 42,
+    "isActive": true,
+    "updatedAt": "2026-09-25T13:20:00Z"
+  },
+  {
+    "id": 2,
+    "cardId": 8821,
+    "description": "Proposta enviada ao cliente",
+    "type": 2,
+    "createdDate": "2026-09-25T13:00:00Z",
+    "createdBy": 42,
+    "isActive": true,
+    "updatedAt": "2026-09-25T13:20:01Z"
+  },
+  {
+    "id": 3,
+    "cardId": 8821,
+    "description": "Status alterado para Ganho",
+    "type": 3,
+    "createdDate": "2026-09-25T13:30:00Z",
+    "createdBy": 42,
+    "isActive": true,
+    "updatedAt": "2026-09-25T13:20:02Z"
+  }
+]
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Lista vazia ou inválida |
+| 401 | - | Token ausente, inválido ou expirado |
+| 404 | - | Todos os históricos do lote pertencem a cards alheios (acesso restrito) |

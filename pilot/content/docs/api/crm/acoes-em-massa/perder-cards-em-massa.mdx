@@ -1,0 +1,105 @@
+---
+title: "Perder em massa"
+description: "Marca vários cards como perdidos em uma única requisição, com opção de registrar descrição para o histórico."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/bulk/close-lost
+---
+
+Marca vários cards como perdidos em uma única requisição, com opção de registrar descrição para o histórico.
+
+## Corpo da requisição
+
+<Params>
+<Param name="cardIds" type="int[]" required>
+Array de IDs de cards. Deve conter entre 1 e 2000 IDs; fora disso a resposta é `400`.
+</Param>
+<Param name="description" type="string">
+Texto descritivo registrado no histórico de cada card. A ação em massa não coleta motivos de perda estruturados, apenas descrição livre.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/bulk/close-lost" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "cardIds": [
+    8821,
+    8822,
+    8823
+  ],
+  "description": "Lote perdido: campanha de agosto encerrada"
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/bulk/close-lost', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "cardIds": [
+      8821,
+      8822,
+      8823
+    ],
+    "description": "Lote perdido: campanha de agosto encerrada"
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/bulk/close-lost",
+    json={
+        "cardIds": [
+            8821,
+            8822,
+            8823,
+        ],
+        "description": "Lote perdido: campanha de agosto encerrada",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/card/bulk/close-lost HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "cardIds": [
+    8821,
+    8822,
+    8823
+  ],
+  "description": "Lote perdido: campanha de agosto encerrada"
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+A ação em massa não coleta motivos de perda estruturados. Para registrar motivos, use [Marcar como perdido](/api/crm/status-e-fechamento/marcar-como-perdido) uma vez por card.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | `cardIds` ausente ou vazio, ou com menos de 1 ou mais de 2000 IDs |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização em um dos funis dos cards |

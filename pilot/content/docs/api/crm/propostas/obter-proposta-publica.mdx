@@ -1,0 +1,74 @@
+---
+title: "Proposta pública"
+description: "Obtém o documento da proposta conforme visto pelo cliente no link público, sem IDs internos."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/proposals/public/{idRef}
+---
+
+Obtém o documento da proposta conforme visto pelo cliente no link público, sem IDs internos.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="idRef" type="uuid">
+Identificador único da proposta no link público.
+</Param>
+</Params>
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="t" type="string" required>
+Token do link público gerado com [`POST /proposals/{id}/link`](/api/crm/propostas/gerar-link-publico).
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl -G https://apiv3.ihelpchat.com/api/v2/crm/proposals/public/c1f0a9e2-5b7d-4c1e-9a33-0f6d2b8e4a17 \
+  --data-urlencode "t=9f2c7e8b1a4d5f6c9e0a2b3d4e5f6a7b8c9d0e1"
+```
+
+```js
+const params = new URLSearchParams({t: '9f2c7e8b1a4d5f6c9e0a2b3d4e5f6a7b8c9d0e1'});
+
+const res = await fetch(`https://apiv3.ihelpchat.com/api/v2/crm/proposals/public/c1f0a9e2-5b7d-4c1e-9a33-0f6d2b8e4a17?${params}`);
+
+console.log(res.status);
+```
+
+```python
+import requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/proposals/public/c1f0a9e2-5b7d-4c1e-9a33-0f6d2b8e4a17",
+    params={
+        "t": "9f2c7e8b1a4d5f6c9e0a2b3d4e5f6a7b8c9d0e1",
+    },
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/proposals/public/c1f0a9e2-5b7d-4c1e-9a33-0f6d2b8e4a17?t=9f2c7e8b1a4d5f6c9e0a2b3d4e5f6a7b8c9d0e1
+```
+
+</CodeTabs>
+
+## Regras
+
+- **Sem autenticação**: rota pública. Token errado, proposta vencida, excluída ou inexistente devolvem o mesmo `404` sem corpo (de propósito).
+- Inclui dados da empresa (nome, telefone, e-mail) e o texto de abertura (se habilitado no perfil).
+- **Mostra apenas** os campos relevantes para o cliente; IDs internos, timestamps de auditoria e dados sensíveis não aparecem.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 404 | - | Token errado, proposta vencida, excluída ou inexistente (mesmo `404` para não distinguir) |

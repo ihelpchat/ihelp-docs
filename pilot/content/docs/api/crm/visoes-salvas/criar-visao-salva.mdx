@@ -1,0 +1,105 @@
+---
+title: "Criar visão"
+description: "Cria uma nova visão salva em uma pipeline. O nome deve ser único por usuário e pipeline."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/saved-views
+---
+
+Cria uma nova visão salva em uma pipeline. O nome deve ser único por usuário e pipeline.
+
+## Corpo da requisição
+
+<Params>
+<Param name="pipelineId" type="int" required>
+ID da pipeline à qual a visão pertence.
+</Param>
+<Param name="name" type="string" required>
+Nome da visão, até 100 caracteres, único por usuário e pipeline. Os nomes 'default' e 'todos os cards' são reservados.
+</Param>
+<Param name="pinned" type="bool">
+Se a visão fica fixada no topo. Default: `false`.
+</Param>
+<Param name="quickFilters" type="string">
+Estado dos filtros rápidos como JSON serializado em texto, até 10 KB. JSON inválido responde `400`. Default: `'{}'`.
+</Param>
+<Param name="advancedFilters" type="string">
+Estado dos filtros avançados como JSON serializado em texto, até 10 KB. JSON inválido responde `400`. Default: `'{}'`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/saved-views" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "pipelineId": 12,
+  "name": "Meus cards urgentes",
+  "pinned": true,
+  "quickFilters": "{\"assignedToMe\":true,\"priority\":\"4\"}",
+  "advancedFilters": "{}"
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/saved-views', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "pipelineId": 12,
+    "name": "Meus cards urgentes",
+    "pinned": true,
+    "quickFilters": "{\"assignedToMe\":true,\"priority\":\"4\"}",
+    "advancedFilters": "{}"
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/saved-views",
+    json={
+        "pipelineId": 12,
+        "name": "Meus cards urgentes",
+        "pinned": True,
+        "quickFilters": "{\"assignedToMe\":true,\"priority\":\"4\"}",
+        "advancedFilters": "{}",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/saved-views HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "pipelineId": 12,
+  "name": "Meus cards urgentes",
+  "pinned": true,
+  "quickFilters": "{\"assignedToMe\":true,\"priority\":\"4\"}",
+  "advancedFilters": "{}"
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Nome vazio, repetido (já existe com esse nome nesta pipeline para este usuário), `pipelineId` ausente ou inválido, JSON de `quickFilters` ou `advancedFilters` com sintaxe incorreta, campos muito grandes |
+| 401 | - | Token ausente, inválido ou expirado |

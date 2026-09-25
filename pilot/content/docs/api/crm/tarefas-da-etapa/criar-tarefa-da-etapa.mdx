@@ -1,0 +1,145 @@
+---
+title: "Criar tarefa"
+description: "Cria um modelo de tarefa para uma etapa. Tarefas marcadas como obrigatórias bloqueiam o card de sair até serem concluídas."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/stages/{stageId}/task-templates
+---
+
+Cria um modelo de tarefa para uma etapa. Tarefas marcadas como obrigatórias bloqueiam o card de sair até serem concluídas.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="stageId" type="int">
+Identificador da etapa
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="title" type="string" required>
+Título da tarefa
+</Param>
+<Param name="description" type="string" required={false}>
+Descrição da tarefa
+</Param>
+<Param name="type" type="int" required>
+1=Ligação, 2=WhatsApp, 3=E-mail, 4=Reunião
+</Param>
+<Param name="dueDays" type="int" required={false}>
+Prazo em dias (0-365) após card entrar na etapa. Padrão 1
+</Param>
+<Param name="businessDaysOnly" type="boolean" required={false}>
+Se conta apenas dias úteis. Padrão false
+</Param>
+<Param name="assigneeKind" type="int" required>
+1=responsável do card, 3=usuário específico, 5=criador do card
+</Param>
+<Param name="assigneeUserId" type="int" required={false}>
+Obrigatório quando assigneeKind=3
+</Param>
+<Param name="required" type="boolean" required={false}>
+Se bloqueia saída do card até conclusão. Padrão false
+</Param>
+<Param name="orderIndex" type="int" required={false}>
+Posição na etapa. 0 ou omitido coloca no fim
+</Param>
+</Params>
+
+assigneeUserId é ignorado quando assigneeKind != 3. dueDays deve estar entre 0 e 365.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "title": "Ligar para o cliente",
+  "description": "Confirmar recebimento da proposta",
+  "type": 1,
+  "dueDays": 2,
+  "businessDaysOnly": true,
+  "assigneeKind": 1,
+  "assigneeUserId": null,
+  "required": true,
+  "orderIndex": 0
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "title": "Ligar para o cliente",
+    "description": "Confirmar recebimento da proposta",
+    "type": 1,
+    "dueDays": 2,
+    "businessDaysOnly": true,
+    "assigneeKind": 1,
+    "assigneeUserId": null,
+    "required": true,
+    "orderIndex": 0
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates",
+    json={
+        "title": "Ligar para o cliente",
+        "description": "Confirmar recebimento da proposta",
+        "type": 1,
+        "dueDays": 2,
+        "businessDaysOnly": True,
+        "assigneeKind": 1,
+        "assigneeUserId": None,
+        "required": True,
+        "orderIndex": 0,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/stages/101/task-templates HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "title": "Ligar para o cliente",
+  "description": "Confirmar recebimento da proposta",
+  "type": 1,
+  "dueDays": 2,
+  "businessDaysOnly": true,
+  "assigneeKind": 1,
+  "assigneeUserId": null,
+  "required": true,
+  "orderIndex": 0
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | `Nao foi possivel criar o template` | Campos obrigatórios faltando, dueDays fora de 0-365, ou assigneeUserId faltando quando kind=3 |
+| 401 | `Unauthorized` | Token ausente ou inválido |
+| 403 | `Forbidden` | Usuário não é admin ou não tem permissão na etapa |
+| 404 | `Not Found` | Etapa não existe |

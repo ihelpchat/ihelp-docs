@@ -1,0 +1,9 @@
+{
+  "title": "Formas de pagamento",
+  "pages": [
+    "listar-formas-de-pagamento",
+    "criar-forma-de-pagamento",
+    "atualizar-forma-de-pagamento",
+    "excluir-forma-de-pagamento"
+  ]
+}

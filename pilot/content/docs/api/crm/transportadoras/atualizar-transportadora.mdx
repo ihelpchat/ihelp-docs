@@ -1,0 +1,107 @@
+---
+title: "Atualizar transportadora"
+description: "Atualiza uma transportadora: nome, CNPJ e unidade federativa da empresa."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/carriers/{id}
+---
+
+Atualiza uma transportadora: nome, CNPJ e unidade federativa da empresa.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da transportadora.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="name" type="string">
+Nome, até 120 caracteres.
+</Param>
+<Param name="cnpj" type="string">
+CNPJ, até 20 caracteres, formato livre.
+</Param>
+<Param name="uf" type="string">
+Sigla do estado, até 2 caracteres.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/carriers/4" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "Rápido Express",
+  "cnpj": "98.765.432/0001-10",
+  "uf": "SP"
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/carriers/4', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "name": "Rápido Express",
+    "cnpj": "98.765.432/0001-10",
+    "uf": "SP"
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/carriers/4",
+    json={
+        "name": "Rápido Express",
+        "cnpj": "98.765.432/0001-10",
+        "uf": "SP",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/carriers/4 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "name": "Rápido Express",
+  "cnpj": "98.765.432/0001-10",
+  "uf": "SP"
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+- Apenas administradores da empresa podem atualizar. Usuário não-admin recebe `401` sem corpo.
+- O módulo de propostas deve estar ativo. Caso contrário, recebe `403`.
+- ID inexistente ou de outra empresa responde `404`.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Validação falha |
+| 401 | - | Não é administrador da empresa |
+| 403 | - | Módulo de propostas não está ativo |
+| 404 | - | ID não encontrado ou de outra empresa |

@@ -1,0 +1,177 @@
+---
+title: "Atualizar regra"
+description: "Atualiza uma regra existente com novos gatilho, condições e ações. O funil da regra permanece o mesmo."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/funnelrule/{id}
+---
+
+Atualiza uma regra existente com novos gatilho, condições e ações. O funil da regra permanece o mesmo.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da regra a atualizar.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="title" type="string" required>
+Título da regra
+</Param>
+<Param name="trigger" type="int" required>
+Tipo de gatilho
+</Param>
+<Param name="conditions" type="array" required>
+Array de condições
+</Param>
+<Param name="actions" type="array" required>
+Array de ações
+</Param>
+<Param name="isActive" type="bool" required={false}>
+Se a regra está ativa. **Omitir desativa**
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/4" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "title": "Lead do Comercial vira card (atualizado)",
+  "trigger": 1,
+  "conditions": [
+    {
+      "field": 2,
+      "operator": 1,
+      "value": "15"
+    },
+    {
+      "field": 5,
+      "operator": 1,
+      "value": "8"
+    }
+  ],
+  "actions": [
+    {
+      "type": 1,
+      "targetStageId": 102
+    }
+  ],
+  "isActive": true
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/4', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "title": "Lead do Comercial vira card (atualizado)",
+    "trigger": 1,
+    "conditions": [
+      {
+        "field": 2,
+        "operator": 1,
+        "value": "15"
+      },
+      {
+        "field": 5,
+        "operator": 1,
+        "value": "8"
+      }
+    ],
+    "actions": [
+      {
+        "type": 1,
+        "targetStageId": 102
+      }
+    ],
+    "isActive": true
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/4",
+    json={
+        "title": "Lead do Comercial vira card (atualizado)",
+        "trigger": 1,
+        "conditions": [
+            {
+                "field": 2,
+                "operator": 1,
+                "value": "15",
+            },
+            {
+                "field": 5,
+                "operator": 1,
+                "value": "8",
+            },
+        ],
+        "actions": [
+            {
+                "type": 1,
+                "targetStageId": 102,
+            },
+        ],
+        "isActive": True,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/funnelrule/4 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "title": "Lead do Comercial vira card (atualizado)",
+  "trigger": 1,
+  "conditions": [
+    {
+      "field": 2,
+      "operator": 1,
+      "value": "15"
+    },
+    {
+      "field": 5,
+      "operator": 1,
+      "value": "8"
+    }
+  ],
+  "actions": [
+    {
+      "type": 1,
+      "targetStageId": 102
+    }
+  ],
+  "isActive": true
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 404 | - | Regra não existe |
+| 400 | - | Etapa de destino inválida ou não pertence ao funil |

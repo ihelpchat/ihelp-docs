@@ -1,0 +1,64 @@
+---
+title: "Excluir pipeline"
+description: "Remove a pipeline inativando em cascata cards, etapas, tarefas, visões salvas e favoritos."
+source: api
+contentType: referencia
+method: DELETE
+endpoint: /crm/pipelines/{id}
+---
+
+Remove a pipeline inativando em cascata cards, etapas, tarefas, visões salvas e favoritos.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int" required>
+ID da pipeline.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X DELETE "https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12', {
+  method: 'DELETE',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.delete(
+    "https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+DELETE /api/v2/crm/pipelines/12 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Pipeline é a padrão da empresa (desmarque antes com set-default) |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem permissão de admin na pipeline |
+| 404 | - | Pipeline não encontrada |

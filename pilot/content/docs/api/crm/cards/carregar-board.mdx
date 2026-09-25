@@ -1,0 +1,87 @@
+---
+title: "Carregar board"
+description: "Carrega a primeira página de cards de cada etapa do funil — equivalente a abrir o board. Aceita filtros simples via query string."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/card/funnel/{funnelId}/initial
+---
+
+Carrega a primeira página de cards de cada etapa do funil — equivalente a abrir o board. Aceita filtros simples via query string.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="funnelId" type="int">
+ID do funil.
+</Param>
+</Params>
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="generalText" type="string" required={false}>
+Texto para busca rápida.
+</Param>
+<Param name="status" type="int" required={false}>
+Status do card (1-5).
+</Param>
+<Param name="responsibleId" type="int" required={false}>
+ID do responsável.
+</Param>
+<Param name="page" type="int" required={false}>
+Página (não usado; retorna primeira página de cada etapa).
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl -G https://apiv3.ihelpchat.com/api/v2/crm/card/funnel/12/initial \
+  --data-urlencode "generalText=ACME" \
+  --data-urlencode "status=1" \
+  --data-urlencode "responsibleId=42" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const params = new URLSearchParams({generalText: 'ACME',status: '1',responsibleId: '42'});
+
+const res = await fetch(`https://apiv3.ihelpchat.com/api/v2/crm/card/funnel/12/initial?${params}`, {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/funnel/12/initial",
+    params={
+        "generalText": "ACME",
+        "status": 1,
+        "responsibleId": 42,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/card/funnel/12/initial?generalText=ACME&status=1&responsibleId=42
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Funil inexistente ou parâmetro inválido |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem acesso ao funil |

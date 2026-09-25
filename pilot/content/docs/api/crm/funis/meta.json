@@ -1,0 +1,17 @@
+{
+  "title": "Funis",
+  "pages": [
+    "listar-funis",
+    "obter-funil-padrao",
+    "obter-funil",
+    "obter-funil-com-etapas",
+    "obter-funil-com-regras",
+    "obter-funil-com-etapas-e-regras",
+    "criar-funil",
+    "atualizar-funil",
+    "excluir-funil",
+    "listar-cards-do-funil",
+    "listar-funis-do-usuario",
+    "importar-cards-e-contatos"
+  ]
+}

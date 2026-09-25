@@ -1,0 +1,67 @@
+---
+title: "Aplicar regras no card"
+description: "Aplica as regras do funil ao card, executando automações e atualizações conforme a configuração."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/{id}/apply-rules
+---
+
+Aplica as regras do funil ao card, executando automações e atualizações conforme a configuração.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/apply-rules" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/apply-rules', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/apply-rules",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/card/8821/apply-rules HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+```
+
+</CodeTabs>
+
+## Regras
+
+As regras são definidas no funil e podem alterar status, atribuição, campos personalizados ou disparam outras automações. Este endpoint força a execução de regras sem esperar por eventos automáticos.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 404 | - | Card não encontrado ou de outra empresa |

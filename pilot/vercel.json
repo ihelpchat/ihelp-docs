@@ -56,6 +56,56 @@
       "source": "/ihelp-docs/duvidas-e-dicas/:path*/",
       "destination": "/ihelp-docs/docs/duvidas-e-dicas/:path*/",
       "permanent": true
+    },
+    {
+      "source": "/ihelp-docs/api/crm/funis-e-etapas/",
+      "destination": "/ihelp-docs/api/crm/funis/listar-funis/",
+      "permanent": true
+    },
+    {
+      "source": "/ihelp-docs/api/crm/mover-card/",
+      "destination": "/ihelp-docs/api/crm/movimentacao/mover-card/",
+      "permanent": true
+    },
+    {
+      "source": "/ihelp-docs/api/crm/mover-cards-em-massa/",
+      "destination": "/ihelp-docs/api/crm/movimentacao/mover-em-massa/",
+      "permanent": true
+    },
+    {
+      "source": "/ihelp-docs/api/crm/trocar-de-funil/",
+      "destination": "/ihelp-docs/api/crm/movimentacao/trocar-de-funil/",
+      "permanent": true
+    },
+    {
+      "source": "/ihelp-docs/api/crm/mover-por-telefone/",
+      "destination": "/ihelp-docs/api/crm/movimentacao/mover-por-telefone/",
+      "permanent": true
+    },
+    {
+      "source": "/ihelp-docs/api/crm/referencia/",
+      "destination": "/ihelp-docs/api/crm/visao-geral/",
+      "permanent": true
+    },
+    {
+      "source": "/ihelp-docs/api/crm/referencia/cards/",
+      "destination": "/ihelp-docs/api/crm/cards/criar-card/",
+      "permanent": true
+    },
+    {
+      "source": "/ihelp-docs/api/crm/referencia/funis-e-etapas/",
+      "destination": "/ihelp-docs/api/crm/funis/listar-funis/",
+      "permanent": true
+    },
+    {
+      "source": "/ihelp-docs/api/crm/referencia/pipelines/",
+      "destination": "/ihelp-docs/api/crm/pipelines/criar-pipeline/",
+      "permanent": true
+    },
+    {
+      "source": "/ihelp-docs/api/crm/referencia/automacoes-e-filtros/",
+      "destination": "/ihelp-docs/api/crm/automacoes/listar-automacoes/",
+      "permanent": true
     }
   ]
 }

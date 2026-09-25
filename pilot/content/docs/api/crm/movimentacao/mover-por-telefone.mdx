@@ -1,0 +1,166 @@
+---
+title: "Mover por telefone"
+description: "Move os cards de um contato identificado pelo telefone, sem precisar do cardId. É o caminho mais direto para automações que só têm o número."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/move-by-phone
+---
+
+Move os cards de um contato identificado pelo telefone, sem precisar do cardId. É o caminho mais direto para automações que só têm o número.
+
+<Callout type="idea" title="Endpoint de integração">
+Move os cards de um contato **sem precisar conhecer o `cardId`**. É o caminho mais direto para automações que só têm o número de telefone em mãos.
+</Callout>
+
+## Corpo da requisição
+
+<Params>
+<Param name="phoneNumber" type="string" required>
+Telefone do contato, com DDI e DDD.
+</Param>
+<Param name="stageId" type="int" required>
+Etapa de destino. Precisa ser maior que zero.
+</Param>
+<Param name="funnelId" type="int" required={false}>
+Restringe a movimentação aos cards deste funil. Sem ele, considera todos os cards do contato.
+</Param>
+<Param name="forceAll" type="bool" required={false}>
+`true` confirma o movimento mesmo com campos ou tarefas obrigatórias pendentes. Padrão `false`.
+</Param>
+<Param name="description" type="string" required={false}>
+Texto registrado no histórico de cada card movido.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/move-by-phone" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "phoneNumber": "5517981259808",
+  "funnelId": 12,
+  "stageId": 102,
+  "forceAll": false,
+  "description": "Movido pelo bot de qualificação"
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/move-by-phone', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "phoneNumber": "5517981259808",
+    "funnelId": 12,
+    "stageId": 102,
+    "forceAll": false,
+    "description": "Movido pelo bot de qualificação"
+  }),
+});
+
+const data = await res.json();
+console.log(data);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/move-by-phone",
+    json={
+        "phoneNumber": "5517981259808",
+        "funnelId": 12,
+        "stageId": 102,
+        "forceAll": False,
+        "description": "Movido pelo bot de qualificação",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.json())
+```
+
+```http
+POST /api/v2/crm/card/move-by-phone HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "phoneNumber": "5517981259808",
+  "funnelId": 12,
+  "stageId": 102,
+  "forceAll": false,
+  "description": "Movido pelo bot de qualificação"
+}
+```
+
+</CodeTabs>
+
+## Resposta
+
+<Response status="200 OK">
+
+```json
+[
+  {
+    "cardId": 8821,
+    "businessId": 3,
+    "previousStageId": 101,
+    "currentStageId": 102,
+    "estimatedValue": 4500,
+    "moved": true,
+    "message": null
+  },
+  {
+    "cardId": 8830,
+    "businessId": 3,
+    "previousStageId": 103,
+    "currentStageId": 103,
+    "estimatedValue": 0,
+    "moved": false,
+    "message": "Campos obrigatórios pendentes"
+  }
+]
+```
+
+</Response>
+
+Array com uma entrada por card avaliado.
+
+<Callout type="warn" title="Verifique moved em cada item">
+O status `200` só indica que a chamada foi processada. Cards individuais podem não ter se movido, sempre percorra o array conferindo `moved`.
+</Callout>
+
+## Campos relevantes
+
+<Fields>
+<Field name="moved">
+`true` se o card foi efetivamente movido.
+</Field>
+<Field name="message">
+Motivo quando `moved: false`.
+</Field>
+<Field name="previousStageId / currentStageId">
+Etapa antes e depois. Iguais quando o card não se moveu.
+</Field>
+</Fields>
+
+## Regras
+
+<Callout type="info" title="Contrato de erro diferente">
+Ao contrário de [Mover card](/api/crm/movimentacao/mover-card), este endpoint responde `400` com a mensagem de erro em texto quando a etapa de destino está inativa, sem o corpo `{ "error": "stage_inactive" }`.
+</Callout>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | `phoneNumber` vazio, `stageId` menor ou igual a zero, ou etapa de destino inativa/excluída |
+| 401 | - | Token ausente, inválido ou expirado |
+| 409 | - | Conflito de concorrência. Vem com header `Retry-After: 1`, repita a chamada |

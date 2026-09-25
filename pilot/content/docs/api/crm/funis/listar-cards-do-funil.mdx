@@ -1,0 +1,71 @@
+---
+title: "Cards do funil"
+description: "Lista todos os cards ativos de um funil, independentemente da etapa ou status. Retorna paginado com filtros opcionais."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/funnel/{funnelId}/cards
+---
+
+Lista todos os cards ativos de um funil, independentemente da etapa ou status. Retorna paginado com filtros opcionais.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="funnelId" type="int">
+Identificador do funil
+</Param>
+</Params>
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="page" type="int" required={false}>
+Número da página. Padrão 1
+</Param>
+<Param name="pageSize" type="int" required={false}>
+Quantidade de cards por página. Padrão 20
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/cards \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/cards', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/cards",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/cards
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | `Unauthorized` | Token ausente ou inválido |
+| 403 | `Forbidden` | Usuário não tem acesso ao funil |
+| 404 | `Not Found` | Funil não existe |

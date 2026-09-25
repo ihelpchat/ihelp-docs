@@ -1,0 +1,9 @@
+{
+  "title": "Tipos de frete",
+  "pages": [
+    "listar-tipos-de-frete",
+    "criar-tipo-de-frete",
+    "atualizar-tipo-de-frete",
+    "excluir-tipo-de-frete"
+  ]
+}

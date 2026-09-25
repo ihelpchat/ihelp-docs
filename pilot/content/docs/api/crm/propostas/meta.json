@@ -1,0 +1,17 @@
+{
+  "title": "Propostas",
+  "pages": [
+    "listar-propostas-do-card",
+    "obter-proposta",
+    "criar-proposta",
+    "atualizar-proposta",
+    "alterar-status-da-proposta",
+    "excluir-proposta",
+    "gerar-link-publico",
+    "contexto-de-envio",
+    "enviar-proposta",
+    "proposta-no-atendimento",
+    "obter-proposta-publica",
+    "responder-proposta"
+  ]
+}

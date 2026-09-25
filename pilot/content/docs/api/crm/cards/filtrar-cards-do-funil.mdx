@@ -1,0 +1,137 @@
+---
+title: "Filtrar cards do funil"
+description: "Filtra cards do funil com busca textual, status, etapa, responsável, datas e paginação. Honra as mesmas regras de permissão do board."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/funnel/{funnelId}/filter
+---
+
+Filtra cards do funil com busca textual, status, etapa, responsável, datas e paginação. Honra as mesmas regras de permissão do board.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="funnelId" type="int">
+ID do funil.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="generalText" type="string">
+Texto para busca em título, descrição, contato, valor, status e notas.
+</Param>
+<Param name="status" type="int">
+`1` Aberto, `2` Em andamento, `3` Ganho, `4` Perdido, `5` Cancelado.
+</Param>
+<Param name="stageId" type="int">
+ID da etapa.
+</Param>
+<Param name="responsibleId" type="int">
+ID do responsável.
+</Param>
+<Param name="startDate" type="datetime">
+Data de início (UTC).
+</Param>
+<Param name="endDate" type="datetime">
+Data de término (UTC).
+</Param>
+<Param name="priority" type="int">
+Prioridade: `1` Baixa, `2` Média, `3` Alta, `4` Urgente.
+</Param>
+<Param name="tags" type="string[]">
+Tags associadas aos contatos.
+</Param>
+<Param name="overdue" type="bool">
+Se true, retorna apenas cards com tarefas vencidas.
+</Param>
+<Param name="isFavorite" type="bool">
+Se true, retorna apenas favoritos do usuário.
+</Param>
+<Param name="page" type="int">
+Página (1-indexed). Padrão: 1.
+</Param>
+<Param name="pageSize" type="int">
+Itens por página. Padrão: 20.
+</Param>
+</Params>
+
+Para filtros avançados aninhados (AND/OR), use [Carregar board filtrado](/api/crm/cards/carregar-board-com-filtro). Mais campos estão disponíveis em [Filtro de cards](/api/crm/filtro-de-cards).
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/funnel/12/filter" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "generalText": "ACME",
+  "status": 1,
+  "stageId": 101,
+  "page": 1,
+  "pageSize": 20
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/funnel/12/filter', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "generalText": "ACME",
+    "status": 1,
+    "stageId": 101,
+    "page": 1,
+    "pageSize": 20
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/funnel/12/filter",
+    json={
+        "generalText": "ACME",
+        "status": 1,
+        "stageId": 101,
+        "page": 1,
+        "pageSize": 20,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/card/funnel/12/filter HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "generalText": "ACME",
+  "status": 1,
+  "stageId": 101,
+  "page": 1,
+  "pageSize": 20
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Funil inexistente ou parâmetro de filtro inválido |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem acesso ao funil |

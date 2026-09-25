@@ -1,0 +1,225 @@
+---
+title: "Criar automação"
+description: "Cria uma nova automação com gatilho, condições, ações e limites de execução."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/automation
+---
+
+Cria uma nova automação com gatilho, condições, ações e limites de execução.
+
+## Corpo da requisição
+
+<Params>
+<Param name="name" type="string" required>
+Nome da automação, até 200 caracteres
+</Param>
+<Param name="description" type="string" required={false}>
+Descrição da automação
+</Param>
+<Param name="scope" type="int" required>
+Escopo: `0` Global, `1` Atendimento, `2` CRM, `3` Contato, `4` Campanha
+</Param>
+<Param name="triggerType" type="int" required>
+Tipo de gatilho que dispara a automação
+</Param>
+<Param name="triggerConfig" type="object" required>
+Configuração específica do gatilho (ex: `stageId`, `inactivityHours` para o gatilho 32)
+</Param>
+<Param name="conditions" type="array" required>
+Condições que precisam ser verdadeiras para executar. Cada item: `{ "field": int, "operator": int, "value": string }`
+</Param>
+<Param name="actions" type="array" required>
+Ações a executar na ordem. Cada item: `{ "type": int, "order": int, "config": object }`
+</Param>
+<Param name="cooldownMinutes" type="int" required={false}>
+Intervalo mínimo entre execuções em minutos
+</Param>
+<Param name="maxExecutionsPerDay" type="int" required={false}>
+Limite máximo de execuções por dia
+</Param>
+<Param name="maxExecutionsPerEntity" type="int" required={false}>
+Limite máximo de execuções por card ou contato
+</Param>
+<Param name="funnelId" type="int" required={false}>
+ID do funil a que a automação se aplica
+</Param>
+<Param name="departmentId" type="int" required={false}>
+ID do departamento a que a automação se aplica
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/automation" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "Lead parado em Qualificação",
+  "description": "Avisa o CRM externo",
+  "scope": 2,
+  "triggerType": 32,
+  "triggerConfig": {
+    "stageId": 102,
+    "inactivityHours": 48,
+    "checkLastMessageAfterStageEntry": true
+  },
+  "conditions": [
+    {
+      "field": 12,
+      "operator": 2,
+      "value": "5517999990000"
+    }
+  ],
+  "actions": [
+    {
+      "type": 3,
+      "order": 1,
+      "config": {
+        "url": "https://seu-sistema.com/webhooks/ihelp"
+      }
+    }
+  ],
+  "cooldownMinutes": 60,
+  "maxExecutionsPerDay": 500,
+  "maxExecutionsPerEntity": 1,
+  "funnelId": 12,
+  "departmentId": null
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/automation', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "name": "Lead parado em Qualificação",
+    "description": "Avisa o CRM externo",
+    "scope": 2,
+    "triggerType": 32,
+    "triggerConfig": {
+      "stageId": 102,
+      "inactivityHours": 48,
+      "checkLastMessageAfterStageEntry": true
+    },
+    "conditions": [
+      {
+        "field": 12,
+        "operator": 2,
+        "value": "5517999990000"
+      }
+    ],
+    "actions": [
+      {
+        "type": 3,
+        "order": 1,
+        "config": {
+          "url": "https://seu-sistema.com/webhooks/ihelp"
+        }
+      }
+    ],
+    "cooldownMinutes": 60,
+    "maxExecutionsPerDay": 500,
+    "maxExecutionsPerEntity": 1,
+    "funnelId": 12,
+    "departmentId": null
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/automation",
+    json={
+        "name": "Lead parado em Qualificação",
+        "description": "Avisa o CRM externo",
+        "scope": 2,
+        "triggerType": 32,
+        "triggerConfig": {
+            "stageId": 102,
+            "inactivityHours": 48,
+            "checkLastMessageAfterStageEntry": True,
+        },
+        "conditions": [
+            {
+                "field": 12,
+                "operator": 2,
+                "value": "5517999990000",
+            },
+        ],
+        "actions": [
+            {
+                "type": 3,
+                "order": 1,
+                "config": {
+                    "url": "https://seu-sistema.com/webhooks/ihelp",
+                },
+            },
+        ],
+        "cooldownMinutes": 60,
+        "maxExecutionsPerDay": 500,
+        "maxExecutionsPerEntity": 1,
+        "funnelId": 12,
+        "departmentId": None,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/automation HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "name": "Lead parado em Qualificação",
+  "description": "Avisa o CRM externo",
+  "scope": 2,
+  "triggerType": 32,
+  "triggerConfig": {
+    "stageId": 102,
+    "inactivityHours": 48,
+    "checkLastMessageAfterStageEntry": true
+  },
+  "conditions": [
+    {
+      "field": 12,
+      "operator": 2,
+      "value": "5517999990000"
+    }
+  ],
+  "actions": [
+    {
+      "type": 3,
+      "order": 1,
+      "config": {
+        "url": "https://seu-sistema.com/webhooks/ihelp"
+      }
+    }
+  ],
+  "cooldownMinutes": 60,
+  "maxExecutionsPerDay": 500,
+  "maxExecutionsPerEntity": 1,
+  "funnelId": 12,
+  "departmentId": null
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+<Callout type="warn" title="O que o motor executa hoje">
+O cadastro aceita todos os gatilhos e ações, mas hoje o motor só executa o gatilho **`32` (card parado na etapa)** com a ação **`3` (disparar webhook)**. Automações com outros gatilhos ou ações são gravadas e não disparam.
+</Callout>

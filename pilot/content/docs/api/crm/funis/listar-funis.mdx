@@ -1,0 +1,101 @@
+---
+title: "Listar funis"
+description: "Lista os funis ativos da empresa. É o ponto de partida da integração: o id de cada funil alimenta a consulta de etapas e as movimentações."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/funnel
+---
+
+Lista os funis ativos da empresa. É o ponto de partida da integração: o id de cada funil alimenta a consulta de etapas e as movimentações.
+
+Comece por aqui: o `id` retornado alimenta [Funil com etapas](/api/crm/funis/obter-funil-com-etapas) e todas as chamadas de [movimentação](/api/crm/movimentacao/mover-card).
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/funnel \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnel', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+const data = await res.json();
+console.log(data);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnel",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.json())
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/funnel
+```
+
+</CodeTabs>
+
+## Resposta
+
+<Response status="200 OK">
+
+```json
+[
+  {
+    "id": 12,
+    "title": "Funil de Vendas",
+    "description": "Pipeline comercial padrão",
+    "isDefault": true,
+    "isActive": true,
+    "contactLock": false,
+    "businessId": 3,
+    "createdDate": "2026-01-15T13:20:41Z",
+    "updatedAt": "2026-07-10T09:02:11Z"
+  }
+]
+```
+
+</Response>
+
+<Callout type="info" title="Observação">
+O campo `stages` **não** vem preenchido aqui. Para as etapas, use [Funil com etapas](/api/crm/funis/obter-funil-com-etapas).
+
+O retorno respeita as permissões do usuário dono do token: administradores veem todos os funis da empresa, demais usuários veem apenas aqueles a que têm acesso. Funis excluídos ou inativos não aparecem.
+</Callout>
+
+## Campos relevantes
+
+<Fields>
+<Field name="id">
+ID do funil, use como `funnelId`.
+</Field>
+<Field name="title">
+Nome exibido.
+</Field>
+<Field name="isDefault">
+Indica o funil padrão da empresa.
+</Field>
+<Field name="isActive">
+Sempre `true` nesta listagem.
+</Field>
+<Field name="contactLock">
+Quando `true`, o mesmo contato não pode ter dois cards ativos neste funil.
+</Field>
+</Fields>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |

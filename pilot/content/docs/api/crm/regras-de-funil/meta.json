@@ -1,0 +1,13 @@
+{
+  "title": "Regras de funil",
+  "pages": [
+    "listar-regras-do-funil",
+    "listar-regras-da-etapa",
+    "listar-regras-do-funil-e-etapa",
+    "obter-regra",
+    "criar-regra",
+    "atualizar-regra",
+    "excluir-regra",
+    "testar-regra-no-card"
+  ]
+}

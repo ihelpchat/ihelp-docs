@@ -1,0 +1,104 @@
+---
+title: "Enviar modelo de PDF"
+description: "Envia um modelo de PDF para anexar antes ou depois da proposta. PDF de até 20 MB com 1 a 5000 páginas."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/pdf-templates
+---
+
+Envia um modelo de PDF para anexar antes ou depois da proposta. PDF de até 20 MB com 1 a 5000 páginas.
+
+## Formulário (multipart)
+
+<Params>
+<Param name="media" type="file" required>
+PDF válido (`application/pdf`, começando com `%PDF-`), até 20 MB. Nome do arquivo com até 200 caracteres.
+</Param>
+<Param name="pageCount" type="int" required>
+Número de páginas, de `1` a `5000`.
+</Param>
+<Param name="sizeBytes" type="long">
+Aceito, mas ignorado: o servidor usa o tamanho real do arquivo.
+</Param>
+</Params>
+
+CURL:
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/pdf-templates" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -F "media=@catalogo-2026.pdf;type=application/pdf" \
+  -F "pageCount=4"
+```
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/pdf-templates" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -F "media=@catalogo-2026.pdf;type=application/pdf" \
+  -F "pageCount=4"
+```
+
+```js
+import { openAsBlob } from 'node:fs';
+
+const form = new FormData();
+form.append('media', await openAsBlob('catalogo-2026.pdf', { type: 'application/pdf' }), 'catalogo-2026.pdf');
+form.append('pageCount', '4');
+
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/pdf-templates', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+  body: form,
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/pdf-templates",
+    files={"media": ("catalogo-2026.pdf", open("catalogo-2026.pdf", "rb"), "application/pdf")},
+    data={"pageCount": "4"},
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/pdf-templates HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: multipart/form-data; boundary=----ihelp
+
+------ihelp
+Content-Disposition: form-data; name="media"; filename="catalogo-2026.pdf"
+
+<conteúdo do arquivo>
+------ihelp
+Content-Disposition: form-data; name="pageCount"
+
+4
+------ihelp--
+```
+
+</CodeTabs>
+
+## Regras
+
+- Apenas administradores da empresa podem enviar. Usuário não-admin recebe `401` sem corpo.
+- O módulo de propostas deve estar ativo. Caso contrário, recebe `403`.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Arquivo inválido (não é PDF, começar com `%PDF-`), pageCount fora do intervalo (1-5000) |
+| 401 | - | Não é administrador da empresa |
+| 403 | - | Módulo de propostas não está ativo |

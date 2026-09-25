@@ -1,0 +1,70 @@
+---
+title: "Alterar status do card"
+description: "Altera o status de um card diretamente para um valor específico sem passar pelas rotas de fechamento."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/card/{id}/status/{status}
+---
+
+Altera o status de um card diretamente para um valor específico sem passar pelas rotas de fechamento.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+<Param name="status" type="int">
+`1` Aberto, `2` Em andamento, `3` Ganho, `4` Perdido, `5` Cancelado.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/status/2" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/status/2', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/status/2",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/card/8821/status/2 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+```
+
+</CodeTabs>
+
+## Regras
+
+Para fechar um card como ganho, perdido ou cancelado, prefira as rotas dedicadas [Marcar como ganho](/api/crm/status-e-fechamento/marcar-como-ganho), [Marcar como perdido](/api/crm/status-e-fechamento/marcar-como-perdido) e [Marcar como cancelado](/api/crm/status-e-fechamento/marcar-como-cancelado), que registram histórico e motivos de forma estruturada.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 404 | - | Card não encontrado ou de outra empresa |

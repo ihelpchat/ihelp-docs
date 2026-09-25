@@ -1,0 +1,60 @@
+---
+title: "Top motivos de perda"
+description: "Os 5 principais motivos de perda de cards no funil, com contagem e percentual."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/funnel/{funnelId}/loss-reasons/aggregate
+---
+
+Os 5 principais motivos de perda de cards no funil, com contagem e percentual.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="funnelId" type="int">
+ID do funil.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/loss-reasons/aggregate \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/loss-reasons/aggregate', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/loss-reasons/aggregate",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/loss-reasons/aggregate
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem acesso ao funil |
+| 404 | - | Funil inexistente |

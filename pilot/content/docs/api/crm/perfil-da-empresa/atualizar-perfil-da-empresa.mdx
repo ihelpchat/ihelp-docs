@@ -1,0 +1,154 @@
+---
+title: "Atualizar perfil"
+description: "Atualiza os dados do perfil da empresa: razão social, CNPJ, contato, configurações de propostas e texto de apresentação."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/company-profile
+---
+
+Atualiza os dados do perfil da empresa: razão social, CNPJ, contato, configurações de propostas e texto de apresentação.
+
+## Corpo da requisição
+
+<Params>
+<Param name="legalName" type="string" required>
+Razão social, até 150 caracteres.
+</Param>
+<Param name="cnpj" type="string">
+CNPJ, até 20 caracteres, formato livre.
+</Param>
+<Param name="email" type="string">
+E-mail válido, até 100 caracteres.
+</Param>
+<Param name="phone" type="string">
+Telefone, até 20 caracteres.
+</Param>
+<Param name="introText" type="string">
+Texto de abertura da proposta, até 1000 caracteres.
+</Param>
+<Param name="introEnabled" type="bool">
+Se o texto de abertura é exibido.
+</Param>
+<Param name="paymentsEnabled" type="bool">
+Se o bloco de condições de pagamento aparece nas propostas.
+</Param>
+<Param name="shippingEnabled" type="bool">
+Se o bloco de frete e transportadora aparece nas propostas.
+</Param>
+<Param name="pdfMergeEnabled" type="bool">
+Se um modelo de PDF é anexado ao documento.
+</Param>
+<Param name="pdfMergePosition" type="int">
+`1` = modelo antes da proposta, `2` = depois. Padrão `1`.
+</Param>
+<Param name="pdfMergeTemplateId" type="int">
+ID do modelo de PDF padrão. Deve existir na empresa.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/company-profile" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "legalName": "ACME Tecnologia LTDA",
+  "cnpj": "12.345.678/0001-90",
+  "email": "comercial@acme.com.br",
+  "phone": "(17) 3333-4444",
+  "introText": "Obrigado pelo interesse! Segue nossa proposta.",
+  "introEnabled": true,
+  "paymentsEnabled": true,
+  "shippingEnabled": false,
+  "pdfMergeEnabled": true,
+  "pdfMergePosition": 2,
+  "pdfMergeTemplateId": 9
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/company-profile', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "legalName": "ACME Tecnologia LTDA",
+    "cnpj": "12.345.678/0001-90",
+    "email": "comercial@acme.com.br",
+    "phone": "(17) 3333-4444",
+    "introText": "Obrigado pelo interesse! Segue nossa proposta.",
+    "introEnabled": true,
+    "paymentsEnabled": true,
+    "shippingEnabled": false,
+    "pdfMergeEnabled": true,
+    "pdfMergePosition": 2,
+    "pdfMergeTemplateId": 9
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/company-profile",
+    json={
+        "legalName": "ACME Tecnologia LTDA",
+        "cnpj": "12.345.678/0001-90",
+        "email": "comercial@acme.com.br",
+        "phone": "(17) 3333-4444",
+        "introText": "Obrigado pelo interesse! Segue nossa proposta.",
+        "introEnabled": True,
+        "paymentsEnabled": True,
+        "shippingEnabled": False,
+        "pdfMergeEnabled": True,
+        "pdfMergePosition": 2,
+        "pdfMergeTemplateId": 9,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/company-profile HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "legalName": "ACME Tecnologia LTDA",
+  "cnpj": "12.345.678/0001-90",
+  "email": "comercial@acme.com.br",
+  "phone": "(17) 3333-4444",
+  "introText": "Obrigado pelo interesse! Segue nossa proposta.",
+  "introEnabled": true,
+  "paymentsEnabled": true,
+  "shippingEnabled": false,
+  "pdfMergeEnabled": true,
+  "pdfMergePosition": 2,
+  "pdfMergeTemplateId": 9
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+- Apenas administradores da empresa podem atualizar. Usuário não-admin recebe `401` sem corpo.
+- O módulo de propostas deve estar ativo. Caso contrário, recebe `403`.
+- Modelo de PDF inválido (ID inexistente ou de outra empresa) responde `400` com mensagem em `dados`.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Modelo de PDF inválido, validação falha ou erro ao processar |
+| 401 | - | Não é administrador da empresa |
+| 403 | - | Módulo de propostas não está ativo |

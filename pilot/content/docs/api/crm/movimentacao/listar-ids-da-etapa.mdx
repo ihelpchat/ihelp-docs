@@ -1,0 +1,117 @@
+---
+title: "IDs dos cards da etapa"
+description: "Lista os IDs dos cards abertos de uma etapa, honrando os mesmos filtros do board (select-all server-side, limitado a 2000)."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/stage/{stageId}/ids
+---
+
+Lista os IDs dos cards abertos de uma etapa, honrando os mesmos filtros do board (select-all server-side, limitado a 2000).
+
+Use este endpoint para obter os IDs de uma coluna inteira do kanban e passá-los direto em [Mover em massa](/api/crm/movimentacao/mover-em-massa), [Ganhar em massa](/api/crm/acoes-em-massa/ganhar-cards-em-massa) ou outras ações.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="stageId" type="int">
+ID da etapa.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="status" type="int">
+`CardStatusEnum`: 1 Aberto, 2 Em andamento, 3 Ganho, 4 Perdido, 5 Cancelado.
+</Param>
+<Param name="responsibleId" type="int">
+ID do usuário responsável.
+</Param>
+<Param name="generalText" type="string">
+Busca textual em título, descrição, contato, valor, status, notas.
+</Param>
+<Param name="page" type="int">
+Número da página. Sem paginação, retorna todos até 2000.
+</Param>
+<Param name="pageSize" type="int">
+Quantidade de itens por página.
+</Param>
+</Params>
+
+O corpo aceita todos os campos de [Filtro de cards](/api/crm/filtro-de-cards). Apenas os 3–4 campos principais acima são comuns; para filtros avançados (tags, datas, campos personalizados, etc.), veja a referência de filtro.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/stage/101/ids" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "status": 1,
+  "responsibleId": 42,
+  "generalText": ""
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/stage/101/ids', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "status": 1,
+    "responsibleId": 42,
+    "generalText": ""
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/stage/101/ids",
+    json={
+        "status": 1,
+        "responsibleId": 42,
+        "generalText": "",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/card/stage/101/ids HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "status": 1,
+  "responsibleId": 42,
+  "generalText": ""
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+- **Select-all server-side:** respeitando os filtros da interface (ex.: usuário restrito vê só seus cards), e limitado a 2000 itens.
+- Ideal para operações em massa: busque os IDs aqui, depois repasse em [Mover em massa](/api/crm/movimentacao/mover-em-massa) ou [Ganhar em massa](/api/crm/acoes-em-massa/ganhar-cards-em-massa).
+- Leitura apenas: não altera estado.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Erro nos parâmetros de filtro |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 404 | - | Etapa não encontrada |

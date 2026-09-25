@@ -1,0 +1,13 @@
+{
+  "title": "Automações",
+  "pages": [
+    "listar-automacoes",
+    "obter-automacao",
+    "criar-automacao",
+    "atualizar-automacao",
+    "ligar-desligar-automacao",
+    "excluir-automacao",
+    "execucoes-da-automacao",
+    "buscar-execucoes"
+  ]
+}

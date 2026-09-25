@@ -1,0 +1,164 @@
+---
+title: "Sync de histórico"
+description: "Sincroniza um lote de registros de histórico de um card específico."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/{cardId}/history/sync/batch
+---
+
+Sincroniza um lote de registros de histórico de um card específico.
+
+<Callout type="warn" title="Uso interno">
+Este endpoint implementa a sincronização incremental do próprio app iHelp e não faz parte da API de integração.
+</Callout>
+
+## Parâmetros de rota
+
+<Params>
+<Param name="cardId" type="int">
+ID do card aos quais os históricos pertencem.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="[]" type="CardHistory[]" required>
+Array de registros de histórico completos com todos os campos da entidade CardHistory. O `cardId` de cada item é forçado ao cardId da rota. IDs existentes atualizam; novos são criados.
+</Param>
+</Params>
+
+Históricos com `isActive: false` são marcados como removidos (soft delete). Se o card não existe ou pertence a outro usuário (em acesso restrito), a requisição retorna `404`.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/history/sync/batch" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[
+  {
+    "id": 1,
+    "cardId": 8821,
+    "description": "Movido para Qualificação",
+    "type": 1,
+    "createdDate": "2026-09-25T12:00:00Z",
+    "createdBy": 42,
+    "isActive": true
+  },
+  {
+    "id": 2,
+    "cardId": 8821,
+    "description": "Proposta enviada ao cliente",
+    "type": 2,
+    "createdDate": "2026-09-25T13:00:00Z",
+    "createdBy": 42,
+    "isActive": true
+  }
+]'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/history/sync/batch', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify([
+    {
+      "id": 1,
+      "cardId": 8821,
+      "description": "Movido para Qualificação",
+      "type": 1,
+      "createdDate": "2026-09-25T12:00:00Z",
+      "createdBy": 42,
+      "isActive": true
+    },
+    {
+      "id": 2,
+      "cardId": 8821,
+      "description": "Proposta enviada ao cliente",
+      "type": 2,
+      "createdDate": "2026-09-25T13:00:00Z",
+      "createdBy": 42,
+      "isActive": true
+    }
+  ]),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/history/sync/batch",
+    json=[
+        {
+            "id": 1,
+            "cardId": 8821,
+            "description": "Movido para Qualificação",
+            "type": 1,
+            "createdDate": "2026-09-25T12:00:00Z",
+            "createdBy": 42,
+            "isActive": True,
+        },
+        {
+            "id": 2,
+            "cardId": 8821,
+            "description": "Proposta enviada ao cliente",
+            "type": 2,
+            "createdDate": "2026-09-25T13:00:00Z",
+            "createdBy": 42,
+            "isActive": True,
+        },
+    ],
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/card/8821/history/sync/batch HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+[
+  {
+    "id": 1,
+    "cardId": 8821,
+    "description": "Movido para Qualificação",
+    "type": 1,
+    "createdDate": "2026-09-25T12:00:00Z",
+    "createdBy": 42,
+    "isActive": true
+  },
+  {
+    "id": 2,
+    "cardId": 8821,
+    "description": "Proposta enviada ao cliente",
+    "type": 2,
+    "createdDate": "2026-09-25T13:00:00Z",
+    "createdBy": 42,
+    "isActive": true
+  }
+]
+```
+
+</CodeTabs>
+
+## Regras
+
+Este é o endpoint legado (CardController). Para novo código, prefira [Sync V2 de histórico](/api/crm/sincronizacao/sync-v2-de-historico).
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Card não existe neste tenant |
+| 401 | - | Token ausente, inválido ou expirado |
+| 404 | - | Card não encontrado ou pertence a outro usuário (acesso restrito) |

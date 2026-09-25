@@ -1,0 +1,79 @@
+---
+title: "Validar movimento"
+description: "Pre-check de movimentação: verifica se um card pode ser movido para outra etapa sem alterar seu estado, informando pendências obrigatórias se houver."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/{id}/validate-move
+---
+
+Pre-check de movimentação: verifica se um card pode ser movido para outra etapa sem alterar seu estado, informando pendências obrigatórias se houver.
+
+Use este endpoint antes de executar [Mover card](/api/crm/movimentacao/mover-card) para descobrir se existem pendências. Se retornar `409`, apresente ao usuário a opção de contornar com `force=true`.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+</Params>
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="targetStageId" type="int" required>
+ID da etapa de destino. Deve estar no mesmo funil.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/validate-move?targetStageId=102" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/validate-move?targetStageId=102', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/validate-move?targetStageId=102",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/card/8821/validate-move?targetStageId=102 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+```
+
+</CodeTabs>
+
+## Regras
+
+- Este é um **pré-check que não altera estado**. Serve para a interface decidir se mostra um modal de confirmação.
+- Recomendação: não force() sem passar por UI, pois nega pendências reais.
+- Se voltar `canMove: true`, [Mover card](/api/crm/movimentacao/mover-card) sem `force` executará sem 409.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 404 | - | Card não encontrado, de outra empresa, ou etapa não existe |

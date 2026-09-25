@@ -1,0 +1,132 @@
+---
+title: "KPIs com filtro"
+description: "KPIs do funil aplicando um filtro avançado. Corpo vazio equivale a sem filtro."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/funnel/{funnelId}/kpis/filtered
+---
+
+KPIs do funil aplicando um filtro avançado. Corpo vazio equivale a sem filtro.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="funnelId" type="int">
+ID do funil.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="generalText" type="string">
+Busca textual em título, descrição e contato.
+</Param>
+<Param name="status" type="int">
+Status do card (1 Aberto, 2 Em andamento, 3 Ganho, 4 Perdido, 5 Cancelado).
+</Param>
+<Param name="responsibleId" type="int">
+ID do usuário responsável.
+</Param>
+<Param name="stageId" type="int">
+ID da etapa.
+</Param>
+<Param name="priority" type="string">
+Prioridade (1 Baixa, 2 Média, 3 Alta, 4 Urgente).
+</Param>
+<Param name="filterTree" type="object">
+Árvore de filtros avançados AND/OR. Ver [Filtro de cards](/api/crm/filtro-de-cards).
+</Param>
+</Params>
+
+Corpo vazio ou filtro sem condições retorna os mesmos KPIs que GET (sem filtro). Todos os campos são opcionais.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/kpis/filtered" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "generalText": "",
+  "status": 1,
+  "responsibleId": 42,
+  "filterTree": {
+    "op": "AND",
+    "groups": [],
+    "conditions": []
+  }
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/kpis/filtered', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "generalText": "",
+    "status": 1,
+    "responsibleId": 42,
+    "filterTree": {
+      "op": "AND",
+      "groups": [],
+      "conditions": []
+    }
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/kpis/filtered",
+    json={
+        "generalText": "",
+        "status": 1,
+        "responsibleId": 42,
+        "filterTree": {
+            "op": "AND",
+            "groups": [],
+            "conditions": [],
+        },
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/funnel/12/kpis/filtered HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "generalText": "",
+  "status": 1,
+  "responsibleId": 42,
+  "filterTree": {
+    "op": "AND",
+    "groups": [],
+    "conditions": []
+  }
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Sintaxe inválida no filterTree |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem acesso ao funil |
+| 404 | - | Funil inexistente |

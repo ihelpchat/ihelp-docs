@@ -1,0 +1,137 @@
+---
+title: "Funil com etapas"
+description: "Retorna um funil junto com todas as suas etapas, ordenadas por posição. É daqui que sai o stageId usado como destino nas movimentações."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/funnel/{id}/with-stages
+---
+
+Retorna um funil junto com todas as suas etapas, ordenadas por posição. É daqui que sai o stageId usado como destino nas movimentações.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do funil, vindo de [Listar funis](/api/crm/funis/listar-funis).
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/with-stages \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/with-stages', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+const data = await res.json();
+console.log(data);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/with-stages",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.json())
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/with-stages
+```
+
+</CodeTabs>
+
+## Resposta
+
+<Response status="200 OK">
+
+```json
+{
+  "id": 12,
+  "title": "Funil de Vendas",
+  "isDefault": true,
+  "isActive": true,
+  "contactLock": false,
+  "stages": [
+    {
+      "id": 101,
+      "title": "Novo lead",
+      "color": "#4F46E5",
+      "order": 1,
+      "funnelId": 12,
+      "isActive": true
+    },
+    {
+      "id": 102,
+      "title": "Qualificação",
+      "color": "#0EA5E9",
+      "order": 2,
+      "funnelId": 12,
+      "isActive": true
+    },
+    {
+      "id": 103,
+      "title": "Proposta",
+      "color": "#F59E0B",
+      "order": 3,
+      "funnelId": 12,
+      "isActive": true
+    }
+  ],
+  "rules": [],
+  "funnelUsers": []
+}
+```
+
+</Response>
+
+<Callout type="warn" title="A lista stages inclui etapas inativas">
+Filtre por `isActive === true` antes de exibir ou usar como destino. Mover para uma etapa inativa retorna `409 stage_inactive`.
+</Callout>
+
+O objeto também traz `rules` (regras de automação do funil) e `funnelUsers` (permissões). Ignore se não for utilizá-los.
+
+## Campos relevantes
+
+<Fields>
+<Field name="stages[].id">
+ID da etapa, use como `stageId` / `targetStageId`.
+</Field>
+<Field name="stages[].title">
+Nome da coluna.
+</Field>
+<Field name="stages[].color">
+Cor em hexadecimal.
+</Field>
+<Field name="stages[].order">
+Posição da etapa no funil, em ordem crescente.
+</Field>
+<Field name="stages[].funnelId">
+Funil a que a etapa pertence.
+</Field>
+<Field name="stages[].isActive">
+`false` para etapas excluídas. Não use essas etapas como destino.
+</Field>
+</Fields>
+
+## Regras
+
+Para montar o mapa completo de todos os funis e todas as etapas: chame [Listar funis](/api/crm/funis/listar-funis) e depois este endpoint uma vez por funil retornado.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 404 | - | Funil não existe ou não pertence à sua empresa |

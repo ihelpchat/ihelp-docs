@@ -1,0 +1,75 @@
+---
+title: "Listar atividades"
+description: "Lista histórico e tarefas vinculadas ao card mesclados e ordenados por data (mais recentes primeiro), com suporte a paginação."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/card/{id}/activities
+---
+
+Lista histórico e tarefas vinculadas ao card mesclados e ordenados por data (mais recentes primeiro), com suporte a paginação.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+</Params>
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="page" type="int" required={false}>
+Número da página (começa em 1). Se omitido ou sem `pageSize`, retorna a lista completa.
+</Param>
+<Param name="pageSize" type="int" required={false}>
+Quantidade de itens por página.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/card/8821/activities \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/activities', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/activities",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/card/8821/activities
+```
+
+</CodeTabs>
+
+## Regras
+
+Esta rota mescla dois tipos de registro: histórico do card e tarefas. Cada item tem `isHistory` para indicar seu tipo. Use [Listar histórico](/api/crm/notas-e-historico/listar-historico) para apenas histórico.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 404 | - | Card não encontrado ou de outra empresa |

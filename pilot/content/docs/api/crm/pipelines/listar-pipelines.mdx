@@ -1,0 +1,51 @@
+---
+title: "Listar pipelines"
+description: "Lista as pipelines da empresa com contagem de etapas e cards, valor total, taxa de conversão, dono, status ativo e favorito por usuário."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/pipelines
+---
+
+Lista as pipelines da empresa com contagem de etapas e cards, valor total, taxa de conversão, dono, status ativo e favorito por usuário.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/pipelines \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/pipelines', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/pipelines",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/pipelines
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Erro genérico do serviço (raro) |
+| 401 | - | Token ausente, inválido ou expirado |

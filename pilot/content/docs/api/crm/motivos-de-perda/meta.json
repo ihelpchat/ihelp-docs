@@ -1,0 +1,9 @@
+{
+  "title": "Motivos de perda",
+  "pages": [
+    "listar-motivos-de-perda",
+    "criar-motivo-de-perda",
+    "atualizar-motivo-de-perda",
+    "excluir-motivo-de-perda"
+  ]
+}

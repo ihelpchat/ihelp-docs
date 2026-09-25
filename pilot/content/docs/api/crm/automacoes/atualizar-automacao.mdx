@@ -1,0 +1,240 @@
+---
+title: "Atualizar automação"
+description: "Atualiza uma automação existente. O corpo substitui a automação inteira; campos omitidos podem voltar vazios."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/automation/{id}
+---
+
+Atualiza uma automação existente. O corpo substitui a automação inteira; campos omitidos podem voltar vazios.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da automação a atualizar.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="name" type="string" required>
+Nome da automação
+</Param>
+<Param name="description" type="string" required={false}>
+Descrição
+</Param>
+<Param name="scope" type="int" required>
+Escopo da automação
+</Param>
+<Param name="triggerType" type="int" required>
+Tipo de gatilho
+</Param>
+<Param name="triggerConfig" type="object" required>
+Configuração do gatilho
+</Param>
+<Param name="conditions" type="array" required>
+Array de condições
+</Param>
+<Param name="actions" type="array" required>
+Array de ações
+</Param>
+<Param name="cooldownMinutes" type="int" required={false}>
+Intervalo mínimo entre execuções
+</Param>
+<Param name="maxExecutionsPerDay" type="int" required={false}>
+Limite de execuções por dia
+</Param>
+<Param name="maxExecutionsPerEntity" type="int" required={false}>
+Limite de execuções por entidade
+</Param>
+<Param name="funnelId" type="int" required={false}>
+ID do funil
+</Param>
+<Param name="departmentId" type="int" required={false}>
+ID do departamento
+</Param>
+<Param name="isActive" type="bool" required={false}>
+Se a automação está ativa
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/automation/7" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "Lead parado em Qualificação",
+  "description": "Avisa o CRM externo (atualizado)",
+  "scope": 2,
+  "triggerType": 32,
+  "triggerConfig": {
+    "stageId": 102,
+    "inactivityHours": 72,
+    "checkLastMessageAfterStageEntry": true
+  },
+  "conditions": [
+    {
+      "field": 12,
+      "operator": 2,
+      "value": "5517999990000"
+    }
+  ],
+  "actions": [
+    {
+      "type": 3,
+      "order": 1,
+      "config": {
+        "url": "https://seu-sistema.com/webhooks/ihelp"
+      }
+    }
+  ],
+  "cooldownMinutes": 90,
+  "maxExecutionsPerDay": 500,
+  "maxExecutionsPerEntity": 1,
+  "funnelId": 12,
+  "departmentId": null,
+  "isActive": true
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/automation/7', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "name": "Lead parado em Qualificação",
+    "description": "Avisa o CRM externo (atualizado)",
+    "scope": 2,
+    "triggerType": 32,
+    "triggerConfig": {
+      "stageId": 102,
+      "inactivityHours": 72,
+      "checkLastMessageAfterStageEntry": true
+    },
+    "conditions": [
+      {
+        "field": 12,
+        "operator": 2,
+        "value": "5517999990000"
+      }
+    ],
+    "actions": [
+      {
+        "type": 3,
+        "order": 1,
+        "config": {
+          "url": "https://seu-sistema.com/webhooks/ihelp"
+        }
+      }
+    ],
+    "cooldownMinutes": 90,
+    "maxExecutionsPerDay": 500,
+    "maxExecutionsPerEntity": 1,
+    "funnelId": 12,
+    "departmentId": null,
+    "isActive": true
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/automation/7",
+    json={
+        "name": "Lead parado em Qualificação",
+        "description": "Avisa o CRM externo (atualizado)",
+        "scope": 2,
+        "triggerType": 32,
+        "triggerConfig": {
+            "stageId": 102,
+            "inactivityHours": 72,
+            "checkLastMessageAfterStageEntry": True,
+        },
+        "conditions": [
+            {
+                "field": 12,
+                "operator": 2,
+                "value": "5517999990000",
+            },
+        ],
+        "actions": [
+            {
+                "type": 3,
+                "order": 1,
+                "config": {
+                    "url": "https://seu-sistema.com/webhooks/ihelp",
+                },
+            },
+        ],
+        "cooldownMinutes": 90,
+        "maxExecutionsPerDay": 500,
+        "maxExecutionsPerEntity": 1,
+        "funnelId": 12,
+        "departmentId": None,
+        "isActive": True,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/automation/7 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "name": "Lead parado em Qualificação",
+  "description": "Avisa o CRM externo (atualizado)",
+  "scope": 2,
+  "triggerType": 32,
+  "triggerConfig": {
+    "stageId": 102,
+    "inactivityHours": 72,
+    "checkLastMessageAfterStageEntry": true
+  },
+  "conditions": [
+    {
+      "field": 12,
+      "operator": 2,
+      "value": "5517999990000"
+    }
+  ],
+  "actions": [
+    {
+      "type": 3,
+      "order": 1,
+      "config": {
+        "url": "https://seu-sistema.com/webhooks/ihelp"
+      }
+    }
+  ],
+  "cooldownMinutes": 90,
+  "maxExecutionsPerDay": 500,
+  "maxExecutionsPerEntity": 1,
+  "funnelId": 12,
+  "departmentId": null,
+  "isActive": true
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 404 | - | Automação não existe ou pertence a outra empresa |

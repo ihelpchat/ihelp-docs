@@ -1,0 +1,10 @@
+{
+  "title": "Filtros salvos",
+  "pages": [
+    "listar-filtros-salvos",
+    "obter-filtro-salvo",
+    "criar-filtro-salvo",
+    "atualizar-filtro-salvo",
+    "excluir-filtro-salvo"
+  ]
+}

@@ -1,0 +1,156 @@
+---
+title: "Importar catálogo"
+description: "Importa múltiplos itens do catálogo em um lote, criando ou atualizando conforme necessário."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/catalog/import
+---
+
+Importa múltiplos itens do catálogo em um lote, criando ou atualizando conforme necessário.
+
+## Corpo da requisição
+
+<Params>
+<Param name="items[]" type="object" required>
+Array de itens a importar. Cada item segue as mesmas regras de criação.
+</Param>
+<Param name="items[].name" type="string" required>
+Nome do item, até 120 caracteres.
+</Param>
+<Param name="items[].description" type="string">
+Descrição, até 500 caracteres.
+</Param>
+<Param name="items[].type" type="int" required>
+`1` = Produto, `2` = Serviço.
+</Param>
+<Param name="items[].sku" type="string">
+Código do item, até 40 caracteres. Linha sem SKU sempre cria um item novo.
+</Param>
+<Param name="items[].price" type="decimal" required>
+Preço em R$, mínimo `0`.
+</Param>
+<Param name="updateBySku" type="bool">
+Se `true`, SKU que já existe é atualizado; se `false`, é ignorado. Padrão `false`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/catalog/import" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "items": [
+    {
+      "name": "Plano Pro (anual)",
+      "type": 2,
+      "sku": "PRO-12M",
+      "price": 800
+    },
+    {
+      "name": "Implantação",
+      "type": 2,
+      "price": 300
+    }
+  ],
+  "updateBySku": true
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/catalog/import', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "items": [
+      {
+        "name": "Plano Pro (anual)",
+        "type": 2,
+        "sku": "PRO-12M",
+        "price": 800
+      },
+      {
+        "name": "Implantação",
+        "type": 2,
+        "price": 300
+      }
+    ],
+    "updateBySku": true
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/catalog/import",
+    json={
+        "items": [
+            {
+                "name": "Plano Pro (anual)",
+                "type": 2,
+                "sku": "PRO-12M",
+                "price": 800,
+            },
+            {
+                "name": "Implantação",
+                "type": 2,
+                "price": 300,
+            },
+        ],
+        "updateBySku": True,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/catalog/import HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "name": "Plano Pro (anual)",
+      "type": 2,
+      "sku": "PRO-12M",
+      "price": 800
+    },
+    {
+      "name": "Implantação",
+      "type": 2,
+      "price": 300
+    }
+  ],
+  "updateBySku": true
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+- Linha inválida é contada em `ignored` e o lote continua.
+- SKU repetido **dentro do mesmo lote** vale a primeira linha, as demais são ignoradas.
+- Linha sem SKU sempre cria um item novo.
+- Sem limite de linhas por chamada, mas prefira lotes de até 500.
+- Requer **administrador da empresa** e o módulo de propostas ativo.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Validação de campos |
+| 401 | - | Usuário não é administrador |
+| 403 | - | Módulo de propostas desligado |

@@ -1,0 +1,145 @@
+---
+title: "Importar cards"
+description: "Importa cards e contatos em lote para um funil"
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/funnel/import-card-contact
+---
+
+Importa cards e contatos em lote para um funil
+
+## Corpo da requisição
+
+<Params>
+<Param name="[].nome" type="string" required>
+Nome do contato (título do card será Atendimento - Nome)
+</Param>
+<Param name="[].telefones" type="array" required>
+Array de telefones. Ao menos um. O primeiro localiza um contato existente
+</Param>
+<Param name="[].emails" type="array" required>
+Array de emails. Pode ser vazio, mas deve estar presente
+</Param>
+<Param name="[].funil" type="string" required>
+Nome exato do funil, diferenciando maiúsculas
+</Param>
+<Param name="[].etapa" type="string" required>
+Nome da etapa dentro do funil, sem diferenciar maiúsculas
+</Param>
+<Param name="[].departamento" type="string" required={false}>
+Nome exato do departamento. Vira o departamento do contato
+</Param>
+<Param name="[].usuario" type="string" required={false}>
+Email do usuário. Vira responsável pelo contato, só se departamento bateu
+</Param>
+</Params>
+
+Corpo é um array, uma linha por card. Linhas com erro de funil/etapa são puladas silenciosamente, mas o contato já foi criado ou atualizado. A importação não respeita a trava de contato do funil.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/funnel/import-card-contact" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[
+  {
+    "nome": "Ana Souza",
+    "telefones": [
+      "5517981259808"
+    ],
+    "emails": [
+      "compras@acme.com.br"
+    ],
+    "funil": "Funil de Vendas",
+    "etapa": "Novo lead",
+    "departamento": "Comercial",
+    "usuario": "joao@suaempresa.com.br"
+  }
+]'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnel/import-card-contact', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify([
+    {
+      "nome": "Ana Souza",
+      "telefones": [
+        "5517981259808"
+      ],
+      "emails": [
+        "compras@acme.com.br"
+      ],
+      "funil": "Funil de Vendas",
+      "etapa": "Novo lead",
+      "departamento": "Comercial",
+      "usuario": "joao@suaempresa.com.br"
+    }
+  ]),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnel/import-card-contact",
+    json=[
+        {
+            "nome": "Ana Souza",
+            "telefones": [
+                "5517981259808",
+            ],
+            "emails": [
+                "compras@acme.com.br",
+            ],
+            "funil": "Funil de Vendas",
+            "etapa": "Novo lead",
+            "departamento": "Comercial",
+            "usuario": "joao@suaempresa.com.br",
+        },
+    ],
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/funnel/import-card-contact HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+[
+  {
+    "nome": "Ana Souza",
+    "telefones": [
+      "5517981259808"
+    ],
+    "emails": [
+      "compras@acme.com.br"
+    ],
+    "funil": "Funil de Vendas",
+    "etapa": "Novo lead",
+    "departamento": "Comercial",
+    "usuario": "joao@suaempresa.com.br"
+  }
+]
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | `Bad Request` | Corpo inválido ou array vazio |
+| 401 | `Unauthorized` | Token ausente ou inválido |

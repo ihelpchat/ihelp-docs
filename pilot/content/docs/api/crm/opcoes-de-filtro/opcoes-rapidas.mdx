@@ -1,0 +1,56 @@
+---
+title: "Opções rápidas"
+description: "Retorna opções dos filtros rápidos em uma única chamada: top-50 canais, top-50 departamentos, e top-50 contatos. Tem cache de 10 minutos e responde com ETag."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/filters/quick-options
+---
+
+Retorna opções dos filtros rápidos em uma única chamada: top-50 canais, top-50 departamentos, e top-50 contatos. Tem cache de 10 minutos e responde com ETag.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/filters/quick-options \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/filters/quick-options', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/filters/quick-options",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/filters/quick-options
+```
+
+</CodeTabs>
+
+## Regras
+
+**Cache e ETag:** a resposta tem cache de 10 minutos no backend. Clientes devem preservar o header `ETag` e enviá-lo em revisitas com `If-None-Match`. Respostas `304 Not Modified` indicam que a versão em cache está ainda válida.
+
+**Busca lazy:** se nenhum dos 50 contatos principais satisfaz a busca, use [Buscar contatos](/api/crm/opcoes-de-filtro/buscar-contatos).
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |

@@ -1,0 +1,98 @@
+---
+title: "Responder proposta"
+description: "Registra a resposta do cliente ao aceitar ou rejeitar a proposta via link público."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/proposals/public/{idRef}/respond
+---
+
+Registra a resposta do cliente ao aceitar ou rejeitar a proposta via link público.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="idRef" type="uuid">
+Identificador único da proposta no link público.
+</Param>
+</Params>
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="t" type="string" required>
+Token do link público gerado com [`POST /proposals/{id}/link`](/api/crm/propostas/gerar-link-publico).
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="result" type="int" required>
+`1` = Aceita (proposta fica Fechada), `2` = Rejeita (proposta fica Rejeitada).
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/proposals/public/c1f0a9e2-5b7d-4c1e-9a33-0f6d2b8e4a17/respond?t=9f2c7e8b1a4d5f6c9e0a2b3d4e5f6a7b8c9d0e1" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "result": 1
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/proposals/public/c1f0a9e2-5b7d-4c1e-9a33-0f6d2b8e4a17/respond?t=9f2c7e8b1a4d5f6c9e0a2b3d4e5f6a7b8c9d0e1', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "result": 1
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/proposals/public/c1f0a9e2-5b7d-4c1e-9a33-0f6d2b8e4a17/respond?t=9f2c7e8b1a4d5f6c9e0a2b3d4e5f6a7b8c9d0e1",
+    json={
+        "result": 1,
+    },
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/proposals/public/c1f0a9e2-5b7d-4c1e-9a33-0f6d2b8e4a17/respond?t=9f2c7e8b1a4d5f6c9e0a2b3d4e5f6a7b8c9d0e1 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Content-Type: application/json
+
+{
+  "result": 1
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+- **Sem autenticação**: esta é uma rota pública. Token errado, proposta vencida, excluída ou inexistente devolvem o mesmo `404` sem corpo (de propósito, para não vazar a existência).
+- **Idempotente**: se a proposta já foi respondida ou o vendedor já a marcou como Fechada/Rejeitada, a chamada devolve `200` com o documento atual e não muda nada.
+- **Rate limit**: máximo 10 chamadas por minuto por IP e proposta. Acima disso: `429` com `{ "dados": { "message": "Muitas tentativas. Tente novamente em breve.", "retryAfterSeconds": 42 } }`.
+- O card **não** muda de etapa quando a proposta é respondida.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Resposta inválida: `result` não é `1` nem `2` |
+| 404 | - | Token errado, proposta vencida, excluída ou inexistente (mesmo `404` para não distinguir) |
+| 429 | - | Rate limit: mais de 10 tentativas por minuto |

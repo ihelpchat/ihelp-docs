@@ -1,0 +1,59 @@
+---
+title: "Listar tarefas"
+description: "Lista os modelos de tarefa (templates) de uma etapa, ordenados por posição. As tarefas são criadas quando um card entra na etapa."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/stages/{stageId}/task-templates
+---
+
+Lista os modelos de tarefa (templates) de uma etapa, ordenados por posição. As tarefas são criadas quando um card entra na etapa.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="stageId" type="int">
+Identificador da etapa
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/stages/101/task-templates
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | `Unauthorized` | Token ausente ou inválido |
+| 404 | `Not Found` | Etapa não existe |

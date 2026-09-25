@@ -1,0 +1,99 @@
+---
+title: "Atualizar visão"
+description: "Atualiza parcialmente uma visão salva: nome, fixação e filtros. Apenas os campos enviados são modificados."
+source: api
+contentType: referencia
+method: PATCH
+endpoint: /crm/saved-views/{id}
+---
+
+Atualiza parcialmente uma visão salva: nome, fixação e filtros. Apenas os campos enviados são modificados.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da visão salva a atualizar.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="name" type="string">
+Novo nome da visão, até 100 caracteres, único por usuário e pipeline. Omita para não alterar.
+</Param>
+<Param name="pinned" type="bool">
+Se a visão fica fixada no topo. Omita para não alterar.
+</Param>
+<Param name="quickFilters" type="string">
+Novo estado dos filtros rápidos como JSON serializado em texto, até 10 KB. JSON inválido responde `400`. Omita para não alterar.
+</Param>
+<Param name="advancedFilters" type="string">
+Novo estado dos filtros avançados como JSON serializado em texto, até 10 KB. JSON inválido responde `400`. Omita para não alterar.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PATCH "https://apiv3.ihelpchat.com/api/v2/crm/saved-views/67" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "Meus cards urgentes (atualizado)",
+  "pinned": true
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/saved-views/67', {
+  method: 'PATCH',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "name": "Meus cards urgentes (atualizado)",
+    "pinned": true
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.patch(
+    "https://apiv3.ihelpchat.com/api/v2/crm/saved-views/67",
+    json={
+        "name": "Meus cards urgentes (atualizado)",
+        "pinned": True,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PATCH /api/v2/crm/saved-views/67 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "name": "Meus cards urgentes (atualizado)",
+  "pinned": true
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Nome repetido para esta pipeline e usuário, JSON de `quickFilters` ou `advancedFilters` com sintaxe incorreta, campos muito grandes |
+| 401 | - | Token ausente, inválido ou expirado |
+| 404 | - | Visão não encontrada ou pertence a outro usuário |

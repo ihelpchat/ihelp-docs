@@ -1,0 +1,107 @@
+---
+title: "Campos obrigatórios"
+description: "Define quais campos devem estar preenchidos para um card sair da etapa."
+source: api
+contentType: referencia
+method: PATCH
+endpoint: /crm/funnelstage/funnels/{pipelineId}/stages/{stageId}/required-fields
+---
+
+Define quais campos devem estar preenchidos para um card sair da etapa.
+
+Campos reconhecidos: `responsible`, `estimatedValue`, `priority`, `leadOrigin`, `temperature` e `custom_<idRef>` (para campos personalizados). Chaves desconhecidas são aceitas mas nunca bloqueiam. Apenas administradores da empresa podem usar este endpoint.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="pipelineId" type="int">
+ID da pipeline (funil).
+</Param>
+<Param name="stageId" type="int">
+ID da etapa.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="requiredFields" type="string[]" required>
+Array de chaves de campos obrigatórios. Mandar [] remove todas as exigências.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PATCH "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/funnels/12/stages/101/required-fields" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "requiredFields": [
+    "responsible",
+    "estimatedValue",
+    "priority"
+  ]
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/funnels/12/stages/101/required-fields', {
+  method: 'PATCH',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "requiredFields": [
+      "responsible",
+      "estimatedValue",
+      "priority"
+    ]
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.patch(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/funnels/12/stages/101/required-fields",
+    json={
+        "requiredFields": [
+            "responsible",
+            "estimatedValue",
+            "priority",
+        ],
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PATCH /api/v2/crm/funnelstage/funnels/12/stages/101/required-fields HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "requiredFields": [
+    "responsible",
+    "estimatedValue",
+    "priority"
+  ]
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Usuário não é administrador da empresa |
+| 404 | - | Pipeline ou etapa inexistente |

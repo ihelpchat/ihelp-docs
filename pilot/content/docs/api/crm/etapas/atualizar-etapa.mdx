@@ -1,0 +1,117 @@
+---
+title: "Atualizar etapa"
+description: "Atualiza completamente uma etapa: título, descrição, cor, posição e status."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/funnelstage/{id}
+---
+
+Atualiza completamente uma etapa: título, descrição, cor, posição e status.
+
+Substituição completa: omitir `isActive` desativa a etapa. Exige nível Admin ou Owner no funil, ou ser administrador da empresa.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da etapa.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="title" type="string">
+Título da etapa. Máximo 100 caracteres.
+</Param>
+<Param name="description" type="string">
+Descrição da etapa. Máximo 500 caracteres.
+</Param>
+<Param name="color" type="string">
+Cor em formato hexadecimal #RRGGBB.
+</Param>
+<Param name="order" type="int">
+Posição na sequência.
+</Param>
+<Param name="isActive" type="bool">
+Ativa (true) ou desativa (false) a etapa. Omitir desativa.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "title": "Negociação",
+  "description": "Proposta enviada, aguardando retorno",
+  "color": "#EA580C",
+  "order": 3,
+  "isActive": true
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "title": "Negociação",
+    "description": "Proposta enviada, aguardando retorno",
+    "color": "#EA580C",
+    "order": 3,
+    "isActive": true
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101",
+    json={
+        "title": "Negociação",
+        "description": "Proposta enviada, aguardando retorno",
+        "color": "#EA580C",
+        "order": 3,
+        "isActive": True,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/funnelstage/101 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "title": "Negociação",
+  "description": "Proposta enviada, aguardando retorno",
+  "color": "#EA580C",
+  "order": 3,
+  "isActive": true
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Cor inválida ou dados inconsistentes |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem permissão Admin/Owner no funil |
+| 404 | - | Etapa inexistente |

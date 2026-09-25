@@ -1,0 +1,10 @@
+{
+  "title": "Visões salvas",
+  "pages": [
+    "listar-visoes-salvas",
+    "obter-visao-salva",
+    "criar-visao-salva",
+    "atualizar-visao-salva",
+    "excluir-visao-salva"
+  ]
+}

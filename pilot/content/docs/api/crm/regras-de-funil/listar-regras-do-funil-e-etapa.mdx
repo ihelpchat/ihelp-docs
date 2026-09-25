@@ -1,0 +1,55 @@
+---
+title: "Regras do funil e etapa"
+description: "Lista as regras ativas do funil e etapa específica da sua empresa."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/funnelrule/funnel/{funnelId}/stage/{stageId}
+---
+
+Lista as regras ativas do funil e etapa específica da sua empresa.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="funnelId" type="int">
+ID do funil.
+</Param>
+<Param name="stageId" type="int">
+ID da etapa.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/funnel/12/stage/101 \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/funnel/12/stage/101', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/funnel/12/stage/101",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/funnel/12/stage/101
+```
+
+</CodeTabs>

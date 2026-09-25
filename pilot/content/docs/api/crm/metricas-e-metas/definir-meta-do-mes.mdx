@@ -1,0 +1,103 @@
+---
+title: "Definir meta do mês"
+description: "Cria ou atualiza a meta de vendas de um mês específico. Apenas administradores da empresa."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/funnel/{funnelId}/goal
+---
+
+Cria ou atualiza a meta de vendas de um mês específico. Apenas administradores da empresa.
+
+`year` deve estar entre 2000 e 2200. `month` entre 1 e 12. `value` mínimo 0. Chamar com o mesmo mês sobrescreve a meta anterior. Usuários que não são administradores recebem 403.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="funnelId" type="int">
+ID do funil.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="year" type="int" required>
+Ano (2000-2200).
+</Param>
+<Param name="month" type="int" required>
+Mês (1-12).
+</Param>
+<Param name="value" type="decimal" required>
+Valor da meta em R$, mínimo 0.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/goal" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "year": 2026,
+  "month": 10,
+  "value": 150000
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/goal', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "year": 2026,
+    "month": 10,
+    "value": 150000
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnel/12/goal",
+    json={
+        "year": 2026,
+        "month": 10,
+        "value": 150000,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/funnel/12/goal HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "year": 2026,
+  "month": 10,
+  "value": 150000
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Year fora de 2000-2200, month fora de 1-12, ou value negativo |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Usuário não é administrador da empresa |
+| 404 | - | Funil inexistente |

@@ -1,0 +1,115 @@
+---
+title: "Atualizar nota"
+description: "Atualiza uma anotação existente, alterando título, descrição e anexo."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/card/{id}/notes/{noteId}
+---
+
+Atualiza uma anotação existente, alterando título, descrição e anexo.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+<Param name="noteId" type="int">
+ID da anotação a atualizar.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="title" type="string">
+Novo título. Campo omitido é apagado.
+</Param>
+<Param name="description" type="string">
+Novo corpo da anotação.
+</Param>
+<Param name="mediaUrl" type="string">
+Nova URL do anexo. Campo omitido é apagado.
+</Param>
+<Param name="mediaType" type="string">
+Novo tipo MIME.
+</Param>
+<Param name="mediaName" type="string">
+Novo nome do arquivo.
+</Param>
+<Param name="mediaSize" type="int">
+Novo tamanho em bytes.
+</Param>
+<Param name="mediaThumbnail" type="string">
+Nova URL da miniatura.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes/1001" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "title": "Ligação de follow-up (atualizada)",
+  "description": "Cliente pediu desconto de 15% para fechar até sexta."
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes/1001', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "title": "Ligação de follow-up (atualizada)",
+    "description": "Cliente pediu desconto de 15% para fechar até sexta."
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/notes/1001",
+    json={
+        "title": "Ligação de follow-up (atualizada)",
+        "description": "Cliente pediu desconto de 15% para fechar até sexta.",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/card/8821/notes/1001 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "title": "Ligação de follow-up (atualizada)",
+  "description": "Cliente pediu desconto de 15% para fechar até sexta."
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+Campos omitidos são apagados (ex.: remover um anexo é omitir `mediaUrl`). A privacidade (`isPrivate`) **não pode ser alterada** em uma atualização; ela é definida apenas na criação. O campo `cardId` e `isPrivate` no corpo são ignorados.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 404 | - | Card ou anotação não encontrados, ou de outra empresa |

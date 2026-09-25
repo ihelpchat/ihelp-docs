@@ -1,0 +1,181 @@
+---
+title: "Criar card"
+description: "Cria um card em uma etapa do funil, vinculado a um contato, com valor, prioridade, origem, temperatura e campos personalizados."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card
+---
+
+Cria um card em uma etapa do funil, vinculado a um contato, com valor, prioridade, origem, temperatura e campos personalizados.
+
+## Corpo da requisição
+
+<Params>
+<Param name="title" type="string" required>
+Título do card. Vazio responde `400` com `O título é obrigatório`.
+</Param>
+<Param name="stageId" type="int" required>
+Etapa onde o card nasce. Etapa inexistente responde `400` com `Stage nao encontrado`.
+</Param>
+<Param name="contactId" type="int" required>
+Contato do card. Sem ele a resposta é `400`.
+</Param>
+<Param name="responsibleId" type="int">
+Usuário responsável. Se o usuário do token só vê os próprios cards, o card nasce com ele mesmo como responsável.
+</Param>
+<Param name="description" type="string">
+Descrição livre.
+</Param>
+<Param name="estimatedValue" type="decimal">
+Valor estimado em R$.
+</Param>
+<Param name="status" type="int">
+`CardStatusEnum`. Ignorado na criação: todo card novo nasce Aberto (`1`).
+</Param>
+<Param name="priority" type="int">
+`CardPriorityEnum`: `1` Baixa, `2` Média, `3` Alta, `4` Urgente.
+</Param>
+<Param name="leadOriginId" type="int">
+Origem do lead cadastrada na empresa.
+</Param>
+<Param name="source" type="string">
+Origem do lead em texto: `whatsapp`, `instagram`, `facebook`, `email`, `telegram` ou `webchat`.
+</Param>
+<Param name="temperature" type="string">
+`quente`, `morno` ou `frio`.
+</Param>
+<Param name="tags" type="string[]">
+Ignorado: as tags ficam no contato, não no card.
+</Param>
+<Param name="dueDate" type="datetime">
+Data prevista de fechamento, em UTC.
+</Param>
+<Param name="customFields[].customizedFieldId" type="int">
+ID do campo personalizado. ID inválido, repetido ou de outra empresa responde `400`.
+</Param>
+<Param name="customFields[].value" type="string">
+Valor do campo, em texto.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "title": "Proposta ACME",
+  "description": "Interesse no plano anual",
+  "estimatedValue": 4500,
+  "stageId": 101,
+  "responsibleId": 42,
+  "contactId": 3107,
+  "priority": 3,
+  "source": "whatsapp",
+  "temperature": "quente",
+  "dueDate": "2026-10-15T00:00:00Z",
+  "customFields": [
+    {
+      "customizedFieldId": 7,
+      "value": "Sorocaba"
+    }
+  ]
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "title": "Proposta ACME",
+    "description": "Interesse no plano anual",
+    "estimatedValue": 4500,
+    "stageId": 101,
+    "responsibleId": 42,
+    "contactId": 3107,
+    "priority": 3,
+    "source": "whatsapp",
+    "temperature": "quente",
+    "dueDate": "2026-10-15T00:00:00Z",
+    "customFields": [
+      {
+        "customizedFieldId": 7,
+        "value": "Sorocaba"
+      }
+    ]
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card",
+    json={
+        "title": "Proposta ACME",
+        "description": "Interesse no plano anual",
+        "estimatedValue": 4500,
+        "stageId": 101,
+        "responsibleId": 42,
+        "contactId": 3107,
+        "priority": 3,
+        "source": "whatsapp",
+        "temperature": "quente",
+        "dueDate": "2026-10-15T00:00:00Z",
+        "customFields": [
+            {
+                "customizedFieldId": 7,
+                "value": "Sorocaba",
+            },
+        ],
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/card HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "title": "Proposta ACME",
+  "description": "Interesse no plano anual",
+  "estimatedValue": 4500,
+  "stageId": 101,
+  "responsibleId": 42,
+  "contactId": 3107,
+  "priority": 3,
+  "source": "whatsapp",
+  "temperature": "quente",
+  "dueDate": "2026-10-15T00:00:00Z",
+  "customFields": [
+    {
+      "customizedFieldId": 7,
+      "value": "Sorocaba"
+    }
+  ]
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Título vazio, etapa inexistente, sem `contactId`, campo personalizado inválido, ou o funil tem trava de contato e o contato já tem card ativo nele |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 409 | `stage_concurrency_conflict` | Conflito de concorrência. Vem com header `Retry-After: 1`; repita a chamada |

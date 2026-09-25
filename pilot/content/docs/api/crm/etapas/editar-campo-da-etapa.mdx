@@ -1,0 +1,96 @@
+---
+title: "Editar campo da etapa"
+description: "Atualiza um único campo da etapa sem afetar os demais."
+source: api
+contentType: referencia
+method: PUT
+endpoint: /crm/funnelstage/{id}/field
+---
+
+Atualiza um único campo da etapa sem afetar os demais.
+
+Campos suportados: `title`, `description`, `color`, `order`, `probability` (0-100) e `isActive` (true/false). Qualquer outro `fieldName` responde 400.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da etapa.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="fieldName" type="string" required>
+Nome do campo: title, description, color, order, probability ou isActive.
+</Param>
+<Param name="value" type="object">
+Novo valor do campo. Para isActive: true/false (será convertido de string).
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PUT "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101/field" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "fieldName": "probability",
+  "value": 60
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101/field', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "fieldName": "probability",
+    "value": 60
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.put(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelstage/101/field",
+    json={
+        "fieldName": "probability",
+        "value": 60,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PUT /api/v2/crm/funnelstage/101/field HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "fieldName": "probability",
+  "value": 60
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | fieldName desconhecido, cor inválida, ou probability fora de 0-100 |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem permissão Admin/Owner no funil |
+| 404 | - | Etapa inexistente |

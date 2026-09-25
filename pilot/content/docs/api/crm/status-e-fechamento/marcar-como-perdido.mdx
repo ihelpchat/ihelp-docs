@@ -1,0 +1,102 @@
+---
+title: "Marcar como perdido"
+description: "Marca um card como perdido, com opção de registrar motivo, observação e descrição para o histórico."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/card/{id}/close-lost
+---
+
+Marca um card como perdido, com opção de registrar motivo, observação e descrição para o histórico.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="reasonId" type="int">
+ID de um [motivo de perda](/api/crm/motivos-de-perda/listar-motivos-de-perda) cadastrado no funil. Enviando este campo, o motivo entra nos relatórios de perda.
+</Param>
+<Param name="customNote" type="string">
+Observação livre sobre o motivo da perda. Também faz o motivo entrar nos relatórios.
+</Param>
+<Param name="description" type="string">
+Texto registrado no histórico do card.
+</Param>
+</Params>
+
+O corpo é **opcional**. Sem corpo, o card é apenas marcado como perdido, sem registrar motivo. Enviar `reasonId` ou `customNote` registra o motivo nos relatórios de perda do funil.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/close-lost" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "reasonId": 4,
+  "customNote": "Cliente fechou com concorrente por preço",
+  "description": "Perdido após 3ª rodada de negociação"
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/close-lost', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "reasonId": 4,
+    "customNote": "Cliente fechou com concorrente por preço",
+    "description": "Perdido após 3ª rodada de negociação"
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/close-lost",
+    json={
+        "reasonId": 4,
+        "customNote": "Cliente fechou com concorrente por preço",
+        "description": "Perdido após 3ª rodada de negociação",
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/card/8821/close-lost HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "reasonId": 4,
+  "customNote": "Cliente fechou com concorrente por preço",
+  "description": "Perdido após 3ª rodada de negociação"
+}
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 404 | - | Card não encontrado ou de outra empresa |

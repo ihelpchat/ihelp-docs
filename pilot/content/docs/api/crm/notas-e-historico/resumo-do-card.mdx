@@ -1,0 +1,64 @@
+---
+title: "Resumo do card"
+description: "Retorna um resumo compacto do card para exibição em popover, incluindo última anotação e contagem de atendimentos."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/card/{id}/popover-summary
+---
+
+Retorna um resumo compacto do card para exibição em popover, incluindo última anotação e contagem de atendimentos.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID do card.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/crm/card/8821/popover-summary \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/card/8821/popover-summary', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/card/8821/popover-summary",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/card/8821/popover-summary
+```
+
+</CodeTabs>
+
+## Regras
+
+Este endpoint é otimizado para exibir um popover rápido quando o usuário passa o mouse sobre um card na interface. Contém apenas as informações mais relevantes.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Permissão apenas de visualização no funil da etapa |
+| 404 | - | Card não encontrado ou de outra empresa |

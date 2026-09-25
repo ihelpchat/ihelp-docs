@@ -1,0 +1,14 @@
+{
+  "title": "Sincronização",
+  "pages": [
+    "sync-de-cards",
+    "sync-de-historico-do-card",
+    "sync-de-notas-do-card",
+    "sync-v2-de-funis",
+    "sync-v2-de-etapas",
+    "sync-v2-de-cards",
+    "sync-v2-de-notas",
+    "sync-v2-de-historico",
+    "sync-v2-de-regras"
+  ]
+}

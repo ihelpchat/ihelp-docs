@@ -1,0 +1,91 @@
+---
+title: "Alterar status"
+description: "Muda manualmente o status de uma proposta para Fechada, Alterada ou Rejeitada."
+source: api
+contentType: referencia
+method: PATCH
+endpoint: /crm/proposals/{id}/status
+---
+
+Muda manualmente o status de uma proposta para Fechada, Alterada ou Rejeitada.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int">
+ID da proposta.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="status" type="int" required>
+`3` = Fechada, `4` = Alterada, `5` = Rejeitada. Qualquer outro valor responde `400`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PATCH "https://apiv3.ihelpchat.com/api/v2/crm/proposals/123/status" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "status": 3
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/proposals/123/status', {
+  method: 'PATCH',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "status": 3
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.patch(
+    "https://apiv3.ihelpchat.com/api/v2/crm/proposals/123/status",
+    json={
+        "status": 3,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PATCH /api/v2/crm/proposals/123/status HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "status": 3
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+O card **não** muda de etapa ao alterar o status. Rejeitar e aceitar mudanças no `estimatedValue` do card: a proposta é incluída ou excluída da soma conforme o novo status.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Status inválido: não é `3`, `4` nem `5` |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Módulo de propostas desligado |
+| 404 | - | Proposta inexistente ou de outra empresa |

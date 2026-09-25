@@ -1,0 +1,11 @@
+{
+  "title": "Status e fechamento",
+  "pages": [
+    "marcar-como-ganho",
+    "marcar-como-perdido",
+    "marcar-como-cancelado",
+    "restaurar-card",
+    "alterar-status-do-card",
+    "aplicar-regras-no-card"
+  ]
+}

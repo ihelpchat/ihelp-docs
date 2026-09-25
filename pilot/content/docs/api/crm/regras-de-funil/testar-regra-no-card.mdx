@@ -1,0 +1,64 @@
+---
+title: "Testar regra no card"
+description: "Testa se uma regra se aplica a um card específico, avaliando as condições sem disparar as ações em produção."
+source: api
+contentType: referencia
+method: POST
+endpoint: /crm/funnelrule/evaluate/{ruleId}/opportunity/{cardId}
+---
+
+Testa se uma regra se aplica a um card específico, avaliando as condições sem disparar as ações em produção.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="ruleId" type="int">
+ID da regra a testar.
+</Param>
+<Param name="cardId" type="int">
+ID do card a testar a regra contra.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X POST "https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/evaluate/4/opportunity/8821" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/evaluate/4/opportunity/8821', {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.post(
+    "https://apiv3.ihelpchat.com/api/v2/crm/funnelrule/evaluate/4/opportunity/8821",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+POST /api/v2/crm/funnelrule/evaluate/4/opportunity/8821 HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Erro na avaliação da regra |

@@ -1,0 +1,70 @@
+---
+title: "Buscar departamentos"
+description: "Busca departamentos por título com paginação. A query exige no mínimo 2 caracteres."
+source: api
+contentType: referencia
+method: GET
+endpoint: /crm/filters/departamentos/search
+---
+
+Busca departamentos por título com paginação. A query exige no mínimo 2 caracteres.
+
+## Parâmetros de consulta
+
+<Params>
+<Param name="q" type="string" required>
+Texto da busca (título do departamento), mínimo 2 caracteres.
+</Param>
+<Param name="limit" type="int" required={false}>
+Quantidade máxima de resultados, limitada ao intervalo [1, 100]. Default: 50.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl -G https://apiv3.ihelpchat.com/api/v2/crm/filters/departamentos/search \
+  --data-urlencode "q=vendas" \
+  --data-urlencode "limit=20" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const params = new URLSearchParams({q: 'vendas',limit: '20'});
+
+const res = await fetch(`https://apiv3.ihelpchat.com/api/v2/crm/filters/departamentos/search?${params}`, {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/crm/filters/departamentos/search",
+    params={
+        "q": "vendas",
+        "limit": 20,
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/crm/filters/departamentos/search?q=vendas&limit=20
+```
+
+</CodeTabs>
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Query `q` ausente, menor que 2 caracteres ou vazia, `limit` fora do intervalo [1, 100] |
+| 401 | - | Token ausente, inválido ou expirado |

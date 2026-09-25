@@ -1,0 +1,158 @@
+---
+title: "Atualizar permissões"
+description: "Sincroniza as permissões da pipeline: substitui a lista completa de membros. Quem não estiver na lista perde acesso."
+source: api
+contentType: referencia
+method: PATCH
+endpoint: /crm/pipelines/{id}/permissions
+---
+
+Sincroniza as permissões da pipeline: substitui a lista completa de membros. Quem não estiver na lista perde acesso.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="int" required>
+ID da pipeline.
+</Param>
+</Params>
+
+## Corpo da requisição
+
+<Params>
+<Param name="members[]" type="object[]" required>
+Array de membros e permissões.
+</Param>
+<Param name="members[].userId" type="int" required>
+ID do usuário da empresa.
+</Param>
+<Param name="members[].level" type="string">
+`none`, `view`, `edit` ou `admin`. `owner` vira `admin`. Padrão `edit`.
+</Param>
+<Param name="members[].onlyOwnCards" type="bool">
+Para edit: usuário vê só seus cards. Omitido mantém valor atual. Sempre false para admin e owner.
+</Param>
+</Params>
+
+Campos `name`, `email`, `isTenantAdmin` e `isOwner` aparecem no GET mas são ignorados no PATCH.
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>
+
+```bash
+curl -X PATCH "https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12/permissions" \
+  -H "Authorization: Bearer $IHELP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "members": [
+    {
+      "userId": 42,
+      "level": "admin"
+    },
+    {
+      "userId": 57,
+      "level": "edit",
+      "onlyOwnCards": true
+    },
+    {
+      "userId": 61,
+      "level": "view"
+    }
+  ]
+}'
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12/permissions', {
+  method: 'PATCH',
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    "members": [
+      {
+        "userId": 42,
+        "level": "admin"
+      },
+      {
+        "userId": 57,
+        "level": "edit",
+        "onlyOwnCards": true
+      },
+      {
+        "userId": 61,
+        "level": "view"
+      }
+    ]
+  }),
+});
+
+console.log(res.status);
+```
+
+```python
+import os, requests
+
+r = requests.patch(
+    "https://apiv3.ihelpchat.com/api/v2/crm/pipelines/12/permissions",
+    json={
+        "members": [
+            {
+                "userId": 42,
+                "level": "admin",
+            },
+            {
+                "userId": 57,
+                "level": "edit",
+                "onlyOwnCards": True,
+            },
+            {
+                "userId": 61,
+                "level": "view",
+            },
+        ],
+    },
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.status_code)
+```
+
+```http
+PATCH /api/v2/crm/pipelines/12/permissions HTTP/1.1
+Host: apiv3.ihelpchat.com
+Authorization: Bearer $IHELP_TOKEN
+Content-Type: application/json
+
+{
+  "members": [
+    {
+      "userId": 42,
+      "level": "admin"
+    },
+    {
+      "userId": 57,
+      "level": "edit",
+      "onlyOwnCards": true
+    },
+    {
+      "userId": 61,
+      "level": "view"
+    }
+  ]
+}
+```
+
+</CodeTabs>
+
+## Regras
+
+Dono e administradores da empresa nunca são alterados por este endpoint — permanecem com acesso independentemente da lista. Quem sai da regra de visibilidade (ex.: troca de `public` para `private`) também é mantido se tiver permissão explícita.
+
+## Erros
+
+| HTTP | `error` | Quando |
+|---|---|---|
+| 400 | - | Payload vazio ou `members` não informado |
+| 401 | - | Token ausente, inválido ou expirado |
+| 403 | - | Sem permissão de admin na pipeline |
+| 404 | - | Pipeline não encontrada |

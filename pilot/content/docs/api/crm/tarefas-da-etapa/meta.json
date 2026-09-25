@@ -1,0 +1,10 @@
+{
+  "title": "Tarefas da etapa",
+  "pages": [
+    "listar-tarefas-da-etapa",
+    "criar-tarefa-da-etapa",
+    "atualizar-tarefa-da-etapa",
+    "excluir-tarefa-da-etapa",
+    "reordenar-tarefas-da-etapa"
+  ]
+}
