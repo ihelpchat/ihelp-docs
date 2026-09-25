@@ -60,7 +60,7 @@ export const productActionSchema = z.object({
   route: z.string(),
   target: z.string().optional(),
 }).strict().superRefine((action, context) => {
-  if (!resolveCatalogAction(action)) {
+  if (!resolveCatalogAction({ id: action.id, route: action.route, label: action.label, target: action.target })) {
     context.addIssue({ code: 'custom', message: 'ação fora do catálogo' });
   }
 });
