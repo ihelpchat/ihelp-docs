@@ -7,6 +7,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { readArticle } from './editorial-standard.mjs';
 import { parseDocument } from 'yaml';
 import { docsPageSchema } from '../lib/docs-page-schema.mjs';
+import { renderArticle, validateArticle } from './content-service.mjs';
 
 const sourceRoot = new URL('../', import.meta.url).pathname;
 const root = await mkdtemp(join(tmpdir(), 'm5-01-roundtrip-'));
@@ -64,7 +65,7 @@ try {
     const originalYaml = parseDocument(originalMdx.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '').toJS();
     if (path.includes('reconectar-canal-qr')) {
       original.assistantIntent = 'reconnect_qr';
-      original.assistantSuggestions = 'Como confirmar que o canal voltou a funcionar?';
+      original.assistantSuggestions = ['Abra CRM | Pipeline: "visão" #1', 'Como falar com uma pessoa?'];
       originalYaml.assistantIntent = original.assistantIntent;
       originalYaml.assistantSuggestions = original.assistantSuggestions;
     }
@@ -76,6 +77,9 @@ try {
     assert.equal(result.isError, false, `${path}: ${result.content[0].text}`);
     const remote = join(root, 'remote/pilot/content/docs', `${path}.mdx`);
     const rendered = await readFile(remote, 'utf8');
+    if (path.includes('reconectar-canal-qr')) {
+      assert.ok(rendered.indexOf('<ProductAction id="abrir-canais"') < rendered.indexOf('1. Abra Canais'), 'ProductAction existente deve permanecer antes do primeiro passo');
+    }
     const frontmatter = parseDocument(rendered.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '').toJS();
     const parsed = docsPageSchema.safeParse(frontmatter);
     assert.equal(parsed.success, true, `${path}: MDX gerado falha no schema real da Central: ${parsed.success ? '' : parsed.error.message}`);
@@ -104,6 +108,12 @@ try {
   const individualMeta = JSON.parse(await readFile(join(root, 'remote/pilot/content/docs/docs/principais-motivos-de-suporte/meta.json')));
   assert.equal(individualMeta.pages.filter((page) => page === 'novo-guia').length, 1, 'submit individual precisa atualizar meta.json pelo pacote');
   const before = await readFile(join(root, 'writes.log'), 'utf8');
+  const privateArticle = { ...individual, path: 'docs/principais-motivos-de-suporte/autores-privados', authors: ['pessoa@example.com'] };
+  assert.ok(validateArticle(privateArticle).issues.some((issue) => /dado pessoal/i.test(issue)), 'array no frontmatter deve ser inspecionado');
+  assert.throws(() => renderArticle(privateArticle), /dado pessoal/i, 'render deve rejeitar dado pessoal no array');
+  const privateResult = await call('docs_submit_article', { ...privateArticle, mode: 'pull_request', requestedBy: 'service:roundtrip' });
+  assert.equal(privateResult.isError, true, 'submit deve rejeitar e-mail em authors');
+  assert.equal(await readFile(join(root, 'writes.log'), 'utf8'), before, 'e-mail em authors deve causar zero writes');
   const original = await readArticle(root, paths[0]);
   const rejected = await call('docs_submit_article', { ...original, body: `${original.body}\n<ProductAction id="abrir-canais" label="Abrir a tela Canais" route="/configuracoes/channel" />`, mode: 'pull_request', requestedBy: 'service:roundtrip' });
   assert.equal(rejected.isError, true, 'submit individual deve rejeitar ProductAction duplicado');
