@@ -238,8 +238,8 @@ function OfflineMessage({ question, compact }: { question: string; compact: bool
 }
 
 export function AssistantBusy({ compact }: { compact: boolean }) {
-  const { counts, scope } = useAssistant();
-  const label = `Consultando ${counts[scope]} documentos${scope === 'Tudo' ? ' da base' : ` em ${scope}`}…`;
+  const { counts, scope, retrying } = useAssistant();
+  const label = retrying ? 'Só um instante, já te respondo…' : `Consultando ${counts[scope]} documentos${scope === 'Tudo' ? ' da base' : ` em ${scope}`}…`;
   return (
     <div className="ih-ai-row ih-ai-busy" role="status">
       {compact ? null : <Avatar />}

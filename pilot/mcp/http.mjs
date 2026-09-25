@@ -16,7 +16,14 @@ const root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname;
 const feedbackFile = process.env.FEEDBACK_FILE ?? '/tmp/ihelp-docs-feedback.jsonl';
 const feedbackAdminToken = process.env.FEEDBACK_ADMIN_TOKEN;
 const allowedOrigins = new Set((process.env.ASSISTANT_ALLOWED_ORIGINS ?? 'http://127.0.0.1:4173,http://localhost:4173').split(',').map((value) => value.trim()).filter(Boolean));
-const requests = new Map();
+const assistantSessions = new Map();
+const assistantIps = new Map();
+const feedbackIps = new Map();
+const windowMs = 60_000;
+const assistantSessionLimit = 10;
+const assistantIpLimit = Math.max(10, Math.min(100, Number(process.env.ASSISTANT_IP_LIMIT) || 100));
+const feedbackIpLimit = 30;
+let lastSweep = Date.now();
 
 function cors(request, response) {
   const origin = request.headers.origin;
@@ -28,13 +35,40 @@ function cors(request, response) {
   }
 }
 
-function limited(request) {
-  const ip = String(request.headers['x-forwarded-for'] ?? request.socket.remoteAddress ?? 'unknown').split(',')[0].trim();
+function clientIp(request) {
+  return String(request.headers['x-forwarded-for'] ?? request.socket.remoteAddress ?? 'unknown').split(',')[0].trim();
+}
+
+function quota(map, key, limit, now) {
+  if (now - lastSweep >= windowMs) {
+    for (const bucket of [assistantSessions, assistantIps, feedbackIps]) {
+      for (const [entry, times] of bucket) {
+        const recent = times.filter((time) => now - time < windowMs);
+        if (recent.length) bucket.set(entry, recent);
+        else bucket.delete(entry);
+      }
+    }
+    lastSweep = now;
+  }
+  const recent = (map.get(key) ?? []).filter((time) => now - time < windowMs);
+  if (!recent.length) map.delete(key);
+  else map.set(key, recent);
+  return { map, key, recent, retryAfter: recent.length >= limit ? Math.ceil((windowMs - (now - recent[0])) / 1000) : 0 };
+}
+
+function rateLimit(response, limits) {
+  const retryAfter = Math.max(...limits.map((item) => item.retryAfter));
+  if (retryAfter) {
+    response.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': String(retryAfter) })
+      .end(JSON.stringify({ error: 'Só um instante, já te respondo. Tente novamente em breve.' }));
+    return true;
+  }
   const now = Date.now();
-  const recent = (requests.get(ip) ?? []).filter((time) => now - time < 60_000);
-  recent.push(now);
-  requests.set(ip, recent);
-  return recent.length > 10;
+  for (const item of limits) {
+    item.recent.push(now);
+    item.map.set(item.key, item.recent);
+  }
+  return false;
 }
 
 async function readJson(request) {
@@ -54,14 +88,18 @@ export const httpServer = createServer(async (request, response) => {
     return;
   }
   if (pathname === '/assistant' && request.method === 'POST') {
-    if (limited(request)) {
-      response.writeHead(429, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Muitas perguntas. Tente novamente em um minuto.' }));
-      return;
-    }
     try {
       const body = await readJson(request);
       const question = typeof body.question === 'string' ? body.question.trim() : '';
-      if (question.length < 4 || question.length > 500) throw new Error('A pergunta deve ter entre 4 e 500 caracteres.');
+      if (question.length < 1 || question.length > 500) throw new Error('A pergunta deve ter entre 1 e 500 caracteres.');
+      const ip = clientIp(request);
+      const sessionId = typeof body.sessionId === 'string' && /^[a-zA-Z0-9_-]{8,128}$/.test(body.sessionId)
+        ? body.sessionId : 'anonymous';
+      const now = Date.now();
+      if (rateLimit(response, [
+        quota(assistantSessions, `${ip}:${sessionId}`, assistantSessionLimit, now),
+        quota(assistantIps, ip, assistantIpLimit, now),
+      ])) return;
       const history = Array.isArray(body.history) ? body.history.slice(-6) : [];
       const scope = typeof body.scope === 'string' ? body.scope : 'Tudo';
       const page = body.page && typeof body.page.path === 'string' && body.page.path.startsWith('/') && body.page.path.length < 300
@@ -79,12 +117,10 @@ export const httpServer = createServer(async (request, response) => {
     return;
   }
   if (pathname === '/feedback' && request.method === 'POST') {
-    if (limited(request)) {
-      response.writeHead(429, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Muitas avaliações. Tente novamente em um minuto.' }));
-      return;
-    }
     try {
       const body = await readJson(request);
+      const ip = clientIp(request);
+      if (rateLimit(response, [quota(feedbackIps, ip, feedbackIpLimit, Date.now())])) return;
       const event = await saveFeedback(feedbackFile, body, { userAgent: request.headers['user-agent'] });
       response.writeHead(201, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ saved: true, id: event.id }));
     } catch (error) {

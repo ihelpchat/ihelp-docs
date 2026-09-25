@@ -23,6 +23,7 @@ type PageRef = { path: string; title: string };
 type AssistantState = {
   messages: ChatMessage[];
   busy: boolean;
+  retrying: boolean;
   scope: AssistantScope;
   drawerOpen: boolean;
   feedback: Record<string, 'up' | 'down'>;
@@ -64,9 +65,11 @@ function historyOf(messages: ChatMessage[]): AssistantHistoryItem[] {
 export function AssistantProvider({ counts, children }: { counts: ScopeCounts; children: ReactNode }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [scope, setScope] = useState<AssistantScope>('Tudo');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({});
+  const sessionId = useRef(id('session-'));
   const abort = useRef<AbortController | null>(null);
   // Lido pelas ações (que não mudam de identidade) para ver sempre o estado mais recente.
   const state = useRef({ messages, busy, scope });
@@ -77,16 +80,17 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
   // A conversa sobrevive à navegação e ao recarregar a aba (fica só neste navegador).
   useEffect(() => {
     try {
-      const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') as { messages?: ChatMessage[]; scope?: AssistantScope } | null;
+      const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') as { messages?: ChatMessage[]; scope?: AssistantScope; sessionId?: string } | null;
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (saved?.messages?.length) setMessages(saved.messages);
       if (saved?.scope) setScope(saved.scope);
+      if (saved?.sessionId) sessionId.current = saved.sessionId;
     } catch {}
   }, []);
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(storageKey, JSON.stringify({ messages: messages.slice(-40), scope }));
+      sessionStorage.setItem(storageKey, JSON.stringify({ messages: messages.slice(-40), scope, sessionId: sessionId.current }));
     } catch {}
   }, [messages, scope]);
 
@@ -99,18 +103,22 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
       return;
     }
     setBusy(true);
+    setRetrying(false);
     abort.current?.abort();
     const controller = new AbortController();
     abort.current = controller;
     try {
-      const reply = await requestAnswer({ question, history, scope: state.current.scope, page }, controller.signal);
+      const reply = await requestAnswer({ question, history, scope: state.current.scope, page, sessionId: sessionId.current }, controller.signal, () => setRetrying(true));
       setMessages((list) => [...list, { id: id('a'), role: 'ai', reply, question }]);
     } catch (error) {
       if (controller.signal.aborted) return;
       const message = error instanceof Error ? error.message : '';
       setMessages((list) => [...list, { id: id('e'), role: 'error', question, message }]);
     } finally {
-      if (abort.current === controller) setBusy(false);
+      if (abort.current === controller) {
+        setBusy(false);
+        setRetrying(false);
+      }
     }
   }, []);
 
@@ -132,6 +140,7 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
   const value = useMemo<AssistantState>(() => ({
     messages,
     busy,
+    retrying,
     scope,
     drawerOpen,
     feedback,
@@ -141,6 +150,7 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
     retry,
     newChat: () => {
       abort.current?.abort();
+      sessionId.current = id('session-');
       setBusy(false);
       setMessages([]);
       setFeedback({});
@@ -161,7 +171,7 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
         sources: message.reply.sources.map((source) => source.path),
       });
     },
-  }), [messages, busy, scope, drawerOpen, feedback, counts, ask, retry]);
+  }), [messages, busy, retrying, scope, drawerOpen, feedback, counts, ask, retry]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
