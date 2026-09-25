@@ -1,0 +1,116 @@
+---
+title: "Buscar detalhes do contato"
+description: "Retorna os dados completos de um contato pelo idRef: telefone, data de criação, última atividade, responsáveis e campos personalizados."
+source: api
+contentType: referencia
+method: GET
+endpoint: /contacts/details/{idRef}
+---
+
+<Callout type="note" title="Onde pegar o idRef">
+Use o `idRef` do contato retornado em [Buscar contatos](/api/contatos/buscar-contatos): buscando `searchData=9969`, o contato `Gian - iHelp` vem com `"idRef": "696fcae1594bdd140221c328"`.
+</Callout>
+
+Retorna os dados completos de um contato pelo idRef: telefone, data de criação, última atividade, responsáveis e campos personalizados.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="idRef" type="string" required>
+`idRef` do contato (ex: `696fcae1594bdd140221c328`). Não é o `idRef` do atendimento.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/contacts/details/696fcae1594bdd140221c328 \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/contacts/details/696fcae1594bdd140221c328', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+const { dados } = await res.json();
+console.log(dados.telefone);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/contacts/details/696fcae1594bdd140221c328",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.json()["dados"]["telefone"])
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/contacts/details/<idRef-do-contato>
+GET https://apiv3.ihelpchat.com/api/v2/contacts/details/696fcae1594bdd140221c328
+```
+
+</CodeTabs>
+
+## Resposta
+
+Aqui `dados` é um objeto, não uma lista.
+
+<Response status="200 OK">
+
+```json
+{
+    "dados": {
+        "id": 4752052,
+        "idRef": "696fcae1594bdd140221c328",
+        "nome": "Gian - iHelp",
+        "contatoTipo": 0,
+        "emailId": 0,
+        "telefoneId": 4665943,
+        "telefone": "5517936189969",
+        "dataCriacao": "20/01/2026 18:35",
+        "userId": 0,
+        "departmentId": 0,
+        "lastActivity": "2026-09-22T13:03:13.885471Z",
+        "responsibleUsers": [
+            {
+                "id": 0,
+                "contatoId": 0,
+                "departmentId": 0,
+                "createdDate": "0001-01-01T00:00:00"
+            }
+        ],
+        "customizedFields": []
+    }
+}
+```
+
+</Response>
+
+## Campos relevantes
+
+<Fields>
+<Field name="dados.id">
+ID curto do contato (ex: `4752052`), usado em [Buscar tags do contato](/api/contatos/buscar-tags-do-contato).
+</Field>
+<Field name="dados.telefone">
+Número com DDI e DDD, sem máscara (ex: `5517936189969`). Na busca, o mesmo valor vem em `numero`.
+</Field>
+<Field name="dados.dataCriacao">
+Data e hora de criação, `DD/MM/AAAA HH:mm` (ex: `20/01/2026 18:35`). Na busca vem só a data.
+</Field>
+<Field name="dados.lastActivity">
+Última atividade do contato, em ISO 8601 UTC (ex: `2026-09-22T13:03:13.885471Z`).
+</Field>
+<Field name="dados.responsibleUsers">
+Responsáveis pelo contato. No exemplo, o contato não tem responsável e a lista traz um item zerado (`"id": 0`, `"createdDate": "0001-01-01T00:00:00"`).
+</Field>
+<Field name="dados.customizedFields">
+Campos personalizados do contato. Vazio (`[]`) quando não há nenhum preenchido.
+</Field>
+</Fields>

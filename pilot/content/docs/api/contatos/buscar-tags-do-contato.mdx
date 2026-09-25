@@ -1,0 +1,106 @@
+---
+title: "Buscar tags do contato"
+description: "Lista as tags vinculadas a um contato pelo ID curto, com nome e cor de cada tag."
+source: api
+contentType: referencia
+method: GET
+endpoint: /contactTags/getContactsTagByContactId/{id}
+---
+
+<Callout type="note" title="Onde pegar o ID do contato">
+Use o `id` curto do contato retornado em [Buscar contatos](/api/contatos/buscar-contatos): buscando `searchData=9969`, o contato `Gian - iHelp` vem com `"id": 4752052`. Não use o `idRef` (`696fcae1594bdd140221c328`) aqui.
+</Callout>
+
+Lista as tags vinculadas a um contato pelo ID curto, com nome e cor de cada tag.
+
+## Parâmetros de rota
+
+<Params>
+<Param name="id" type="number" required>
+ID curto do contato (ex: `4752052`).
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl https://apiv3.ihelpchat.com/api/v2/contactTags/getContactsTagByContactId/4752052 \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const res = await fetch('https://apiv3.ihelpchat.com/api/v2/contactTags/getContactsTagByContactId/4752052', {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+const tags = await res.json();
+console.log(tags.map((t) => t.tagName));
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/contactTags/getContactsTagByContactId/4752052",
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print([t["tagName"] for t in r.json()])
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/contactTags/getContactsTagByContactId/<id-do-contato>
+GET https://apiv3.ihelpchat.com/api/v2/contactTags/getContactsTagByContactId/4752052
+```
+
+</CodeTabs>
+
+## Resposta
+
+A resposta é a lista direto, sem o envelope `dados`.
+
+<Response status="200 OK">
+
+```json
+[
+    {
+        "id": 203434,
+        "contatoId": 4752052,
+        "nomeContato": "Gian - iHelp",
+        "tagsId": 34,
+        "tagName": "Processo seletivo",
+        "color": "#89CFF0",
+        "empresaId": 1
+    },
+    {
+        "id": 203435,
+        "contatoId": 4752052,
+        "nomeContato": "Gian - iHelp",
+        "tagsId": 279,
+        "tagName": "FECHAMENTO",
+        "color": "#EADDCA",
+        "empresaId": 1
+    }
+]
+```
+
+</Response>
+
+## Campos relevantes
+
+<Fields>
+<Field name="[].tagsId">
+ID da tag (ex: `279` para `FECHAMENTO`). É o mesmo `id` que a tag tem em `contato.tags` do atendimento.
+</Field>
+<Field name="[].id">
+ID do vínculo entre o contato e a tag (ex: `203435`), não da tag.
+</Field>
+<Field name="[].tagName">
+Nome da tag.
+</Field>
+<Field name="[].color">
+Cor da tag em hexadecimal (ex: `#89CFF0`).
+</Field>
+</Fields>

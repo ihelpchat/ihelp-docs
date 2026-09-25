@@ -1,0 +1,4 @@
+{
+  "title": "Contatos",
+  "pages": ["buscar-contatos", "buscar-detalhes-do-contato", "buscar-tags-do-contato"]
+}

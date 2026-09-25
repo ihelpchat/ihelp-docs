@@ -1,0 +1,162 @@
+---
+title: "Buscar contatos"
+description: "Lista os contatos da empresa que batem com um trecho do nome ou do número, com paginação."
+source: api
+contentType: referencia
+method: GET
+endpoint: /contacts
+---
+
+Lista os contatos da empresa que batem com um trecho do nome ou do número, com paginação.
+
+## Parâmetros
+
+<Params>
+<Param name="searchData" type="string">
+Trecho do nome ou do número do contato. Casa em qualquer parte: `9969` encontra `5517936189969` e `raul` encontra `Braulio`.
+</Param>
+<Param name="page" type="number">
+Página, começando em `1`.
+</Param>
+<Param name="limit" type="number">
+Contatos por página. Os exemplos usam `20`.
+</Param>
+</Params>
+
+## Exemplo
+
+<CodeTabs labels={["cURL", "Node", "Python", "URL"]}>
+
+```bash
+curl -G https://apiv3.ihelpchat.com/api/v2/contacts \
+  --data-urlencode "searchData=9969" \
+  --data-urlencode "page=1" \
+  --data-urlencode "limit=20" \
+  -H "Authorization: Bearer $IHELP_TOKEN"
+```
+
+```js
+const params = new URLSearchParams({ searchData: '9969', page: '1', limit: '20' });
+
+const res = await fetch(`https://apiv3.ihelpchat.com/api/v2/contacts?${params}`, {
+  headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` },
+});
+
+const { dados } = await res.json();
+console.log(dados[0].nome);
+```
+
+```python
+import os, requests
+
+r = requests.get(
+    "https://apiv3.ihelpchat.com/api/v2/contacts",
+    params={"searchData": "9969", "page": 1, "limit": 20},
+    headers={"Authorization": f"Bearer {os.environ['IHELP_TOKEN']}"},
+    timeout=15,
+)
+print(r.json()["dados"][0]["nome"])
+```
+
+```http
+GET https://apiv3.ihelpchat.com/api/v2/contacts?page=1&limit=20&searchData=<nome-ou-numero>
+GET https://apiv3.ihelpchat.com/api/v2/contacts?page=1&limit=20&searchData=9969
+```
+
+</CodeTabs>
+
+<Callout type="warn" title="Contato não é atendimento">
+O `idRef` retornado aqui é do **contato** (ex: `696fcae1594bdd140221c328`), não do atendimento. Para enviar mensagem, use o `idRef` do atendimento (ex: `69ea67a0ab43821f9dcb3976`), obtido em [Buscar atendimento pelo telefone](/api/atendimentos/buscar-atendimento-por-telefone).
+</Callout>
+
+## Resposta
+
+Busca por número, `searchData=9969`:
+
+<Response status="200 OK">
+
+```json
+{
+    "dados": [
+        {
+            "id": 4752052,
+            "nome": "Gian - iHelp",
+            "idRef": "696fcae1594bdd140221c328",
+            "numero": "5517936189969",
+            "dataCriacao": "20/01/2026",
+            "linkedTags": "IA desligada",
+            "empresaId": 1,
+            "childContactsNumber": 0
+        }
+    ]
+}
+```
+
+</Response>
+
+Busca por nome, `searchData=raul` (trecho da resposta). Campos sem valor não vêm no JSON: o primeiro contato não tem `email` nem `linkedTags`.
+
+<Response status="200 OK">
+
+```json
+{
+    "dados": [
+        {
+            "id": 3606734,
+            "nome": "Braulio",
+            "idRef": "682ce3d56b180bd7df6ffd9e",
+            "numero": "553183160000",
+            "dataCriacao": "20/05/2025",
+            "empresaId": 1,
+            "childContactsNumber": 0
+        },
+        {
+            "id": 180112,
+            "nome": "Braulio | HA Call Center",
+            "idRef": "61fbf3cefc7c1be1a5ff9a92",
+            "email": "",
+            "numero": "5521981988888",
+            "dataCriacao": "03/02/2022",
+            "linkedTags": "PRIORIDADE",
+            "empresaId": 1,
+            "childContactsNumber": 0
+        },
+        {
+            "id": 930925,
+            "nome": "Raul | Rodobens",
+            "idRef": "64c7f2544709d8124cf6287d",
+            "email": "",
+            "numero": "5514991917777",
+            "dataCriacao": "00/00/0000",
+            "empresaId": 1,
+            "childContactsNumber": 0,
+            "responsableDepartment": "Financeiro"
+        }
+    ]
+}
+```
+
+</Response>
+
+## Campos relevantes
+
+<Fields>
+<Field name="dados[].id">
+ID numérico do contato (ex: `4752052`). É o mesmo `contatoId` que aparece no atendimento. Use em [Buscar tags do contato](/api/contatos/buscar-tags-do-contato).
+</Field>
+<Field name="dados[].idRef">
+Identificador do contato. Use em [Buscar detalhes do contato](/api/contatos/buscar-detalhes-do-contato). Não serve para enviar mensagem.
+</Field>
+<Field name="dados[].numero">
+Número com DDI e DDD, sem máscara (ex: `5517936189969`).
+</Field>
+<Field name="dados[].dataCriacao">
+Data de criação no formato `DD/MM/AAAA`. Contatos antigos podem vir com `00/00/0000`.
+</Field>
+<Field name="dados[].linkedTags">
+Tags do contato em texto (ex: `IA desligada`). Não vem quando o contato não tem tag.
+</Field>
+<Field name="dados[].responsableDepartment">
+Departamento responsável pelo contato (ex: `Financeiro`). Só vem quando definido.
+</Field>
+</Fields>
