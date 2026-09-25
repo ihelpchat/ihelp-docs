@@ -59,6 +59,10 @@ Valor do campo, em texto.
 </Param>
 </Params>
 
+<Callout type="note" title="Não existe funnelId na criação">
+Diferente de [Mover por telefone](/api/crm/movimentacao/mover-por-telefone), que recebe `funnelId` e `stageId`, este endpoint recebe só `stageId`. O funil vem da etapa: cada etapa pertence a um único funil, então `"stageId": 1461` já cria o card no funil `337`, dono dessa etapa. Se você mandar `funnelId` no corpo, a API ignora sem avisar.
+</Callout>
+
 ## Exemplo
 
 <CodeTabs labels={["cURL", "Node", "Python", "HTTP"]}>

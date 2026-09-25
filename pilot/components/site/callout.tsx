@@ -7,6 +7,7 @@ const kinds = {
   warning: { icon: AlertTriangle, label: 'Atenção' },
   error: { icon: OctagonAlert, label: 'Importante' },
   idea: { icon: Lightbulb, label: 'Dica' },
+  note: { icon: Lightbulb, label: 'Nota' },
   success: { icon: Info, label: 'Pronto' },
 } as const;
 
