@@ -16,10 +16,9 @@ await writeFile(catalogPath, JSON.stringify(fixtureCatalog));
 const { generateContentPackage, planContent, normalizeCatalogLabel } = await import(new URL(`file://${join(testRoot, 'mcp/content-ai-service.mjs')}`));
 const { renderArticle } = await import(new URL(`file://${join(testRoot, 'mcp/content-service.mjs')}`));
 assert.deepEqual(normalizeCatalogLabel({ id: 'abrir-relatorios', label: 'Label inventado', route: '/relatorio', target: null }), { id: 'abrir-relatorios', label: 'Abrir Relatórios', route: '/relatorio', target: null });
-for (const divergent of [
-  { id: 'importar-contatos', label: 'Label inventado', route: '/relatorio', target: 'contacts-more-options' },
-  { id: 'importar-contatos', label: 'Label inventado', route: '/contact', target: 'outro-alvo' },
-]) assert.deepEqual(normalizeCatalogLabel(divergent), divergent, 'destino divergente não pode receber label confiável');
+const divergentRoute = { id: 'importar-contatos', label: 'Label inventado', route: '/relatorio', target: 'contacts-more-options' };
+assert.deepEqual(normalizeCatalogLabel(divergentRoute), divergentRoute, 'route divergente não pode receber ação confiável');
+assert.deepEqual(normalizeCatalogLabel({ id: 'importar-contatos', label: 'Label inventado', route: '/contact', target: 'outro-alvo' }), { id: 'importar-contatos', label: 'Abrir a tela Contatos', route: '/contact', target: 'contacts-more-options' }, 'label e target vêm do catálogo');
 
 const aiClient = {
   responses: {

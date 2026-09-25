@@ -68,16 +68,19 @@ async function loadTs(path) {
 const { normalizeReply } = await loadTs('../lib/assistant.ts');
 const { productActionUrl } = await loadTs('../lib/links.ts');
 const good = { id: 'abrir-canais', route: actions['abrir-canais'].route, label: 'Outro' };
+const minimal = { id: good.id, route: good.route };
+const differentTarget = { ...good, target: 'alvo-inventado' };
 const badRoute = { ...good, route: '/atendimento' };
 const badHref = { ...good, href: 'https://example.test' };
-for (const input of [good, badRoute, badHref]) {
-  const expected = input === good ? { id: good.id, ...actions[good.id] } : null;
+for (const input of [good, minimal, differentTarget, badRoute, badHref]) {
+  const expected = input === good || input === minimal || input === differentTarget ? { id: good.id, ...actions[good.id] } : null;
   assert.deepEqual(resolveCatalogAction(input), expected);
   if (input === badHref) assert.throws(() => parseProductAction(input), 'schema recusa href');
   else assert.deepEqual(parseProductAction(input), expected, 'schema segue o resolver');
+  if (expected) assert.deepEqual(parseAssistantReply({ answer: 'Abra Canais.', steps: [{ text: 'Abra Canais.', action: input }] }).steps[0].action, expected, 'resposta v1 normaliza ação');
   assert.equal(isCatalogAction(input), Boolean(expected), 'MCP segue o resolver');
   assert.deepEqual(normalizeReply({ answer: 'Abra Canais.', steps: [{ text: 'Abra Canais.', action: input }] }).steps[0].action, expected ?? undefined, 'UI segue o resolver');
-  assert.equal(Boolean(productActionUrl(input.route, input.id, input.target)), Boolean(expected), 'link segue o resolver');
+  assert.equal(Boolean(productActionUrl(input)), Boolean(expected), 'link segue o resolver, inclusive campos extras');
 }
 assert.equal(resolveCatalogAction({ id: 'inventada', route: '/bot' }), null);
 execFileSync(process.execPath, ['scripts/generate-conversation-types.mjs', '--check'], { cwd: root, stdio: 'pipe' });

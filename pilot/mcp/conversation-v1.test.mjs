@@ -40,13 +40,13 @@ assert.throws(() => parseAssistantRequest({ ...request, guide: { ...state, stepI
 for (const bad of [
   { ...reply, extra: true },
   { ...reply, actions: [{ id: 'inventada', label: 'Inventada', route: '/admin' }] },
-  { ...reply, actions: [{ ...reply.actions[0], target: 'inventado' }] },
 ]) {
   assert.throws(() => parseAssistantReply(bad));
   assert.throws(() => validateConversationReply(bad));
 }
-assert.equal(resolveGuideId('abrir-canais'), 'reconectar-canal-qr');
-assert.equal(resolveGuideId('importar-contatos'), 'importar-contatos');
+assert.deepEqual(parseAssistantReply({ ...reply, actions: [{ ...reply.actions[0], target: 'inventado' }] }).actions, reply.actions, 'target vem do catálogo');
+assert.equal(resolveGuideId('abrir-canais'), null, 'alias ambíguo só navega');
+assert.equal(resolveGuideId('importar-contatos'), null, 'alias ambíguo só navega');
 assert.equal(resolveGuideId('reconectar-canal-qr'), 'reconectar-canal-qr');
 assert.equal(resolveGuideId('desconhecido'), null);
 execFileSync(process.execPath, ['scripts/generate-conversation-types.mjs', '--check'], { cwd: new URL('../', import.meta.url), stdio: 'pipe' });

@@ -449,12 +449,18 @@ assert.equal(validateArticle(articleWithAction).valid, true, 'ação idêntica a
 for (const action of [
   { ...trustedAction, id: 'acao-inventada' },
   { ...trustedAction, route: '/reports' },
-  { ...trustedAction, target: 'wrong-target' },
-  { ...trustedAction, label: 'Importar contatos automaticamente' },
 ]) {
   const invalid = { ...articleWithAction, productActions: [action] };
   assert.equal(validateArticle(invalid).valid, false, `ação divergente deve falhar: ${JSON.stringify(action)}`);
   assert.throws(() => renderArticle(invalid), /productActions/, 'ação inválida não pode ser renderizada');
+}
+for (const action of [
+  { ...trustedAction, target: 'wrong-target' },
+  { ...trustedAction, label: 'Importar contatos automaticamente' },
+]) {
+  const normalized = { ...articleWithAction, productActions: [action] };
+  assert.equal(validateArticle(normalized).valid, true, 'id e route válidos aceitam normalização');
+  assert.match(renderArticle(normalized), /<ProductAction id="importar-contatos" label="Abrir a tela Contatos" route="\/contact" target="contacts-more-options" \/>/, 'MDX publica label e target do catálogo');
 }
 
 const modelWithAction = (actionId, path) => ({ responses: { create: async () => ({
@@ -463,10 +469,10 @@ const modelWithAction = (actionId, path) => ({ responses: { create: async () => 
 const invented = await answerQuestion(testRoot, 'importar contatos', { client: modelWithAction('acao-inventada', '/docs/teste/importar-contatos') });
 assert.equal(invented.steps[0].action, undefined, 'actionId inventado não pode usar a primeira ação da fonte');
 
-for (const [slug, route, target] of [['rota-divergente', '/reports', 'contacts-more-options'], ['alvo-divergente', '/contact', 'wrong-target']]) {
+for (const [slug, route, target, accepted] of [['rota-divergente', '/reports', 'contacts-more-options', false], ['alvo-divergente', '/contact', 'wrong-target', true]]) {
   await writeFile(join(actionDir, `${slug}.mdx`), `---\ntitle: "${slug}"\ndescription: "Guia para verificar ação de produto com ${slug}."\nsource: produto\ncontentType: tutorial\n---\n\nAbra Contatos para ${slug.replace('-', ' ')}.\n\n<ProductAction id="importar-contatos" label="Abrir Contatos" route="${route}" target="${target}" />\n`);
   const reply = await answerQuestion(testRoot, slug.replace('-', ' '), { client: modelWithAction('importar-contatos', `/docs/teste/${slug}`) });
-  assert.equal(reply.steps[0].action, undefined, `${slug} não pode virar ação`);
+  assert.deepEqual(reply.steps[0].action, accepted ? trustedAction : undefined, `${slug} segue o catálogo`);
 }
 await writeFile(join(actionDir, 'sem-acao.mdx'), `---\ntitle: "Importar contatos sem ação"\ndescription: "Artigo de importação sem CTA de produto."\nsource: produto\ncontentType: faq\n---\n\nAbra Contatos e veja as opções de importação.\n`);
 const wrongSource = await answerQuestion(testRoot, 'importar contatos', { client: modelWithAction('importar-contatos', '/docs/teste/sem-acao') });
