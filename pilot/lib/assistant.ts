@@ -1,4 +1,5 @@
 import allowedActions from '@/architecture/product-actions.json';
+export type { ActionId, GuideId, GuideV1, AssistantRequestV1, AssistantReplyV1, ProductActionV1 } from './conversation-contract.generated';
 
 /**
  * Cliente do assistente de IA.

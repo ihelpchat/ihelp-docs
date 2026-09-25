@@ -1,0 +1,7 @@
+# Contrato de conversa e guia v1
+
+`conversation-v1.mjs` é a fonte dos validadores Zod de pedido, resposta, guia e ProductAction. `conversation-v1.schema.json` e `lib/conversation-contract.generated.ts` são gerados por `node scripts/generate-conversation-types.mjs`; `--check` impede artefatos desatualizados no `mcp:test`. O front pode consumir os tipos publicados e executar o mesmo validador; TypeScript sozinho não valida payload de rede.
+
+O campo `schemaVersion` vale `1`. `guideId` identifica o guia, `stepId` identifica um passo dentro da versão positiva do guia, `actionId` identifica uma das oito ações do catálogo, `mode` vale `real` ou `treino`, e `choices` define apenas IDs e destinos declarativos. Campos adicionais, inclusive `condition` ou código executável, são recusados. `pendingChoiceId` e `choiceId` registram a decisão pendente e a escolha feita; nenhum deles concede acesso ou executa ação. A autorização e a existência do passo na versão publicada precisam ser conferidas pelo consumidor do guia.
+
+Links antigos `?ihelpGuide=<actionId>` são resolvidos por `resolveGuideId`. O alias `abrir-canais` aponta para `reconectar-canal-qr` como destino de transição; links antigos não carregam o artigo de origem, então a tela de destino deve oferecer escolha quando o tema for outro. IDs desconhecidos retornam `null`. Os links antigos continuam sendo emitidos enquanto o app não consome o catálogo de guias; a migração do produtor de links fica com a integração do front.
