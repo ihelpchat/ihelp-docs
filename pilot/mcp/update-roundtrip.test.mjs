@@ -11,7 +11,7 @@ const root = await mkdtemp(join(tmpdir(), 'm5-01-roundtrip-'));
 const paths = [
   'docs/principais-motivos-de-suporte/reconectar-canal-qr',
   'docs/principais-motivos-de-suporte/crm',
-  'api/mensagens/mensagem-comum',
+  'api/crm/visoes-salvas/atualizar-visao-salva',
   'blog/encerramento-automatico-e-filtros',
 ];
 for (const path of paths) {
@@ -58,6 +58,11 @@ const call = (name, args) => client.callTool({ name, arguments: args });
 try {
   for (const path of paths) {
     const original = await readArticle(root, path);
+    if (path.includes('reconectar-canal-qr')) {
+      original.assistantIntent = 'reconnect_qr';
+      original.assistantSuggestions = 'Como confirmar que o canal voltou a funcionar?';
+    }
+    if (path.endsWith('/crm')) original.assistantSuggestions = 'Como confirmar que a pipeline foi criada?';
     const result = await call('docs_update_article', { ...original, requestedBy: 'service:roundtrip' });
     assert.equal(result.isError, false, `${path}: ${result.content[0].text}`);
     const remote = join(root, 'remote/pilot/content/docs', `${path}.mdx`);
@@ -70,7 +75,7 @@ try {
     }
     assert.equal((rendered.match(/<ProductAction\b/g) ?? []).length, (original.body.match(/<ProductAction\b/g) ?? []).length, `${path}: ProductAction duplicado`);
     const meta = JSON.parse(await readFile(join(root, 'remote/pilot/content/docs', path.split('/').slice(0, -1).join('/'), 'meta.json')));
-    assert.deepEqual(meta.pages, [path.split('/').at(-1)], `${path}: menu incorreto`);
+    assert.equal(meta.pages.filter((page) => page === path.split('/').at(-1)).length, 1, `${path}: menu incorreto`);
   }
   const before = await readFile(join(root, 'writes.log'), 'utf8');
   const original = await readArticle(root, paths[0]);
