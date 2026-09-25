@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { readArticle } from './editorial-standard.mjs';
+import { parseDocument } from 'yaml';
+import { docsPageSchema } from '../lib/docs-page-schema.mjs';
 
 const sourceRoot = new URL('../', import.meta.url).pathname;
 const root = await mkdtemp(join(tmpdir(), 'm5-01-roundtrip-'));
@@ -58,15 +60,28 @@ const call = (name, args) => client.callTool({ name, arguments: args });
 try {
   for (const path of paths) {
     const original = await readArticle(root, path);
+    const originalMdx = await readFile(join(root, 'content/docs', `${path}.mdx`), 'utf8');
+    const originalYaml = parseDocument(originalMdx.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '').toJS();
     if (path.includes('reconectar-canal-qr')) {
       original.assistantIntent = 'reconnect_qr';
       original.assistantSuggestions = 'Como confirmar que o canal voltou a funcionar?';
+      originalYaml.assistantIntent = original.assistantIntent;
+      originalYaml.assistantSuggestions = original.assistantSuggestions;
     }
-    if (path.endsWith('/crm')) original.assistantSuggestions = 'Como confirmar que a pipeline foi criada?';
+    if (path.endsWith('/crm')) {
+      original.assistantSuggestions = 'Como confirmar que a pipeline foi criada?';
+      originalYaml.assistantSuggestions = original.assistantSuggestions;
+    }
     const result = await call('docs_update_article', { ...original, requestedBy: 'service:roundtrip' });
     assert.equal(result.isError, false, `${path}: ${result.content[0].text}`);
     const remote = join(root, 'remote/pilot/content/docs', `${path}.mdx`);
     const rendered = await readFile(remote, 'utf8');
+    const frontmatter = parseDocument(rendered.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '').toJS();
+    const parsed = docsPageSchema.safeParse(frontmatter);
+    assert.equal(parsed.success, true, `${path}: MDX gerado falha no schema real da Central: ${parsed.success ? '' : parsed.error.message}`);
+    for (const [key, value] of Object.entries(originalYaml)) {
+      assert.deepEqual(frontmatter[key], value, `${path}: tipo YAML de ${key} mudou`);
+    }
     const updated = join(root, 'content/docs', `${path}.mdx`);
     await writeFile(updated, rendered);
     const reread = await readArticle(root, path);
@@ -78,10 +93,13 @@ try {
     assert.equal(meta.pages.filter((page) => page === path.split('/').at(-1)).length, 1, `${path}: menu incorreto`);
   }
   const individual = await readArticle(root, paths[0]);
+  individual.fixtureEnabled = true;
   const newPath = 'docs/principais-motivos-de-suporte/novo-guia';
   const submitted = await call('docs_submit_article', { ...individual, path: newPath, productActions: [{ id: 'abrir-canais', label: 'Abrir a tela Canais', route: '/configuracoes/channel' }], mode: 'pull_request', requestedBy: 'service:roundtrip' });
   assert.equal(submitted.isError, false, `submit individual: ${submitted.content[0].text}`);
   const individualMdx = await readFile(join(root, 'remote/pilot/content/docs', `${newPath}.mdx`), 'utf8');
+  const individualFrontmatter = parseDocument(individualMdx.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '').toJS();
+  assert.equal(individualFrontmatter.fixtureEnabled, true, 'booleano do frontmatter precisa continuar booleano');
   assert.equal((individualMdx.match(/<ProductAction\b/g) ?? []).length, 1, 'ProductAction inline e estruturado não podem duplicar');
   const individualMeta = JSON.parse(await readFile(join(root, 'remote/pilot/content/docs/docs/principais-motivos-de-suporte/meta.json')));
   assert.equal(individualMeta.pages.filter((page) => page === 'novo-guia').length, 1, 'submit individual precisa atualizar meta.json pelo pacote');
