@@ -4,6 +4,7 @@ import { basename, join, normalize, relative } from 'node:path';
 import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 import { isCatalogAction } from './product-actions.mjs';
 import { conversationalIssues } from './conversational-contract.mjs';
+import { stringify } from 'yaml';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -111,12 +112,12 @@ export function renderArticle(article) {
   const serializedSuggestions = article.assistantSuggestions?.some((item) => item.includes('|'))
     ? JSON.stringify(article.assistantSuggestions)
     : escapeYaml(article.assistantSuggestions?.join(' | ') ?? '');
-  const reserved = new Set(['path', 'body', 'title', 'description', 'source', 'contentType', 'tangoUrl', 'productActions']);
-  const metadata = Object.entries(article).filter(([key, value]) => !reserved.has(key) && value !== undefined)
-    .map(([key, value]) => `${key}: ${key === 'assistantSuggestions' ? serializedSuggestions : typeof value === 'string' ? escapeYaml(value) : JSON.stringify(value)}`).join('\n');
+  const reserved = new Set(['path', 'body', 'tangoUrl', 'productActions']);
+  const metadata = Object.fromEntries(Object.entries(article).filter(([key, value]) => !reserved.has(key) && value !== undefined));
+  if (metadata.assistantSuggestions) metadata.assistantSuggestions = serializedSuggestions.startsWith('[') ? serializedSuggestions : JSON.parse(serializedSuggestions);
   const embeddedAction = /<ProductAction\b[^>]*\/>/g;
   const body = article.productActions?.length ? article.body.replace(embeddedAction, '').trim() : article.body.trim();
-  return `---\ntitle: ${escapeYaml(article.title)}\ndescription: ${escapeYaml(article.description)}\nsource: ${article.source}\ncontentType: ${article.contentType}\n${metadata ? `${metadata}\n` : ''}---\n\n${body}${actionBlock}${tutorial}\n`;
+  return `---\n${stringify(metadata, { lineWidth: 0 })}---\n\n${body}${actionBlock}${tutorial}\n`;
 }
 
 async function walk(root) {
@@ -342,7 +343,7 @@ function safeArticleList(articles, deletes = []) {
     const reserved = new Set(['path', 'body', 'productActions', 'tangoUrl']);
     for (const [key, value] of Object.entries(article)) {
       if (reserved.has(key)) continue;
-      if (!/^[A-Za-z][A-Za-z0-9]*$/.test(key) || (typeof value !== 'string' && typeof value !== 'number' && !(key === 'assistantSuggestions' && Array.isArray(value)))) {
+      if (!/^[A-Za-z][A-Za-z0-9]*$/.test(key) || (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean' && !(Array.isArray(value) && value.every((item) => typeof item === 'string')))) {
         throw new SubmitArticleError('INVALID_PACKAGE', `Metadado inválido: ${key}`);
       }
     }

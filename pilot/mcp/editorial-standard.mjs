@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join, normalize, relative } from 'node:path';
 import { conversationalIssues, parseAssistantSuggestions } from './conversational-contract.mjs';
+import { parseDocument } from 'yaml';
 
 const GENERIC_DESCRIPTION = /^(?:Entenda .+ e veja como usar esse recurso no iHelp\.|Referência técnica da API do iHelp para .+\.)$/i;
 const LEGACY_TUTORIAL = /\n+(?:(?:\*\*\*|---)\n+\n+)?## Tutorial Guiado\n+\n+Prefere seguir o passo a passo interativo\?[^\n]*(?:\n|$)/gi;
@@ -287,5 +288,9 @@ export async function readArticle(root, contentPath) {
     throw error;
   }
   const article = parseArticle(raw, contentPath);
-  return { path: contentPath, ...article.metadata, body: article.body };
+  const frontmatter = raw.match(/^---\n([\s\S]*?)\n---\n?/);
+  const document = frontmatter ? parseDocument(frontmatter[1]) : null;
+  if (document?.errors.length) throw new Error('frontmatter YAML inválido');
+  const metadata = document?.toJS() ?? article.metadata;
+  return { path: contentPath, ...metadata, body: article.body };
 }
