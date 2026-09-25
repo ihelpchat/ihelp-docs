@@ -1,0 +1,955 @@
+{
+  "schemaVersion": 1,
+  "schemas": {
+    "GuideV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "guideId": {
+          "type": "string",
+          "enum": [
+            "guia-importar-contatos",
+            "robo-de-atendimento",
+            "usuario-acesso",
+            "reconectar-canal-qr",
+            "campanhas",
+            "permissoes-departamentos",
+            "arquivos",
+            "crm"
+          ]
+        },
+        "version": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "real",
+            "treino"
+          ]
+        },
+        "initialStepId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+        },
+        "steps": {
+          "minItems": 1,
+          "maxItems": 40,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "stepId": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              "actionId": {
+                "type": "string",
+                "enum": [
+                  "importar-contatos",
+                  "abrir-robos",
+                  "abrir-usuarios",
+                  "abrir-canais",
+                  "abrir-campanhas",
+                  "abrir-departamentos",
+                  "abrir-atendimento",
+                  "abrir-crm"
+                ]
+              },
+              "choices": {
+                "maxItems": 6,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "nextStepId": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "stepId",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "guideId",
+        "version",
+        "mode",
+        "initialStepId",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    "AssistantRequestV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "sessionId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]{8,128}$"
+        },
+        "history": {
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "user",
+                  "assistant"
+                ]
+              },
+              "content": {
+                "type": "string",
+                "maxLength": 20000
+              }
+            },
+            "required": [
+              "role",
+              "content"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "Tudo",
+            "Ajuda e FAQ",
+            "API",
+            "Tutoriais",
+            "Novidades"
+          ]
+        },
+        "page": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^\\/(?!\\/)[a-z0-9/_-]+$"
+            },
+            "title": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "path",
+            "title"
+          ],
+          "additionalProperties": false
+        },
+        "widgetContext": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "faq",
+                "app"
+              ]
+            },
+            "route": {
+              "type": "string",
+              "enum": [
+                "/contact",
+                "/bot",
+                "/configuracoes/user",
+                "/configuracoes/channel",
+                "/campanhas",
+                "/configuracoes/department",
+                "/atendimento",
+                "/crm/pipeline"
+              ]
+            },
+            "module": {
+              "type": "string",
+              "enum": [
+                "robots",
+                "users",
+                "channels",
+                "billing",
+                "campaigns",
+                "templates",
+                "conversations",
+                "settings"
+              ]
+            },
+            "screen": {
+              "type": "string",
+              "enum": [
+                "list",
+                "create",
+                "edit",
+                "detail",
+                "connection",
+                "qr",
+                "unknown"
+              ]
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "owner",
+                "admin",
+                "manager",
+                "agent",
+                "unknown"
+              ]
+            },
+            "permissions": {
+              "maxItems": 12,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "robots.read",
+                  "robots.create",
+                  "users.read",
+                  "users.manage",
+                  "channels.read",
+                  "channels.manage",
+                  "billing.read",
+                  "campaigns.read",
+                  "campaigns.create",
+                  "templates.read",
+                  "templates.manage"
+                ]
+              }
+            },
+            "plan": {
+              "type": "string",
+              "enum": [
+                "trial",
+                "active",
+                "expired",
+                "limited",
+                "unknown"
+              ]
+            },
+            "channels": {
+              "maxItems": 5,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "whatsapp",
+                      "official_api",
+                      "coexistence"
+                    ]
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "connected",
+                      "disconnected",
+                      "qr_pending",
+                      "blocked",
+                      "syncing",
+                      "unknown"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "state"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "credit": {
+              "type": "string",
+              "enum": [
+                "available",
+                "low",
+                "empty",
+                "unknown"
+              ]
+            },
+            "templates": {
+              "type": "string",
+              "enum": [
+                "none",
+                "pending",
+                "approved",
+                "rejected",
+                "unknown"
+              ]
+            },
+            "incidents": {
+              "maxItems": 5,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "channel_outage",
+                  "message_delivery",
+                  "billing",
+                  "robot",
+                  "app"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "guide": {
+          "type": "object",
+          "properties": {
+            "guideId": {
+              "type": "string",
+              "enum": [
+                "guia-importar-contatos",
+                "robo-de-atendimento",
+                "usuario-acesso",
+                "reconectar-canal-qr",
+                "campanhas",
+                "permissoes-departamentos",
+                "arquivos",
+                "crm"
+              ]
+            },
+            "stepId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+            },
+            "version": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "real",
+                "treino"
+              ]
+            },
+            "pendingChoiceId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+            },
+            "pendingChoice": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+            },
+            "choiceId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+            }
+          },
+          "required": [
+            "guideId",
+            "stepId",
+            "version",
+            "mode"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "question"
+      ],
+      "additionalProperties": false
+    },
+    "AssistantReplyV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "answer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "title",
+              "items"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "action": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": [
+                      "importar-contatos",
+                      "abrir-robos",
+                      "abrir-usuarios",
+                      "abrir-canais",
+                      "abrir-campanhas",
+                      "abrir-departamentos",
+                      "abrir-atendimento",
+                      "abrir-crm"
+                    ]
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "route": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "route"
+                ],
+                "additionalProperties": false
+              },
+              "image": {
+                "type": "object",
+                "properties": {
+                  "src": {
+                    "type": "string"
+                  },
+                  "alt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "src",
+                  "alt"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "code": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "language": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "language",
+                "content"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^\\/(?!\\/)[a-z0-9/_-]+$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "Ajuda",
+                  "FAQ",
+                  "API",
+                  "Tutorial",
+                  "Novidade"
+                ]
+              },
+              "excerpt": {
+                "type": "string"
+              },
+              "media": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "video",
+                      "tango"
+                    ]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "embedUrl": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "url"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "title",
+              "path"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resolution": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial",
+            "not_found"
+          ]
+        },
+        "found": {
+          "type": "boolean"
+        },
+        "diagnosis": {
+          "type": "object",
+          "properties": {
+            "cause": {
+              "type": "string",
+              "enum": [
+                "usage",
+                "configuration",
+                "permission",
+                "plan",
+                "channel_qr",
+                "meta_coexistence",
+                "bug_incident",
+                "sensitive_action"
+              ]
+            }
+          },
+          "required": [
+            "cause"
+          ],
+          "additionalProperties": false
+        },
+        "escalation": {
+          "type": "object",
+          "properties": {
+            "intent": {
+              "type": "string",
+              "enum": [
+                "create_robot",
+                "manage_users",
+                "connect_channel",
+                "billing",
+                "campaigns",
+                "templates",
+                "departments",
+                "files",
+                "crm",
+                "get_help"
+              ]
+            },
+            "diagnosis": {
+              "type": "string",
+              "enum": [
+                "usage",
+                "configuration",
+                "permission",
+                "plan",
+                "channel_qr",
+                "meta_coexistence",
+                "bug_incident",
+                "sensitive_action"
+              ]
+            },
+            "state": {
+              "type": "object",
+              "properties": {
+                "surface": {
+                  "type": "string",
+                  "enum": [
+                    "faq",
+                    "app"
+                  ]
+                },
+                "route": {
+                  "type": "string",
+                  "enum": [
+                    "/contact",
+                    "/bot",
+                    "/configuracoes/user",
+                    "/configuracoes/channel",
+                    "/campanhas",
+                    "/configuracoes/department",
+                    "/atendimento",
+                    "/crm/pipeline"
+                  ]
+                },
+                "module": {
+                  "type": "string",
+                  "enum": [
+                    "robots",
+                    "users",
+                    "channels",
+                    "billing",
+                    "campaigns",
+                    "templates",
+                    "conversations",
+                    "settings"
+                  ]
+                },
+                "screen": {
+                  "type": "string",
+                  "enum": [
+                    "list",
+                    "create",
+                    "edit",
+                    "detail",
+                    "connection",
+                    "qr",
+                    "unknown"
+                  ]
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "owner",
+                    "admin",
+                    "manager",
+                    "agent",
+                    "unknown"
+                  ]
+                },
+                "permissions": {
+                  "maxItems": 12,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "robots.read",
+                      "robots.create",
+                      "users.read",
+                      "users.manage",
+                      "channels.read",
+                      "channels.manage",
+                      "billing.read",
+                      "campaigns.read",
+                      "campaigns.create",
+                      "templates.read",
+                      "templates.manage"
+                    ]
+                  }
+                },
+                "plan": {
+                  "type": "string",
+                  "enum": [
+                    "trial",
+                    "active",
+                    "expired",
+                    "limited",
+                    "unknown"
+                  ]
+                },
+                "channels": {
+                  "maxItems": 5,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "whatsapp",
+                          "official_api",
+                          "coexistence"
+                        ]
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "connected",
+                          "disconnected",
+                          "qr_pending",
+                          "blocked",
+                          "syncing",
+                          "unknown"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "credit": {
+                  "type": "string",
+                  "enum": [
+                    "available",
+                    "low",
+                    "empty",
+                    "unknown"
+                  ]
+                },
+                "templates": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "pending",
+                    "approved",
+                    "rejected",
+                    "unknown"
+                  ]
+                },
+                "incidents": {
+                  "maxItems": 5,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "channel_outage",
+                      "message_delivery",
+                      "billing",
+                      "robot",
+                      "app"
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "attempts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "documented_guide",
+                  "reported_stuck"
+                ]
+              }
+            }
+          },
+          "required": [
+            "intent",
+            "diagnosis",
+            "attempts"
+          ],
+          "additionalProperties": false
+        },
+        "guide": {
+          "type": "object",
+          "properties": {
+            "guideId": {
+              "type": "string",
+              "enum": [
+                "guia-importar-contatos",
+                "robo-de-atendimento",
+                "usuario-acesso",
+                "reconectar-canal-qr",
+                "campanhas",
+                "permissoes-departamentos",
+                "arquivos",
+                "crm"
+              ]
+            },
+            "stepId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+            },
+            "version": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "real",
+                "treino"
+              ]
+            },
+            "pendingChoiceId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+            },
+            "pendingChoice": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+            },
+            "choiceId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+            }
+          },
+          "required": [
+            "guideId",
+            "stepId",
+            "version",
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "actions": {
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "enum": [
+                  "importar-contatos",
+                  "abrir-robos",
+                  "abrir-usuarios",
+                  "abrir-canais",
+                  "abrir-campanhas",
+                  "abrir-departamentos",
+                  "abrir-atendimento",
+                  "abrir-crm"
+                ]
+              },
+              "label": {
+                "type": "string"
+              },
+              "route": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "route"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "model": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "answer"
+      ],
+      "additionalProperties": false
+    },
+    "ProductActionV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": [
+            "importar-contatos",
+            "abrir-robos",
+            "abrir-usuarios",
+            "abrir-canais",
+            "abrir-campanhas",
+            "abrir-departamentos",
+            "abrir-atendimento",
+            "abrir-crm"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "route": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "route"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

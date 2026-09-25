@@ -8,8 +8,11 @@ import ts from 'typescript';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 
 const require = createRequire(import.meta.url);
+assert.equal(parseAssistantRequest({ question: 'sim', sessionId: 'session-valid-123' }).sessionId, 'session-valid-123',
+  'contrato v1 preserva o ID usado pelo limite da conversa');
 
 const scratch = await mkdtemp(join(tmpdir(), 'claricia-limits-'));
 const fakeOpenAI = createServer((_request, response) => response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({

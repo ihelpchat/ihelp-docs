@@ -7,7 +7,7 @@ import { answerQuestion, retrieveContext } from './assistant-service.mjs';
 
 const uiSource = await readFile(new URL('../lib/assistant.ts', import.meta.url), 'utf8');
 const actions = await readFile(new URL('../architecture/product-actions.json', import.meta.url), 'utf8');
-const compiled = ts.transpileModule(uiSource.replace("import allowedActions from '@/architecture/product-actions.json';", `const allowedActions = ${actions};`), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+const compiled = ts.transpileModule(uiSource.replace("import allowedActions from '@/architecture/product-actions.json';", `const allowedActions = ${actions};`).replace("from '../architecture/catalog-action.mjs'", `from '${new URL('../architecture/catalog-action.mjs', import.meta.url).href}'`), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 const { normalizeReply, supportMessageFor } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 
 const root = new URL('../', import.meta.url).pathname;
@@ -118,7 +118,7 @@ for (const [question, slug, intent, action, count, moduleName] of cases) {
     const normalized = normalizeReply({ ...overview, steps: [{ text: overview.steps[0].text, action: { ...trusted, label: 'Ligue para (11) 98765-4321' } }] });
     assert.equal(normalized.steps[0].action?.label, trusted.label, `label canônico: ${question}`);
     assert.equal(normalizeReply({ ...overview, steps: [{ text: 'Ação', action: { ...trusted, route: '/outra-rota' } }] }).steps[0].action, undefined, 'route falsa é rejeitada');
-    assert.equal(normalizeReply({ ...overview, steps: [{ text: 'Ação', action: { ...trusted, target: 'alvo-falso' } }] }).steps[0].action, undefined, 'target falso é rejeitado');
+    assert.deepEqual(normalizeReply({ ...overview, steps: [{ text: 'Ação', action: { ...trusted, target: 'alvo-falso' } }] }).steps[0].action, { id: trusted.id, label: trusted.label, route: trusted.route }, 'target falso é substituído pelo catálogo');
   }
 }
 assert.equal(Object.hasOwn(JSON.parse(actions), 'abrir-cobranca'), false, 'não existe ProductAction para cobrança sem rota comprovada');
@@ -144,6 +144,6 @@ description: "Confirme a ação canônica para abrir usuários."
 1. Abra Usuários.
 `);
 const hostileSource = (await retrieveContext(fixtureRoot, 'abrir usuários com label hostil'))[0];
-assert.deepEqual(hostileSource.productActions, [{ id: 'abrir-usuarios', label: 'Abrir a tela Usuários', route: '/configuracoes/user', target: undefined }], 'MCP canonicaliza label e rejeita route/target divergentes');
+assert.deepEqual(hostileSource.productActions, [{ id: 'abrir-usuarios', label: 'Abrir a tela Usuários', route: '/configuracoes/user' }], 'MCP canonicaliza label e target, rejeita route divergente e deduplica');
 await rm(fixtureRoot, { recursive: true, force: true });
 console.log('Nove intenções de suporte: fluxo answerQuestion completo.');

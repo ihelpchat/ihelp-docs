@@ -1,4 +1,6 @@
-import allowedActions from '@/architecture/product-actions.json';
+import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
+import type { AssistantRequestV1 } from './conversation-contract.generated';
+export type { ActionId, GuideId, GuideV1, AssistantRequestV1, AssistantReplyV1, ProductActionV1 } from './conversation-contract.generated';
 
 /**
  * Cliente do assistente de IA.
@@ -48,14 +50,7 @@ export type AssistantReply = {
 
 export type AssistantHistoryItem = { role: 'user' | 'assistant'; content: string };
 
-export type AssistantRequest = {
-  question: string;
-  history: AssistantHistoryItem[];
-  scope: AssistantScope;
-  sessionId?: string;
-  page?: { path: string; title: string };
-  widgetContext?: Record<string, unknown>;
-};
+export type AssistantRequest = AssistantRequestV1;
 
 function stateSummary(state: Record<string, unknown>): string {
   const parts: string[] = [];
@@ -137,14 +132,7 @@ function strings(value: unknown, max: number) {
 }
 
 function safeAction(value: unknown): AssistantProductAction | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const action = value as Record<string, unknown>;
-  if (typeof action.id !== 'string' || !/^[a-z0-9][a-z0-9-]{2,63}$/.test(action.id)) return undefined;
-  if (typeof action.route !== 'string' || !/^\/(?!\/)[a-z0-9/_-]*$/.test(action.route)) return undefined;
-  const target = typeof action.target === 'string' && /^[a-z][a-z0-9-]{2,63}$/.test(action.target) ? action.target : undefined;
-  const allowed = (allowedActions as Record<string, { label: string; route: string; target?: string }>)[action.id];
-  if (!allowed || action.route !== allowed.route || target !== allowed.target) return undefined;
-  return { id: action.id, label: allowed.label, route: action.route, ...(target ? { target } : {}) };
+  return resolveCatalogAction(value) ?? undefined;
 }
 
 function steps(value: unknown): AssistantStep[] {
