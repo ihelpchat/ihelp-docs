@@ -79,6 +79,7 @@ export const parseGuide = (value) => guideSchema.parse(value);
 export const parseAssistantRequest = (value) => assistantRequestSchema.parse(value);
 export const parseAssistantReply = (value) => assistantReplySchema.parse(value);
 export const parseProductAction = (value) => productActionSchema.parse(value);
+export function resolveGuideLink() { throw new Error('não implementado'); }
 export function resolveGuideId(value) {
   if (typeof value !== 'string') return null;
   if (Object.hasOwn(legacyGuideAliases, value)) return legacyGuideAliases[value];
