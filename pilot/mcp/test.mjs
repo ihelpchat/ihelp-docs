@@ -216,8 +216,9 @@ try {
   const mockFetchFile = join(await mkdtemp(join(tmpdir(), 'ihelp-docs-fetch-')), 'mock.mjs');
   await writeFile(mockFetchFile, `import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
-globalThis.fetch = async (url) => {
+globalThis.fetch = async (url, init = {}) => {
   if (process.env.MOCK_GITHUB_OUTCOME === '422') return { ok: false, status: 422, text: async () => 'token=secret-from-provider' };
+  if (String(url).includes('/contents/') && (init.method ?? 'GET') === 'GET') return { ok: false, status: 404 };
   if (String(url).endsWith('/pulls')) {
     await chmod(join(process.env.DOCS_ROOT, '.audit/docs-submissions.jsonl'), 0o400);
     return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/789' }) };
