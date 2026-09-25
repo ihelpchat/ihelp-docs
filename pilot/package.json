@@ -16,7 +16,7 @@
     "content:validate": "node scripts/validate-coverage.mjs",
     "mcp:start": "node mcp/server.mjs",
     "mcp:http": "node mcp/http.mjs",
-    "mcp:test": "node mcp/test.mjs && node mcp/assistant-quality.test.mjs && node mcp/sensitive-data.test.mjs && node mcp/product-context.test.mjs && node mcp/editorial-ai.test.mjs && node mcp/conversational-guides.test.mjs && node mcp/conversational-rework.test.mjs && node mcp/conversational-trust.test.mjs && node mcp/real-state.test.mjs && node mcp/top-support-intents.test.mjs && node mcp/crm-optional-branch.test.mjs && node mcp/campaign-hotfix.test.mjs && node mcp/package-github.test.mjs && node mcp/package-delete-only.test.mjs",
+    "mcp:test": "node mcp/test.mjs && node mcp/assistant-quality.test.mjs && node mcp/sensitive-data.test.mjs && node mcp/product-context.test.mjs && node mcp/editorial-ai.test.mjs && node mcp/conversational-guides.test.mjs && node mcp/conversational-rework.test.mjs && node mcp/conversational-trust.test.mjs && node mcp/real-state.test.mjs && node mcp/top-support-intents.test.mjs && node mcp/crm-optional-branch.test.mjs && node mcp/campaign-hotfix.test.mjs && node mcp/package-github.test.mjs && node mcp/package-delete-only.test.mjs && node mcp/conversation-v1.test.mjs",
     "qa:visual:baseline": "node scripts/visual/design-baseline.mjs"
   },
   "dependencies": {
