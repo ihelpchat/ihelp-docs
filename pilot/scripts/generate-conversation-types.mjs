@@ -6,7 +6,7 @@ import { assistantReplySchema, assistantRequestSchema, guideSchema, productActio
 
 const schemas = {
   GuideV1: z.toJSONSchema(guideSchema),
-  AssistantRequestV1: z.toJSONSchema(assistantRequestSchema),
+  AssistantRequestV1: z.toJSONSchema(assistantRequestSchema, { io: 'input' }),
   AssistantReplyV1: z.toJSONSchema(assistantReplySchema),
   ProductActionV1: z.toJSONSchema(productActionSchema),
 };

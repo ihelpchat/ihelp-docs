@@ -12,7 +12,7 @@
         "guideId": {
           "type": "string",
           "enum": [
-            "importar-contatos",
+            "guia-importar-contatos",
             "robo-de-atendimento",
             "usuario-acesso",
             "reconectar-canal-qr",
@@ -141,7 +141,7 @@
               },
               "content": {
                 "type": "string",
-                "maxLength": 3000
+                "maxLength": 20000
               }
             },
             "required": [
@@ -342,7 +342,7 @@
             "guideId": {
               "type": "string",
               "enum": [
-                "importar-contatos",
+                "guia-importar-contatos",
                 "robo-de-atendimento",
                 "usuario-acesso",
                 "reconectar-canal-qr",
@@ -822,7 +822,7 @@
             "guideId": {
               "type": "string",
               "enum": [
-                "importar-contatos",
+                "guia-importar-contatos",
                 "robo-de-atendimento",
                 "usuario-acesso",
                 "reconectar-canal-qr",

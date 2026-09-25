@@ -2,11 +2,11 @@
 
 export type ActionId = "importar-contatos" | "abrir-robos" | "abrir-usuarios" | "abrir-canais" | "abrir-campanhas" | "abrir-departamentos" | "abrir-atendimento" | "abrir-crm";
 
-export type GuideId = "importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
+export type GuideId = "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
 
 export type GuideV1 = {
   schemaVersion: 1;
-  guideId: "importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
+  guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
   version: number;
   mode: "real" | "treino";
   initialStepId: string;
@@ -51,7 +51,7 @@ export type AssistantRequestV1 = {
   incidents?: Array<"channel_outage" | "message_delivery" | "billing" | "robot" | "app">;
 };
   guide?: {
-  guideId: "importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
+  guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
   stepId: string;
   version: number;
   mode: "real" | "treino";
@@ -124,7 +124,7 @@ export type AssistantReplyV1 = {
   attempts: Array<"documented_guide" | "reported_stuck">;
 };
   guide?: {
-  guideId: "importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
+  guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
   stepId: string;
   version: number;
   mode: "real" | "treino";

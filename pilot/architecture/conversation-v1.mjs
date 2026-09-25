@@ -64,7 +64,7 @@ export const productActionSchema = z.object({
     context.addIssue({ code: 'custom', message: 'ação fora do catálogo' });
   }
 });
-const historySchema = z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(3000) }).strict();
+const historySchema = z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(20_000).transform((content) => content.slice(0, 3_000)) }).strict();
 const widgetContextSchema = z.object({
   surface: z.enum(['faq', 'app']).optional(),
   route: z.enum([...new Set(Object.values(actions).map((action) => action.route))]).optional(),
