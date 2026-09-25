@@ -226,7 +226,7 @@ button {
 .ih-pill[data-kind='Agendamento'] { color: #7e22ce; background: #f3e8ff; }
 
 .ih-method {
-  flex: 0 0 34px;
+  flex: 0 0 40px;
   padding: 2px 0;
   color: var(--ih-slate-600);
   font-family: var(--ih-mono);
@@ -722,6 +722,28 @@ button {
 .ih-side-link:hover {
   color: var(--ih-ink);
   background: var(--ih-slate-50);
+}
+
+/* Pasta sem página própria: botão que abre e fecha a lista, com a mesma seta dos grupos. */
+.ih-side-folder {
+  width: 100%;
+  font-family: inherit;
+  text-align: left;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.ih-side-folder > svg {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  color: var(--ih-slate-500);
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ih-side-folder[aria-expanded='true'] > svg {
+  transform: rotate(90deg);
 }
 
 .ih-side-link[data-active] {

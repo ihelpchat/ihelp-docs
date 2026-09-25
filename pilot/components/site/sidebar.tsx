@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronRight, Search } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useSearchContext } from 'fumadocs-ui/contexts/search';
 import type { NavGroup, NavItem } from '@/lib/site';
 
@@ -15,6 +15,11 @@ function contains(item: NavItem, pathname: string): boolean {
   return (item.url !== undefined && normalize(item.url) === pathname) || Boolean(item.children?.some((child) => contains(child, pathname)));
 }
 
+/** Páginas do grupo, contando as que estão dentro de subpastas. */
+function countPages(items: NavItem[]): number {
+  return items.reduce((total, item) => total + (item.children?.length ? countPages(item.children) + (item.url ? 1 : 0) : 1), 0);
+}
+
 function MethodBadge({ method }: { method?: string }) {
   const value = method ?? 'DOC';
   return <span className="ih-method" data-method={value}>{value}</span>;
@@ -24,10 +29,14 @@ function Item({ item, api, depth }: { item: NavItem; api: boolean; depth: number
   const pathname = normalize(usePathname());
   const active = item.url !== undefined && normalize(item.url) === pathname;
   const open = item.children?.length ? contains(item, pathname) : false;
+  // Pasta sem página própria: fechada por padrão, aberta quando a página atual está dentro dela,
+  // e a escolha da pessoa (clique) vale enquanto ela navega.
+  const [choice, setChoice] = useState<boolean>();
+  const expanded = choice ?? open;
   const label = (
     <>
-      {api ? <MethodBadge method={item.method} /> : null}
-      <span className="ih-side-label">{item.title}</span>
+      {api && item.url ? <MethodBadge method={item.method} /> : null}
+      <span className="ih-side-label" title={item.title}>{item.title}</span>
     </>
   );
 
@@ -38,9 +47,12 @@ function Item({ item, api, depth }: { item: NavItem; api: boolean; depth: number
           {label}
         </Link>
       ) : (
-        <span className="ih-side-link ih-side-folder" data-depth={depth}>{label}</span>
+        <button type="button" className="ih-side-link ih-side-folder" data-depth={depth} aria-expanded={expanded} onClick={() => setChoice(!expanded)}>
+          <ChevronRight aria-hidden="true" />
+          {label}
+        </button>
       )}
-      {item.children?.length && (open || !item.url) ? (
+      {item.children?.length && (item.url ? open : expanded) ? (
         <ul className="ih-side-sub">
           {item.children.map((child) => <Item key={`${child.title}-${child.url}`} item={child} api={api} depth={depth + 1} />)}
         </ul>
@@ -88,9 +100,20 @@ export function Sidebar({ groups, section }: { groups: NavGroup[]; section: 'doc
   const { setOpenSearch } = useSearchContext();
   const base = useId();
   const collapse = useCollapsible(groups, (group) => group.items.some((item) => contains(item, pathname)));
+  const nav = useRef<HTMLElement>(null);
+
+  // Grupos longos (o CRM tem uma página por endpoint): traz o item atual para dentro da área visível do menu.
+  useEffect(() => {
+    const wrap = nav.current?.closest('.ih-sidebar-wrap');
+    const link = nav.current?.querySelector('[aria-current="page"]');
+    if (!wrap || !link) return;
+    const box = wrap.getBoundingClientRect();
+    const item = link.getBoundingClientRect();
+    if (item.top < box.top || item.bottom > box.bottom) wrap.scrollTop += item.top - box.top - box.height / 3;
+  }, [pathname]);
 
   return (
-    <nav className={api ? 'ih-sidebar ih-sidebar-api' : 'ih-sidebar'} aria-label={api ? 'Referência da API' : 'Central de ajuda'}>
+    <nav ref={nav} className={api ? 'ih-sidebar ih-sidebar-api' : 'ih-sidebar'} aria-label={api ? 'Referência da API' : 'Central de ajuda'}>
       {api ? (
         <>
           <button type="button" className="ih-side-search" onClick={() => setOpenSearch(true)}>
@@ -116,7 +139,7 @@ export function Sidebar({ groups, section }: { groups: NavGroup[]; section: 'doc
             {group.title ? (
               <GroupToggle
                 open={open}
-                count={group.items.length}
+                count={api ? countPages(group.items) : group.items.length}
                 title={group.title}
                 controls={listId}
                 onClick={() => collapse.toggle(group, index)}
