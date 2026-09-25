@@ -31,6 +31,7 @@ function escapeYaml(value) {
 
 function publicArticleText(article) {
   const fields = [article.path, article.title, article.description, article.source, article.contentType, article.body, article.tangoUrl, article.assistantQuestion, article.assistantOverview, ...(Array.isArray(article.assistantSuggestions) ? article.assistantSuggestions : [])];
+  fields.push(...Object.entries(article).filter(([key]) => !['body', 'productActions'].includes(key)).map(([, value]) => value).filter((value) => typeof value === 'string'));
   for (const action of Array.isArray(article.productActions) ? article.productActions : []) {
     fields.push(action?.id, action?.label, action?.route, action?.target);
   }
@@ -110,8 +111,12 @@ export function renderArticle(article) {
   const serializedSuggestions = article.assistantSuggestions?.some((item) => item.includes('|'))
     ? JSON.stringify(article.assistantSuggestions)
     : escapeYaml(article.assistantSuggestions?.join(' | ') ?? '');
-  const conversation = article.assistantQuestion ? `assistantQuestion: ${escapeYaml(article.assistantQuestion)}\nassistantOverview: ${escapeYaml(article.assistantOverview)}\nassistantInitialSteps: ${article.assistantInitialSteps}\nassistantSuggestions: ${serializedSuggestions}\n` : '';
-  return `---\ntitle: ${escapeYaml(article.title)}\ndescription: ${escapeYaml(article.description)}\nsource: ${article.source}\ncontentType: ${article.contentType}\n${conversation}---\n\n${article.body.trim()}${actionBlock}${tutorial}\n`;
+  const reserved = new Set(['path', 'body', 'title', 'description', 'source', 'contentType', 'tangoUrl', 'productActions']);
+  const metadata = Object.entries(article).filter(([key, value]) => !reserved.has(key) && value !== undefined)
+    .map(([key, value]) => `${key}: ${key === 'assistantSuggestions' ? serializedSuggestions : typeof value === 'string' ? escapeYaml(value) : JSON.stringify(value)}`).join('\n');
+  const embeddedAction = /<ProductAction\b[^>]*\/>/g;
+  const body = article.productActions?.length ? article.body.replace(embeddedAction, '').trim() : article.body.trim();
+  return `---\ntitle: ${escapeYaml(article.title)}\ndescription: ${escapeYaml(article.description)}\nsource: ${article.source}\ncontentType: ${article.contentType}\n${metadata ? `${metadata}\n` : ''}---\n\n${body}${actionBlock}${tutorial}\n`;
 }
 
 async function walk(root) {
@@ -319,7 +324,7 @@ async function createDraft(root, article, rendered) {
 }
 
 async function submitValidatedArticle(root, article, mode, actor, beforePull) {
-  const rendered = renderArticle(article);
+  const [{ rendered }] = safeArticleList([article]);
   safeContentPath(root, article.path);
   if (mode === 'pull_request') return createPullRequest(article, rendered, actor, beforePull);
   if (mode !== 'draft') throw new Error('mode deve ser draft ou pull_request');
@@ -334,6 +339,29 @@ function safeArticleList(articles, deletes = []) {
     if (paths.has(article.path)) throw new SubmitArticleError('INVALID_PACKAGE', `Path duplicado no pacote: ${article.path}`);
     paths.add(article.path);
     safeContentPath(process.cwd(), article.path);
+    const reserved = new Set(['path', 'body', 'productActions', 'tangoUrl']);
+    for (const [key, value] of Object.entries(article)) {
+      if (reserved.has(key)) continue;
+      if (!/^[A-Za-z][A-Za-z0-9]*$/.test(key) || (typeof value !== 'string' && typeof value !== 'number' && !(key === 'assistantSuggestions' && Array.isArray(value)))) {
+        throw new SubmitArticleError('INVALID_PACKAGE', `Metadado inválido: ${key}`);
+      }
+    }
+    const inline = [...article.body.matchAll(/<ProductAction\b([^>]*?)\/>/g)].map((match) => {
+      const attributes = [...match[1].matchAll(/\b(id|label|route|target)="([^"]*)"/g)];
+      if (match[1].replace(/\b(id|label|route|target)="[^"]*"/g, '').trim()) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction contém atributos desconhecidos');
+      const action = Object.fromEntries(attributes.map((entry) => [entry[1], entry[2]]));
+      if (!isCatalogAction(action)) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction no body fora do catálogo confiável');
+      return action;
+    });
+    if ((article.body.match(/<ProductAction\b/g) ?? []).length !== inline.length) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction inválido no body');
+    if (new Set(inline.map((action) => action.id)).size !== inline.length) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction duplicado no body');
+    for (const action of article.productActions ?? []) {
+      const embedded = inline.find((candidate) => candidate.id === action.id);
+      if (embedded && JSON.stringify(embedded) !== JSON.stringify(action)) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction do body difere do campo productActions');
+    }
+    if (article.productActions?.length && inline.some((action) => !article.productActions.some((candidate) => candidate.id === action.id))) {
+      throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction do body ausente de productActions');
+    }
     return { article, rendered: renderArticle(article) };
   });
   for (const path of deletes) {
@@ -456,9 +484,18 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
     } else {
       throw new SubmitArticleError('INVALID_MODE', 'mode deve ser draft ou pull_request');
     }
-    await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'success', reference: result.branch });
+    try {
+      await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'success', reference: result.branch });
+    } catch (error) {
+      if (mode === 'pull_request') {
+        const safeUrl = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*$/.test(result.url) ? result.url : '(URL indisponível)';
+        throw new SubmitArticleError('PR_CREATED_AUDIT_FAILED', `pull_request criado em ${safeUrl}; audit final indisponível`, { cause: error });
+      }
+      throw error;
+    }
     return result;
   } catch (error) {
+    if (error instanceof SubmitArticleError && error.code === 'PR_CREATED_AUDIT_FAILED') throw error;
     if (actor) await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'failure' });
     throw publicSubmitError(error);
   }
