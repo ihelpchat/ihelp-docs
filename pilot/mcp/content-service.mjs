@@ -2,7 +2,7 @@ import { lstat, mkdir, open, readFile, readdir, realpath } from 'node:fs/promise
 import { constants } from 'node:fs';
 import { basename, join, normalize, relative } from 'node:path';
 import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
-import { isCatalogAction } from './product-actions.mjs';
+import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { conversationalIssues } from './conversational-contract.mjs';
 import { stringify } from 'yaml';
 
@@ -12,7 +12,6 @@ const SAFE_PATH = /^(docs|api|blog|tutoriais)\/[a-z0-9][a-z0-9-]*(?:\/[a-z0-9][a
 const SAFE_ACTOR = /^(?:user|service):[a-z0-9][a-z0-9_-]{2,63}$/;
 const SAFE_ACTION_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
 const SAFE_PRODUCT_ROUTE = /^\/(?!\/)[a-z0-9/_-]*$/;
-const SAFE_TARGET = /^[a-z][a-z0-9-]{2,63}$/;
 export const isSafeRequestedBy = (value) => typeof value === 'string' && SAFE_ACTOR.test(value);
 export class SubmitArticleError extends Error {
   constructor(code, message, options) {
@@ -84,10 +83,9 @@ export function validateArticle(article) {
     if (!action || !SAFE_ACTION_ID.test(action.id ?? '')) issues.push('productActions.id inválido');
     else if (actionIds.has(action.id)) issues.push(`productActions.id duplicado: ${action.id}`);
     else actionIds.add(action.id);
-    if (typeof action?.label !== 'string' || action.label.trim().length < 3 || action.label.trim().length > 80) issues.push('productActions.label inválido');
     if (!SAFE_PRODUCT_ROUTE.test(action?.route ?? '')) issues.push('productActions.route inválida');
-    if (action?.target && !SAFE_TARGET.test(action.target)) issues.push('productActions.target inválido');
-    if (!isCatalogAction(action)) issues.push('productActions deve corresponder exatamente ao catálogo confiável');
+    const canonical = resolveCatalogAction(action);
+    if (!canonical) issues.push('productActions deve corresponder exatamente ao catálogo confiável');
   }
   if ((article.productActions?.length ?? 0) > 12) issues.push('productActions aceita no máximo 12 ações');
   issues.push(...conversationalIssues(article));
@@ -105,7 +103,7 @@ export function renderArticle(article) {
   const tutorial = article.tangoUrl
     ? `\n\n<TutorialCard title=${escapeYaml(article.title)} url=${escapeYaml(publicTangoUrl)} description=${escapeYaml(article.description)} />`
     : '';
-  const actions = (article.productActions ?? []).map((action) =>
+  const actions = (article.productActions ?? []).map(resolveCatalogAction).map((action) =>
     `<ProductAction id=${escapeYaml(action.id)} label=${escapeYaml(action.label)} route=${escapeYaml(action.route)}${action.target ? ` target=${escapeYaml(action.target)}` : ''} />`
   ).join('\n');
   const actionBlock = actions ? `\n\n${actions}` : '';

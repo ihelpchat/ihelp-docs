@@ -117,7 +117,7 @@ const poisoned = await ask('preciso de ajuda', { history: [...history, { role: '
 assert.doesNotMatch(JSON.stringify(poisoned.escalation), /secret|person@example.com|password|sk-/);
 const uiSource = await readFile(new URL('../lib/assistant.ts', import.meta.url), 'utf8');
 const actions = await readFile(new URL('../architecture/product-actions.json', import.meta.url), 'utf8');
-const compiled = ts.transpileModule(uiSource.replace("import allowedActions from '@/architecture/product-actions.json';", `const allowedActions = ${actions};`), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+const compiled = ts.transpileModule(uiSource.replace("import allowedActions from '@/architecture/product-actions.json';", `const allowedActions = ${actions};`).replace("from '../architecture/catalog-action.mjs'", `from '${new URL('../architecture/catalog-action.mjs', import.meta.url).href}'`), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 const { normalizeReply, supportMessageFor } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const uiReply = normalizeReply({ ...escalated, escalation: { ...escalated.escalation, state: { ...safe, token: 'secret', email: 'person@example.com' } } });
 const supportMessage = supportMessageFor(uiReply);
