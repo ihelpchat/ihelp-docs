@@ -63,7 +63,7 @@ assert.ok(reply.suggestions.includes('Pode me guiar etapa por etapa'), 'guia pro
 for (const suggestion of suggestions) assert.ok(reply.suggestions.includes(suggestion), `sugestão editorial ausente: ${suggestion}`);
 const source = await readFile(join(new URL('../', import.meta.url).pathname, 'lib/assistant.ts'), 'utf8');
 const catalog = JSON.parse(await readFile(join(new URL('../', import.meta.url).pathname, 'architecture/product-actions.json'), 'utf8'));
-const compiled = ts.transpileModule(source.replace("import allowedActions from '@/architecture/product-actions.json';", `const allowedActions = ${JSON.stringify(catalog)};`), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+const compiled = ts.transpileModule(source.replace("import allowedActions from '@/architecture/product-actions.json';", `const allowedActions = ${JSON.stringify(catalog)};`).replace("from '../architecture/catalog-action.mjs'", `from '${new URL('../architecture/catalog-action.mjs', import.meta.url).href}'`), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 const { normalizeReply } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const uiReply = normalizeReply(reply);
 for (const suggestion of suggestions) assert.ok(uiReply.suggestions.includes(suggestion), `UI descartou: ${suggestion}`);

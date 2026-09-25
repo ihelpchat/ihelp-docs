@@ -3,13 +3,11 @@ import { searchContent, validateArticle } from './content-service.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
 import { readArticle } from './editorial-standard.mjs';
 import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
-import { catalogAction, catalogActions, isCatalogAction } from './product-actions.mjs';
+import { catalogActions, isCatalogAction } from './product-actions.mjs';
+import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 
 export function normalizeCatalogLabel(action) {
-  const trusted = catalogAction(action.id);
-  return trusted && action.route === trusted.route && action.target === trusted.target
-    ? { ...action, label: trusted.label }
-    : action;
+  return resolveCatalogAction(action) ?? action;
 }
 
 function confirmedAction(action, request, productContext) {
