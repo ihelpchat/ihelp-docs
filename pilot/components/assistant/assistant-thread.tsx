@@ -270,8 +270,11 @@ export function AssistantThread({ compact = false }: { compact?: boolean }) {
         return (
           <div key={message.id} className="ih-ai-error" role="alert">
             {compact ? null : <AlertCircle aria-hidden="true" />}
-            <span>{compact ? 'Não consegui responder agora.' : 'Não consegui responder agora. Tente de novo em alguns segundos.'}</span>
-            <button type="button" onClick={() => retry(message.id)}>Tentar de novo</button>
+            <span>{message.status === 429 ? message.message : compact ? 'Não consegui responder agora.' : 'Não consegui responder agora. Tente de novo em alguns segundos.'}</span>
+            <div className="ih-ai-error-actions">
+              <button type="button" onClick={() => retry(message.id)}>Tentar de novo</button>
+              {message.status === 429 ? <a href={supportUrl} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a> : null}
+            </div>
           </div>
         );
       })}

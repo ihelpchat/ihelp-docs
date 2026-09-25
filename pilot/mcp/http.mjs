@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { isIP } from 'node:net';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { buildServer } from './server.mjs';
@@ -23,6 +24,8 @@ const windowMs = 60_000;
 const assistantSessionLimit = 10;
 const assistantIpLimit = Math.max(10, Math.min(100, Number(process.env.ASSISTANT_IP_LIMIT) || 100));
 const feedbackIpLimit = 30;
+const configuredProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 1);
+const trustProxyHops = Number.isInteger(configuredProxyHops) && configuredProxyHops >= 0 && configuredProxyHops <= 10 ? configuredProxyHops : 0;
 let lastSweep = Date.now();
 
 function cors(request, response) {
@@ -36,7 +39,13 @@ function cors(request, response) {
 }
 
 function clientIp(request) {
-  return String(request.headers['x-forwarded-for'] ?? request.socket.remoteAddress ?? 'unknown').split(',')[0].trim();
+  const forwarded = request.headers['x-forwarded-for'];
+  if (trustProxyHops > 0 && typeof forwarded === 'string') {
+    const hops = forwarded.split(',').map((value) => value.trim());
+    const candidate = hops.at(-trustProxyHops);
+    if (candidate && isIP(candidate)) return candidate;
+  }
+  return request.socket.remoteAddress ?? 'unknown';
 }
 
 function quota(map, key, limit, now) {

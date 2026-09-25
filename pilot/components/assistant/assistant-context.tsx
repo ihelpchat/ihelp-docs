@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   assistantEnabled,
+  AssistantError,
   requestAnswer,
   type AssistantHistoryItem,
   type AssistantReply,
@@ -15,7 +16,7 @@ export type ScopeCounts = Record<AssistantScope, number>;
 export type ChatMessage =
   | { id: string; role: 'user'; text: string }
   | { id: string; role: 'ai'; reply: AssistantReply; question: string }
-  | { id: string; role: 'error'; question: string; message: string }
+  | { id: string; role: 'error'; question: string; message: string; status?: number }
   | { id: string; role: 'offline'; question: string };
 
 type PageRef = { path: string; title: string };
@@ -81,7 +82,6 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
   useEffect(() => {
     try {
       const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') as { messages?: ChatMessage[]; scope?: AssistantScope; sessionId?: string } | null;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (saved?.messages?.length) setMessages(saved.messages);
       if (saved?.scope) setScope(saved.scope);
       if (saved?.sessionId) sessionId.current = saved.sessionId;
@@ -113,7 +113,7 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
     } catch (error) {
       if (controller.signal.aborted) return;
       const message = error instanceof Error ? error.message : '';
-      setMessages((list) => [...list, { id: id('e'), role: 'error', question, message }]);
+      setMessages((list) => [...list, { id: id('e'), role: 'error', question, message, status: error instanceof AssistantError ? error.status : undefined }]);
     } finally {
       if (abort.current === controller) {
         setBusy(false);
