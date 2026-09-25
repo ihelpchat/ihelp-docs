@@ -1,5 +1,11 @@
 # MCP de documentação
 
+## Dados da Claricia
+
+O `/assistant` remove padrões conhecidos de credenciais, email, CPF e telefone da pergunta e do histórico antes da chamada ao provider. A redaction não detecta nomes nem endereços e não é anonimização total. O `/feedback` guarda voto e caminhos, sem pergunta ou user agent. Caminhos com query ou fragmento são rejeitados.
+
+Eventos de sessão em `SESSION_EVENTS_FILE` (padrão `/tmp/ihelp-docs-session-events.jsonl`) guardam somente `sessionId`, origem (`faq` ou `app`), guia, passo, duração, resultado, caminho local e horário. O schema rejeita campos extras e URL com query. `pruneSessionEvents` elimina registros com mais de 30 dias; o serviço chama essa limpeza no primeiro pedido e pelo menos uma vez a cada 24 horas enquanto recebe pedidos. `discardSessionEvents` remove todos os eventos de um `sessionId` solicitado pelo operador. O arquivo padrão em `/tmp` não é persistente entre deploys.
+
 O servidor permite que uma IA consulte a base, valide conteúdo e envie um FAQ/tutorial como draft ou pull request. Ele nunca faz merge ou deploy.
 
 ## Ferramentas

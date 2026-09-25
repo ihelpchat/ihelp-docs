@@ -52,6 +52,8 @@ export type AssistantRequest = {
   question: string;
   history: AssistantHistoryItem[];
   scope: AssistantScope;
+  sessionId?: string;
+  origin?: 'faq' | 'app';
   page?: { path: string; title: string };
   widgetContext?: Record<string, unknown>;
 };

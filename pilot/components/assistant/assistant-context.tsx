@@ -68,6 +68,7 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({});
   const abort = useRef<AbortController | null>(null);
+  const sessionId = useRef(id('s'));
   // Lido pelas ações (que não mudam de identidade) para ver sempre o estado mais recente.
   const state = useRef({ messages, busy, scope });
   useLayoutEffect(() => {
@@ -77,16 +78,17 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
   // A conversa sobrevive à navegação e ao recarregar a aba (fica só neste navegador).
   useEffect(() => {
     try {
-      const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') as { messages?: ChatMessage[]; scope?: AssistantScope } | null;
+    const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') as { messages?: ChatMessage[]; scope?: AssistantScope; sessionId?: string } | null;
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (saved?.messages?.length) setMessages(saved.messages);
       if (saved?.scope) setScope(saved.scope);
+      if (saved?.sessionId && /^[a-z0-9-]{3,64}$/i.test(saved.sessionId)) sessionId.current = saved.sessionId;
     } catch {}
   }, []);
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(storageKey, JSON.stringify({ messages: messages.slice(-40), scope }));
+      sessionStorage.setItem(storageKey, JSON.stringify({ messages: messages.slice(-40), scope, sessionId: sessionId.current }));
     } catch {}
   }, [messages, scope]);
 
@@ -103,7 +105,7 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
     const controller = new AbortController();
     abort.current = controller;
     try {
-      const reply = await requestAnswer({ question, history, scope: state.current.scope, page }, controller.signal);
+      const reply = await requestAnswer({ question, history, scope: state.current.scope, page, sessionId: sessionId.current, origin: 'faq' }, controller.signal);
       setMessages((list) => [...list, { id: id('a'), role: 'ai', reply, question }]);
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -141,6 +143,7 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
     retry,
     newChat: () => {
       abort.current?.abort();
+      sessionId.current = id('s');
       setBusy(false);
       setMessages([]);
       setFeedback({});
@@ -157,7 +160,6 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
         type: 'assistant',
         value: rating,
         path: window.location.pathname,
-        question: message.question,
         sources: message.reply.sources.map((source) => source.path),
       });
     },

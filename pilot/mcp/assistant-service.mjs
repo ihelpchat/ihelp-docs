@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import { catalogAction } from './product-actions.mjs';
 import { parseAssistantSuggestions } from './conversational-contract.mjs';
 import { sanitizeWidgetContext, diagnoseState, diagnosticQuestion, escalationFor } from './real-state.mjs';
+import { redactSensitiveData } from './sensitive-data.mjs';
 
 const STOP_WORDS = new Set([
   'a', 'ao', 'aos', 'as', 'como', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'eu',
@@ -427,7 +428,7 @@ function sanitizeHistory(history) {
   return history
     .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string')
     .slice(-6)
-    .map((item) => ({ role: item.role, content: item.content.slice(0, 3_000) }));
+    .map((item) => ({ role: item.role, content: redactSensitiveData(item.content.slice(0, 3_000)) }));
 }
 
 function sourcePathsFromHistory(history) {
@@ -486,10 +487,15 @@ function detailedProcedureQuestion(question) {
 }
 
 export async function answerQuestion(root, question, options = {}) {
+  question = redactSensitiveData(question);
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   if (!apiKey && !options.client) throw new Error('OPENAI_API_KEY não configurada');
   const scope = Object.hasOwn(ASSISTANT_SCOPES, options.scope ?? '') ? options.scope : 'Tudo';
-  const page = options.page?.path ? { path: String(options.page.path), title: String(options.page.title ?? '') } : undefined;
+  const pagePath = String(options.page?.path ?? '').split(/[?#]/u)[0];
+  const page = /^\/(?!\/)[a-z0-9/_-]*$/iu.test(pagePath) ? {
+    path: pagePath,
+    title: redactSensitiveData(String(options.page.title ?? '')),
+  } : undefined;
   if (/\b(?:mcp|model context protocol)\b/i.test(question)) {
     return {
       answer: 'O MCP do iHelp está sendo preparado e será disponibilizado em breve. Quando ele estiver liberado, a Central de Ajuda mostrará o que você poderá fazer e como começar.',

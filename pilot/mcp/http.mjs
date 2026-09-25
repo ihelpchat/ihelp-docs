@@ -5,6 +5,7 @@ import { buildServer } from './server.mjs';
 import { answerQuestion } from './assistant-service.mjs';
 import { saveFeedback, summarizeFeedback } from './feedback-service.mjs';
 import { sanitizeWidgetContext } from './real-state.mjs';
+import { saveSessionEvent, pruneSessionEvents } from './session-events.mjs';
 
 const apiKey = process.env.DOCS_MCP_API_KEY;
 if (apiKey && apiKey.length < 24) throw new Error('DOCS_MCP_API_KEY precisa ter ao menos 24 caracteres');
@@ -14,9 +15,11 @@ const handler = toNodeHandler(mcpHandler);
 const port = Number(process.env.PORT ?? 3100);
 const root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname;
 const feedbackFile = process.env.FEEDBACK_FILE ?? '/tmp/ihelp-docs-feedback.jsonl';
+const sessionEventsFile = process.env.SESSION_EVENTS_FILE ?? '/tmp/ihelp-docs-session-events.jsonl';
 const feedbackAdminToken = process.env.FEEDBACK_ADMIN_TOKEN;
 const allowedOrigins = new Set((process.env.ASSISTANT_ALLOWED_ORIGINS ?? 'http://127.0.0.1:4173,http://localhost:4173').split(',').map((value) => value.trim()).filter(Boolean));
 const requests = new Map();
+let lastSessionPrune = 0;
 
 function cors(request, response) {
   const origin = request.headers.origin;
@@ -59,6 +62,7 @@ export const httpServer = createServer(async (request, response) => {
       return;
     }
     try {
+      const startedAt = Date.now();
       const body = await readJson(request);
       const question = typeof body.question === 'string' ? body.question.trim() : '';
       if (question.length < 4 || question.length > 500) throw new Error('A pergunta deve ter entre 4 e 500 caracteres.');
@@ -68,6 +72,25 @@ export const httpServer = createServer(async (request, response) => {
         ? { path: body.page.path, title: typeof body.page.title === 'string' ? body.page.title.slice(0, 200) : '' }
         : undefined;
       const result = await answerQuestion(root, question, { history, scope, page, widgetContext: sanitizeWidgetContext(body.widgetContext) });
+      try {
+        const now = Date.now();
+        if (now - lastSessionPrune > 24 * 60 * 60_000) {
+          await pruneSessionEvents(sessionEventsFile, { now });
+          lastSessionPrune = now;
+        }
+        const safeId = (value) => typeof value === 'string' && /^[a-z0-9][a-z0-9-]{2,63}$/iu.test(value) ? value : undefined;
+        await saveSessionEvent(sessionEventsFile, {
+          sessionId: safeId(body.sessionId) ?? crypto.randomUUID(),
+          origin: body.origin === 'app' ? 'app' : 'faq',
+          ...(safeId(body.guideId) ? { guideId: body.guideId } : {}),
+          ...(safeId(body.stepId) ? { stepId: body.stepId } : {}),
+          durationMs: Math.min(now - startedAt, 300_000),
+          result: ['complete', 'partial', 'not_found'].includes(result.resolution) ? result.resolution : 'not_found',
+          path: page?.path?.split(/[?#]/u)[0] ?? '/assistente',
+        }, { now });
+      } catch {
+        console.error('Falha ao registrar evento de sessão');
+      }
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(result));
     } catch (error) {
       const unavailable = /OPENAI_API_KEY/.test(error.message);

@@ -1,5 +1,6 @@
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { redactSensitiveData } from './sensitive-data.mjs';
 
 const validTypes = new Set(['assistant', 'article']);
 const validValues = new Set(['up', 'down']);
@@ -8,11 +9,18 @@ function clean(value, max) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
-export function normalizeFeedback(input, request = {}) {
+function localPath(value) {
+  return /^\/(?!\/)[a-z0-9/_-]*$/iu.test(value);
+}
+
+export function normalizeFeedback(input) {
   const type = clean(input?.type, 20);
   const value = clean(input?.value, 10);
   const path = clean(input?.path, 300);
-  if (!validTypes.has(type) || !validValues.has(value) || !path.startsWith('/')) {
+  if (!validTypes.has(type) || !validValues.has(value) || !localPath(path)
+    || (input?.eventId !== undefined && !/^[a-z0-9-]{3,100}$/iu.test(input.eventId))
+    || (input?.sources !== undefined && (!Array.isArray(input.sources)
+      || input.sources.some((source) => !localPath(source))))) {
     throw new Error('Feedback inválido.');
   }
 
@@ -22,11 +30,10 @@ export function normalizeFeedback(input, request = {}) {
     type,
     value,
     path,
-    question: clean(input.question, 500) || undefined,
+    // Keep the vote and source paths only. Free text is not needed for metrics.
     sources: Array.isArray(input.sources)
-      ? input.sources.map((source) => clean(source, 300)).filter((source) => source.startsWith('/')).slice(0, 4)
+      ? input.sources.map((source) => redactSensitiveData(clean(source, 300))).slice(0, 4)
       : [],
-    userAgent: clean(request.userAgent, 300) || undefined,
   };
 }
 
