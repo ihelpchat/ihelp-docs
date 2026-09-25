@@ -79,7 +79,7 @@ try {
   assert.doesNotMatch(normalizedFaq, /Respostas para dúvidas frequentes/);
   const quotedArticle = `---\ntitle: "Benefícios"\ndescription: "Veja uma opção \\"melhorada\\" para organizar o atendimento no iHelp."\nsource: produto\ncontentType: guia\n---\n\nEste conteúdo explica uma opção melhorada para organizar o atendimento sem alterar os fatos do produto. Ele também apresenta as decisões e os cuidados necessários para aplicar a orientação com segurança na rotina da equipe.`;
   const normalizedQuoted = renderNormalizedArticle(parseArticle(quotedArticle, 'docs/teste/beneficios'));
-  assert.match(normalizedQuoted, /description: "Veja uma opção \\"melhorada\\"/);
+  assert.equal(parseArticle(normalizedQuoted, 'docs/teste/beneficios').metadata.description, 'Veja uma opção "melhorada" para organizar o atendimento no iHelp.');
   assert.equal(renderNormalizedArticle(parseArticle(normalizedQuoted, 'docs/teste/beneficios')), normalizedQuoted, 'normalização precisa ser idempotente');
   assert.doesNotMatch(normalizeBody('## Etapa\r\n\r\nTexto com espaço. \r\n', 'Teste', 'Descrição completa para testar finais de linha legados.'), /[ \t\r]+$/m);
 

@@ -3,6 +3,7 @@ import { constants } from 'node:fs';
 import { basename, join, normalize, relative } from 'node:path';
 import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
+import { isCatalogAction } from './product-actions.mjs';
 import { conversationalIssues } from './conversational-contract.mjs';
 import { stringify } from 'yaml';
 
@@ -30,12 +31,14 @@ function escapeYaml(value) {
 }
 
 function publicArticleText(article) {
-  const fields = [article.path, article.title, article.description, article.source, article.contentType, article.body, article.tangoUrl, article.assistantQuestion, article.assistantOverview, ...(Array.isArray(article.assistantSuggestions) ? article.assistantSuggestions : [])];
-  fields.push(...Object.entries(article).filter(([key]) => !['body', 'productActions'].includes(key)).map(([, value]) => value).filter((value) => typeof value === 'string'));
-  for (const action of Array.isArray(article.productActions) ? article.productActions : []) {
-    fields.push(action?.id, action?.label, action?.route, action?.target);
-  }
-  return fields.filter((value) => typeof value === 'string').join('\n');
+  const fields = [];
+  const collect = (value) => {
+    if (typeof value === 'string') fields.push(value);
+    else if (Array.isArray(value)) value.forEach(collect);
+    else if (value && typeof value === 'object') Object.values(value).forEach(collect);
+  };
+  collect(article);
+  return fields.join('\n');
 }
 
 function rejectSensitive(value) {
@@ -103,18 +106,15 @@ export function renderArticle(article) {
   const tutorial = article.tangoUrl
     ? `\n\n<TutorialCard title=${escapeYaml(article.title)} url=${escapeYaml(publicTangoUrl)} description=${escapeYaml(article.description)} />`
     : '';
-  const actions = (article.productActions ?? []).map(resolveCatalogAction).map((action) =>
+  const embeddedAction = /<ProductAction\b[^>]*\/>/g;
+  const existingIds = new Set([...article.body.matchAll(embeddedAction)].map((match) => match[0].match(/\bid="([^"]+)"/)?.[1]));
+  const actions = (article.productActions ?? []).filter((action) => !existingIds.has(action.id)).map(resolveCatalogAction).map((action) =>
     `<ProductAction id=${escapeYaml(action.id)} label=${escapeYaml(action.label)} route=${escapeYaml(action.route)}${action.target ? ` target=${escapeYaml(action.target)}` : ''} />`
   ).join('\n');
   const actionBlock = actions ? `\n\n${actions}` : '';
-  const serializedSuggestions = article.assistantSuggestions?.some((item) => item.includes('|'))
-    ? JSON.stringify(article.assistantSuggestions)
-    : escapeYaml(article.assistantSuggestions?.join(' | ') ?? '');
   const reserved = new Set(['path', 'body', 'tangoUrl', 'productActions']);
   const metadata = Object.fromEntries(Object.entries(article).filter(([key, value]) => !reserved.has(key) && value !== undefined));
-  if (metadata.assistantSuggestions) metadata.assistantSuggestions = serializedSuggestions.startsWith('[') ? serializedSuggestions : JSON.parse(serializedSuggestions);
-  const embeddedAction = /<ProductAction\b[^>]*\/>/g;
-  const body = article.productActions?.length ? article.body.replace(embeddedAction, '').trim() : article.body.trim();
+  const body = article.body.trim();
   return `---\n${stringify(metadata, { lineWidth: 0 })}---\n\n${body}${actionBlock}${tutorial}\n`;
 }
 

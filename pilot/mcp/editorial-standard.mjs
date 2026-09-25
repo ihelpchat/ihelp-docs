@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join, normalize, relative } from 'node:path';
 import { conversationalIssues, parseAssistantSuggestions } from './conversational-contract.mjs';
-import { parseDocument } from 'yaml';
+import { parseDocument, stringify } from 'yaml';
 
 const GENERIC_DESCRIPTION = /^(?:Entenda .+ e veja como usar esse recurso no iHelp\.|Referência técnica da API do iHelp para .+\.)$/i;
 const LEGACY_TUTORIAL = /\n+(?:(?:\*\*\*|---)\n+\n+)?## Tutorial Guiado\n+\n+Prefere seguir o passo a passo interativo\?[^\n]*(?:\n|$)/gi;
@@ -157,24 +157,9 @@ export function normalizeBody(body, title, description, path = '') {
 export function parseArticle(raw, path) {
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?/);
   if (!match) return { path, metadata: {}, body: raw };
-  const metadata = {};
-  for (const line of match[1].split('\n')) {
-    const field = line.match(/^([A-Za-z][A-Za-z0-9]*):\s*(.*)$/);
-    if (field) {
-      const value = field[2].trim();
-      if (value.startsWith('"') && value.endsWith('"')) {
-        try {
-          let parsed = JSON.parse(value);
-          while (/\\[\\"]/.test(parsed)) parsed = parsed.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-          metadata[field[1]] = parsed;
-        } catch {
-          metadata[field[1]] = value.slice(1, -1);
-        }
-      } else {
-        metadata[field[1]] = value.replace(/^'|'$/g, '');
-      }
-    }
-  }
+  const document = parseDocument(match[1]);
+  if (document.errors.length) throw new Error('frontmatter YAML inválido');
+  const metadata = document.toJS() ?? {};
   return { path, metadata, body: raw.slice(match[0].length).trim() };
 }
 
@@ -192,14 +177,8 @@ export function renderNormalizedArticle(article) {
   const contentType = inferContentType(article.path, title, article.body);
   const reserved = new Set(['title', 'description', 'source', 'contentType']);
   const extra = Object.entries(article.metadata).filter(([key]) => !reserved.has(key));
-  const frontmatter = [
-    `title: ${JSON.stringify(title)}`,
-    `description: ${JSON.stringify(description)}`,
-    `source: ${source}`,
-    `contentType: ${contentType}`,
-    ...extra.map(([key, value]) => `${key}: ${value}`),
-  ].join('\n');
-  return `---\n${frontmatter}\n---\n\n${normalizeBody(article.body, title, description, article.path)}`;
+  const frontmatter = { title, description, source, contentType, ...Object.fromEntries(extra) };
+  return `---\n${stringify(frontmatter, { lineWidth: 0 })}---\n\n${normalizeBody(article.body, title, description, article.path)}`;
 }
 
 export function auditArticle(raw, path) {
@@ -207,7 +186,7 @@ export function auditArticle(raw, path) {
   const issues = [];
   const conversation = { ...metadata, body };
   if (Object.hasOwn(conversation, 'assistantInitialSteps')) conversation.assistantInitialSteps = Number(conversation.assistantInitialSteps);
-  if (Object.hasOwn(conversation, 'assistantSuggestions')) conversation.assistantSuggestions = parseAssistantSuggestions(conversation.assistantSuggestions);
+  if (Object.hasOwn(conversation, 'assistantSuggestions') && !Array.isArray(conversation.assistantSuggestions)) conversation.assistantSuggestions = parseAssistantSuggestions(conversation.assistantSuggestions);
   issues.push(...conversationalIssues(conversation));
   if (!metadata.title || metadata.title.length < 4) issues.push('title ausente ou curto');
   if (!metadata.description || metadata.description.length < 40) issues.push('description ausente ou curta');
@@ -288,9 +267,5 @@ export async function readArticle(root, contentPath) {
     throw error;
   }
   const article = parseArticle(raw, contentPath);
-  const frontmatter = raw.match(/^---\n([\s\S]*?)\n---\n?/);
-  const document = frontmatter ? parseDocument(frontmatter[1]) : null;
-  if (document?.errors.length) throw new Error('frontmatter YAML inválido');
-  const metadata = document?.toJS() ?? article.metadata;
-  return { path: contentPath, ...metadata, body: article.body };
+  return { path: contentPath, ...article.metadata, body: article.body };
 }

@@ -70,7 +70,7 @@ try {
       originalYaml.assistantSuggestions = original.assistantSuggestions;
     }
     if (path.endsWith('/crm')) {
-      original.assistantSuggestions = 'Como confirmar que a pipeline foi criada?';
+      original.assistantSuggestions = ['Como confirmar que a pipeline foi criada?'];
       originalYaml.assistantSuggestions = original.assistantSuggestions;
     }
     const result = await call('docs_update_article', { ...original, requestedBy: 'service:roundtrip' });
@@ -78,7 +78,9 @@ try {
     const remote = join(root, 'remote/pilot/content/docs', `${path}.mdx`);
     const rendered = await readFile(remote, 'utf8');
     if (path.includes('reconectar-canal-qr')) {
-      assert.ok(rendered.indexOf('<ProductAction id="abrir-canais"') < rendered.indexOf('1. Abra Canais'), 'ProductAction existente deve permanecer antes do primeiro passo');
+      const actionAt = rendered.indexOf('<ProductAction id="abrir-canais"');
+      const firstStepAt = rendered.indexOf('1. Abra Canais');
+      assert.ok(actionAt >= 0 && firstStepAt >= 0 && actionAt < firstStepAt, 'ProductAction existente deve permanecer antes do primeiro passo');
     }
     const frontmatter = parseDocument(rendered.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '').toJS();
     const parsed = docsPageSchema.safeParse(frontmatter);
