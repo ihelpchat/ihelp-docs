@@ -71,7 +71,11 @@ export const httpServer = createServer(async (request, response) => {
       const page = body.page && typeof body.page.path === 'string' && body.page.path.startsWith('/') && body.page.path.length < 300
         ? { path: body.page.path, title: typeof body.page.title === 'string' ? body.page.title.slice(0, 200) : '' }
         : undefined;
-      const result = await answerQuestion(root, question, { history, scope, page, widgetContext: sanitizeWidgetContext(body.widgetContext) });
+      let resolvedStep;
+      const result = await answerQuestion(root, question, {
+        history, scope, page, widgetContext: sanitizeWidgetContext(body.widgetContext),
+        onResolvedStep: (step) => { resolvedStep = step; },
+      });
       try {
         const now = Date.now();
         if (now - lastSessionPrune > 24 * 60 * 60_000) {
@@ -82,8 +86,7 @@ export const httpServer = createServer(async (request, response) => {
         await saveSessionEvent(sessionEventsFile, {
           sessionId: safeId(body.sessionId) ?? crypto.randomUUID(),
           origin: body.origin === 'app' ? 'app' : 'faq',
-          ...(safeId(body.guideId) ? { guideId: body.guideId } : {}),
-          ...(safeId(body.stepId) ? { stepId: body.stepId } : {}),
+          ...resolvedStep,
           durationMs: Math.min(now - startedAt, 300_000),
           result: ['complete', 'partial', 'not_found'].includes(result.resolution) ? result.resolution : 'not_found',
           path: page?.path?.split(/[?#]/u)[0] ?? '/assistente',

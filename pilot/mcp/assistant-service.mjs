@@ -667,6 +667,12 @@ export async function answerQuestion(root, question, options = {}) {
     && (overviewProcedure || detailedProcedure || progressStep?.text === fallbackSource.documentedSteps[0])) {
     safeSteps[0] = { ...safeSteps[0], actionId: fallbackSource.productActions[0].id };
   }
+  const resolvedStepIndex = fallbackSource?.documentedSteps.findIndex((step) =>
+    normalize(step) === normalize(safeSteps[0]?.text ?? '')) ?? -1;
+  const resolvedGuideId = fallbackSource?.path.split('/').at(-1);
+  if (resolvedStepIndex >= 0 && /^[a-z0-9][a-z0-9-]{2,63}$/iu.test(resolvedGuideId ?? '')) {
+    options.onResolvedStep?.({ guideId: resolvedGuideId, stepId: `passo-${resolvedStepIndex + 1}` });
+  }
   const modelUsedValidatedImage = safeSteps.some(({ imagePath }) => availableImages.has(imagePath));
   const shouldFallbackImages = procedure && !continuation && !overviewProcedure && !modelUsedValidatedImage;
   const fallbackImages = shouldFallbackImages
