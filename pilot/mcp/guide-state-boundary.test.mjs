@@ -36,6 +36,7 @@ await once(provider, 'listening');
 process.env.PORT = '0';
 process.env.DOCS_ROOT = root;
 process.env.OPENAI_API_KEY = 'fixture';
+process.env.DOCS_MCP_API_KEY = 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz';
 process.env.OPENAI_BASE_URL = `http://127.0.0.1:${provider.address().port}/v1`;
 process.env.SESSION_EVENTS_FILE = join(root, 'sessions.jsonl');
 const { httpServer } = await import('./http.mjs');
