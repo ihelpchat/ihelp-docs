@@ -31,11 +31,13 @@ let measuredTargets = 0;
 let measuredContrast = 0;
 let measuredStates = 0;
 let measuredColorRules = 0;
+let expectedColorRules = 0;
 const rules = [];
 css.walkRules((rule) => {
   if (!/(?:\.ih-ai-|\.ih-assistant-)/.test(rule.selector)) return;
   measuredRules++;
   const declarations = Object.fromEntries(rule.nodes.filter((node) => node.type === 'decl').map((node) => [node.prop, node.value]));
+  if (declarations.color || declarations.background || declarations['background-color']) expectedColorRules++;
   rules.push({ selector: rule.selector, declarations, line: rule.source.start.line });
   if (declarations['font-size']) {
     measuredType++;
@@ -57,16 +59,26 @@ css.walkRules((rule) => {
 const withoutLastPseudos = (selector) => {
   let start = 0;
   let brackets = 0;
+  let parentheses = 0;
   for (let i = 0; i < selector.length; i++) {
     if (selector[i] === '[') brackets++;
     else if (selector[i] === ']') brackets--;
-    else if (!brackets && /[\s>+~]/.test(selector[i])) start = i + 1;
+    else if (selector[i] === '(') parentheses++;
+    else if (selector[i] === ')') parentheses--;
+    else if (!brackets && !parentheses && /[\s>+~]/.test(selector[i])) start = i + 1;
   }
   const prefix = selector.slice(0, start);
   const last = selector.slice(start);
   let base = '';
   const states = [];
   for (let i = 0; i < last.length;) {
+    if (last[i] === '[') {
+      const end = last.indexOf(']', i);
+      if (end < 0) { failures.push(`atributo sem fechamento: ${selector}`); break; }
+      base += last.slice(i, end + 1);
+      i = end + 1;
+      continue;
+    }
     if (last[i] !== ':') { base += last[i++]; continue; }
     const begin = i++;
     if (last[i] === ':') i++;
@@ -91,9 +103,12 @@ for (const rule of candidates) {
   for (const selector of postcss.list.comma(rule.selector)) {
     const { base: baseSelector, states } = withoutLastPseudos(selector);
     const base = states.length ? rules.find((item) => postcss.list.comma(item.selector).some((part) => normalized(part) === normalized(baseSelector))) : null;
-    if (states.length && !base) { failures.push(`${rule.line}: estado sem regra base: ${selector}`); continue; }
-    const foreground = rule.declarations.color === 'inherit' ? base?.declarations.color : rule.declarations.color ?? base?.declarations.color;
-    if (!foreground || foreground === 'transparent' || /\bsvg\b|avatar|icon|dot/.test(selector)) continue;
+    if (/\bsvg\b|avatar|icon|dot/.test(selector)) continue;
+    if (/::(?:before|after)\b/.test(selector) && /^(['"])\1$/.test(rule.declarations.content ?? '')) continue;
+    if (!states.length && !rule.declarations.color) continue;
+    if (states.length && !base && !rule.declarations.color) { failures.push(`${rule.line}: estado sem regra base: ${selector}`); continue; }
+    const inheritedColor = base?.declarations.color && base.declarations.color !== 'inherit' ? base.declarations.color : 'var(--ih-slate-700)';
+    const foreground = rule.declarations.color === 'inherit' ? inheritedColor : rule.declarations.color ?? inheritedColor;
     const parentBackground = selector.includes('.ih-ai-code') ? '#0b1220'
       : selector.includes('.ih-ai-user') ? '#0f172a'
       : selector.includes('.ih-ai-error') ? '#fef2f2'
@@ -109,7 +124,7 @@ for (const rule of candidates) {
     if (contrast(front, back) < 4.5) failures.push(`${rule.line}: ${selector} contraste ${contrast(front, back).toFixed(2)}:1`);
   }
 }
-assert.equal(measuredColorRules, candidates.length, 'todas as regras com cor ou fundo foram medidas');
+assert.equal(measuredColorRules, expectedColorRules, 'todas as regras com cor ou fundo foram medidas');
 assert.ok(measuredRules > 100 && measuredType > 50 && measuredTargets > 10 && measuredContrast > 50,
   `varredura incompleta: ${measuredRules} regras, ${measuredType} fontes, ${measuredTargets} alvos, ${measuredContrast} contrastes`);
 assert.ok(measuredStates >= 8, `Estados medidos: ${measuredStates}`);
