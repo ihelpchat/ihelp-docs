@@ -18,7 +18,7 @@ const CREDENTIAL_SEGMENTS = new Set(['token', 'secret', 'password', 'passwd', 'p
 const DESCRIPTIVE_SUFFIXES = new Set(['hint', 'description', 'count', 'name', 'label', 'type', 'enabled', 'example']);
 const PLACEHOLDER = /^(?:\$[A-Z_][A-Z0-9_]*|\$\{[A-Z_][A-Z0-9_]*\})$/u;
 const NON_SECRET_LITERAL = /^(?:null|true|false|undefined|string|number)$/iu;
-const OPAQUE_SEQUENCE = /[A-Za-z0-9+=]{24,}/gu;
+const OPAQUE_SEQUENCE = /[A-Za-z0-9+=]{16,}/gu;
 const HEX_SEQUENCE = /^[A-Fa-f0-9]{32,}$/u;
 
 function entropy(value) {
@@ -32,11 +32,12 @@ function entropy(value) {
 
 function opaqueSequence(value) {
   if (HEX_SEQUENCE.test(value)) return true;
+  if ((value.includes('+') || /=+$/u.test(value)) && /^[A-Za-z0-9+]+={0,2}$/u.test(value)) return true;
+  if (value.length < 24) return false;
   const hasLetters = /[A-Za-z]/u.test(value);
   const hasTwoDigits = (value.match(/\d/gu) ?? []).length >= 2;
-  const hasBase64Symbols = /[+=]/u.test(value);
   const mixedCase = /[a-z]/u.test(value) && /[A-Z]/u.test(value);
-  return hasLetters && hasTwoDigits && (hasBase64Symbols || mixedCase) && entropy(value) >= 3.5;
+  return hasLetters && hasTwoDigits && mixedCase && entropy(value) >= 3.5;
 }
 
 function opaqueSequences(value) {
