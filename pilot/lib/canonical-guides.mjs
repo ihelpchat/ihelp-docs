@@ -1,5 +1,7 @@
 import { parseArticle } from '../mcp/editorial-standard.mjs';
 import { guideSchema } from '../architecture/conversation-v1.mjs';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 const sourcePattern = /\{\/\* fonte: ([a-z0-9-]+) \| (front|back)@([a-f0-9]{12}):([^\s|]+):(\d+) \| alvo: ([^\n]+) \*\/\}/gu;
 export const approvedGuideSentences = {
@@ -38,6 +40,7 @@ const confusables = new Map(Object.entries({
 const canonical = (text) => [...text.normalize('NFKD').replace(/\p{Default_Ignorable_Code_Point}/gu, '')]
   .map((char) => confusables.get(char) ?? char).join('')
   .normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('pt-BR').replace(/\s+/gu, ' ').trim();
+export const hashApprovedSentence = (sentence) => createHash('sha256').update(canonical(sentence)).digest('hex');
 const approvedSentences = Object.fromEntries(Object.entries(approvedGuideSentences)
   .map(([id, sentences]) => [id, new Set(sentences.map(canonical))]));
 const controlledTerm = /\b(?:mensag\w*|convers\w*|recad\w*|chat\w*|notifica\w*|perd\w*|recuper\w*|volt\w*|reaparec\w*|sincroniz\w*|chega[m]? depois|aparece[m]? depois|se perde|nao perde)\b/u;
@@ -45,6 +48,7 @@ const controlledTerm = /\b(?:mensag\w*|convers\w*|recad\w*|chat\w*|notifica\w*|p
 function renderedSentences(text) {
   const visible = text
     .replace(/\{\/\*[\s\S]*?\*\/\}/gu, ' ')
+    .replace(/<ProductAction\b[^>]*\blabel="([^"]+)"[^>]*\/>/gu, '$1')
     .replace(/\[([^\]]+)\]\([^)]*\)/gu, '$1')
     .replace(/<[^>]*>/gu, ' ')
     .replace(/[`*_>#|]/gu, '');
@@ -63,6 +67,14 @@ function publishedText(metadata, body) {
   return fields.filter((value) => typeof value === 'string');
 }
 
+export function approvedTextEntries(raw, expectedId) {
+  const { metadata, body } = parseArticle(raw, `docs/${expectedId}`);
+  return publishedText(metadata, body).flatMap((text) => renderedSentences(text))
+    .map((sentence) => {
+      return { sentence, hash: hashApprovedSentence(sentence) };
+    });
+}
+
 export function validateCanonicalGuide(raw, expectedId) {
   const { metadata, body } = parseArticle(raw, `docs/${expectedId}`);
   const guide = guideSchema.parse(metadata.guide);
@@ -78,12 +90,13 @@ export function validateCanonicalGuide(raw, expectedId) {
     if (!byStep.has(stepId)) throw new Error(`${expectedId}: fonte ausente no passo ${stepId}`);
   }
   if (byStep.size !== guide.steps.length) throw new Error(`${expectedId}: fonte sem passo`);
-  for (const text of publishedText(metadata, body)) {
-    for (const sentence of renderedSentences(text)) {
-      const normalized = canonical(sentence);
-      if (controlledTerm.test(normalized) && !approvedSentences[expectedId]?.has(normalized)) {
-        throw new Error(`${expectedId}: frase com termo controlado não aprovada: ${sentence}`);
-      }
+  const approval = JSON.parse(readFileSync(new URL('../content/canonical-guides.approved.json', import.meta.url), 'utf8'));
+  const allowed = new Set((approval.guides?.[expectedId] ?? []).map(({ hash }) => hash));
+  for (const { sentence, hash } of approvedTextEntries(raw, expectedId)) {
+    const normalized = canonical(sentence);
+    if (!allowed.has(hash)) throw new Error(`${expectedId}: frase não aprovada: ${sentence}`);
+    if (controlledTerm.test(normalized) && !approvedSentences[expectedId]?.has(normalized)) {
+      throw new Error(`${expectedId}: frase com termo controlado não aprovada: ${sentence}`);
     }
   }
   return guide;
