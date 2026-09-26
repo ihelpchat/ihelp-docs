@@ -18,6 +18,8 @@ Eventos de sessão em `SESSION_EVENTS_FILE` (padrão `/tmp/ihelp-docs-session-ev
 
 O servidor permite que uma IA consulte a base, valide conteúdo e envie um FAQ/tutorial como draft ou pull request. Ele nunca faz merge ou deploy.
 
+Para gerar conteúdo com grounding de código, configure `PRODUCT_LOCAL_CHECKOUT` e `BACKEND_LOCAL_CHECKOUT` no servidor. O chamador escolhe somente `frontend` ou `backend`; o SHA vem do Git do checkout e não do pedido. A busca lê código fonte rastreado apenas em `src/components`, `src/pages`, `src/features` e `src/routes` no frontend; no backend, apenas em `Controllers`, `Comzada.Application/Controllers` e `ihelp.PublicApi`. Rejeita nomes com `key`, `secret`, `token`, `credential`, `password`, `env` ou `config`, symlinks em qualquer componente do caminho, pastas operacionais e arquivos que contenham qualquer marcador sensível. Limita arquivos, bytes e tempo, e devolve caminho, linha e SHA. Checkout ausente ou alterado mantém plano e pacote em `needs_information`; resposta sem citações verificáveis fica em `needs_evidence`.
+
 ## Ferramentas
 
 - `docs_inventory`: mostra módulos cobertos e gaps.

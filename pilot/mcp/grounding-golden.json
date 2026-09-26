@@ -1,0 +1,10 @@
+{
+  "reference": { "frontend": "133ac38c1749428aca10d55dd59f3c600fe37f73", "backend": "15713f0b385942bffeebef053e0462b00ea8d2e1" },
+  "cases": [
+    { "topic": "Criar robô", "module": "Robôs", "frontend": "src/components/pages/Robots/index.tsx", "backend": null, "backendExcluded": "BotController.cs contém literal opaco com formato de token; arquivo inteiro é bloqueado" },
+    { "topic": "Reconectar QR", "module": "Canais", "frontend": "src/components/pages/Configuration/pages/ChannelById/components/ChannelDetails/index.tsx", "backend": "Comzada.Application/Controllers/V2/ChannelController.cs" },
+    { "topic": "Criar usuário", "module": "Usuários", "frontend": "src/components/pages/Configuration/components/TabUser/index.tsx", "backend": null, "backendExcluded": "ConfigurationsUsersController.cs contém literal de senha embutida; arquivo inteiro é bloqueado" },
+    { "topic": "Cadastrar atendente", "module": "Equipe", "frontend": "src/components/pages/Configuration/components/TabUser/index.tsx", "backend": null, "backendExcluded": "ConfigurationsUsersController.cs contém literal de senha embutida; arquivo inteiro é bloqueado" },
+    { "topic": "Configurar horário de atendimento", "module": "Departamentos", "frontend": "src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx", "backend": "Comzada.Application/Controllers/V2/ConfigurationsDepartmentsController.cs" }
+  ]
+}

@@ -73,7 +73,8 @@ async function exercise(label, readToken) {
     reached.set(name, calls.slice(start));
   }
   const githubTools = [...reached].filter(([, requests]) => requests.length);
-  assert.ok(githubTools.length >= 7, `GitHub-facing tools reached: ${githubTools.map(([name]) => name).join(', ')}`);
+  assert.ok(githubTools.length >= 5, `GitHub-facing tools reached: ${githubTools.map(([name]) => name).join(', ')}`);
+  assert.ok(!githubTools.some(([name]) => ['docs_plan_content', 'docs_generate_package'].includes(name)), 'AI editorial exige checkout local e não consulta código privado pelo GitHub');
   assert.ok(calls.some(({ method }) => method === 'GET'), 'private code reads must run');
   assert.ok(calls.some(({ method }) => method === 'POST'), 'branch and PR creation must run');
   assert.ok(calls.some(({ method }) => method === 'PUT'), 'commit writes must run');

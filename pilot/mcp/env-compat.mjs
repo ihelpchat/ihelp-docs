@@ -4,6 +4,7 @@ import { loadCredentials, loadLegacyCredential } from './access-control.mjs';
 export const envCompatibility = Object.freeze({
   mcpCredentials: Object.freeze({ old: 'DOCS_MCP_API_KEY', current: 'DOCS_MCP_CREDENTIALS', rule: 'old used only when current is absent' }),
   githubReadToken: Object.freeze({ old: 'GITHUB_TOKEN', current: 'GITHUB_READ_TOKEN', rule: 'old used only when current is absent' }),
+  localCheckouts: Object.freeze({ frontend: 'PRODUCT_LOCAL_CHECKOUT', backend: 'BACKEND_LOCAL_CHECKOUT' }),
 });
 
 const warned = new Set();

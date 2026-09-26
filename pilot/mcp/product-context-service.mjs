@@ -2,7 +2,8 @@ const treeCache = new Map();
 import { readFile } from 'node:fs/promises';
 import { redactSensitiveData } from './sensitive-data.mjs';
 import { join } from 'node:path';
-import { githubReadToken } from './env-compat.mjs';
+import { searchLocalProductContext } from './local-product-context.mjs';
+import { envCompatibility, githubReadToken } from './env-compat.mjs';
 const CACHE_MS = 5 * 60_000;
 const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|cs)$/;
 const PINNED_PATHS = new Set([
@@ -109,14 +110,17 @@ export async function searchProductContext(topic, module, provided = {}) {
 }
 
 export async function getIhelpContext(root, topic, module, provided = {}) {
+  const local = provided.requireLocal === true || provided.repositoryIds !== undefined
+    || (!provided.fetch && !provided.repositories && Boolean(process.env[envCompatibility.localCheckouts.frontend] || process.env[envCompatibility.localCheckouts.backend]));
   const token = provided.token ?? githubReadToken();
   const fetcher = provided.fetch ?? globalThis.fetch;
   const repositories = provided.repositories ?? [
     { repository: process.env.PRODUCT_GITHUB_REPOSITORY ?? 'ihelpchat/front-react', ref: process.env.PRODUCT_GITHUB_REF ?? 'master', role: 'Interface, rotas, permissões visíveis e textos de botões' },
     { repository: process.env.BACKEND_GITHUB_REPOSITORY ?? 'ihelpchat/olah-ihelp', ref: process.env.BACKEND_GITHUB_REF ?? 'master', role: 'Regras de negócio, APIs, permissões e validações' },
   ];
-  const code = [];
-  for (const source of repositories) {
+  const localResult = local ? await searchLocalProductContext(topic, module, { repositoryIds: provided.repositoryIds }) : null;
+  const code = localResult?.code ?? [];
+  if (!local) for (const source of repositories) {
     const result = await searchProductContext(topic, module, { fetch: fetcher, token, repository: source.repository, ref: source.ref }).catch((error) => ({ available: false, repository: source.repository, ref: source.ref, matches: [], reason: error.message }));
     code.push({ ...result, role: source.role });
   }
@@ -132,6 +136,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
   const relevantCoverage = coverage.filter((item) => terms.some((term) => normalize(item.module).includes(term) || (ALIASES[normalize(item.module)] ?? []).includes(term)));
   return {
     code,
+    groundingRequired: local,
     support: {
       source: supportSignals.source,
       period: supportSignals.period,
