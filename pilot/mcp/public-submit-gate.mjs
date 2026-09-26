@@ -4,12 +4,18 @@ import { validateCanonicalGuide } from '../lib/canonical-guides.mjs';
 import { validatePublicArtifact } from '../lib/guide-package.mjs';
 import approvedMap from '../product-map/approved.json' with { type: 'json' };
 import { sensitiveKinds } from './sensitive-data.mjs';
+import { internalLinkIssues } from './editorial-standard.mjs';
 
 // A mesma lista protege texto submetido ao MCP e passos dos guias submetidos.
 export const jargon = Object.freeze(['template', 'API', 'Meta', 'Gupshup', 'janela de 24h', 'US$']);
 const allowedHosts = new Set(['app.tango.us', 'apiv3.ihelpchat.com', 'ihelpchat.com.br', 'www.ihelpchat.com.br']);
-const mapLabels = new Set(approvedMap.manifest.labels.map(({ label }) => label.toLocaleLowerCase('pt-BR')));
+const normalizeLabel = (value) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
+const mapLabels = new Set(approvedMap.manifest.labels.map(({ label }) => normalizeLabel(label)));
+// CTA da Claricia é renderizado pelo widget público em pilot/lib/assistant.ts.
+mapLabels.add(normalizeLabel('Falar com uma pessoa'));
 const routes = new Set(approvedMap.manifest.routes.map(({ path }) => path));
+const UI_VERBS = Object.freeze(['clique em', 'toque em', 'aperte', 'selecione', 'escolha', 'marque', 'desmarque', 'abra', 'vá em', 'acesse', 'ative', 'desative', 'preencha', 'digite em']);
+const actionLabel = new RegExp(`\\b(?:${UI_VERBS.join('|')})\\s+(?:(?:no|na|o|a)\\s+)?(?:(?:botão|botao)\\s+)?(?:["“]([^"”]+)["”]|\\*\\*([^*]+)\\*\\*)`, 'giu');
 
 function reject(message) { throw Object.assign(new Error(`gate público: ${message}`), { code: 'PUBLIC_GATE' }); }
 
@@ -46,9 +52,14 @@ export async function assertPublicSubmit(root, items, deletes = []) {
     if (article.path.startsWith('docs/') || article.path.startsWith('tutoriais/')) {
       checkJargon([article.title, article.description, article.body, ...(article.guide?.steps ?? []).map(({ text }) => text)].join('\n'));
     }
-    for (const match of article.body.matchAll(/\b(?:botão|botao)\s+["“]([^"”]+)["”]/giu)) {
-      if (!mapLabels.has(match[1].toLocaleLowerCase('pt-BR'))) reject(`rótulo fora do mapa: ${match[1]}`);
+    for (const text of [article.body, ...(article.guide?.steps ?? []).map(({ text }) => text)]) {
+      for (const match of [...text.matchAll(actionLabel), ...text.matchAll(/\b(?:botão|botao)\s+["“]([^"”]+)["”]/giu)]) {
+        const label = match[1] ?? match[2];
+        if (!mapLabels.has(normalizeLabel(label))) reject(`rótulo fora do mapa: ${label}`);
+      }
     }
+    const brokenLinks = await internalLinkIssues(root, article.path, article.body);
+    if (brokenLinks.length) reject(brokenLinks[0]);
     for (const [raw] of article.body.matchAll(/https?:\/\/[^\s<)"']+/giu)) {
       let url;
       try { url = new URL(raw.replace(/[.,;:!?]+$/u, '')); } catch { reject('link inválido'); }
@@ -64,7 +75,10 @@ export async function assertPublicSubmit(root, items, deletes = []) {
         continue;
       }
       if (value.startsWith('/')) {
-        if (value.includes('?') || value.includes('#') || (!routes.has(value) && !value.startsWith('/docs/') && !value.startsWith('/api/') && !value.startsWith('/tutoriais/'))) reject('link fora do catálogo público');
+        const pathname = value.split(/[?#]/u)[0];
+        if (value.includes('?') || (!routes.has(pathname) && !/^\/(?:docs|api|blog|tutoriais)(?:\/|$)/u.test(pathname))) reject('link fora do catálogo público');
+      } else if (value.startsWith('#') || value.startsWith('./') || value.startsWith('../') || /^[a-z0-9][a-z0-9/_-]*(?:[?#][^\s]*)?$/iu.test(value)) {
+        // O validador editorial acima resolve estes links a partir da página.
       } else {
         let url;
         try { url = new URL(value); } catch { reject('link inválido'); }

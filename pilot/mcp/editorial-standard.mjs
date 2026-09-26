@@ -227,32 +227,60 @@ export async function auditContent(root) {
     records.push({ path, raw, issues: auditArticle(raw, path) });
   }
 
-  const routes = new Set(['/']);
-  for (const { path } of records) {
-    routes.add(`/${path}`);
-    if (path.endsWith('/index')) routes.add(`/${path.slice(0, -'/index'.length)}`);
-  }
+  const routes = contentRoutes(records.map(({ path }) => path));
   for (const record of records) {
-    const targets = [...record.raw.matchAll(/(?:!?)\[[^\]]*\]\(([^)]+)\)|<(?:VideoEmbed|TutorialCard)[^>]+(?:url|embedUrl)="([^"]+)"/g)]
-      .map((match) => (match[1] ?? match[2]).trim().split(/\s+["']/)[0])
-      .filter((target) => !/^(?:https?:|mailto:|tel:|#)/.test(target));
-    for (const target of targets) {
-      const rawPath = target.split(/[?#]/)[0].replace(/\.mdx?$/, '');
-      const pathname = (rawPath.startsWith('/') ? rawPath : normalize(join('/', dirname(record.path), rawPath))).replace(/\/$/, '') || '/';
-      if (pathname.startsWith('/img/') || pathname.startsWith('/videos/')) {
-        try {
-          await readFile(join(root, 'public', decodeURIComponent(pathname.slice(1))));
-        } catch {
-          record.issues.push(`asset inexistente: ${pathname}`);
-        }
-      } else if (/^\/(?:docs|api|blog|tutoriais)(?:\/|$)/.test(pathname) && !routes.has(pathname)) {
-        record.issues.push(`link interno inexistente: ${pathname}`);
-      }
-    }
+    record.issues.push(...await internalLinkIssues(root, record.path, record.raw, routes));
   }
 
   const articles = records.filter((record) => record.issues.length).map(({ path, issues }) => ({ path, issues }));
   return { total: files.length, valid: files.length - articles.length, invalid: articles.length, articles };
+}
+
+function contentRoutes(paths) {
+  const routes = new Set(['/']);
+  for (const path of paths) {
+    routes.add(`/${path}`);
+    if (path.endsWith('/index')) routes.add(`/${path.slice(0, -'/index'.length)}`);
+  }
+  return routes;
+}
+
+// Usado pelo audit do conteúdo publicado e pelo gate antes de qualquer escrita.
+export async function internalLinkIssues(root, path, raw, routes) {
+  const targets = [...raw.matchAll(/(?:!?)\[[^\]]*\]\(([^)]+)\)|<(?:VideoEmbed|TutorialCard)[^>]+(?:url|embedUrl)="([^"]+)"/g)]
+    .map((match) => (match[1] ?? match[2]).trim().split(/\s+["']/)[0])
+    .filter((target) => !/^(?:https?:|mailto:|tel:)/.test(target));
+  if (!targets.length) return [];
+  if (!routes) {
+    const contentRoot = join(root, 'content/docs');
+    const localFiles = await walk(contentRoot).catch((error) => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    });
+    routes = contentRoutes(localFiles.map((file) => relative(contentRoot, file).replace(/\.mdx$/, '')));
+    // Testes de submit usam raízes temporárias com só parte do conteúdo publicado.
+    const publishedRoot = new URL('../content/docs/', import.meta.url).pathname.replace(/\/$/u, '');
+    if (contentRoot !== publishedRoot) {
+      for (const route of contentRoutes((await walk(publishedRoot)).map((file) => relative(publishedRoot, file).replace(/\.mdx$/, '')))) routes.add(route);
+    }
+    routes.add(`/${path}`);
+    if (path.endsWith('/index')) routes.add(`/${path.slice(0, -'/index'.length)}`);
+  }
+  const issues = [];
+  for (const target of targets) {
+    const rawPath = target.split(/[?#]/)[0].replace(/\.mdx?$/, '') || path;
+    const pathname = (rawPath.startsWith('/') ? rawPath : normalize(join('/', dirname(path), rawPath))).replace(/\/$/, '') || '/';
+    if (pathname.startsWith('/img/') || pathname.startsWith('/videos/')) {
+      try {
+        await readFile(join(root, 'public', decodeURIComponent(pathname.slice(1))));
+      } catch {
+        issues.push(`asset inexistente: ${pathname}`);
+      }
+    } else if (/^\/(?:docs|api|blog|tutoriais)(?:\/|$)/.test(pathname) && !routes.has(pathname)) {
+      issues.push(`link interno inexistente: ${pathname}`);
+    }
+  }
+  return issues;
 }
 
 export async function readArticle(root, contentPath) {
