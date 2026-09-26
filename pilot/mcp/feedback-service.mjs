@@ -1,18 +1,35 @@
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { isPublishedPath } from './published-paths.mjs';
+import { z } from 'zod/v4';
 
 const validTypes = new Set(['assistant', 'article']);
 const validValues = new Set(['up', 'down']);
+export const feedbackInputSchema = z.object({
+  eventId: z.string().regex(/^[a-z0-9-]{3,100}$/i).optional(),
+  type: z.enum(['assistant', 'article']),
+  value: z.enum(['up', 'down']),
+  path: z.string().nullable(),
+  sources: z.array(z.string()).optional(),
+});
 
 function clean(value, max) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
-export function normalizeFeedback(input, request = {}) {
+function localPath(value) {
+  return /^\/(?!\/)[a-z0-9/_-]*$/iu.test(value);
+}
+
+export function normalizeFeedback(input) {
+  if (!feedbackInputSchema.safeParse(input).success) throw new Error('Feedback inválido.');
   const type = clean(input?.type, 20);
   const value = clean(input?.value, 10);
   const path = clean(input?.path, 300);
-  if (!validTypes.has(type) || !validValues.has(value) || !path.startsWith('/')) {
+  if (!validTypes.has(type) || !validValues.has(value) || (input?.path !== null && !localPath(path))
+    || (input?.eventId !== undefined && !/^[a-z0-9-]{3,100}$/iu.test(input.eventId))
+    || (input?.sources !== undefined && (!Array.isArray(input.sources)
+      || input.sources.some((source) => !localPath(source))))) {
     throw new Error('Feedback inválido.');
   }
 
@@ -21,12 +38,11 @@ export function normalizeFeedback(input, request = {}) {
     createdAt: new Date().toISOString(),
     type,
     value,
-    path,
-    question: clean(input.question, 500) || undefined,
+    path: isPublishedPath(path) ? path : null,
+    // Keep the vote and source paths only. Free text is not needed for metrics.
     sources: Array.isArray(input.sources)
-      ? input.sources.map((source) => clean(source, 300)).filter((source) => source.startsWith('/')).slice(0, 4)
+      ? input.sources.filter(isPublishedPath).slice(0, 4)
       : [],
-    userAgent: clean(request.userAgent, 300) || undefined,
   };
 }
 

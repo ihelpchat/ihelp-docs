@@ -128,7 +128,15 @@
         },
         "sessionId": {
           "type": "string",
-          "pattern": "^[a-zA-Z0-9_-]{8,128}$"
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "faq",
+            "app"
+          ]
         },
         "history": {
           "maxItems": 6,

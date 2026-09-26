@@ -36,7 +36,7 @@ const typeSource = [
   `export type GuideId = ${literalUnion(guideIds)};`,
   ...Object.entries(schemas).map(([name, schema]) => `export type ${name} = ${typeOf(schema)};`),
   '',
-].join('\n\n');
+].join('\n\n').trimEnd() + '\n';
 const jsonSource = `${JSON.stringify({ schemaVersion: 1, schemas }, null, 2)}\n`;
 for (const [path, source] of [
   [new URL('../lib/conversation-contract.generated.ts', import.meta.url), typeSource],

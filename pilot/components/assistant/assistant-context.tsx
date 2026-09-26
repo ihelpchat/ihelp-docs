@@ -84,7 +84,7 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
       const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') as { messages?: ChatMessage[]; scope?: AssistantScope; sessionId?: string } | null;
       if (saved?.messages?.length) setMessages(saved.messages);
       if (saved?.scope) setScope(saved.scope);
-      if (saved?.sessionId) sessionId.current = saved.sessionId;
+      if (saved?.sessionId && /^[a-zA-Z0-9_-]{8,128}$/.test(saved.sessionId)) sessionId.current = saved.sessionId;
     } catch {}
   }, []);
 
@@ -108,7 +108,7 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
     const controller = new AbortController();
     abort.current = controller;
     try {
-      const reply = await requestAnswer({ question, history, scope: state.current.scope, page, sessionId: sessionId.current }, controller.signal, () => setRetrying(true));
+      const reply = await requestAnswer({ question, history, scope: state.current.scope, page, sessionId: sessionId.current, origin: 'faq' }, controller.signal, () => setRetrying(true));
       setMessages((list) => [...list, { id: id('a'), role: 'ai', reply, question }]);
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -167,7 +167,6 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
         type: 'assistant',
         value: rating,
         path: window.location.pathname,
-        question: message.question,
         sources: message.reply.sources.map((source) => source.path),
       });
     },
