@@ -115,7 +115,7 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
       const priorReply = [...base].reverse().find((message) => message.role === 'ai')?.reply;
       const request = explicitRequest ?? buildAssistantRequest(question, priorReply, { history, scope: state.current.scope, page, sessionId: sessionId.current, origin: 'faq' });
       const reply = await requestAnswer(request, controller.signal, () => setRetrying(true));
-      setMessages((list) => [...list, { id: id('a'), role: 'ai', reply, question }]);
+      setMessages((list) => [...list, { id: reply.eventId ?? id('a'), role: 'ai', reply, question }]);
     } catch (error) {
       if (controller.signal.aborted) return;
       const message = error instanceof Error ? error.message : '';

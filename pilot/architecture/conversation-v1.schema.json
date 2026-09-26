@@ -139,6 +139,11 @@
             "app"
           ]
         },
+        "companyId": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
         "history": {
           "maxItems": 6,
           "type": "array",
@@ -972,6 +977,10 @@
         },
         "model": {
           "type": "string"
+        },
+        "eventId": {
+          "type": "string",
+          "pattern": "^event-[a-f0-9]{16}$"
         }
       },
       "required": [
