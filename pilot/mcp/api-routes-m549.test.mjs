@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { readCsharpEndpoints } from '../lib/csharp-endpoints.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
+import { planContent } from './content-ai-service.mjs';
 import { renderApiReference } from './api-reference-render.mjs';
 
 const optional = `[ApiVersion("2")][Route("api/v{version:apiVersion}/contacts")]
@@ -19,7 +20,7 @@ public class ContactsController {
   public IActionResult Post([FromRoute] int contactId) { return null; }
 }`;
 
-async function contextFor(source, requested, { topic = 'API Contatos', repeat = 1, readFile: reader, cache = false } = {}) {
+async function contextFor(source, requested, { topic = 'API Contatos', repeat = 1, readFile: reader, cache = false, plan = false } = {}) {
   const root = await mkdtemp(join(await realpath(tmpdir()), 'api-routes-m549-'));
   const backend = join(root, 'back');
   const previous = process.env.BACKEND_LOCAL_CHECKOUT;
@@ -38,6 +39,17 @@ async function contextFor(source, requested, { topic = 'API Contatos', repeat = 
     for (let index = 0; index < repeat; index += 1) contexts.push(await getIhelpContext(root, topic, 'api', {
       requireLocal: true, repositoryIds: ['backend'], explicitEndpoints: [requested], cache, readFile: reader,
     }));
+    if (plan) {
+      const prompts = [];
+      const client = { responses: { create: async (payload) => {
+        prompts.push(payload.input[1].content);
+        return { output_text: JSON.stringify({ status: 'needs_information', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [] }), model: 'fake' };
+      } } };
+      const result = await planContent(root, { topic, module: 'api', description: `${requested.verb} ${requested.route}` }, {
+        productContext: contexts[0], client,
+      });
+      return { context: contexts[0], result, prompts };
+    }
     return repeat === 1 ? contexts[0] : contexts;
   } finally {
     if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
@@ -71,6 +83,18 @@ test('tema genérico seleciona action absoluta citada com valor concreto', async
   assert.ok(missing.pending.includes('endpoint citado não encontrado (POST /api/v2/crm/contacts/42/unknown)'), missing.pending.join('; '));
 });
 
+test('plano usa fato da rota absoluta concreta e mantém motivo para rota inexistente', async () => {
+  const requested = { verb: 'POST', route: '/api/v2/crm/contacts/42/tags' };
+  const positive = await contextFor(absolute('/'), requested, { topic: 'Referência da API', plan: true });
+  assert.equal(positive.prompts.length, 1, JSON.stringify(positive.result));
+  assert.ok(positive.prompts[0].includes('"route":"/api/v2/crm/contacts/{contactId}/tags"'));
+  assert.ok(!positive.result.pending.some((reason) => reason.startsWith('endpoint citado não encontrado')), positive.result.pending.join('; '));
+
+  const missing = await contextFor(absolute('/'), { ...requested, route: '/api/v2/crm/contacts/42/unknown' }, { topic: 'Referência da API', plan: true });
+  assert.equal(missing.prompts.length, 0);
+  assert.ok(missing.result.pending.includes('endpoint citado não encontrado (POST /api/v2/crm/contacts/42/unknown)'), missing.result.pending.join('; '));
+});
+
 test('tema genérico seleciona action opcional com e sem segmento', async () => {
   const source = optional.replace('{letter?}', '{letter:alpha?}');
   for (const route of ['/api/v2/contacts/abc', '/api/v2/contacts']) {
@@ -86,13 +110,13 @@ test('controller citado usa cache por caminho e mtime entre pedidos', async () =
   let reads = 0;
   const reader = async (path, options) => {
     if (path.endsWith('ContactsController.cs')) reads += 1;
-    return readFile(path, options);
+    return readFile(path, { encoding: 'utf8', ...options });
   };
   const contexts = await contextFor(optional, { verb: 'GET', route: '/api/v2/contacts/abc' }, {
     topic: 'Referência da API', repeat: 2, cache: true, readFile: reader,
   });
   assert.equal(contexts.length, 2);
-  assert.equal(contexts[1].endpoints[0]?.explicit, true);
+  assert.equal(contexts[1].endpoints[0]?.explicit, true, JSON.stringify(contexts[1].code.map(({ reason, endpoints }) => ({ reason, count: endpoints?.length }))));
   assert.equal(reads, 1, `controller lido ${reads} vezes`);
 });
 
