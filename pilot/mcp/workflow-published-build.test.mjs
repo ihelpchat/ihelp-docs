@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const checker = new URL('../scripts/workflow-concurrency.check.mjs', import.meta.url).pathname;
+const packageVercel = new URL('../scripts/prepare-vercel-release.mjs', import.meta.url).pathname;
 const workflow = readFileSync(new URL('../../.github/workflows/deploy.yml', import.meta.url), 'utf8');
 const release = readFileSync(new URL('../../.github/workflows/product-release.yml', import.meta.url), 'utf8');
 const temp = mkdtempSync(join(tmpdir(), 'published-build-'));
@@ -12,6 +13,49 @@ try {
   const safe = join(temp, 'safe.yml');
   writeFileSync(safe, workflow);
   assert.equal(spawnSync(process.execPath, [checker, safe], { encoding: 'utf8' }).status, 0, 'workflow seguro passa');
+  const artifact = join(temp, 'out');
+  const deployment = join(temp, 'deploy');
+  mkdirSync(artifact);
+  writeFileSync(join(artifact, 'release.json'), JSON.stringify({ codeSha: 'a'.repeat(40), contentSha256: 'b'.repeat(64) }));
+  writeFileSync(join(artifact, 'index.html'), 'artifact original');
+  assert.equal(spawnSync(process.execPath, [packageVercel, artifact, deployment], { encoding: 'utf8' }).status, 0, 'artifact deve ser empacotado sem build');
+  assert.equal(readFileSync(join(deployment, '.vercel/output/static/ihelp-docs/index.html'), 'utf8'), 'artifact original');
+  const originalConfig = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+  assert.deepEqual(JSON.parse(readFileSync(join(deployment, 'vercel.json'), 'utf8')), originalConfig, 'vercel.json preservado');
+  const outputConfig = JSON.parse(readFileSync(join(deployment, '.vercel/output/config.json'), 'utf8'));
+  assert.equal(outputConfig.version, 3);
+  assert.equal(outputConfig.routes.filter((route) => route.status).length, originalConfig.redirects.length, 'todos os redirects no prebuilt');
+  assert.equal(outputConfig.routes.filter((route) => route.continue).length, originalConfig.headers.length, 'todos os headers no prebuilt');
+  const example = (value) => value.replaceAll(':path*', 'a/b').replaceAll(':slug', 'exemplo');
+  const routed = (route, path) => {
+    const match = new RegExp(route.src).exec(path);
+    return match && match.index === 0 ? match : null;
+  };
+  const destinationFor = (route, match) => route.headers.Location.replace(/\$(\d+)/gu, (_, index) => match[Number(index)] ?? '');
+  const miss = '/fora-das-regras/exemplo/';
+  for (const redirect of originalConfig.redirects) {
+    const path = example(redirect.source);
+    const expected = example(redirect.destination);
+    const matches = outputConfig.routes.filter((route) => route.status && routed(route, path));
+    assert.ok(matches.length, `redirect para ${path}`);
+    assert.equal(matches[0].status, redirect.permanent ? 308 : 307, `status para ${path}`);
+    assert.equal(destinationFor(matches[0], routed(matches[0], path)), expected, `destino para ${path}`);
+    assert.ok(!routed(matches[0], miss), `redirect ${redirect.source} não pode casar com ${miss}`);
+  }
+  for (const header of originalConfig.headers) {
+    const path = example(header.source);
+    const matches = outputConfig.routes.filter((route) => route.headers && !route.status && routed(route, path));
+    assert.equal(matches.length, 1, `headers para ${path}`);
+    for (const { key, value } of header.headers) assert.equal(matches[0].headers[key], value, `${key} para ${path}`);
+    assert.ok(!routed(matches[0], miss), `header ${header.source} não pode casar com ${miss}`);
+  }
+  const redirectPath = '/ihelp-docs/primeiros-passos/acessando-a-plataforma/';
+  const redirectRoute = outputConfig.routes.find((route) => route.status === 308 && routed(route, redirectPath));
+  assert.ok(redirectRoute, 'redirect de primeiros passos deve casar com URL concreta');
+  assert.equal(destinationFor(redirectRoute, routed(redirectRoute, redirectPath)), '/ihelp-docs/docs/primeiros-passos/acessando-a-plataforma/');
+  const headerPath = '/ihelp-docs/acesso-mcp/qualquer/';
+  assert.ok(outputConfig.routes.some((route) => !route.status && routed(route, headerPath) && route.headers?.['X-Robots-Tag']?.includes('noindex')), 'filho de acesso-mcp deve receber noindex');
+  assert.ok(outputConfig.routes.some((route) => route.src === '^/ihelp-docs/(.*)/$' && route.dest === '/ihelp-docs/$1/index.html'), 'Next.js trailingSlash preservado');
   const unsafe = join(temp, 'unsafe.yml');
   writeFileSync(unsafe, readFileSync(safe, 'utf8').replace(
     '          NEXT_PUBLIC_BASE_PATH: /ihelp-docs',
@@ -31,6 +75,23 @@ try {
     assert.notEqual(changed, workflow, `${label}: fixture não mudou`);
     writeFileSync(bad, changed);
     assert.notEqual(spawnSync(process.execPath, [checker, bad], { encoding: 'utf8' }).status, 0, label);
+  }
+  const vercelMutations = [
+    ['rebuild no Vercel', (s) => s.replace('npx vercel@', 'npm run build\n          npx vercel@'), /Vercel não pode reconstruir artifact/],
+    ['Vercel sem environment', (s) => s.replace(/(  deploy-production-vercel:\n(?:.*\n)*?    environment:) production/, '$1 staging'), /Vercel exige environment production/],
+    ['token em outro job', (s) => s.replace('  deploy-service:\n', '  deploy-service:\n    env:\n      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}\n'), /VERCEL_TOKEN só no job Vercel/],
+    ['deploy sem project', (s) => s.replace(' --project "$VERCEL_PROJECT_ID"', ''), /vercel deploy.*--project.*VERCEL_PROJECT_ID/i],
+    ['deploy sem scope', (s) => s.replace(' --scope "$VERCEL_SCOPE"', ''), /vercel deploy.*--scope.*VERCEL_SCOPE/i],
+    ['deploy sem prebuilt', (s) => s.replace(' --prebuilt', ''), /vercel deploy.*--prebuilt/i],
+  ];
+  for (const [label, mutate, reason] of vercelMutations) {
+    const changed = mutate(workflow);
+    assert.notEqual(changed, workflow, `${label}: fixture não mudou`);
+    const bad = join(temp, `${label.replaceAll(' ', '-')}.yml`);
+    writeFileSync(bad, changed);
+    const verdict = spawnSync(process.execPath, [checker, bad], { encoding: 'utf8' });
+    assert.notEqual(verdict.status, 0, label);
+    assert.match(verdict.stderr, reason, `${label}: motivo específico`);
   }
   const releaseFile = join(temp, 'release.yml');
   const checkRelease = (source) => {
