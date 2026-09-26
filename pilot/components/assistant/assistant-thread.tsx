@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchContext } from 'fumadocs-ui/contexts/search';
 import { useAssistant, type ChatMessage } from '@/components/assistant/assistant-context';
 import { setPendingQuery } from '@/lib/search-query';
-import { supportMessageFor, type AssistantReply } from '@/lib/assistant';
+import { clickablesFor, type AssistantReply } from '@/lib/assistant';
 import { supportUrl } from '@/lib/links';
 import { productActionUrl } from '@/lib/links';
 
@@ -87,14 +87,15 @@ function MediaGuide({ reply, openMedia, setOpenMedia }: {
 }
 
 function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, { role: 'ai' }>; last: boolean; compact: boolean }) {
-  const { feedback, rate, ask, busy, closeDrawer } = useAssistant();
+  const { feedback, rate, askRequest, requestOptions, busy, closeDrawer } = useAssistant();
   const { copied, copy } = useCopy();
   const [openMedia, setOpenMedia] = useState<string | null>(null);
   const { reply } = message;
   const rating = feedback[message.id];
   const paragraphs = reply.answer.split(/\n{2,}/).map((text) => text.trim()).filter(Boolean);
-  const needsSupport = reply.resolution !== 'complete';
-  const supportMessage = supportMessageFor(reply);
+  const clickables = clickablesFor(reply, { supportUrl, productActionUrl, requestOptions });
+  const support = clickables.find((item) => item.slot === 'support');
+  const followups = clickables.filter((item) => item.kind === 'request');
 
   return (
     <div className="ih-ai-row">
@@ -125,11 +126,11 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
                 <div>
                   <p>{step.text}</p>
                   {step.image ? <StepVisual image={step.image} /> : null}
-                  {step.action && productActionUrl(step.action.route, step.action.id, step.action.target) ? (
-                    <a className="ih-ai-product-action" href={productActionUrl(step.action.route, step.action.id, step.action.target) ?? undefined} target="_blank" rel="noreferrer noopener">
-                      {step.action.label}<ArrowRight aria-hidden="true" />
+                  {clickables.filter((item) => item.slot === 'action' && item.stepIndex === index).map((item) => item.kind === 'link' ? (
+                    <a key={item.href} className="ih-ai-product-action" href={item.href} target="_blank" rel="noreferrer noopener">
+                      {item.label}<ArrowRight aria-hidden="true" />
                     </a>
-                  ) : null}
+                  ) : null)}
                 </div>
               </li>
             ))}
@@ -166,20 +167,20 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
             </ul>
           </div>
         ) : null}
-        {needsSupport && !reply.actions?.length ? (
+        {support?.kind === 'link' && !reply.actions?.length ? (
           <div className="ih-ai-support-cta">
             <div>
               <strong>Precisa concluir este procedimento?</strong>
               <span>Nosso time de atendimento continua com você pelo WhatsApp.</span>
             </div>
-            <a href={`${supportUrl}?text=${encodeURIComponent(supportMessage)}`} target="_blank" rel="noreferrer noopener">
+            <a href={support.href} target="_blank" rel="noreferrer noopener">
               <MessageCircle aria-hidden="true" />
-              Falar com o atendimento
+              {support.label}
             </a>
           </div>
         ) : null}
         {reply.actions?.map((action) => action.type === 'link' && action.destination === 'support' ? (
-          <a className="ih-ai-human-action" key={action.destination} href={`${supportUrl}?text=${encodeURIComponent(supportMessage)}`} target="_blank" rel="noreferrer noopener">
+          <a className="ih-ai-human-action" key={action.destination} href={support?.kind === 'link' ? support.href : supportUrl} target="_blank" rel="noreferrer noopener">
             {action.label}
           </a>
         ) : null)}
@@ -196,13 +197,13 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
           </button>
           {rating && !compact ? <span className="ih-ai-thanks" role="status">Obrigado pelo retorno</span> : null}
         </div>
-        {last && !busy && reply.suggestions.length ? (
+        {last && !busy && followups.length ? (
           <div className="ih-ai-follow">
             <p>Posso continuar com você:</p>
-            {reply.suggestions.map((suggestion) => (
-              <button type="button" key={suggestion} onClick={() => ask(suggestion)}>
+            {followups.map((item) => (
+              <button type="button" key={item.label} onClick={() => askRequest(item.request)}>
                 {compact ? null : <ArrowRight aria-hidden="true" />}
-                {suggestion}
+                {item.label}
               </button>
             ))}
           </div>

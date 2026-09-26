@@ -4,7 +4,9 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import {
   assistantEnabled,
   AssistantError,
+  buildAssistantRequest,
   requestAnswer,
+  type AssistantRequest,
   type AssistantHistoryItem,
   type AssistantReply,
   type AssistantScope,
@@ -31,6 +33,8 @@ type AssistantState = {
   counts: ScopeCounts;
   enabled: boolean;
   ask: (question: string, options?: { page?: PageRef }) => void;
+  askRequest: (request: AssistantRequest) => void;
+  requestOptions: Omit<AssistantRequest, 'question'>;
   retry: (id: string) => void;
   newChat: () => void;
   setScope: (scope: AssistantScope) => void;
@@ -94,7 +98,7 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
     } catch {}
   }, [messages, scope]);
 
-  const run = useCallback(async (question: string, page?: PageRef, prior?: ChatMessage[]) => {
+  const run = useCallback(async (question: string, page?: PageRef, prior?: ChatMessage[], explicitRequest?: AssistantRequest) => {
     const base = prior ?? state.current.messages;
     const history = historyOf(base);
     setMessages([...base, { id: id('u'), role: 'user', text: question }]);
@@ -108,7 +112,9 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
     const controller = new AbortController();
     abort.current = controller;
     try {
-      const reply = await requestAnswer({ question, history, scope: state.current.scope, page, sessionId: sessionId.current, origin: 'faq' }, controller.signal, () => setRetrying(true));
+      const priorReply = [...base].reverse().find((message) => message.role === 'ai')?.reply;
+      const request = explicitRequest ?? buildAssistantRequest(question, priorReply, { history, scope: state.current.scope, page, sessionId: sessionId.current, origin: 'faq' });
+      const reply = await requestAnswer(request, controller.signal, () => setRetrying(true));
       setMessages((list) => [...list, { id: id('a'), role: 'ai', reply, question }]);
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -126,6 +132,11 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
     const question = raw.trim();
     if (!question || state.current.busy) return;
     void run(question, options?.page);
+  }, [run]);
+
+  const askRequest = useCallback((request: AssistantRequest) => {
+    if (!request.question.trim() || state.current.busy) return;
+    void run(request.question, undefined, undefined, request);
   }, [run]);
 
   const retry = useCallback((messageId: string) => {
@@ -147,6 +158,8 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
     counts,
     enabled: assistantEnabled,
     ask,
+    askRequest,
+    requestOptions: { history: historyOf(messages), scope, sessionId: sessionId.current, origin: 'faq' },
     retry,
     newChat: () => {
       abort.current?.abort();
@@ -170,7 +183,7 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
         sources: message.reply.sources.map((source) => source.path),
       });
     },
-  }), [messages, busy, retrying, scope, drawerOpen, feedback, counts, ask, retry]);
+  }), [messages, busy, retrying, scope, drawerOpen, feedback, counts, ask, askRequest, retry]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

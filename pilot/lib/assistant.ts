@@ -28,12 +28,15 @@ export type AssistantSection = { title: string; items: string[] };
 export type AssistantProductAction = { id: string; label: string; route: string; target?: string };
 export type AssistantImage = { src: string; alt: string };
 export type AssistantStep = { text: string; action?: AssistantProductAction; image?: AssistantImage };
-export type AssistantResolution = 'complete' | 'partial' | 'not_found';
+export type AssistantResolution = 'complete' | 'partial' | 'not_found' | 'in_progress';
+export type AssistantGuideState = NonNullable<AssistantRequestV1['guide']>;
 export type AssistantEscalation = {
   intent: 'create_robot' | 'manage_users' | 'connect_channel' | 'billing' | 'campaigns' | 'templates' | 'departments' | 'files' | 'crm' | 'get_help';
   diagnosis: 'usage' | 'configuration' | 'permission' | 'plan' | 'channel_qr' | 'meta_coexistence' | 'bug_incident' | 'sensitive_action';
   state?: Record<string, unknown>;
   attempts: ('documented_guide' | 'reported_stuck')[];
+  guideId?: string;
+  stepId?: string;
 };
 
 export type AssistantReply = {
@@ -46,6 +49,8 @@ export type AssistantReply = {
   actions?: { type: 'link'; destination: 'support'; label: 'Falar com uma pessoa' }[];
   resolution: AssistantResolution;
   found: boolean;
+  guide?: AssistantGuideState;
+  guideChoices?: { id: string; label: string }[];
   escalation?: AssistantEscalation;
 };
 
@@ -89,7 +94,8 @@ function stateSummary(state: Record<string, unknown>): string {
 }
 
 export function supportMessageFor(reply: AssistantReply): string {
-  if (!reply.escalation) return 'Olá! Consultei a Central de Ajuda do iHelp e preciso de atendimento.';
+  if (!reply.escalation) return ['Olá! Consultei a Central de Ajuda do iHelp e preciso de atendimento.',
+    ...(reply.guide ? [`Guia: ${reply.guide.guideId}; passo: ${reply.guide.stepId}.`] : [])].join('\n');
   const intentLabels: Record<AssistantEscalation['intent'], string> = {
     create_robot: 'criar robô', manage_users: 'gerenciar usuários', connect_channel: 'conectar canal',
     billing: 'cobrança ou plano', campaigns: 'campanhas', templates: 'templates',
@@ -109,6 +115,9 @@ export function supportMessageFor(reply: AssistantReply): string {
     'Olá! Preciso de atendimento no iHelp.',
     `Intenção: ${intentLabels[reply.escalation.intent]}.`,
     `Diagnóstico inicial: ${diagnosisLabels[reply.escalation.diagnosis]}.`,
+    ...(reply.escalation.guideId || reply.guide
+      ? [`Guia: ${reply.escalation.guideId ?? reply.guide?.guideId}${reply.escalation.stepId || reply.guide?.stepId
+        ? `; passo: ${reply.escalation.stepId ?? reply.guide?.stepId}` : ''}.`] : []),
     ...(state ? [`Estado informado pelo aplicativo, não confirmado pelo servidor: ${state}.`] : []),
     `Tentativas: ${reply.escalation.attempts.map((item) => attemptLabels[item]).join('; ') || 'nenhuma registrada'}.`,
   ].join('\n');
@@ -198,9 +207,67 @@ function safeEscalation(value: unknown): AssistantEscalation | undefined {
   }
   return {
     intent: raw.intent as AssistantEscalation['intent'], diagnosis: raw.diagnosis as AssistantEscalation['diagnosis'],
+    ...(typeof raw.guideId === 'string' && /^[a-z0-9][a-z0-9-]{2,63}$/u.test(raw.guideId)
+      ? { guideId: raw.guideId } : {}),
+    ...(typeof raw.stepId === 'string' && /^[a-z0-9][a-z0-9-]{2,63}$/u.test(raw.stepId)
+      ? { stepId: raw.stepId } : {}),
     ...(Object.keys(safeState).length ? { state: safeState } : {}),
     attempts: Array.isArray(raw.attempts) ? raw.attempts.filter((item): item is AssistantEscalation['attempts'][number] => escalationAttempts.includes(item)).slice(0, 2) : [],
   };
+}
+
+function safeGuide(value: unknown): AssistantGuideState | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const validId = (item: unknown) => typeof item === 'string' && /^[a-z0-9][a-z0-9-]{2,63}$/.test(item);
+  if (!validId(raw.guideId) || !validId(raw.stepId) || !Number.isSafeInteger(raw.version) || Number(raw.version) < 1 || !['real', 'treino'].includes(raw.mode as string)) return undefined;
+  return {
+    guideId: raw.guideId as AssistantGuideState['guideId'], stepId: raw.stepId as string,
+    version: raw.version as number, mode: raw.mode as AssistantGuideState['mode'],
+    ...(validId(raw.pendingChoiceId) ? { pendingChoiceId: raw.pendingChoiceId as string } : {}),
+    ...(typeof raw.stateToken === 'string' && raw.stateToken.length <= 128 ? { stateToken: raw.stateToken } : {}),
+  };
+}
+
+/** Mesmo montador usado pelo contexto da UI e pelas jornadas HTTP. */
+export function buildAssistantRequest(question: string, priorReply: AssistantReply | undefined, options: Omit<AssistantRequest, 'question'>): AssistantRequest {
+  const guide = options.guide ?? (priorReply?.resolution === 'in_progress' || priorReply?.resolution === 'not_found' ? priorReply.guide : undefined);
+  const choice = guide?.pendingChoiceId && priorReply?.suggestions.includes(question)
+    ? priorReply.guideChoices?.find((item) => item.label === question)?.id : undefined;
+  return { ...options, question, ...(guide ? { guide: { ...guide, ...(choice ? { choiceId: choice } : {}) } } : {}) };
+}
+
+export type AssistantClickable =
+  | { kind: 'request'; slot: 'suggestion' | 'navigation'; label: string; request: AssistantRequest }
+  | { kind: 'link'; slot: 'action' | 'support'; label: string; href: string; stepIndex?: number };
+
+/** Os controles de guia que a tela mostra e que a jornada HTTP percorre. */
+export function clickablesFor(reply: AssistantReply, options: {
+  supportUrl: string;
+  productActionUrl: (action: AssistantProductAction) => string | null;
+  requestOptions?: Omit<AssistantRequest, 'question'>;
+}): AssistantClickable[] {
+  const result: AssistantClickable[] = [];
+  const request = (label: string, slot: 'suggestion' | 'navigation') => result.push({
+    kind: 'request', slot, label, request: buildAssistantRequest(label, reply, options.requestOptions ?? {}),
+  });
+  reply.steps.forEach((step, stepIndex) => {
+    if (!step.action) return;
+    const href = options.productActionUrl(step.action);
+    if (href) result.push({ kind: 'link', slot: 'action', label: step.action.label, href, stepIndex });
+  });
+  reply.suggestions.forEach((label) => {
+    if (!reply.guide && label === 'Falar com uma pessoa') return; // o CTA já abre o handoff validado
+    request(label, 'suggestion');
+  });
+  if (reply.guide && reply.resolution === 'in_progress') {
+    // O primeiro byte do token codifica o primeiro passo; caminho com um só byte não tem volta.
+    if (/^[A-Za-z0-9_-]{3,54}\.[A-Za-z0-9_-]{43}$/.test(reply.guide.stateToken ?? '')) request('Voltar', 'navigation');
+    request('Recomeçar', 'navigation');
+  }
+  if (reply.resolution !== 'complete') result.push({ kind: 'link', slot: 'support', label: 'Falar com o atendimento',
+    href: `${options.supportUrl}?text=${encodeURIComponent(supportMessageFor(reply))}` });
+  return result;
 }
 
 /** Aceita o formato completo e o antigo ({ answer, sources: { title, path }[] }). */
@@ -210,10 +277,15 @@ export function normalizeReply(data: unknown): AssistantReply {
   if (!answer) throw new AssistantError('Resposta vazia do assistente.');
   const code = raw.code as { language?: unknown; content?: unknown } | null | undefined;
   const sources = Array.isArray(raw.sources) ? raw.sources : [];
-  const resolution = raw.resolution === 'partial' || raw.resolution === 'not_found' || raw.resolution === 'complete'
+  const resolution = raw.resolution === 'partial' || raw.resolution === 'not_found' || raw.resolution === 'complete' || raw.resolution === 'in_progress'
     ? raw.resolution
     : raw.found === false ? 'not_found' : 'complete';
   const escalation = safeEscalation(raw.escalation);
+  const guide = safeGuide(raw.guide);
+  const guideChoices = Array.isArray(raw.guideChoices) ? raw.guideChoices.slice(0, 6).flatMap((item) => {
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !/^[a-z0-9][a-z0-9-]{2,63}$/.test(item.id) || typeof item.label !== 'string' || !item.label.trim()) return [];
+    return [{ id: item.id, label: item.label.trim().slice(0, 100) }];
+  }) : undefined;
   return {
     answer,
     sections: Array.isArray(raw.sections)
@@ -237,6 +309,8 @@ export function normalizeReply(data: unknown): AssistantReply {
       ? [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }] : [],
     resolution,
     found: resolution !== 'not_found' && raw.found !== false,
+    ...(guide ? { guide } : {}),
+    ...(guideChoices ? { guideChoices } : {}),
     ...(escalation ? { escalation } : {}),
   };
 }
