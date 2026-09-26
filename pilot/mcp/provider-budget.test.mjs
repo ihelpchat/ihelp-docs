@@ -26,6 +26,13 @@ try {
   assert.equal(calls, 2);
   assert.equal(simultaneous[2].kind, 'budget_exhausted');
 
+  const reconciledFile = join(dir, 'reconciled.json');
+  const cheap = { responses: { create: async () => ok } };
+  assert.equal((await call(cheap, { ...fixed, file: reconciledFile })).kind, 'ok');
+  assert.equal((await call(cheap, { ...fixed, file: reconciledFile })).kind, 'ok');
+  assert.equal((await call(cheap, { ...fixed, file: reconciledFile })).kind, 'ok',
+    'usage reconcilia a reserva e libera orçamento não gasto');
+
   // Processo novo usa o mesmo ledger: uma reserva sem usage continua cobrada.
   const restartFile = join(dir, 'restart.json');
   const missingUsage = { responses: { create: async () => ({ status: 'completed', output_text: '{}'}) } };
