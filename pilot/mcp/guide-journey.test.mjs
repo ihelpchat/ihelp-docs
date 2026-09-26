@@ -28,10 +28,10 @@ ${choice ? '' : '      actionId: abrir-canais\n'}
       text: ${choice ? 'Escolha uma opção.' : 'Confira o resultado.'}
 ${choice ? `      choices:
         - id: android
-          label: Android
+          label: Usar Android
           nextStepId: android
         - id: iphone
-          label: iPhone
+          label: Usar iPhone
           nextStepId: iphone
     - stepId: android
       text: Abra o menu Android.
@@ -78,13 +78,16 @@ async function post(question, priorReply, initialGuide) {
 const startState = (guideId, extra = {}) => ({ guideId, stepId: 'inicio', version: 1, mode: 'real', ...extra });
 const assertStep = (reply, guideId) => {
   const published = guideId === 'reconectar-canal-qr'
-    ? { inicio: { text: 'Abra a primeira tela.' }, escolha: { text: 'Escolha uma opção.', choices: ['Android', 'iPhone'] }, android: { text: 'Abra o menu Android.' }, iphone: { text: 'Abra o menu iPhone.' }, confirmar: { text: 'Confirme a conexão.', actionId: 'abrir-canais' } }
+    ? { inicio: { text: 'Abra a primeira tela.' }, escolha: { text: 'Escolha uma opção.', choices: [{ id: 'android', label: 'Usar Android' }, { id: 'iphone', label: 'Usar iPhone' }] }, android: { text: 'Abra o menu Android.' }, iphone: { text: 'Abra o menu iPhone.' }, confirmar: { text: 'Confirme a conexão.', actionId: 'abrir-canais' } }
     : { inicio: { text: 'Abra a primeira tela.', actionId: 'abrir-canais' }, final: { text: 'Confira o resultado.' } };
   const step = published[reply.guide.stepId];
   assert.ok(step, `${guideId}: passo publicado`);
   assert.equal(reply.steps[0].text, step.text);
   assert.deepEqual(reply.steps[0].action, step.actionId ? { id: 'abrir-canais', label: 'Abrir a tela Canais', route: '/configuracoes/channel' } : undefined);
-  if (step.choices) assert.deepEqual(reply.suggestions, step.choices);
+  if (step.choices) {
+    assert.deepEqual(reply.suggestions, step.choices.map((choice) => choice.label));
+    assert.deepEqual(reply.guideChoices, step.choices);
+  }
 };
 
 try {
