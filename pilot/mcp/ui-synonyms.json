@@ -1,0 +1,15 @@
+{
+  "criar": ["novo", "nova", "adicionar", "cadastrar", "create", "post"],
+  "cadastrar": ["criar", "novo", "adicionar", "create", "post"],
+  "atendente": ["usuario", "usuarios", "user", "users", "membro", "pessoa"],
+  "equipe": ["usuario", "usuarios", "user", "users", "atendente"],
+  "usuario": ["usuarios", "atendente", "membro", "pessoa", "user", "users"],
+  "usuarios": ["usuario", "atendente", "membro", "pessoa", "user", "users"],
+  "conectar": ["reconectar", "connection", "connect", "reconnect"],
+  "reconectar": ["conectar", "connection", "connect", "reconnect"],
+  "qr": ["qrcode", "codigo"],
+  "horario": ["horarios", "expediente", "fora", "hour", "schedule"],
+  "robô": ["robo", "bot", "chatbot"],
+  "robo": ["bot", "chatbot", "robot"],
+  "robos": ["robo", "bot", "chatbot", "robot"]
+}

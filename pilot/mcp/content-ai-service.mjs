@@ -6,6 +6,43 @@ import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './se
 import { catalogActions, isCatalogAction } from './product-actions.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 
+const CITATION_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  required: ['repository', 'path', 'lineStart', 'lineEnd', 'sha'],
+  properties: {
+    repository: { type: 'string' }, path: { type: 'string' },
+    lineStart: { type: 'integer' }, lineEnd: { type: 'integer' }, sha: { type: 'string' },
+  },
+};
+const GROUNDING_SCHEMA = { type: 'array', items: {
+  type: 'object', additionalProperties: false, required: ['text', 'citations'],
+  properties: { text: { type: 'string' }, citations: { type: 'array', items: CITATION_SCHEMA } },
+} };
+
+export function validateGroundedOutput(output, context, fields) {
+  if (!context.groundingRequired) return true;
+  const claims = output.grounding;
+  if (!Array.isArray(claims)) return false;
+  const lines = fields.flatMap((field) => {
+    const value = output[field];
+    return (Array.isArray(value) ? value : [value]).filter((item) => typeof item === 'string')
+      .flatMap((item) => item.split(/(?<=[.!?])\s+|\n/u).map((line) => line.trim()).filter(Boolean));
+  });
+  if (!lines.length || lines.some((line) => !claims.some((claim) => claim.text === line))) return false;
+  return claims.length > 0 && claims.every((claim) => typeof claim.text === 'string'
+    && lines.includes(claim.text) && Array.isArray(claim.citations) && claim.citations.length > 0
+    && claim.citations.every((citation) => context.matches.some((match) =>
+      citation.repository === match.repository && citation.path === match.path
+      && citation.sha === match.sha && citation.sha === match.ref
+      && Number.isInteger(citation.lineStart) && citation.lineStart === match.line
+      && citation.lineEnd === match.line)));
+}
+
+function evidencePending() {
+  return { status: 'needs_evidence', summary: 'A resposta não está vinculada às linhas do código recuperado.',
+    questions: ['Confirme a fonte e as citações de cada afirmação.'], articles: [] };
+}
+
 export function normalizeCatalogLabel(action) {
   return resolveCatalogAction(action) ?? action;
 }
@@ -35,20 +72,21 @@ const actionSchema = {
 const PLAN_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['status', 'guidance', 'questions', 'risks', 'suggestedActions'],
+  required: ['status', 'guidance', 'questions', 'risks', 'suggestedActions', 'grounding'],
   properties: {
     status: { type: 'string', enum: ['ready', 'needs_information'] },
     guidance: { type: 'string' },
     questions: { type: 'array', items: { type: 'string' } },
     risks: { type: 'array', items: { type: 'string' } },
     suggestedActions: { type: 'array', items: actionSchema },
+    grounding: GROUNDING_SCHEMA,
   },
 };
 
 const ARTICLE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['path', 'title', 'description', 'source', 'contentType', 'body', 'productActions', 'assistantQuestion', 'assistantOverview', 'assistantInitialSteps', 'assistantSuggestions'],
+  required: ['path', 'title', 'description', 'source', 'contentType', 'body', 'productActions', 'assistantQuestion', 'assistantOverview', 'assistantInitialSteps', 'assistantSuggestions', 'grounding'],
   properties: {
     path: { type: 'string' },
     title: { type: 'string' },
@@ -61,18 +99,20 @@ const ARTICLE_SCHEMA = {
     assistantOverview: { type: 'string' },
     assistantInitialSteps: { type: 'integer' },
     assistantSuggestions: { type: 'array', items: { type: 'string' } },
+    grounding: GROUNDING_SCHEMA,
   },
 };
 
 const PACKAGE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['status', 'summary', 'questions', 'articles'],
+  required: ['status', 'summary', 'questions', 'articles', 'grounding'],
   properties: {
     status: { type: 'string', enum: ['ready', 'needs_information'] },
     summary: { type: 'string' },
     questions: { type: 'array', items: { type: 'string' } },
     articles: { type: 'array', items: ARTICLE_SCHEMA },
+    grounding: GROUNDING_SCHEMA,
   },
 };
 
@@ -119,12 +159,23 @@ function requestText(request, existing, productContext) {
     request.productRoute ? `Rota confirmada no produto: ${request.productRoute}` : '',
     request.tangoUrl ? `Tango já existente: ${request.tangoUrl}` : '',
     `Documentação publicada semelhante (fonte editorial):\n${existing.length ? existing.map((item) => `- ${item.title} (${item.path}): ${item.description}\n${item.body ?? ''}`).join('\n') : '- Nenhum'}`,
-    `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${redactSensitiveData(item.path)}\n${redactSensitiveData(item.excerpt)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
+    `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${redactSensitiveData(item.path)} LINHA ${item.line ?? 'não informada'} SHA ${item.sha ?? item.ref}\n${redactSensitiveData(item.excerpt)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
     `Regras do suporte:\n${productContext.support?.rules?.map((item) => `- ${item}`).join('\n') ?? '- Nenhuma'}`,
     `Matriz de cobertura:\n${productContext.coverage?.map((item) => `- ${item.module}: ${item.coverage}; rotas=${item.productRoutes.join(', ')}; permissão=${item.permission}`).join('\n') ?? '- Nenhuma correspondência'}`,
     `Catálogo confiável de ProductAction (id, label, route, target):\n${catalogActions().map((action) => JSON.stringify(action)).join('\n')}`,
   ].filter(Boolean).map(redactSensitiveData).join('\n');
+}
+
+function groundingPending(context) {
+  if (!context.groundingRequired || (context.code.length && context.code.every(({ available }) => available) && context.matches.length)) return null;
+  return {
+    status: 'needs_information',
+    summary: 'Código do produto indisponível ou sem evidência para este tema.',
+    guidance: 'Código do produto indisponível ou sem evidência para este tema.',
+    questions: ['Confirme os checkouts autorizados, seus SHAs e a implementação do tema.'],
+    risks: [], suggestedActions: [], articles: [],
+  };
 }
 
 async function related(root, request) {
@@ -145,7 +196,9 @@ async function related(root, request) {
 export async function planContent(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
-  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module).catch(() => ({ repository: 'ihelpchat/front-react', ref: 'master', matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const pending = groundingPending(productContext);
+  if (pending) return pending;
   const response = await clientOf(options).responses.create(baseRequest('plano_documentacao', PLAN_SCHEMA, [
     {
       role: 'developer',
@@ -156,21 +209,26 @@ export async function planContent(root, request, options = {}) {
         'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
         'Sugira ações no produto somente com rota fornecida ou sustentada pelos detalhes. target é um identificador data-help-id estável, nunca um seletor CSS.',
         'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
+        'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].join(' '),
     },
     { role: 'user', content: requestText(request, existing, productContext) },
   ], options));
   const parsed = parseJson(response);
-  return { ...parsed, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path }) => `${repository}:${redactSensitiveData(path)}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
+  if (parsed.status === 'ready' && !validateGroundedOutput(parsed, productContext, ['guidance', 'risks'])) return evidencePending();
+  const { grounding: _grounding, ...safePlan } = parsed;
+  return { ...safePlan, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
 }
 
 export async function generateContentPackage(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
-  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module).catch(() => ({ repository: 'ihelpchat/front-react', ref: 'master', matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
-  const plan = options.plan ?? await planContent(root, request, options);
-  if (plan.status === 'needs_information') {
-    return { status: 'needs_information', summary: plan.guidance, questions: plan.questions, articles: [], existing, model: plan.model };
+  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const pending = groundingPending(productContext);
+  if (pending) return pending;
+  const plan = options.plan ?? await planContent(root, request, { ...options, productContext });
+  if (plan.status !== 'ready') {
+    return { status: plan.status, summary: plan.summary ?? plan.guidance, questions: plan.questions, articles: [], existing, model: plan.model };
   }
   const response = await clientOf(options).responses.create(baseRequest('pacote_documentacao', PACKAGE_SCHEMA, [
     {
@@ -185,13 +243,17 @@ export async function generateContentPackage(root, request, options = {}) {
         'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
         'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
         'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
+        'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].join(' '),
     },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(plan)}`) },
   ], options));
   const parsed = parseJson(response);
-  if (parsed.status !== 'ready') return { ...parsed, articles: [], existing, model: response.model };
-  const articles = parsed.articles.map((article) => ({
+  const { grounding: _grounding, ...safePackage } = parsed;
+  if (parsed.status !== 'ready') return { ...safePackage, articles: [], existing, model: response.model };
+  if (!validateGroundedOutput(parsed, productContext, ['summary']) || parsed.articles.some((article) =>
+    !validateGroundedOutput(article, productContext, ['description', 'body', 'assistantOverview', 'assistantSuggestions']))) return evidencePending();
+  const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => ({
     ...article,
     productActions: article.productActions.map(normalizeCatalogLabel),
     ...(request.tangoUrl && article.contentType === 'tutorial' ? { tangoUrl: request.tangoUrl } : {}),
@@ -211,5 +273,5 @@ export async function generateContentPackage(root, request, options = {}) {
       articles: [], existing, model: response.model,
     };
   }
-  return { ...parsed, articles, existing, model: response.model };
+  return { ...safePackage, articles, existing, model: response.model };
 }
