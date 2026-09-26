@@ -120,6 +120,34 @@ function responseTypeOf(declaration, attrs) {
   return /^\w+$/u.test(type) ? type : null;
 }
 
+function okResponseType(body) {
+  const items = tokens(body);
+  for (let index = 0; index < items.length - 4; index++) {
+    if (items[index].value !== 'return' || items[index + 1].value !== 'Ok' || items[index + 2].value !== '(') continue;
+    const argument = items[index + 3];
+    if (argument.value === 'new' && items[index + 4]?.kind === 'word') return items[index + 4].value;
+    if (argument.kind !== 'word' || items[index + 4]?.value !== ')') continue;
+    for (let declaration = index - 1; declaration >= 1; declaration--) {
+      if (items[declaration].value !== argument.value || items[declaration + 1]?.value !== '=' || items[declaration - 1]?.kind !== 'word') continue;
+      const type = items[declaration - 1].value;
+      if (type !== 'var') return type;
+      if (items[declaration + 2]?.value === 'new' && items[declaration + 3]?.kind === 'word') return items[declaration + 3].value;
+      return null;
+    }
+  }
+  return null;
+}
+
+function actionBodyOf(source, items, start) {
+  if (items[start]?.value !== '{') return '';
+  let depth = 0;
+  for (let index = start; index < items.length; index++) {
+    if (items[index].value === '{') depth++;
+    if (items[index].value === '}' && --depth === 0) return source.slice(items[start].at, items[index].at + 1);
+  }
+  return '';
+}
+
 export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
   const t = tokens(source);
   const endpoints = [];
@@ -163,15 +191,19 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
         ?? attr(pending, 'Authorize') ?? attr(controller.attrs, 'Authorize');
       const authorizationSource = authorizationAttribute ? `${file}:${lineOf(source, authorizationAttribute.at)}` : null;
       const rawParameters = reference ? signatureParameters(t.slice(i + 1, end - 1), route, dtoSources, file, source) : undefined;
-      const actionBody = source.slice(t[end]?.at ?? source.length, source.indexOf('[Http', t[end]?.at ?? source.length) < 0 ? source.length : source.indexOf('[Http', t[end].at));
+      const actionBody = actionBodyOf(source, t, end);
       const assigned = new Set([...actionBody.matchAll(/\b(\w+)\.(\w+)\s*=(?!=)/gu)].map((match) => match[2].toLowerCase()));
       const parameters = rawParameters?.filter((item) => item.in !== 'query' || !assigned.has(item.name.toLowerCase()))
         .map(({ dtoType: _dtoType, ...item }) => ({ ...item, source: item.source ?? location }));
       const declaration = source.slice(Math.max(0, source.lastIndexOf('public ', t[i - 1].at)), t[i - 1].at);
-      const resultType = responseTypeOf(declaration, pending);
-      const responseFields = resultType ? dtoFields(dtoSources, resultType) : [];
+      const declaredResultType = responseTypeOf(declaration, pending);
+      const resultType = declaredResultType === 'IActionResult' || !declaredResultType
+        ? okResponseType(actionBody) : declaredResultType;
+      const fields = resultType ? dtoFields(dtoSources, resultType) : [];
+      const responseFields = fields.length ? fields : null;
+      const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : [];
       endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
-        ...(reference ? { parameters, responseFields, responseType: resultType, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
+        ...(reference ? { parameters, responseFields, responseType: resultType, pending: responsePending, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
           routeSource, actionRouteSource: verbSource, verbSource, authorizationSource, authorization: policy } : {}) });
       pending = [];
     }

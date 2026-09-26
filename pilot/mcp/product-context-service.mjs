@@ -168,13 +168,16 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
       public: publicControllers.has(item.file)
       || (provided.explicitEndpoints ?? []).some((route) => route.toLowerCase() === item.route.toLowerCase()
         || route.toLowerCase() === item.route.replace(/^\/api\/v\d+/iu, '').toLowerCase()) }));
-    const privateFiles = new Set(endpoints.filter((item) => !item.public).map((item) => item.file));
-    nonPublicEndpoints = privateFiles.size > 0;
+    const allowedBackendFiles = new Set(endpoints.filter((item) => item.public).map((item) => item.file));
+    nonPublicEndpoints = endpoints.some((item) => !item.public);
     endpoints = endpoints.filter((item) => item.public);
-    contextCode = code.map((source) => ({ ...source,
-      endpoints: (source.endpoints ?? []).filter((item) => !privateFiles.has(item.file)),
-      matches: source.matches.filter((match) => !privateFiles.has(match.path)),
-    }));
+    contextCode = code.map((source) => {
+      const backend = source.role === 'backend' || source.repository === 'ihelpchat/olah-ihelp';
+      return { ...source,
+        endpoints: backend ? (source.endpoints ?? []).filter((item) => allowedBackendFiles.has(item.file)) : (source.endpoints ?? []),
+        matches: backend ? source.matches.filter((match) => allowedBackendFiles.has(match.path)) : source.matches,
+      };
+    });
     apiExamples = apiExamples.slice(0, 4);
   }
   return {
@@ -189,9 +192,10 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     coverage: relevantCoverage,
     endpoints,
     nonPublicEndpoints,
+    pending: endpoints.flatMap((item) => item.pending ?? []),
     apiExamples,
     matches: [...contextCode.flatMap((source) => source.matches.map((match) => ({ ...match, repository: source.repository, ref: source.ref, role: source.role }))),
-      ...endpoints.filter((item) => item.documented || item.explicit).flatMap((item) => [item, ...item.parameters, ...item.responseFields]
+      ...endpoints.filter((item) => item.documented || item.explicit).flatMap((item) => [item, ...item.parameters, ...(item.responseFields ?? [])]
         .map((fact) => ({ repository: 'ihelpchat/olah-ihelp', role: 'backend',
           path: fact.source.split(':')[0], line: Number(fact.source.split(':').at(-1)),
           sha: item.sha, ref: item.sha, excerpt: JSON.stringify(fact) })))],
