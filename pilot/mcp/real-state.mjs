@@ -52,9 +52,8 @@ export function intentOf(question, context) {
   return 'get_help';
 }
 
-export function diagnoseState(question, context) {
+export function diagnosisFor(question, context, intent = 'get_help') {
   const value = plain(question);
-  const intent = intentOf(question, context);
   if (/\b(?:cancelar|reembolso|alterar contrato|alterar plano|excluir conta|dados pessoais)\b/.test(value)) return { cause: 'sensitive_action' };
   if (/\b(?:sem permissao|nao tenho permissao|permissao negada|acesso negado|nao tenho acesso)\b/.test(value)) return { cause: 'permission' };
   if (/\b(?:erro|falha|travou|bug)\b/.test(value)) return { cause: 'bug_incident' };
@@ -73,8 +72,11 @@ export function diagnoseState(question, context) {
   return { cause: 'usage' };
 }
 
-export function diagnosticQuestion(question, context, diagnosis = diagnoseState(question, context)) {
-  const intent = intentOf(question, context);
+export function diagnoseState(question, context) {
+  return diagnosisFor(question, context, intentOf(question, context));
+}
+
+export function questionForDiagnosis(question, context, diagnosis, intent = 'get_help') {
   const moduleName = {
     create_robot: 'Robôs', manage_users: 'Usuários', campaigns: 'Campanhas', templates: 'Templates',
     connect_channel: 'Canais', billing: 'Plano e cobrança', departments: 'Departamentos',
@@ -90,9 +92,12 @@ export function diagnosticQuestion(question, context, diagnosis = diagnoseState(
   return `Você vê ${moduleName} no menu lateral?`;
 }
 
-export function escalationFor(question, diagnosis, context, history) {
+export function diagnosticQuestion(question, context, diagnosis = diagnoseState(question, context)) {
+  return questionForDiagnosis(question, context, diagnosis, intentOf(question, context));
+}
+
+export function handoffFor(diagnosis, context, history, intent = 'get_help') {
   const past = history.map(({ content }) => plain(content));
-  const intent = intentOf(question, context);
   return {
     intent,
     diagnosis: diagnosis.cause,
@@ -102,4 +107,8 @@ export function escalationFor(question, diagnosis, context, history) {
       ...(past.some((item) => /nao encontrei|preciso de ajuda/.test(item)) ? ['reported_stuck'] : []),
     ])],
   };
+}
+
+export function escalationFor(question, diagnosis, context, history) {
+  return handoffFor(diagnosis, context, history, intentOf(question, context));
 }

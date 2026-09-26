@@ -8,6 +8,8 @@ export const docsPageSchema = pageSchema.extend({
   source: z.enum(['produto', 'suporte', 'api']),
   contentType: z.enum(['faq', 'tutorial', 'guia', 'referencia']),
   guide: guideSchema.optional(),
+  assistantAliases: z.array(z.string().min(2).max(120)).max(20).optional(),
+  assistantKeywords: z.array(z.string().min(2).max(80)).max(30).optional(),
   method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).optional(),
   endpoint: z.string().optional(),
   date: z.coerce.date().optional(),

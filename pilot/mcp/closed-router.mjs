@@ -8,7 +8,13 @@ import { assistantRouterModel } from './env-compat.mjs';
 
 const normalize = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 const words = (value) => normalize(value).match(/[a-z0-9]+/g) ?? [];
-const ignored = new Set(['como', 'criar', 'fazer', 'quero', 'para', 'uma', 'com', 'pelo', 'meu', 'que', 'isso']);
+const ignored = new Set(['a', 'ao', 'as', 'como', 'criar', 'fazer', 'configurar', 'usar', 'enviar', 'abrir', 'quero', 'para', 'uma', 'com', 'pelo', 'meu', 'que', 'isso', 'guia', 'ihelp', 'no', 'de', 'do', 'da', 'em', 'o', 'e']);
+const meaningful = (value) => words(value).map((word) => word.replace(/s$/u, '')).filter((word) => word.length > 3 && !ignored.has(word));
+const publicTerms = (item) => [item.title, item.question, ...(item.aliases ?? []), ...(item.keywords ?? [])].join(' ');
+const supportedByQuestion = (question, item) => {
+  const available = new Set(meaningful(publicTerms(item)));
+  return meaningful(question).some((word) => available.has(word));
+};
 
 /** Only MDX containing a valid, published guide may enter the classifier's choices. */
 export async function publishedGuideCatalog(root) {
@@ -30,7 +36,9 @@ export async function publishedGuideCatalog(root) {
       try { guide = parseGuide(metadata.guide); } catch { continue; }
       catalog.push({ guideId: guide.guideId, initialStepId: guide.initialStepId, version: guide.version, mode: guide.mode,
         title: String(metadata.title ?? ''),
-        question: String(metadata.assistantQuestion ?? ''), description: String(metadata.description ?? '') });
+        question: String(metadata.assistantQuestion ?? ''), description: String(metadata.description ?? ''),
+        aliases: Array.isArray(metadata.assistantAliases) ? metadata.assistantAliases.filter((value) => typeof value === 'string') : [],
+        keywords: Array.isArray(metadata.assistantKeywords) ? metadata.assistantKeywords.filter((value) => typeof value === 'string') : [] });
     }
   }
   await visit(directory);
@@ -72,7 +80,8 @@ export async function routeMessage(question, { catalog, client, budget, history 
       'Escolha apenas um valor da lista fechada. A mensagem atual vence o histórico e o contexto da tela.',
       'Negação explícita veta o guia negado. Se houver ambiguidade, escolha perguntar.',
       'Se pedir uma pessoa, escolha humano. Se não houver guia adequado, escolha sem guia.',
-      ...catalog.map(({ guideId, title, question: example, description }) => `${guideId}: ${title}; ${example}; ${description}`),
+      ...catalog.map(({ guideId, title, question: example, description, aliases = [], keywords = [] }) =>
+        `${guideId}: ${title}; ${example}; ${description}; ${aliases.join('; ')}; ${keywords.join('; ')}`),
     ].join('\n') },
     ...history.filter((item) => ['user', 'assistant'].includes(item?.role) && typeof item.content === 'string')
       .slice(-2).map((item) => ({ role: item.role, content: redactSensitiveData(item.content.slice(0, 500)) })),
@@ -99,6 +108,7 @@ export async function routeMessage(question, { catalog, client, budget, history 
     if (identifiers.has(parsed.choice)) {
       const explicit = lexicalFallback(safeQuestion, catalog);
       return negated(safeQuestion, catalog.find(({ guideId }) => guideId === parsed.choice))
+        || !supportedByQuestion(safeQuestion, catalog.find(({ guideId }) => guideId === parsed.choice))
         || (explicit.kind === 'guide' && explicit.guideId !== parsed.choice)
         ? NONE : { kind: 'guide', guideId: parsed.choice };
     }

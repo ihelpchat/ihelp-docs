@@ -9,7 +9,7 @@ import { diagnoseState, escalationFor, sanitizeWidgetContext } from './real-stat
 import { guideStateToken, guideStatePath } from './opaque-id.mjs';
 
 const plain = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
-export const requestsHuman = (value) => /\b(?:falar|conversar) com (?:uma? )?(?:pessoa|atendente|humano)|\b(?:quero|preciso de) (?:um )?(?:atendente|humano|suporte)|^(?:suporte|atendimento)$/.test(plain(value));
+export const requestsHuman = (value) => /\b(?:falar|conversar) com (?:uma? )?(?:pessoa|atendente|humano|alguem)|\b(?:quero|preciso de) (?:um )?(?:atendente|atendimento|humano|suporte)|\b(?:suporte humano|me liga|chamar o suporte)\b|^(?:suporte|atendimento)$/.test(plain(value));
 const failure = (value) => /(?:deu certo\? nao|nao deu certo|nao funcionou)/.test(value);
 const guideIds = new Set(canonicalGuideIds);
 

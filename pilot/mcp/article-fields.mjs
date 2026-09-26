@@ -27,6 +27,8 @@ export const articleSchema = z.strictObject({
   tags: z.array(z.string()).optional(),
   slug: z.string().optional(),
   assistantQuestion: z.string().optional(),
+  assistantAliases: z.array(z.string().min(2).max(120)).max(20).optional(),
+  assistantKeywords: z.array(z.string().min(2).max(80)).max(30).optional(),
   assistantOverview: z.string().optional(),
   assistantInitialSteps: z.coerce.number().int().optional(),
   assistantSuggestions: z.union([z.array(z.string()), z.string().transform(parseAssistantSuggestions)]).optional(),

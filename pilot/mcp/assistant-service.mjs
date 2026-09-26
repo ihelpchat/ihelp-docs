@@ -5,7 +5,7 @@ import { parseDocument } from 'yaml';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { resolveGuideId } from '../architecture/conversation-v1.mjs';
 import { parseAssistantSuggestions } from './conversational-contract.mjs';
-import { sanitizeWidgetContext, diagnoseState, diagnosticQuestion, escalationFor } from './real-state.mjs';
+import { sanitizeWidgetContext, diagnosisFor, questionForDiagnosis, handoffFor } from './real-state.mjs';
 import { redactSensitiveData } from './sensitive-data.mjs';
 import { answerGuide, requestsHuman } from './guide-state.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
@@ -16,6 +16,22 @@ const STOP_WORDS = new Set([
   'me', 'meu', 'na', 'nas', 'no', 'nos', 'o', 'os', 'para', 'por', 'que', 'se', 'um', 'uma',
 ]);
 const MAX_GUIDE_STEPS = 20;
+const sourceIntents = new Map(Object.entries({
+  '/docs/sobre-o-sistema/robo-de-atendimento': 'create_robot',
+  '/docs/sobre-o-sistema/configuracoes/gerenciamento-de-usuarios': 'manage_users',
+  '/docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha': 'campaigns',
+  '/docs/sobre-o-sistema/configuracoes/canais': 'connect_channel',
+  '/docs/sobre-o-sistema/crm/como-criar-uma-nova-pipeline': 'crm',
+  ...Object.fromEntries(Object.entries({
+    'cobranca-plano': 'billing', 'usuario-acesso': 'manage_users',
+    'reconectar-canal-qr': 'connect_channel', 'api-oficial-qr-coexistencia': 'connect_channel',
+    campanhas: 'campaigns', 'permissoes-departamentos': 'departments',
+    templates: 'templates', arquivos: 'files', crm: 'crm',
+  }).map(([slug, intent]) => [`/docs/principais-motivos-de-suporte/${slug}`, intent])),
+}));
+const knownIntents = new Set([...sourceIntents.values(), 'get_help']);
+const intentFromSource = (source) => knownIntents.has(source?.assistantIntent) ? source.assistantIntent
+  : sourceIntents.get(source?.path) ?? 'get_help';
 
 function normalize(value) {
   return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
@@ -573,7 +589,8 @@ export async function answerQuestion(root, question, options = {}) {
     || (priorGuide.assistantOptionalPrompt && normalize(activeText) === normalize(priorGuide.assistantOptionalPrompt))
   );
   const activeDiagnosis = !activeChoice && Boolean(optionalBranch) && activeText
-    && normalize(activeText) === normalize(diagnosticQuestion(priorGuide.assistantQuestion, widgetContext))
+    && normalize(activeText) === normalize(questionForDiagnosis(priorGuide.assistantQuestion, widgetContext,
+      diagnosisFor(priorGuide.assistantQuestion, widgetContext, intentFromSource(priorGuide)), intentFromSource(priorGuide)))
     && optionalDecisionIndex(history, priorGuide.documentedSteps) === optionalBranch.decision;
   const activeResume = !activeChoice && Boolean(optionalBranch && priorGuide.assistantOptionalResumePrompt)
     && normalize(activeText) === normalize(priorGuide.assistantOptionalResumePrompt);
@@ -593,7 +610,6 @@ export async function answerQuestion(root, question, options = {}) {
     && (originalQuestion === question || optionalChoice(originalQuestion) || optionalRecovery(originalQuestion))) {
     originalQuestion = historyGuide.assistantQuestion;
   }
-  const diagnosis = diagnoseState(originalQuestion, widgetContext);
   if (historyGuide) sources = [historyGuide];
   if (!sources.length) {
     return {
@@ -680,6 +696,8 @@ export async function answerQuestion(root, question, options = {}) {
   const used = procedure && selected.some((source) => source.documentedSteps.length)
     ? selected.filter((source) => source.documentedSteps.length || source.productActions.length)
     : selected;
+  const selectedIntent = intentFromSource(used[0]);
+  const diagnosis = diagnosisFor(originalQuestion, widgetContext, selectedIntent);
   const availableActions = new Map(used.flatMap((source) => source.productActions.map((action) => [action.id, action])));
   const availableImages = new Map(used.flatMap((source) => source.screenshots.map((image) => [image.src, image])));
   const fallbackSource = used.find((source) => source.documentedSteps.length);
@@ -726,7 +744,7 @@ export async function answerQuestion(root, question, options = {}) {
       : parsed.steps.length ? parsed.steps : documentedFallback;
   const attemptedHelp = history.some((item) => item.role === 'user' && /^(?:ainda )?n[aã]o encontrei\b|^preciso de ajuda\b/i.test(item.content.trim()));
   const escalate = needsHelp && attemptedHelp;
-  const questionForDiagnosis = diagnosticQuestion(originalQuestion, widgetContext, diagnosis);
+  const diagnosisQuestion = questionForDiagnosis(originalQuestion, widgetContext, diagnosis, selectedIntent);
   const safeSteps = needsHelp ? [] : detailedProcedure && fallbackSource
     ? fallbackSource.documentedSteps.map((text, index) => ({
         text, actionId: index === 0 ? fallbackSource.productActions[0]?.id ?? null : null,
@@ -767,7 +785,7 @@ export async function answerQuestion(root, question, options = {}) {
   return {
     answer: needsHelp ? escalate
       ? 'Vou encaminhar seu caso ao atendimento com o estado informado e as tentativas já feitas.'
-      : questionForDiagnosis
+      : diagnosisQuestion
       : withoutRepeatedInstructions(overviewSource
       ? overviewSource.assistantOverview
       : blockedFollowup ? recovery ? fallbackSource.assistantOptionalPrompt : fallbackSource.assistantOptionalBlockedPrompt
@@ -779,7 +797,7 @@ export async function answerQuestion(root, question, options = {}) {
         ? 'Você concluiu as etapas documentadas. Publicar coloca o robô online; Salvar guarda o robô inativo.'
         : 'Você chegou ao fim das etapas documentadas.')
       : progressStep ? needsHelp
-        ? questionForDiagnosis
+        ? diagnosisQuestion
         : startGuide && !activeChoice ? 'Vamos começar pelo primeiro passo.' : 'Vamos para a próxima ação.'
       : parsed.answer, safeSteps)
       || (continuation ? 'Vamos por uma ação de cada vez.' : 'Siga os passos abaixo e me diga onde precisar de ajuda.'),
@@ -800,7 +818,7 @@ export async function answerQuestion(root, question, options = {}) {
     resolution: escalate ? 'partial' : (historyGuide || exactGuide)?.assistantResolution ?? (historyGuide ? 'complete' : parsed.resolution),
     found: historyGuide || exactGuide ? true : parsed.found,
     diagnosis,
-    ...(escalate ? { escalation: escalationFor(originalQuestion, diagnosis, widgetContext, history) } : {}),
+    ...(escalate ? { escalation: handoffFor(diagnosis, widgetContext, history, selectedIntent) } : {}),
     model: response.model,
   };
 }

@@ -71,7 +71,9 @@ export async function compileGuidePackage(root) {
     if (ids.has(guide.guideId)) throw new Error(`${path}: guideId duplicado: ${guide.guideId}`);
     ids.add(guide.guideId);
     if (typeof metadata.title !== 'string' || typeof metadata.description !== 'string') throw new Error(`${path}: título ou descrição ausente`);
-    guides.push({ pathSegments: path.split('/'), title: metadata.title, description: metadata.description, guide });
+    guides.push({ pathSegments: path.split('/'), title: metadata.title, description: metadata.description,
+      ...(metadata.assistantAliases?.length ? { aliases: metadata.assistantAliases } : {}),
+      ...(metadata.assistantKeywords?.length ? { keywords: metadata.assistantKeywords } : {}), guide });
   }
   guides.sort((left, right) => left.guide.guideId < right.guide.guideId ? -1 : left.guide.guideId > right.guide.guideId ? 1 : 0);
   const aliases = { ...legacyGuideAliases };
