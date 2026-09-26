@@ -7,6 +7,7 @@ export const envCompatibility = Object.freeze({
   guideProof: Object.freeze({ stagingUrl: 'GUIDE_QA_STAGING_URL', allowedHosts: 'GUIDE_QA_ALLOWED_HOSTS', authorizedEmail: 'GUIDE_QA_AUTHORIZED_EMAIL', authorizedPassword: 'GUIDE_QA_AUTHORIZED_PASSWORD', deniedEmail: 'GUIDE_QA_DENIED_EMAIL', deniedPassword: 'GUIDE_QA_DENIED_PASSWORD', appSha: 'GUIDE_QA_APP_SHA' }),
   assistantRouterModel: Object.freeze({ old: 'OPENAI_MODEL', current: 'ASSISTANT_ROUTER_MODEL', rule: 'use OPENAI_MODEL with a warning when current is absent' }),
   assistantRouterEffort: Object.freeze({ current: 'ASSISTANT_ROUTER_EFFORT', default: 'none' }),
+  conversationsRetentionDays: Object.freeze({ current: 'CONVERSATIONS_RETENTION_DAYS' }),
   localCheckouts: Object.freeze({ frontend: 'PRODUCT_LOCAL_CHECKOUT', backend: 'BACKEND_LOCAL_CHECKOUT' }),
 });
 
@@ -58,4 +59,15 @@ export function assistantRouterEffort(env = process.env) {
     throw new Error(`${current} inválido: ${effort}`);
   }
   return effort;
+}
+
+export function conversationsRetentionDays(env = process.env) {
+  const { current } = envCompatibility.conversationsRetentionDays;
+  const value = env[current];
+  if (value === undefined) return undefined;
+  const days = Number(value);
+  if (!/^[1-9]\d*$/u.test(value) || !Number.isSafeInteger(days)) {
+    throw new Error(`${current} inválido: ${value}`);
+  }
+  return days;
 }

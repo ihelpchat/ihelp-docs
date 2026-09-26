@@ -40,6 +40,7 @@ export type AssistantEscalation = {
 };
 
 export type AssistantReply = {
+  eventId?: string;
   answer: string;
   sections: AssistantSection[];
   steps: AssistantStep[];

@@ -27,6 +27,7 @@ export type AssistantRequestV1 = {
   question: string;
   sessionId?: string;
   origin?: "faq" | "app";
+  companyId?: number;
   history?: Array<{
   role: "user" | "assistant";
   content: string;
@@ -149,6 +150,7 @@ export type AssistantReplyV1 = {
   target?: string;
 }>;
   model?: string;
+  eventId?: string;
 };
 
 export type ProductActionV1 = {

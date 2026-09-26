@@ -1,5 +1,4 @@
-import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { appendJsonl, readJsonl, replaceJsonl, serialize } from './jsonl-store.mjs';
 import guideIds from '../architecture/guide-ids.json' with { type: 'json' };
 import productActions from '../architecture/product-actions.json' with { type: 'json' };
 import { isPublishedPath } from './published-paths.mjs';
@@ -28,17 +27,9 @@ export const sessionEventSchema = z.object({
   createdAt: z.string().optional(),
 }).strict();
 const FIELDS = new Set(Object.keys(sessionEventSchema.shape));
-const pending = new Map();
 
 function invalid() { throw new Error('Evento inválido.'); }
 
-function serialize(file, operation) {
-  const previous = pending.get(file) ?? Promise.resolve();
-  const current = previous.catch(() => {}).then(operation);
-  pending.set(file, current);
-  void current.finally(() => { if (pending.get(file) === current) pending.delete(file); }).catch(() => {});
-  return current;
-}
 
 export function normalizeSessionEvent(input, { now = Date.now() } = {}) {
   const safeInput = input && typeof input === 'object' && !Array.isArray(input)
@@ -73,40 +64,19 @@ export function normalizeSessionEvent(input, { now = Date.now() } = {}) {
   };
 }
 
-async function readEvents(file) {
-  try {
-    return (await readFile(file, 'utf8')).split('\n').filter(Boolean).flatMap((line) => {
-      try { return [JSON.parse(line)]; } catch { return []; }
-    });
-  } catch (error) {
-    if (error?.code === 'ENOENT') return [];
-    throw error;
-  }
-}
-
-async function replaceEvents(file, events) {
-  await mkdir(dirname(file), { recursive: true });
-  const temporary = `${file}.${crypto.randomUUID()}.tmp`;
-  await writeFile(temporary, events.map((event) => JSON.stringify(event)).join('\n') + (events.length ? '\n' : ''), { mode: 0o600 });
-  await rename(temporary, file);
-}
-
 export async function saveSessionEvent(file, input, options = {}) {
   const event = normalizeSessionEvent(input, options);
-  await serialize(file, async () => {
-    await mkdir(dirname(file), { recursive: true });
-    await appendFile(file, `${JSON.stringify(event)}\n`, { mode: 0o600 });
-  });
+  await appendJsonl(file, event);
   return event;
 }
 
 export async function pruneSessionEvents(file, { now = Date.now(), retentionDays = 30 } = {}) {
   if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 365) invalid();
   return serialize(file, async () => {
-    const events = await readEvents(file);
+    const events = await readJsonl(file);
     const kept = events.filter((event) => Number.isFinite(Date.parse(event.createdAt))
       && Date.parse(event.createdAt) >= now - retentionDays * DAY_MS);
-    if (kept.length !== events.length) await replaceEvents(file, kept);
+    if (kept.length !== events.length) await replaceJsonl(file, kept);
     return events.length - kept.length;
   });
 }
@@ -114,9 +84,9 @@ export async function pruneSessionEvents(file, { now = Date.now(), retentionDays
 export async function discardSessionEvents(file, sessionId) {
   if (!ID.test(sessionId ?? '')) invalid();
   return serialize(file, async () => {
-    const events = await readEvents(file);
+    const events = await readJsonl(file);
     const kept = events.filter((event) => event.sessionId !== sessionId);
-    if (kept.length !== events.length) await replaceEvents(file, kept);
+    if (kept.length !== events.length) await replaceJsonl(file, kept);
     return events.length - kept.length;
   });
 }
