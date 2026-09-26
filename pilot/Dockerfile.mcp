@@ -9,6 +9,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY architecture ./architecture
 COPY content ./content
+COPY public/guides ./public/guides
+COPY deploy-release.json ./public/release.json
 COPY mcp ./mcp
 
 EXPOSE 3100
