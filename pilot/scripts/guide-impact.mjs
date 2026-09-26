@@ -23,5 +23,5 @@ const result = calculateGuideImpact({ before: before.value, after: after.value, 
 if (before.pending || after.pending) result.pending = [before.pending, after.pending].filter(Boolean);
 await writeFile(outputFile, `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });
 console.log(`${result.proposals.length} propostas; ${result.pending.length} pendências`);
-if (before.pending || after.pending) process.exitCode = 2;
+if (before.pending || after.pending || result.pending.some((message) => message.includes('snapshot inválido'))) process.exitCode = 2;
 else if (result.pending.length) process.exitCode = 1;

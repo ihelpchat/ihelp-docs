@@ -11,8 +11,29 @@ const keyOf = {
 };
 const manifestField = { route: 'routes', marker: 'markers', label: 'labels', permission: 'permissions' };
 const validSha = (value) => typeof value === 'string' && /^[a-f0-9]{40}$/u.test(value);
-const validSnapshot = (value) => value && validSha(value.frontSha) && validSha(value.backSha) &&
-  Object.values(manifestField).every((field) => Array.isArray(value.manifest?.[field]));
+const itemFields = {
+  routes: ['path', 'label'], labels: ['label', 'file'], markers: ['kind', 'id'],
+  permissions: ['controller', 'method', 'verb', 'route', 'policy', 'name'],
+};
+const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+function snapshotIssue(value, name) {
+  if (!record(value)) return `${name}: snapshot inválido em snapshot`;
+  for (const field of ['frontSha', 'backSha']) {
+    if (!validSha(value[field])) return `${name}: snapshot inválido em ${field}`;
+  }
+  if (!record(value.manifest)) return `${name}: snapshot inválido em manifest`;
+  for (const [field, required] of Object.entries(itemFields)) {
+    if (!Array.isArray(value.manifest[field])) return `${name}: snapshot inválido em manifest.${field}`;
+    for (const [index, item] of value.manifest[field].entries()) {
+      const path = `manifest.${field}[${index}]`;
+      if (!record(item)) return `${name}: snapshot inválido em ${path}`;
+      for (const key of required) {
+        if (typeof item[key] !== 'string' || !item[key].trim()) return `${name}: snapshot inválido em ${path}.${key}`;
+      }
+    }
+  }
+  return null;
+}
 const normalizedLabel = (value) => value.normalize('NFD').replace(/\p{M}/gu, '')
   .toLocaleLowerCase('pt-BR').replace(/\s+/gu, ' ').trim();
 const labelKey = ({ file, label }) => `${file}:${normalizedLabel(label)}`;
@@ -44,13 +65,14 @@ export function buildGuideReferenceIndex(guides, actions, sources = {}, manifest
 }
 
 export function calculateGuideImpact({ before, after, guides, actions, sources }) {
-  const index = buildGuideReferenceIndex(guides, actions, sources, before?.manifest);
+  const issues = [snapshotIssue(before, 'snapshot anterior'), snapshotIssue(after, 'snapshot atual')].filter(Boolean);
+  const index = buildGuideReferenceIndex(guides, actions, sources, issues.length ? {} : before.manifest);
   const shas = { before: before ? { frontSha: before.frontSha, backSha: before.backSha } : null,
     after: after ? { frontSha: after.frontSha, backSha: after.backSha } : null };
   const info = index.filter(({ references }) => !references.some(({ kind }) => kind === 'permission'))
     .map(({ guideId }) => `${guideId}: permissão não mapeada`);
-  if (!validSnapshot(before) || !validSnapshot(after)) {
-    return { shas, index, proposals: [], pending: ['snapshot anterior ou atual ausente ou inválido'], info };
+  if (issues.length) {
+    return { shas, index, proposals: [], pending: issues, info };
   }
   const proposals = [];
   const pending = [];
