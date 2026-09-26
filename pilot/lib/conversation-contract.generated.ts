@@ -60,6 +60,7 @@ export type AssistantRequestV1 = {
   pendingChoiceId?: string;
   pendingChoice?: string;
   choiceId?: string;
+  stateToken?: string;
 };
 };
 
@@ -99,7 +100,7 @@ export type AssistantReplyV1 = {
 };
 }>;
   suggestions?: Array<string>;
-  resolution?: "complete" | "partial" | "not_found";
+  resolution?: "complete" | "partial" | "not_found" | "in_progress";
   found?: boolean;
   diagnosis?: {
   cause: "usage" | "configuration" | "permission" | "plan" | "channel_qr" | "meta_coexistence" | "bug_incident" | "sensitive_action";
@@ -124,6 +125,8 @@ export type AssistantReplyV1 = {
   incidents?: Array<"channel_outage" | "message_delivery" | "billing" | "robot" | "app">;
 };
   attempts: Array<"documented_guide" | "reported_stuck">;
+  guideId?: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
+  stepId?: string;
 };
   guide?: {
   guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
@@ -133,7 +136,12 @@ export type AssistantReplyV1 = {
   pendingChoiceId?: string;
   pendingChoice?: string;
   choiceId?: string;
+  stateToken?: string;
 };
+  guideChoices?: Array<{
+  id: string;
+  label: string;
+}>;
   actions?: Array<{
   id: "importar-contatos" | "abrir-robos" | "abrir-usuarios" | "abrir-canais" | "abrir-campanhas" | "abrir-departamentos" | "abrir-atendimento" | "abrir-crm";
   label?: string;

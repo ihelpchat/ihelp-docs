@@ -9,7 +9,7 @@ const ID = /^[a-z0-9][a-z0-9-]{2,63}$/iu;
 const PATH = /^\/(?!\/)[a-z0-9/_-]*$/iu;
 const ORIGINS = new Set(['faq', 'app']);
 const GUIDE_IDS = new Set(guideIds);
-const RESULTS = new Set(['complete', 'partial', 'not_found', 'escalated', 'abandoned']);
+const RESULTS = new Set(['complete', 'partial', 'not_found', 'in_progress', 'escalated', 'abandoned']);
 export const sessionEventSchema = z.object({
   sessionId: z.string().regex(ID),
   origin: z.enum(['faq', 'app']),
