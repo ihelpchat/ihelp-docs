@@ -217,7 +217,7 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
     if (!terms.length) return pending(source, 'Tema sem termos pesquisáveis');
     const rawTerms = [...new Set([...terms, ...`${topic} ${module}`.split(/[^\p{L}\p{N}]+/u).map((word) => word.toLowerCase())])];
     const textual = await candidatePaths(root, paths, terms, topic, deadline);
-    const pathFallback = textual.length ? [] : paths.filter((path) => terms.some((term) => normalize(path).includes(term)));
+    const pathFallback = paths.filter((path) => moduleTerms.some((term) => normalize(path).includes(term)));
     const candidates = [...new Set([...textual, ...pathFallback])]
       .sort((a, b) => pathRelevance(b, terms, moduleTerms) - pathRelevance(a, terms, moduleTerms)).slice(0, 64);
     let totalBytes = 0;
@@ -235,7 +235,7 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
       const fileKey = `${root}\0${sha}\0${path}`;
       let lines = cache ? fileCache.get(fileKey) : undefined;
       if (lines === undefined) {
-        const content = await deadline.wait(reader(actual, { encoding: 'utf8', signal: deadline.signal }));
+        const content = (await deadline.wait(reader(actual, { encoding: 'utf8', signal: deadline.signal }))).replace(/^\uFEFF/u, '');
         lines = sensitiveSource(content) ? null : content.split('\n');
         if (cache) fileCache.set(fileKey, lines);
       }

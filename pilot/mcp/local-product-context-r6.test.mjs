@@ -33,8 +33,8 @@ export function DepartmentConfigExtras() {
 
 assert.equal(containsSensitiveData(identifier, { detectOpaque: true }), false, 'identificador camelCase não é segredo');
 assert.equal(containsSensitiveData(files[department], { detectOpaque: true }), false, 'componente com identificador camelCase é elegível');
-assert.equal(containsSensitiveData("const value = '/AbcDefGhiJklMnoPqrStuVwxYz';", { detectOpaque: true }), true,
-  'sequência com barra fora de import ainda é opaca');
+assert.equal(containsSensitiveData("const value = '/AbcDefGhiJklMnoPqrStuVwxYz';", { detectOpaque: true }), false,
+  'barra de caminho separa segmentos e não caracteriza token');
 
 const checkout = await realpath(await mkdtemp(join(tmpdir(), 'm530-r6-')));
 const git = (...args) => execFileSync('git', args, { cwd: checkout, encoding: 'utf8' }).trim();

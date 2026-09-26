@@ -41,9 +41,13 @@ const original = [process.env.PRODUCT_LOCAL_CHECKOUT, process.env.BACKEND_LOCAL_
 process.env.PRODUCT_LOCAL_CHECKOUT = front;
 process.env.BACKEND_LOCAL_CHECKOUT = back;
 try {
-  for (const { topic, module, frontend, backend } of golden.cases) {
+  for (const { topic, module, frontend, backend, backendExcluded } of golden.cases) {
     const result = await searchLocalProductContext(topic, module, { cache: false });
     for (const [role, causal] of [['frontend', frontend], ['backend', backend]]) {
+      if (!causal) {
+        assert.ok(role === 'backend' && backendExcluded, `${topic} ${role}: exclusão sem motivo`);
+        continue;
+      }
       const source = result.code.find((item) => item.role === role);
       assert.equal(source?.available, true, `${topic} ${role}: ${source?.reason}`);
       assert.ok(source.matches.slice(0, 3).some(({ path }) => path === causal), `${topic} ${role}: causal fora do top 3`);
