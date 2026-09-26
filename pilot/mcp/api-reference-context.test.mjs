@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readCsharpEndpoints } from '../lib/csharp-endpoints.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
+import { planContent } from './content-ai-service.mjs';
 import { mkdtemp, mkdir, writeFile, rm, realpath, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,9 +40,12 @@ test('leitor extrai os três endpoints, query DTO e evidência de linha', () => 
     ['GET', '/api/v2/contacts/details/{IdRef}'],
     ['GET', '/api/v2/contactTags/getContactsTagByContactId/{contactId}'],
   ]);
-  assert.deepEqual(endpoints[0].parameters.filter(({ in: location }) => location === 'query').map(({ name }) => name), ['searchData', 'page', 'limit']);
+  assert.deepEqual(endpoints[0].parameters.filter(({ in: location }) => location === 'query').map(({ name, type }) => [name, type]), [['searchData', 'string'], ['page', 'int'], ['limit', 'int']]);
   assert.equal(endpoints[0].policy, 'authenticated');
-  assert.match(endpoints[0].source, /ContactsController\.cs:6/);
+  assert.equal(endpoints[0].routeSource, 'Controllers/ContactsController.cs:3');
+  assert.equal(endpoints[0].verbSource, 'Controllers/ContactsController.cs:5');
+  assert.equal(endpoints[0].authorizationSource, 'Controllers/ContactsController.cs:1');
+  assert.equal(endpoints[0].parameters.find(({ name }) => name === 'letter')?.source, 'Controllers/ContactsController.cs:6');
 });
 
 test('leitor inclui campos de DTO de resposta resolvível', () => {
@@ -74,12 +78,51 @@ test('contexto local indexa fatos e mantém controller sem página privado', asy
     process.env.BACKEND_LOCAL_CHECKOUT = backend;
     const found = await getIhelpContext(root, 'API de Contatos', 'api', { requireLocal: true, repositoryIds: ['backend'], cache: false });
     assert.equal(found.endpoints.find((item) => item.route === '/api/v2/contacts')?.public, true);
-    assert.equal(found.endpoints.find((item) => item.route.includes('getContactsTagByContactId'))?.public, false);
-    assert.deepEqual(found.endpoints.find((item) => item.route === '/api/v2/contacts')?.parameters.filter((item) => item.in === 'query').map((item) => item.name), ['searchData', 'page', 'limit']);
+    assert.equal(found.endpoints.some((item) => item.route.includes('getContactsTagByContactId')), false);
+    assert.deepEqual(found.endpoints.find((item) => item.route === '/api/v2/contacts')?.parameters.filter((item) => item.in === 'query').map((item) => [item.name, item.type]), [['searchData', 'string'], ['page', 'int'], ['limit', 'int']]);
     const copy = join(root, 'copy');
     await cp(join(root, 'architecture'), join(copy, 'architecture'), { recursive: true });
     const removed = await getIhelpContext(copy, 'API de Contatos', 'api', { requireLocal: true, repositoryIds: ['backend'], publicReferenceRoot: root });
     assert.equal(removed.endpoints.find((item) => item.route === '/api/v2/contacts')?.public, true);
+  } finally {
+    if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('coleta DTO de saída no checkout e impede controller privado no prompt final', async () => {
+  const root = await mkdtemp(join(await realpath(tmpdir()), 'api-output-test-'));
+  const backend = join(root, 'back');
+  const previous = process.env.BACKEND_LOCAL_CHECKOUT;
+  try {
+    await mkdir(join(backend, 'Comzada.Application/Controllers/V2'), { recursive: true });
+    await mkdir(join(backend, 'Comzada.Domain/EntitiesV2/Contato'), { recursive: true });
+    await writeFile(join(backend, 'Comzada.Application/Controllers/V2/ContactsController.cs'), `[Authorize]\n[ApiVersion("2")]\n[Route("api/v{version:apiVersion}/contacts")]\npublic class ContactsController {\n  [HttpGet("{id}")]\n  public Task<ActionResult<ContactResponse>> Get([FromRoute] int id) { return null; }\n}`);
+    await writeFile(join(backend, 'Comzada.Application/Controllers/V2/InternalController.cs'), `[Route("api/v{version:apiVersion}/internal")]\n[ApiVersion("2")]\npublic class InternalController {\n  [HttpGet("private/{id}")]\n  public Task<IActionResult> Get([FromRoute] int id) { return null; }\n}`);
+    await writeFile(join(backend, 'Comzada.Domain/EntitiesV2/Contato/ContactResponse.cs'), 'public class ContactResponse {\n  public string Name { get; set; }\n}');
+    execFileSync('git', ['init', '-q', backend]);
+    execFileSync('git', ['-C', backend, 'add', '.']);
+    execFileSync('git', ['-C', backend, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']);
+    await mkdir(join(root, 'architecture'), { recursive: true });
+    await writeFile(join(root, 'architecture/support-signals.json'), JSON.stringify({ categories: [], rules: [] }));
+    await writeFile(join(root, 'architecture/coverage-matrix.json'), '[]');
+    await mkdir(join(root, 'content/docs/api/contatos'), { recursive: true });
+    await writeFile(join(root, 'content/docs/api/contatos/buscar.mdx'), '---\nsource: api\ncontentType: referencia\nmethod: GET\nendpoint: /contacts/{id}\n---\n');
+    process.env.BACKEND_LOCAL_CHECKOUT = backend;
+    const context = await getIhelpContext(root, 'API contacts internal', 'api', { requireLocal: true, repositoryIds: ['backend'], cache: false });
+    assert.deepEqual(context.endpoints.find((item) => item.controller === 'ContactsController')?.responseFields.map(({ name, type }) => [name, type]), [['name', 'string']]);
+    const captured = [];
+    await planContent(root, { topic: 'API contacts internal', module: 'api', description: 'Documentar contatos' }, {
+      productContext: context, client: { responses: { create: async (payload) => {
+        captured.push(payload.input[1].content);
+        return { output_text: JSON.stringify({ status: 'needs_information', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [] }), model: 'fake' };
+      } } },
+    });
+    assert.equal(captured.length, 1);
+    assert.doesNotMatch(captured[0], /private\/\{id\}|InternalController/);
+    assert.equal(context.endpoints.some(({ public: visible }) => visible === false), false);
+    assert.equal(context.matches.some(({ path }) => path.includes('InternalController')), false);
   } finally {
     if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
     else process.env.BACKEND_LOCAL_CHECKOUT = previous;
