@@ -272,6 +272,12 @@ public class ContactsController {
     const wrongMethod = await generateContentPackage(root, { ...short, details: 'POST /contacts/details/{id}' }, { ...options, plan: { status: 'ready' } });
     assert.ok(wrongMethod.pending.includes('endpoint citado não encontrado (POST /contacts/details/{id})'), JSON.stringify(wrongMethod));
     assert.equal(prompts.length, 2);
+    const generic = await planContent(root, { ...full, topic: 'Referência da API' }, options);
+    assert.match(prompts.at(-1), /"route":"\/api\/v2\/contacts\/details\/\{IdRef\}"/);
+    assert.ok(!generic.pending.some((item) => item.startsWith('endpoint citado não encontrado')), JSON.stringify(generic));
+    const genericPackage = await generateContentPackage(root, { ...full, topic: 'Referência da API' }, { ...options, plan: { status: 'ready' } });
+    assert.match(prompts.at(-1), /"route":"\/api\/v2\/contacts\/details\/\{IdRef\}"/);
+    assert.ok(!genericPackage.pending.some((item) => item.startsWith('endpoint citado não encontrado')), JSON.stringify(genericPackage));
   } finally {
     if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
     else process.env.BACKEND_LOCAL_CHECKOUT = previous;

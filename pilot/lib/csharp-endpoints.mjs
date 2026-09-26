@@ -183,6 +183,8 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
         ? `/${[base, action].filter(Boolean).join('/').replace(/\{version:apiVersion\}/gu, version)
           .replace(/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\??\}/gu, '{$1}').replace(/\/+$/u, '')}`
         : normalizeRoute([base, action].filter(Boolean).join('/'));
+      const controllerRoute = reference && base ? `/${base.replace(/\{version:apiVersion\}/gu, version)
+        .replace(/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\??\}/gu, '{$1}').replace(/^\/+|\/+$/gu, '')}` : undefined;
       const optionalAlias = reference && /(?:^|\/)\{[A-Za-z][A-Za-z0-9_]*(?::[^{}]+)?\?\}$/u.test(action)
         ? route.replace(/\/\{[A-Za-z][A-Za-z0-9_]*\}$/u, '') : null;
       let end = i + 1, nesting = 1;
@@ -206,7 +208,7 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       const responseFields = fields.length ? fields : null;
       const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : [];
       endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
-        ...(reference ? { parameters, responseFields, responseType: resultType, pending: responsePending, optionalAlias, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
+        ...(reference ? { controllerRoute, parameters, responseFields, responseType: resultType, pending: responsePending, optionalAlias, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
           routeSource, actionRouteSource: verbSource, verbSource, authorizationSource, authorization: policy } : {}) });
       pending = [];
     }

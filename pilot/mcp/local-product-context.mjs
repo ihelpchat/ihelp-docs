@@ -173,7 +173,7 @@ async function safeRead(path, { signal }) {
   finally { await handle.close(); }
 }
 
-async function scan(source, topic, module, deadline, { readFile: reader = safeRead, cache = true } = {}) {
+async function scan(source, topic, module, deadline, { readFile: reader = safeRead, cache = true, explicitEndpoints = [] } = {}) {
   if (!source || !isAbsolute(source.root ?? '')) return pending(source ?? {}, 'Checkout autorizado ausente');
   try {
     if (await deadline.wait(hasSymlink(source.root))) return pending(source, 'Checkout por symlink não autorizado');
@@ -272,11 +272,27 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
     let endpoints = [];
     if (source.role === 'backend' && (normalize(module) === 'api' || /\b(?:endpoint|\/api\/v\d)\b/iu.test(topic))) {
       const apiTerms = terms.filter((term) => term !== 'api');
-      const controllers = paths.filter((path) => /Controller\.cs$/u.test(path) && apiTerms.some((term) => normalize(path).includes(term)))
+      const controllerPaths = paths.filter((path) => /Controller\.cs$/u.test(path));
+      const citedControllers = [];
+      const citedContent = new Map();
+      for (const path of controllerPaths) {
+        if (!explicitEndpoints.length || await hasSymlink(join(root, path), root)) continue;
+        const content = await deadline.wait(reader(join(root, path), { signal: deadline.signal }));
+        const shallow = readCsharpEndpoints(content, path, { dtoSources: [] });
+        const matches = shallow.some(({ controllerRoute }) => controllerRoute && explicitEndpoints.some(({ route }) => {
+          const prefix = controllerRoute.toLowerCase();
+          const requested = route.toLowerCase();
+          const shortPrefix = prefix.replace(/^\/api\/v\d+/u, '');
+          return [prefix, shortPrefix].some((base) => requested === base || requested.startsWith(`${base}/`));
+        }));
+        if (matches) { citedControllers.push(path); citedContent.set(path, content); }
+      }
+      const topicControllers = controllerPaths.filter((path) => apiTerms.some((term) => normalize(path).includes(term)))
         .sort((left, right) => pathRelevance(right, apiTerms, []) - pathRelevance(left, apiTerms, [])).slice(0, 16);
+      const controllers = [...new Set([...citedControllers, ...topicControllers])];
       for (const path of controllers) {
         if (await hasSymlink(join(root, path), root)) continue;
-        const content = await deadline.wait(reader(join(root, path), { signal: deadline.signal }));
+        const content = citedContent.get(path) ?? await deadline.wait(reader(join(root, path), { signal: deadline.signal }));
         const shallow = readCsharpEndpoints(content, path, { dtoSources: [] });
         const types = new Set(shallow.flatMap((endpoint) => endpoint.dtoTypes ?? []));
         const dtoSources = [];
@@ -301,14 +317,14 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
   }
 }
 
-export async function searchLocalProductContext(topic, module, { repositoryIds = Object.keys(SOURCES), deadlineMs = DEFAULT_DEADLINE_MS, readFile, cache = true } = {}) {
+export async function searchLocalProductContext(topic, module, { repositoryIds = Object.keys(SOURCES), deadlineMs = DEFAULT_DEADLINE_MS, readFile, cache = true, explicitEndpoints = [] } = {}) {
   const deadline = deadlineContext(Math.max(1, deadlineMs));
   const code = [];
   try {
     for (const id of repositoryIds) {
       const configured = SOURCES[id];
       if (!configured) { code.push(pending({ repository: id }, 'Repositório não autorizado')); continue; }
-      code.push(await scan({ repository: configured.repository, role: configured.role, root: process.env[configured.env] }, topic, module, deadline, { readFile, cache }));
+      code.push(await scan({ repository: configured.repository, role: configured.role, root: process.env[configured.env] }, topic, module, deadline, { readFile, cache, explicitEndpoints }));
     }
   } finally {
     deadline.close();
