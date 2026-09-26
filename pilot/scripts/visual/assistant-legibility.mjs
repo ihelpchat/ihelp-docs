@@ -95,7 +95,9 @@ const audit = (root) => {
       measured.text++;
       const size = parseFloat(style.fontSize);
       if (size < 16) failures.push(`${selector}: fonte ${size}px < 16px`);
-      const fg = rgba(style.color);
+      const fg = rgba(isField && !el.value && el.getAttribute('placeholder')
+        ? getComputedStyle(el, '::placeholder').color
+        : style.color);
       const bg = background(el);
       const ratio = contrast(fg, bg);
       if (ratio < 4.5) failures.push(`${selector}: contraste ${ratio.toFixed(2)}:1 < 4.5:1`);
@@ -131,17 +133,40 @@ try {
       const expected = { normal: '.ih-ai-sources', guia: '.ih-ai-steps li', fallback: '.ih-ai-human-action', erro: '.ih-ai-error' };
       assert.ok(await root.locator(expected[state]).first().isVisible(), `${state}/${viewport}: estado não foi renderizado`);
       const targets = await page.locator('.ih-ai-screen a, .ih-ai-screen button, .ih-ai-screen textarea, .ih-ai-screen summary').evaluateAll((els) => els.flatMap((el, i) => el.getClientRects().length && !el.matches(':disabled') ? [i] : []));
-      for (const [mode, target] of [['normal', null], ...targets.map((i) => ['interactive', i])]) {
-        if (target !== null) {
-          const item = page.locator('.ih-ai-screen a, .ih-ai-screen button, .ih-ai-screen textarea, .ih-ai-screen summary').nth(target);
-          if (!(await item.isVisible()) || !(await item.isEnabled())) continue;
-          await item.hover();
-          await item.focus();
-        }
+      const collect = async (mode) => {
         const result = await root.evaluate(audit);
         textCount += result.measured.text;
         clickCount += result.measured.clickable;
-        failures.push(...result.failures.map((item) => `${state}/${viewport}/${mode}${target ?? ''}: ${item}`));
+        failures.push(...result.failures.map((item) => `${state}/${viewport}/${mode}: ${item}`));
+      };
+      await page.mouse.move(0, 0);
+      await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+      await collect('repouso');
+      for (const target of targets) {
+        const item = page.locator('.ih-ai-screen a, .ih-ai-screen button, .ih-ai-screen textarea, .ih-ai-screen summary').nth(target);
+        if (!(await item.isVisible()) || !(await item.isEnabled())) continue;
+        await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+        await item.hover();
+        await collect(`hover${target}`);
+        await page.mouse.move(0, 0);
+        await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+        let keyboardFocused = false;
+        for (let attempt = 0; attempt < targets.length * 2 + 8; attempt++) {
+          await page.keyboard.press('Tab');
+          if (await item.evaluate((el) => el === document.activeElement && el.matches(':focus-visible'))) {
+            keyboardFocused = true;
+            break;
+          }
+        }
+        if (!keyboardFocused) failures.push(`${state}/${viewport}/teclado${target}: foco por Tab indisponível`);
+        else await collect(`teclado${target}`);
+      }
+      for (const field of await page.locator('.ih-ai-screen textarea, .ih-ai-screen input').all()) {
+        if (!(await field.isVisible()) || !(await field.isEnabled())) continue;
+        await field.fill('Texto de teste');
+        await page.mouse.move(0, 0);
+        await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+        await collect('campo preenchido');
       }
       await page.close();
     }
