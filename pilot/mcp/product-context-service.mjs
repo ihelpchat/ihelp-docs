@@ -159,7 +159,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
       }
     }
     const requested = provided.explicitEndpoints ?? [];
-    const routeKey = (route) => String(route).replace(/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\??\}/gu, '{$1}').replace(/\/+$/u, '').toLowerCase();
+    const routeKey = (route) => String(route).replace(/\{[A-Za-z][A-Za-z0-9_]*(?::[^{}]+)?\??\}/gu, '{}').replace(/\/+$/u, '').toLowerCase();
     const cited = (item, endpoint) => endpoint.verb === item.verb &&
       (routeKey(endpoint.route) === routeKey(item.route) ||
         (!/^\/api\/v\d+\//iu.test(endpoint.route) && routeKey(endpoint.route) === routeKey(item.route.replace(/^\/api\/v\d+/iu, ''))));
