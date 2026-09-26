@@ -14,11 +14,19 @@ function tokens(source) {
       let j = quoteAt + 1;
       let value = '';
       const verbatim = prefix.includes('@');
+      let interpolation = 0;
       while (j < source.length) {
         if (source[j] === '"') {
+          if (prefix.includes('$') && interpolation > 0) {
+            j++;
+            while (j < source.length && source[j] !== '"') j += source[j] === '\\' ? 2 : 1;
+            j++; continue;
+          }
           if (verbatim && source[j + 1] === '"') { value += '"'; j += 2; continue; }
           j++; break;
         }
+        if (prefix.includes('$') && source[j] === '{' && source[j + 1] !== '{') { interpolation++; j++; continue; }
+        if (prefix.includes('$') && source[j] === '}' && interpolation > 0) { interpolation--; j++; continue; }
         if (!verbatim && source[j] === '\\') { j += 2; continue; }
         value += source[j++];
       }
@@ -31,8 +39,8 @@ function tokens(source) {
       i = j + 1; continue;
     }
     const word = rest.match(/^[A-Za-z_][A-Za-z_0-9]*/u);
-    if (word) { result.push({ kind: 'word', value: word[0] }); i += word[0].length; continue; }
-    result.push({ kind: 'punct', value: rest[0] }); i++;
+    if (word) { result.push({ kind: 'word', value: word[0], at: i }); i += word[0].length; continue; }
+    result.push({ kind: 'punct', value: rest[0], at: i }); i++;
   }
   return result;
 }
@@ -65,7 +73,42 @@ function policyOf(attrs) {
   return value ? `${role ? 'role:' : ''}${value}` : 'authenticated';
 }
 
-export function readCsharpEndpoints(source, file) {
+const lineOf = (source, at) => source.slice(0, at).split('\n').length;
+const camel = (name) => name[0].toLowerCase() + name.slice(1);
+function dtoFields(dtoSources, type) {
+  for (const { file, source } of dtoSources) {
+    const declaration = new RegExp(`\\b(?:class|record)\\s+${type}\\b`, 'u').exec(source);
+    if (!declaration) continue;
+    const body = source.slice(declaration.index).split(/\n\s*\}\s*(?:;|$)/u)[0];
+    return [...body.matchAll(/\bpublic\s+([\w<>?,\[\]]+)\s+(\w+)\s*\{\s*get\s*;/gu)]
+      .map((match) => ({ name: camel(match[2]), type: match[1], source: `${file}:${lineOf(source, declaration.index + match.index)}` }));
+  }
+  return [];
+}
+function signatureParameters(items, route, dtoSources) {
+  const groups = [];
+  let group = [], depth = 0;
+  for (const token of items) {
+    if (token.value === '<' || token.value === '[') depth++;
+    if (token.value === '>' || token.value === ']') depth--;
+    if (token.value === ',' && depth === 0) { groups.push(group); group = []; } else group.push(token);
+  }
+  if (group.length) groups.push(group);
+  return groups.flatMap((part) => {
+    const words = part.filter((item) => item.kind === 'word');
+    const name = words.at(-1)?.value;
+    const type = words.at(-2)?.value;
+    if (!name || !type) return [];
+    const location = words.some((item) => item.value === 'FromBody') ? 'body'
+      : words.some((item) => item.value === 'FromQuery') ? 'query'
+        : words.some((item) => item.value === 'FromRoute') || new RegExp(`\\{${name}\\??\\}`, 'iu').test(route) ? 'route' : 'query';
+    const fields = dtoFields(dtoSources, type);
+    return fields.length ? fields.map((field) => ({ ...field, in: location }))
+      : [{ name: camel(name), type, in: location }];
+  });
+}
+
+export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
   const t = tokens(source);
   const endpoints = [];
   let pending = [];
@@ -92,8 +135,27 @@ export function readCsharpEndpoints(source, file) {
       const method = t[i - 1].value;
       const anonymous = Boolean(attr(pending, 'AllowAnonymous') || attr(controller.attrs, 'AllowAnonymous'));
       const policy = anonymous ? 'anonymous' : policyOf(pending) ?? policyOf(controller.attrs) ?? 'anonymous';
-      const route = normalizeRoute([stringArg(attr(controller.attrs, 'Route')) ?? '', stringArg(http) ?? ''].filter(Boolean).join('/'));
-      endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy });
+      const base = stringArg(attr(controller.attrs, 'Route')) ?? '';
+      const action = stringArg(http) ?? '';
+      const reference = arguments.length > 2;
+      const version = stringArg(attr(controller.attrs, 'ApiVersion')) ?? '';
+      const route = reference
+        ? `/${[base, action].filter(Boolean).join('/').replace(/\{version:apiVersion\}/gu, version).replace(/\/\{\w+\?\}/gu, '').replace(/\/+$/u, '')}`
+        : normalizeRoute([base, action].filter(Boolean).join('/'));
+      let end = i + 1, nesting = 1;
+      while (end < t.length && nesting) { if (t[end].value === '(') nesting++; if (t[end].value === ')') nesting--; end++; }
+      const location = `${file}:${lineOf(source, t[i - 1].at)}`;
+      const rawParameters = reference ? signatureParameters(t.slice(i + 1, end - 1), route, dtoSources) : undefined;
+      const actionBody = source.slice(t[end]?.at ?? source.length, source.indexOf('[Http', t[end]?.at ?? source.length) < 0 ? source.length : source.indexOf('[Http', t[end].at));
+      const assigned = new Set([...actionBody.matchAll(/\b(\w+)\.(\w+)\s*=(?!=)/gu)].map((match) => match[2].toLowerCase()));
+      const parameters = rawParameters?.filter((item) => item.in !== 'query' || !assigned.has(item.name.toLowerCase()))
+        .map((item) => ({ ...item, source: item.source ?? location }));
+      const declaration = source.slice(Math.max(0, source.lastIndexOf('public ', t[i - 1].at)), t[i - 1].at);
+      const resultType = declaration.match(/(?:ActionResult|Task)<(?:IEnumerable<)?(\w+)>/u)?.[1]
+        ?? pending.flatMap((item) => item.args.map((arg) => arg.value)).find((value) => dtoSources.some(({ source: dto }) => new RegExp(`\\bclass\\s+${value}\\b`, 'u').test(dto)));
+      const responseFields = resultType ? dtoFields(dtoSources, resultType) : [];
+      endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
+        ...(reference ? { parameters, responseFields, source: location, authorization: policy } : {}) });
       pending = [];
     }
     if (value === '{') depth++;

@@ -1,9 +1,10 @@
 const treeCache = new Map();
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { redactSensitiveData } from './sensitive-data.mjs';
 import { join } from 'node:path';
 import { searchLocalProductContext } from './local-product-context.mjs';
 import { envCompatibility, githubReadToken } from './env-compat.mjs';
+import { parse } from 'yaml';
 const CACHE_MS = 5 * 60_000;
 const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|cs)$/;
 const PINNED_PATHS = new Set([
@@ -134,6 +135,39 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     .slice(0, 5)
     .map(({ score: _score, ...item }) => item);
   const relevantCoverage = coverage.filter((item) => terms.some((term) => normalize(item.module).includes(term) || (ALIASES[normalize(item.module)] ?? []).includes(term)));
+  let endpoints = [];
+  let apiExamples = [];
+  if (normalize(module) === 'api' || /\bendpoint\b|\/api\/v\d/iu.test(topic)) {
+    endpoints = code.flatMap((source) => source.endpoints ?? []);
+    const docsRoot = join(provided.publicReferenceRoot ?? root, 'content/docs/api');
+    const pages = (await readdir(docsRoot, { recursive: true }).catch(() => []))
+      .filter((path) => path.endsWith('.mdx'))
+      .sort((left, right) => Number(normalize(right).includes(terms.find((term) => term !== 'api') ?? '\0')) - Number(normalize(left).includes(terms.find((term) => term !== 'api') ?? '\0')));
+    const documented = new Set();
+    for (const page of pages) {
+      const raw = await readFile(join(docsRoot, page), 'utf8');
+      const match = raw.match(/^---\n([\s\S]*?)\n---/u);
+      if (!match) continue;
+      const frontmatter = parse(match[1]);
+      if (frontmatter?.source === 'api' && frontmatter?.method && frontmatter?.endpoint) {
+        documented.add(`${frontmatter.method} ${String(frontmatter.endpoint).toLowerCase().replace(/\{[^}]+\}/gu, '{}')}`);
+        apiExamples.push({ frontmatter: { source: frontmatter.source, contentType: frontmatter.contentType,
+          method: frontmatter.method, endpoint: frontmatter.endpoint },
+        sections: [...raw.matchAll(/^## (.+)$/gmu)].map((section) => section[1]) });
+      }
+    }
+    const publicControllers = new Set(endpoints.filter((item) => /^\/api\/v2\//iu.test(item.route) &&
+      documented.has(`${item.verb} ${item.route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')}`))
+      .map((item) => item.file));
+    endpoints = endpoints.map((item) => ({ ...item,
+      documented: /^\/api\/v2\//iu.test(item.route) && documented.has(`${item.verb} ${item.route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')}`),
+      explicit: (provided.explicitEndpoints ?? []).some((route) => route.toLowerCase() === item.route.toLowerCase()
+        || route.toLowerCase() === item.route.replace(/^\/api\/v\d+/iu, '').toLowerCase()),
+      public: publicControllers.has(item.file)
+      || (provided.explicitEndpoints ?? []).some((route) => route.toLowerCase() === item.route.toLowerCase()
+        || route.toLowerCase() === item.route.replace(/^\/api\/v\d+/iu, '').toLowerCase()) }));
+    apiExamples = apiExamples.slice(0, 4);
+  }
   return {
     code,
     groundingRequired: local,
@@ -144,7 +178,13 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
       rules: supportSignals.rules,
     },
     coverage: relevantCoverage,
-    matches: code.flatMap((source) => source.matches.map((match) => ({ ...match, repository: source.repository, ref: source.ref, role: source.role }))),
+    endpoints,
+    apiExamples,
+    matches: [...code.flatMap((source) => source.matches.map((match) => ({ ...match, repository: source.repository, ref: source.ref, role: source.role }))),
+      ...endpoints.filter((item) => item.documented || item.explicit).flatMap((item) => [item, ...item.parameters, ...item.responseFields]
+        .map((fact) => ({ repository: 'ihelpchat/olah-ihelp', role: 'backend',
+          path: fact.source.split(':')[0], line: Number(fact.source.split(':').at(-1)),
+          sha: item.sha, ref: item.sha, excerpt: JSON.stringify(fact) })))],
     repository: code[0]?.repository ?? repositories[0].repository,
     ref: code[0]?.ref ?? repositories[0].ref,
   };
