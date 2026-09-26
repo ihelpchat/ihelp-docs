@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { routeMessage } from './closed-router.mjs';
-import { answerQuestion } from './assistant-service.mjs';
+import { answerQuestion, retrieveContext } from './assistant-service.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'closed-router-'));
 const directory = join(root, 'content/docs/docs/guias');
@@ -29,6 +29,12 @@ guide:
 Conteúdo publicado de ${title}.
 `);
 }
+await writeFile(join(directory, 'recado.mdx'), `---
+title: Recado fora do horário no WhatsApp
+description: Configure o recado fora do horário no WhatsApp.
+---
+Abra Departamentos e configure o recado fora do horário no WhatsApp.
+`);
 
 const calls = [];
 const client = { responses: { create: async (payload) => {
@@ -70,6 +76,49 @@ try {
   const noContent = await answerQuestion(root, 'Como cultivar tomates?', { client: { responses: { create: async () => ({ status: 'completed', output_text: '{"choice":"sem guia"}', usage: { input_tokens: 1, output_tokens: 1 } }) } }, budget });
   assert.equal(noContent.resolution, 'not_found', 'sem conteúdo não inventa procedimento');
   assert.equal(noContent.steps.length, 0);
+  const human = await answerQuestion(root, 'Quero falar com uma pessoa', { budget });
+  assert.deepEqual(human.actions, [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
+    'pedido de pessoa funciona sem provider e antes da triagem');
+  const cida = await retrieveContext(root, 'NÃO é campanha, quero fazer recado fora do horário no whatsapp');
+  assert.notEqual(cida[0]?.path, '/docs/guias/campanhas', 'sem guia não prioriza campanha negada');
+  const models = [];
+  const splitClient = { responses: { create: async (payload) => {
+    models.push(payload.model);
+    return { status: 'completed', output_text: '{"choice":"sem guia"}', usage: { input_tokens: 1, output_tokens: 1 } };
+  } } };
+  process.env.ASSISTANT_ROUTER_MODEL = 'router-small-test';
+  process.env.OPENAI_MODEL = 'answer-large-test';
+  try {
+    await answerQuestion(root, 'Como criar campanhas?', { client: splitClient, budget });
+    assert.deepEqual(models, ['router-small-test', 'answer-large-test'],
+      'sem guia usa router pequeno e modelo final distinto');
+  } finally {
+    delete process.env.ASSISTANT_ROUTER_MODEL;
+    delete process.env.OPENAI_MODEL;
+  }
+  let release;
+  let started;
+  const entered = new Promise((resolve) => { started = resolve; });
+  const lateCalls = [];
+  const lateClient = { responses: { create: async (payload, requestOptions) => {
+    lateCalls.push(requestOptions?.signal);
+    started();
+    await new Promise((resolve) => { release = resolve; });
+    return { status: 'incomplete', usage: { input_tokens: 1, output_tokens: 1 } };
+  } } };
+  let expire;
+  const deadline = new Promise((resolve) => { expire = () => resolve('timeout'); });
+  const pending = route('Como criar campanhas?', { client: lateClient, timeout: deadline });
+  await entered;
+  expire();
+  assert.deepEqual(await pending, { kind: 'guide', guideId: 'campanhas' });
+  assert.equal(lateCalls.length, 1);
+  assert.equal(lateCalls[0]?.aborted, true, 'timeout aborta o request em andamento');
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(lateCalls.length, 1, 'resposta incomplete atrasada não dispara retry');
+  assert.deepEqual(await route('NÃO é campanha, quero recado fora do horário', { timeout }), { kind: 'none' },
+    'fallback após timeout não escolhe guia negado');
 } finally {
   await rm(root, { recursive: true, force: true });
 }
