@@ -7,11 +7,17 @@ import { submitContentPackage } from './content-service.mjs';
 import { proofOutcome } from '../scripts/guide-proof.mjs';
 
 export const MAX_DEPLOY_PULLS = 5;
+// Updates automáticos só abrem PRs contra branches de integração revisadas.
+export const ALLOWED_UPDATE_BASES = /^integration\/[a-z0-9._-]+$/;
+export function assertAllowedUpdateBase(base) {
+  if (typeof base !== 'string' || !ALLOWED_UPDATE_BASES.test(base)) throw Error(`base não permitida: ${base ?? ''}`);
+}
 let queue = Promise.resolve();
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16);
 const shaText = ({ frontSha, backSha }) => `front ${frontSha}; back ${backSha}`;
 
 async function execute(root, { before, after, prova, base = 'integration/claricia-v2', requestedBy = 'service:deploy' }, deps) {
+  assertAllowedUpdateBase(base);
   const pending = [];
   const proposals = [];
   let impact;

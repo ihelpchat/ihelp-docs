@@ -1,7 +1,7 @@
 import { readFile, appendFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { atualizarPorDeploy } from '../mcp/update-by-deploy.mjs';
+import { atualizarPorDeploy, assertAllowedUpdateBase } from '../mcp/update-by-deploy.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const json = async (path) => JSON.parse(await readFile(path, 'utf8'));
@@ -11,8 +11,13 @@ const validManifest = (value) => value && ['routes', 'labels', 'markers', 'permi
 export async function detectRelease({ beforeFile, afterFile, proofFile, token, base }, deps = {}) {
   const pending = [];
   if (!token) pending.push('DOCS_WRITE_TOKEN não configurado');
-  if (!base) pending.push('DOCS_UPDATE_BASE não configurada');
+  if (!base) pending.push('DOCS_UPDATE_BASE não configurada; base não permitida: ');
   if (pending.length) return { status: 'pendente', pending, proposals: [], exitCode: 0 };
+  try {
+    assertAllowedUpdateBase(base);
+  } catch (error) {
+    return { status: 'pendente', pending: [error.message], proposals: [], exitCode: 1 };
+  }
   let before;
   let after;
   let prova;
