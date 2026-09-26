@@ -27,9 +27,9 @@ const keysOf = (node) => Array.isArray(node) ? node.flatMap(keysOf)
 function apiIssues(article, context) {
   if (context.module !== 'api' && article.source !== 'api' && !/^api\//u.test(article.path ?? '')) return [];
   if (!context.endpoints?.length) return ['endpoints estruturados ausentes'];
+  const versioned = /^\/api\/v\d+/iu.test(article.endpoint ?? '');
   const endpoint = context.endpoints.find((item) => item.verb === article.method &&
-    (routeShape(item.route) === routeShape(article.endpoint) ||
-      (!/^\/api\/v\d+/iu.test(article.endpoint ?? '') && routeShape(relativeRoute(item.route)) === routeShape(article.endpoint))));
+    (versioned ? item.route === article.endpoint : routeShape(relativeRoute(item.route)) === routeShape(article.endpoint)));
   if (!endpoint) return ['rota divergente: method/endpoint sem fato extraído'];
   if (endpoint.public !== undefined && !endpoint.public) return ['endpoint não público: confirmar'];
   const names = new Set(endpoint.parameters?.map(({ name }) => name.toLowerCase()) ?? []);
@@ -46,8 +46,10 @@ function apiIssues(article, context) {
   const responseNames = new Set((endpoint.responseFields ?? []).map(({ name }) => name.toLowerCase()));
   const general = new Set(['get', 'post', 'put', 'patch', 'delete', 'authorization', 'bearer', 'content-type', 'application/json', ...endpoint.route.split('/').map((part) => part.toLowerCase())]);
   const sections = body.split(/(?=^##\s+)/gmu);
+  let response = false;
   for (const section of sections) {
-    const response = /^##\s*(?:resposta|response)\b/iu.test(section);
+    if (/^##\s*(?:resposta|response|campos relevantes|identificadores retornados)\b/iu.test(section)) response = true;
+    else if (/^##\s*(?:requisição|request|parâmetros|parametros|campos do body|corpo da requisição)\b/iu.test(section)) response = false;
     const allowed = response ? responseNames : requestNames;
     const check = (name, kind) => {
       const value = name.toLowerCase();
@@ -60,8 +62,8 @@ function apiIssues(article, context) {
       const route = match[0];
       if (route === '/json' && routeText.slice(Math.max(0, match.index - 11), match.index).endsWith('application')) continue;
       if (/^\/(?:docs|blog|tutoriais)\//u.test(route) && /\]\([^)]*$/u.test(routeText.slice(0, match.index))) continue;
-      if (routeShape(route) !== routeShape(endpoint.route) &&
-        !(routeShape(route) === routeShape(relativeRoute(endpoint.route)) && !/^\/api\/v\d+/iu.test(route))) return [`rota divergente no artigo: ${route}`];
+      if (/^\/api\/v\d+/iu.test(route) ? route !== endpoint.route
+        : routeShape(route) !== routeShape(relativeRoute(endpoint.route))) return [`rota divergente no artigo: ${route}`];
     }
     for (const match of section.matchAll(/[?&]([A-Za-z][\w]*)=/gu)) {
       const issue = check(match[1], response ? 'campo inexistente' : 'parâmetro inexistente');
@@ -82,6 +84,7 @@ function apiIssues(article, context) {
       if (issue) return [issue];
     }
     for (const match of section.matchAll(/```json\s*([\s\S]*?)```/gu)) {
+      if (response && endpoint.responseFields === null) return ['campos de resposta não verificáveis'];
       let value;
       try { value = JSON.parse(match[1]); } catch { return ['JSON de resposta inválido']; }
       for (const key of keysOf(value)) {
@@ -99,7 +102,9 @@ function apiIssues(article, context) {
   }
   for (const match of body.matchAll(/^##\s+`?(GET|POST|PUT|PATCH|DELETE)`?\s*$/gmu)) if (match[1] !== endpoint.verb) return ['method divergente no artigo'];
   for (const match of body.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(?:https?:\/\/[^/\s]+)?(\/api\/v\d+\/[^\s`"']+|\/[a-z][\w/-]*(?:\{[^}]+\})?)/gu)) {
-    if (match[1] !== endpoint.verb || (routeShape(match[2].split('?')[0]) !== routeShape(endpoint.route) && routeShape(match[2].split('?')[0]) !== routeShape(relativeRoute(endpoint.route)))) return ['rota divergente no artigo'];
+    const route = match[2].split('?')[0];
+    if (match[1] !== endpoint.verb || (/^\/api\/v\d+/iu.test(route)
+      ? route !== endpoint.route : routeShape(route) !== routeShape(relativeRoute(endpoint.route)))) return ['rota divergente no artigo'];
   }
   return [];
 }
