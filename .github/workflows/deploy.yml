@@ -131,7 +131,7 @@ jobs:
           CLARICIA_DOCS_ORIGIN: ${{ vars.CLARICIA_DOCS_URL }}
         run: |
           test -n "$RAILWAY_TOKEN" && test -n "$RAILWAY_PROJECT_ID" && test -n "$RAILWAY_SERVICE_ID" && test -n "$CLARICIA_HEALTH_URL"
-          railway up --ci --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT" --service "$RAILWAY_SERVICE_ID" -m "docs $GITHUB_SHA"
+          railway up . --path-as-root --ci --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT" --service "$RAILWAY_SERVICE_ID" -m "docs $GITHUB_SHA"
           node scripts/release.mjs service public "$CLARICIA_HEALTH_URL"
 
   deploy-docs-staging:
@@ -160,5 +160,5 @@ jobs:
           CLARICIA_DOCS_URL: ${{ vars.CLARICIA_DOCS_URL }}
         run: |
           test -n "$RAILWAY_TOKEN" && test -n "$RAILWAY_PROJECT_ID" && test -n "$RAILWAY_DOCS_SERVICE_ID" && test -n "$CLARICIA_DOCS_URL"
-          railway up --ci --project "$RAILWAY_PROJECT_ID" --environment staging --service "$RAILWAY_DOCS_SERVICE_ID" -m "docs $GITHUB_SHA"
+          railway up . --path-as-root --ci --project "$RAILWAY_PROJECT_ID" --environment staging --service "$RAILWAY_DOCS_SERVICE_ID" -m "docs $GITHUB_SHA"
           node scripts/release.mjs site out "$CLARICIA_DOCS_URL"
