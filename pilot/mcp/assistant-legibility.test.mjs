@@ -88,5 +88,6 @@ for (const rule of rules.filter((item) => /:hover|:disabled|\[aria-pressed=/.tes
 assert.ok(measuredRules > 100 && measuredType > 50 && measuredTargets > 10 && measuredContrast > 50,
   `varredura incompleta: ${measuredRules} regras, ${measuredType} fontes, ${measuredTargets} alvos, ${measuredContrast} contrastes`);
 assert.ok(measuredStates >= 8, `Estados medidos: ${measuredStates}`);
+assert.ok(rules.some((rule) => rule.selector === '.ih-ai-human-action'), 'link humano tem estilo medido');
 assert.deepEqual(failures, [], `Legibilidade do assistente:\n${failures.join('\n')}`);
 console.log(`Legibilidade: ${measuredRules} regras, ${measuredType} fontes, ${measuredTargets} alvos, ${measuredContrast} contrastes, ${measuredStates} estados.`);
