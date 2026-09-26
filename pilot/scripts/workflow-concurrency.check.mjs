@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { parseDocument } from 'yaml';
 
 if (process.argv[2] === '--product-release') {
-  const source = readFileSync(process.argv[3] ?? resolve(import.meta.dirname, '../../.github/workflows/product-release.yml'), 'utf8');
+  const releasePath = process.argv[3] ?? resolve(import.meta.dirname, '../../.github/workflows/product-release.yml');
+  const source = readFileSync(releasePath, 'utf8');
   const document = parseDocument(source);
   assert.equal(document.errors.length, 0, 'product-release YAML must be valid');
   const release = document.toJS();
@@ -12,10 +13,13 @@ if (process.argv[2] === '--product-release') {
   assert.deepEqual(release.permissions, { contents: 'read' }, 'product-release permissions must be contents: read');
   assert.equal(release.concurrency?.group, 'product-release', 'product-release must use its own concurrency group');
   assert.equal(release.concurrency?.['cancel-in-progress'], false, 'product-release cannot cancel an in-progress run');
+  assert.equal(release.jobs?.detect?.environment, 'product-release', 'product-release detect job must use environment: product-release');
+  assert.equal(release.jobs?.detect?.if, "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)", 'product-release job must guard github.ref against default_branch');
   const steps = release.jobs?.detect?.steps ?? [];
   const checkouts = steps.filter((step) => step.uses?.startsWith('actions/checkout@'));
   assert.equal(checkouts.length, 3, 'product-release needs docs and both product checkouts');
   for (const step of checkouts) assert.equal(step.with?.['persist-credentials'], false, 'product-release checkout cannot persist credentials');
+  assert.equal(checkouts[0].with?.ref, '${{ github.event.repository.default_branch }}', 'docs checkout must use the default_branch');
   assert.deepEqual(checkouts.slice(1).map((step) => [step.with.repository, step.with.ref, step.with.token]), [
     ['ihelpchat/front-react', 'master', '${{ secrets.PRODUCT_READ_TOKEN }}'],
     ['ihelpchat/olah-ihelp', 'release/validation', '${{ secrets.PRODUCT_READ_TOKEN }}'],
@@ -37,6 +41,9 @@ if (process.argv[2] === '--product-release') {
   }
   assert.equal((source.match(/secrets\.PRODUCT_READ_TOKEN/g) ?? []).length, 3, 'PRODUCT_READ_TOKEN only in availability and product checkouts');
   assert.equal((source.match(/secrets\.DOCS_WRITE_TOKEN/g) ?? []).length, 1, 'DOCS_WRITE_TOKEN only in update');
+  for (const name of readdirSync(dirname(releasePath)).filter((entry) => /\.ya?ml$/.test(entry) && join(dirname(releasePath), entry) !== releasePath)) {
+    assert.doesNotMatch(readFileSync(join(dirname(releasePath), name), 'utf8'), /DOCS_WRITE_TOKEN/, `${name} must not reference DOCS_WRITE_TOKEN`);
+  }
   console.log('Product release workflow check OK');
   process.exit(0);
 }

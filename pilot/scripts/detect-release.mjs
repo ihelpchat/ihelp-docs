@@ -9,15 +9,9 @@ const validSha = (value) => /^[a-f0-9]{40}$/i.test(value ?? '');
 const validManifest = (value) => value && ['routes', 'labels', 'markers', 'permissions'].every((key) => Array.isArray(value[key]));
 
 export async function detectRelease({ beforeFile, afterFile, proofFile, token, base }, deps = {}) {
-  const pending = [];
-  if (!token) pending.push('DOCS_WRITE_TOKEN não configurado');
-  if (!base) pending.push('DOCS_UPDATE_BASE não configurada; base não permitida: ');
-  if (pending.length) return { status: 'pendente', pending, proposals: [], exitCode: 0 };
-  try {
-    assertAllowedUpdateBase(base);
-  } catch (error) {
-    return { status: 'pendente', pending: [error.message], proposals: [], exitCode: 1 };
-  }
+  const configPending = [];
+  if (!token) configPending.push('DOCS_WRITE_TOKEN não configurado');
+  if (!base) configPending.push('DOCS_UPDATE_BASE não configurada; base não permitida: ');
   let before;
   let after;
   let prova;
@@ -27,17 +21,27 @@ export async function detectRelease({ beforeFile, afterFile, proofFile, token, b
     if (!validManifest(before.manifest) || !validManifest(after.manifest)) throw Error('manifest inválido no snapshot');
     if (proofFile) prova = await (deps.read ?? json)(proofFile);
   } catch (error) {
-    return { status: 'pendente', pending: [`leitura do snapshot falhou: ${error.message}`], proposals: [], exitCode: 1 };
+    return { status: 'pendente', pending: [...(after?.pending ?? []).map((reason) => `mapa: ${reason}`), `leitura do snapshot falhou: ${error.message}`], proposals: [], exitCode: 1 };
+  }
+  const mapPending = (after.pending ?? []).map((reason) => `mapa: ${reason}`);
+  if (configPending.length) {
+    const pending = [...configPending, ...mapPending];
+    return { status: 'pendente', pending, proposals: [], exitCode: mapPending.length ? 1 : 0 };
+  }
+  try {
+    assertAllowedUpdateBase(base);
+  } catch (error) {
+    return { status: 'pendente', pending: [...mapPending, error.message], proposals: [], exitCode: 1 };
   }
   if (before.frontSha === after.frontSha && before.backSha === after.backSha) {
-    return { status: 'sem versão nova', pending: [], proposals: [], exitCode: 0, shas: { frontSha: after.frontSha, backSha: after.backSha } };
+    return { status: mapPending.length ? 'pendente' : 'sem versão nova', pending: mapPending, proposals: [], exitCode: mapPending.length ? 1 : 0, shas: { frontSha: after.frontSha, backSha: after.backSha } };
   }
   try {
     const result = await (deps.update ?? ((input) => atualizarPorDeploy(root, input)))({ before, after, prova, base, requestedBy: 'service:deploy' });
-    const allPending = [...(after.pending ?? []).map((reason) => `mapa: ${reason}`), ...(result.pending ?? [])];
-    return { ...result, status: allPending.length ? 'pendente' : result.status, pending: allPending, exitCode: 0 };
+    const allPending = [...mapPending, ...(result.pending ?? [])];
+    return { ...result, status: allPending.length ? 'pendente' : result.status, pending: allPending, exitCode: allPending.length ? 1 : (result.exitCode ?? 0) };
   } catch (error) {
-    return { status: 'pendente', pending: [`atualização falhou: ${error.message}`], proposals: [], exitCode: 1 };
+    return { status: 'pendente', pending: [...mapPending, `atualização falhou: ${error.message}`], proposals: [], exitCode: 1 };
   }
 }
 
