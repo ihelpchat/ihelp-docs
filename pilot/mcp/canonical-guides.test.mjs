@@ -21,6 +21,13 @@ for (const [file, id, required] of cases) {
 }
 
 const qr = await readFile(join(root.pathname, cases[0][0]), 'utf8');
+for (const term of ['homologação', 'homologacao', 'staging', 'conta de teste', 'ambiente de teste']) {
+  const publicCopy = qr.replace('## Como confirmar', `Confira em ${term}.\n\n## Como confirmar`);
+  assert.throws(() => validateCanonicalGuide(publicCopy, 'reconectar-canal-qr'),
+    /termo de ambiente interno/u, `termo interno no corpo público: ${term}`);
+}
+assert.throws(() => validateCanonicalGuide(qr.replace('Veja o código na tela', 'Veja o código em staging na tela'), 'reconectar-canal-qr'),
+  /termo de ambiente interno/u, 'termo interno no metadata público');
 const approved = 'As mensagens enviadas enquanto o WhatsApp estava desconectado podem não aparecer no iHelp. Se for importante, confira no celular.';
 const withConfirmation = (sentence) => qr.replace('## Como confirmar', `${sentence}\n\n## Como confirmar`);
 for (const sentence of [
