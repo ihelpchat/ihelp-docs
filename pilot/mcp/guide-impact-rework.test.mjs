@@ -59,5 +59,23 @@ try {
   await writeFile(invalid, '{');
   assert.equal(invoke(invalid).status, 2, 'JSON inválido tem exit code próprio');
   assert.ok((JSON.parse(await readFile(outputFile, 'utf8'))).pending.includes('snapshot anterior: JSON inválido'));
+  for (const [field, item, path] of [
+    ['labels', {}, 'manifest.labels[0].label'],
+    ['routes', { label: 'Canais' }, 'manifest.routes[0].path'],
+    ['permissions', { method: 'Read', verb: 'GET', route: '/api', policy: 'authenticated', name: 'read' }, 'manifest.permissions[0].controller'],
+    ['markers', { kind: 'tour', id: 42 }, 'manifest.markers[0].id'],
+  ]) {
+    const malformed = structuredClone(snapshot);
+    malformed.manifest[field][0] = item;
+    await writeFile(invalid, JSON.stringify(malformed));
+    await rm(outputFile, { force: true });
+    const run = invoke(invalid);
+    assert.equal(run.status, 2, `${path} tem exit code de snapshot inválido: ${run.stderr}`);
+    assert.match(run.stderr, /^$/u, `${path} não lança exceção`);
+    const report = JSON.parse(await readFile(outputFile, 'utf8'));
+    assert.ok(report.pending.some((message) => message.includes('snapshot inválido') && message.includes(path)),
+      `${path} deve aparecer no relatório`);
+    assert.deepEqual(report.proposals, [], `${path} não gera proposta sobre snapshot inválido`);
+  }
 } finally { await rm(dir, { recursive: true, force: true }); }
 console.log('Guide impact rework test OK');
