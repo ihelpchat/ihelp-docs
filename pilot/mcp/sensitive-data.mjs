@@ -84,11 +84,13 @@ function redact(value, patterns, marker) {
 export function sensitiveKinds(value) {
   const text = String(value ?? '');
   const folded = text.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase('en-US');
+  const mixedAlphabet = (text.normalize('NFKC').match(/[\p{L}\p{M}]+/gu) ?? []).some((word) =>
+    /\p{Script=Latin}/u.test(word) && /[\p{Script=Cyrillic}\p{Script=Greek}]/u.test(word));
   return {
     personal: matchesAny(text, PERSONAL),
     credential: matchesAny(text, CREDENTIALS) || credentialPairs(text).length > 0,
     internal: /🟡|🔴|\binterno\b|\bconfidencial\b/u.test(folded),
-    control: /[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text),
+    control: mixedAlphabet || /[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text),
   };
 }
 

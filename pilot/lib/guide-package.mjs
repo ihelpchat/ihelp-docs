@@ -15,14 +15,36 @@ const publicRoutes = new Set(Object.values(productActions).map(({ route }) => ro
 const versionOf = (output) => output.manifest.contentSha256.slice(0, 12);
 const serialized = (value) => `${canonical(value)}\n`;
 
-function validateStep(text, path) {
-  const kinds = sensitiveKinds(text);
-  if (kinds.credential || kinds.personal || kinds.internal || kinds.control || /[\p{Cc}]/u.test(text)) {
-    throw new Error(`${path}: passo privado, interno ou com caractere invisível`);
+const allowedCharacters = /^[A-Za-zÀÁÂÃÇÉÊÍÓÔÕÚÜàáâãçéêíóôõúü0-9 .,;:!?()\[\]{}'"“”‘’…•●○◉—–\-_/\\@#%&+=*<>|$]+$/u;
+
+function validatePublicArtifact(artifact, name) {
+  function visit(value, location, key) {
+    if (typeof value === 'string') {
+      const normalized = value.normalize('NFKC');
+      for (const character of normalized) {
+        if (!allowedCharacters.test(character)) {
+          throw new Error(`${name}.${location}: caractere privado proibido U+${character.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`);
+        }
+      }
+      const kinds = sensitiveKinds(value);
+      if (key !== 'contentSha256' && (kinds.credential || kinds.personal || kinds.internal || kinds.control)) throw new Error(`${name}.${location}: dado privado ou interno`);
+      // O permalink da página é gerado pelo compilador; não é uma rota do app.
+      if (key !== 'path') {
+        for (const match of value.matchAll(/(^|[\s(:=])\/(?!\/)[^\s"'<>()[\]{}]+/gu)) {
+          const route = match[0].slice(match[1].length).replace(/[.,;:!?]+$/u, '');
+          if (route.includes('%') || !publicRoutes.has(route)) throw new Error(`${name}.${location}: rota fora do catálogo: ${route}`);
+        }
+      }
+    } else if (Array.isArray(value)) {
+      value.forEach((item, index) => visit(item, `${location}[${index}]`));
+    } else if (value && typeof value === 'object') {
+      for (const [childKey, child] of Object.entries(value)) {
+        visit(childKey, `${location}.key`);
+        visit(child, `${location}.${childKey}`, childKey);
+      }
+    }
   }
-  for (const route of text.match(/\/[a-z0-9][a-z0-9/_-]*/giu) ?? []) {
-    if (!publicRoutes.has(route)) throw new Error(`${path}: rota fora do catálogo: ${route}`);
-  }
+  visit(artifact, '', undefined);
 }
 
 async function walk(dir) {
@@ -46,13 +68,7 @@ export async function compileGuidePackage(root) {
     if (metadata.guide === undefined) continue;
     const unknown = Object.keys(metadata).filter((key) => !frontmatterFields.has(key));
     if (unknown.length) throw new Error(`${path}: campo desconhecido: ${unknown.join(', ')}`);
-    const privateData = sensitiveKinds(raw);
-    if (privateData.credential || privateData.personal || privateData.internal || privateData.control) throw new Error(`${path}: dado privado no guia`);
     const guide = guideSchema.parse(metadata.guide);
-    for (const step of guide.steps) {
-      validateStep(step.text, path);
-      for (const choice of step.choices ?? []) validateStep(choice.label, path);
-    }
     if (ids.has(guide.guideId)) throw new Error(`${path}: guideId duplicado: ${guide.guideId}`);
     ids.add(guide.guideId);
     if (typeof metadata.title !== 'string' || typeof metadata.description !== 'string') throw new Error(`${path}: título ou descrição ausente`);
@@ -62,11 +78,14 @@ export async function compileGuidePackage(root) {
   const aliases = { ...legacyGuideAliases };
   const content = { schemaVersion, version: packageVersion, aliases, guides };
   const sha = contentSha256(content);
-  return {
+  const output = {
     manifest: { ...content, contentSha256: sha },
     catalog: { schemaVersion, version: packageVersion, contentSha256: sha, guides },
     app: { schemaVersion, version: packageVersion, contentSha256: sha, aliases, guides: guides.map(({ guide }) => guide) },
   };
+  validatePublicArtifact(output.catalog, 'catalog');
+  validatePublicArtifact(output.app, 'app');
+  return output;
 }
 
 export async function writeGuidePackage(root) {
