@@ -3,13 +3,13 @@ import { promisify } from 'node:util';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { isAbsolute, join, relative, sep, dirname, parse } from 'node:path';
-import { redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
+import { containsSensitiveData, redactSensitiveData } from './sensitive-data.mjs';
 import { envCompatibility } from './env-compat.mjs';
 
 const run = promisify(execFile);
 const SOURCE = /\.(?:ts|tsx|js|jsx|cs)$/iu;
 const BLOCKED = /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.git|node_modules|dist|build|out|bin|obj|data|logs?|backups?|coverage|migrations?|secrets?|credentials?|fixtures?|__tests__|tests?|public)(?:\/|$)/iu;
-const BLOCKED_FILE = /(?:^|\/)(?:[^/]*(?:secret|credential|token|private[-_]?key)[^/]*|[^/]*\.(?:min|designer|generated|spec|test)|styles?)\.(?:ts|tsx|js|jsx|cs)$/iu;
+const BLOCKED_FILE = /(?:^|\/)(?:[^/]*(?:key|secret|token|credential|password|env|config)[^/]*|[^/]*\.(?:min|designer|generated|spec|test)|styles?)\.(?:ts|tsx|js|jsx|cs)$/iu;
 const SHA = /^[a-f0-9]{40}$/u;
 const MAX_LISTED = 10_000;
 const MAX_SEARCH_FILES = 4_096;
@@ -17,8 +17,10 @@ const MAX_FILE_BYTES = 256_000;
 const MAX_TOTAL_BYTES = 64_000_000;
 const TIMEOUT_MS = 2_000;
 const SOURCES = Object.freeze({
-  frontend: { repository: 'ihelpchat/front-react', role: 'frontend', env: envCompatibility.localCheckouts.frontend },
-  backend: { repository: 'ihelpchat/olah-ihelp', role: 'backend', env: envCompatibility.localCheckouts.backend },
+  frontend: { repository: 'ihelpchat/front-react', role: 'frontend', env: envCompatibility.localCheckouts.frontend,
+    folders: ['src/components', 'src/pages', 'src/features', 'src/routes'] },
+  backend: { repository: 'ihelpchat/olah-ihelp', role: 'backend', env: envCompatibility.localCheckouts.backend,
+    folders: ['Controllers', 'Comzada.Application/Controllers', 'ihelp.PublicApi'] },
 });
 const STOP = new Set(['para', 'pelo', 'pela', 'como', 'criar', 'configurar', 'codigo', 'code', 'de', 'com', 'uma', 'um']);
 const ALIASES = { robo: ['robot'], robos: ['robot'], canal: ['channel'], canais: ['channel'], horario: ['schedule', 'hour'], horarios: ['schedule', 'hour'], departamento: ['department'], departamentos: ['department'], atendimento: ['attendance'], reconectar: ['reconnect', 'connection'], contatos: ['contacts'], campanha: ['campaign'] };
@@ -33,8 +35,10 @@ function words(topic, module) {
     .flatMap((word) => [word, ...(ALIASES[word] ?? [])]))];
 }
 
-export function isAllowedSourcePath(path) {
-  return SOURCE.test(path) && !BLOCKED.test(path) && !BLOCKED_FILE.test(path)
+export function isAllowedSourcePath(path, role = 'frontend') {
+  const folders = SOURCES[role]?.folders ?? [];
+  return folders.some((folder) => path.startsWith(`${folder}/`))
+    && SOURCE.test(path) && !BLOCKED.test(path) && !BLOCKED_FILE.test(path)
     && !path.startsWith('/') && !path.split('/').includes('..');
 }
 
@@ -98,6 +102,11 @@ function pending(source, reason) {
   return { available: false, repository: source.repository, ref: source.sha, role: source.role, matches: [], reason };
 }
 
+function sensitiveSource(content) {
+  const normalized = content.normalize('NFKC').replace(/[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, '');
+  return content.includes('\0') || containsSensitiveData(content) || containsSensitiveData(normalized);
+}
+
 async function scan(source, topic, module) {
   if (!source || !isAbsolute(source.root ?? '')) return pending(source ?? {}, 'Checkout autorizado ausente');
   try {
@@ -110,7 +119,7 @@ async function scan(source, topic, module) {
     if ((await git(root, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Checkout com alterações não commitadas');
     const listed = (await git(root, 'ls-files', '-z')).toString().split('\0').filter(Boolean);
     if (listed.length > MAX_LISTED) return pending(source, 'Limite de arquivos listados excedido');
-    const paths = listed.filter(isAllowedSourcePath);
+    const paths = listed.filter((path) => isAllowedSourcePath(path, source.role));
     if (paths.length > MAX_SEARCH_FILES) return pending(source, 'Limite de arquivos pesquisáveis excedido');
     const terms = words(topic, module);
     const moduleTerms = words('', module);
@@ -127,6 +136,10 @@ async function scan(source, topic, module) {
       if (size > MAX_FILE_BYTES) continue;
       totalBytes += size;
       if (totalBytes > MAX_TOTAL_BYTES) return pending(source, 'Limite de bytes pesquisados excedido');
+      const handle = await open(full, constants.O_RDONLY | constants.O_NOFOLLOW);
+      let content;
+      try { content = await handle.readFile('utf8'); } finally { await handle.close(); }
+      if (sensitiveSource(content)) continue;
       eligible.push(path);
     }
     const textual = await candidatePaths(root, eligible, terms, topic);
@@ -142,8 +155,7 @@ async function scan(source, topic, module) {
       const handle = await open(actual, constants.O_RDONLY | constants.O_NOFOLLOW);
       let content;
       try { content = await handle.readFile('utf8'); } finally { await handle.close(); }
-      if (content.includes('\0')) return null;
-      if (sensitiveKinds(content).internal) return null;
+      if (sensitiveSource(content)) return null;
       const lines = content.split('\n');
       const pathScore = pathRelevance(path, terms, moduleTerms);
       let best = null;
