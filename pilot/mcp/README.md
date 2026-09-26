@@ -15,20 +15,20 @@ O servidor permite que uma IA consulte a base, valide conteúdo e envie um FAQ/t
 - `docs_get_article`: entrega o artigo completo para revisão ou reaproveitamento.
 - `docs_audit_content`: verifica toda a base contra o padrão editorial.
 - `docs_validate_article`: valida schema, caminhos, Tango e possíveis segredos.
-- `docs_submit_article`: cria draft local ou pull request e exige `requestedBy`.
+- `docs_submit_article`: cria draft local ou pull request; no HTTP, o ator vem da credencial.
 - `docs_product_context`: consulta frontend e backend no GitHub, além de sinais agregados de suporte e cobertura editorial.
 - `docs_plan_content` e `docs_generate_package`: planejam e geram FAQ, tutorial e ações guiadas sem vídeo.
 - `docs_submit_package`: aceita `articles` para create/update e `deletes` para remoção, com `mode: dry_run | draft | pull_request`; na PR atualiza MDX e os `meta.json` afetados.
 - `docs_update_article` e `docs_delete_article`: atualizam ou removem por PR revisável.
 
-## Migração dos clientes de escrita
+## Identidade dos clientes de escrita
 
-Todo cliente que chama ferramentas de IA ou escrita deve enviar `requestedBy` antes de atualizar o servidor. Use somente um identificador opaco e não sensível no formato `user:<id>` ou `service:<id>` (3 a 64 caracteres minúsculos, dígitos, `_` ou `-` após o prefixo), por exemplo `service:docs-bot`. Nunca use nome, email, token ou outro dado pessoal. Chamadas sem o campo ou com valor inválido são rejeitadas; `docs_inventory`, `docs_search`, `docs_get_article`, `docs_audit_content` e `docs_validate_article` continuam sem ator.
+No HTTP, o servidor deriva `requestedBy` da credencial. O cliente pode omitir o campo; se o enviar, deve coincidir com o ator da chave. Divergência é recusada e registrada sem o valor enviado. Use atores opacos `user:<id>` ou `service:<id>` na configuração, nunca nome ou email. Clientes locais por stdio continuam informando `requestedBy` nas ferramentas de IA e escrita.
 
-Exemplo seguro de argumentos para escrita (junto dos demais campos obrigatórios do artigo):
+Exemplo de argumentos para escrita via HTTP (junto dos demais campos obrigatórios do artigo):
 
 ```json
-{"mode":"draft","requestedBy":"service:docs-bot"}
+{"mode":"draft"}
 ```
 
 ## Audit log local
@@ -48,6 +48,14 @@ npm run mcp:start
 ## HTTP remoto e assistente GPT
 
 Configure `DOCS_MCP_CREDENTIALS` como JSON de credenciais individuais: `[{"actor":"user:operador-1","role":"reader","key":"<chave aleatória com 24+ caracteres>"},{"actor":"service:docs-writer","role":"writer","key":"<outra chave aleatória com 24+ caracteres>"}]`. Cada ator e chave devem ser únicos. O HTTP deriva o ator da chave e rejeita `requestedBy` diferente no pedido. Remover uma entrada e reiniciar o serviço revoga a chave. O reader acessa contexto do front e back, mas não envia artigos; o writer envia artigos, mas não consulta código privado. O limite é de 30 chamadas por ator por minuto.
+
+### Migração da chave no Railway
+
+1. Confira quais clientes usam `DOCS_MCP_API_KEY` e prepare uma chave individual para cada pessoa ou serviço. Guarde os valores apenas nas variáveis privadas do Railway e nos clientes correspondentes.
+2. Configure `DOCS_MCP_CREDENTIALS` no serviço do Railway com o JSON acima. No próximo restart, a configuração nova prevalece; `DOCS_MCP_API_KEY` é ignorada e um aviso aparece no log sem revelar a chave.
+3. Atualize cada cliente para a própria chave, confirme leitura e escrita conforme o papel e remova `DOCS_MCP_API_KEY` do Railway e dos clientes antigos. Reinicie e confirme que a chave antiga recebe HTTP 401.
+
+Enquanto somente `DOCS_MCP_API_KEY` estiver configurada, o serviço continua aceitando a chave antiga como ator `service:legado`, com acesso às mesmas ferramentas de antes, e registra um aviso de descontinuação. Sem nenhuma das duas variáveis, o processo falha na subida. Configure também `MCP_STATE_DIR` no volume persistente antes de migrar os drafts e o audit.
 
 Use `GITHUB_READ_TOKEN` com acesso de leitura apenas a `front-react` e `olah-ihelp`. Use `GITHUB_TOKEN` separado, com acesso de escrita apenas a `ihelp-docs`, para abrir pull requests; configure `GITHUB_REPOSITORY=ihelpchat/ihelp-docs` e `GITHUB_BASE_BRANCH`. Para ativar o assistente, configure `OPENAI_API_KEY`; o modelo padrão é `gpt-6-luna` e pode ser trocado por `OPENAI_MODEL`.
 

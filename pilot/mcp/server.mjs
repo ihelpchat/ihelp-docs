@@ -10,7 +10,8 @@ import { getIhelpContext } from './product-context-service.mjs';
 import { authorizeTool, requestIdentity } from './access-control.mjs';
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
-const requestedBySchema = z.string().refine(isSafeRequestedBy, 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais').describe('ID opaco não sensível, como user:bruno; obrigatório para IA e escrita');
+const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article']);
+const requestedBySchema = z.string().optional().describe('Ator opcional; se informado, deve coincidir com o ator da credencial');
 const contentRequestSchema = z.object({
   topic: z.string().min(3).max(120),
   module: z.string().min(2).max(80),
@@ -37,11 +38,16 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     if (identity) {
       try {
         const actor = authorizeTool(identity, name, args);
-        return callback({ ...args, ...(args.requestedBy === undefined ? {} : { requestedBy: actor }) }, extra);
+        return callback({ ...args, requestedBy: actor }, extra);
       } catch (error) {
+        if (error.message === 'requestedBy forged') {
+          await auditOperation(root, { actor: identity.actor, operation: name, result: 'forbidden' });
+          return textResult({ error: error.message, status: 403 }, true);
+        }
         return textResult({ error: error.message }, true);
       }
     }
+    if (actorTools.has(name) && !isSafeRequestedBy(args.requestedBy)) return textResult({ error: 'requestedBy inválido para stdio' }, true);
     return callback(args, extra);
   });
 

@@ -23,6 +23,11 @@ export function loadCredentials(serialized) {
   });
 }
 
+export function loadLegacyCredential(key) {
+  if (typeof key !== 'string' || key.length < 24) throw new Error('DOCS_MCP_API_KEY precisa ter ao menos 24 caracteres');
+  return { actor: 'service:legado', role: 'legacy', digest: createHash('sha256').update(key).digest() };
+}
+
 export function authenticate(credentials, authorization) {
   if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) return null;
   const digest = createHash('sha256').update(authorization.slice(7)).digest();
