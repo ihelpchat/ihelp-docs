@@ -8,6 +8,7 @@ import { buildServer } from './server.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const article = await readArticle(root, 'api/crm/funis/listar-funis');
+const snapshot = { frontSha: 'a'.repeat(40), backSha: 'b'.repeat(40), manifest: { routes: [], labels: [], markers: [], permissions: [] } };
 const request = {
   ...article,
   articles: [article],
@@ -19,6 +20,8 @@ const request = {
   details: 'Conferir o fluxo de importação de contatos no produto.',
   query: 'contatos',
   limit: 1,
+  before: snapshot,
+  after: snapshot,
 };
 const envNames = ['GITHUB_TOKEN', 'GITHUB_READ_TOKEN', 'OPENAI_API_KEY', 'MCP_STATE_DIR', 'PRODUCT_GITHUB_REF', 'BACKEND_GITHUB_REF'];
 const savedEnv = new Map(envNames.map((name) => [name, process.env[name]]));

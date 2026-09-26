@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { runGuideProof } from '../scripts/guide-proof.mjs';
+import { proofOutcome, runGuideProof } from '../scripts/guide-proof.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'guide-proof-rework-'));
 const packageRoot = join(root, 'package');
@@ -52,7 +52,7 @@ const app = createServer((req, res) => {
     if (!req.url.includes('/demo')) {
       res.end(`<main data-tour-id="guide-department-open"><button onclick="/* source: src/store/slices/tab/tab.slice.ts:16 */ ${brokenClick ? '' : "this.dataset.done='yes'"}">Departamentos</button><table><tr><td onclick="/* source: src/components/ui/components/Tables/components/TableCommonDepartments/index.tsx:235 */ location.href='/configuracoes/department/demo'+location.search">Demo</td></tr></table></main>`);
     } else {
-      res.end(`<!doctype html><main><label>Inicio<input name="horarioAtendimentoInicio"></label><div><div><h3>Mensagem automática fora de horário de atendimento</h3></div><button role="switch" aria-checked="false" onclick="/* source: src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:356 */ this.setAttribute('aria-checked',this.getAttribute('aria-checked')==='true'?'false':'true');document.querySelector('#chat').hidden=this.getAttribute('aria-checked')!=='true';if(${toggleClearsMessage})message.textContent=''">Ativar</button></div><div id="chat" hidden><div><div><textarea placeholder="Crie uma mensagem..."></textarea></div></div><button aria-label="Enviar" onclick="/* source: src/components/shared/Chat/components/ChatView/index.tsx:210 */ const value=document.querySelector('textarea').value;if(value)message.textContent=value"><svg class="w-6"></svg>Enviar</button></div><p class="whitespace-pre-line" id="message"></p><button>Salvar Alterações</button></main><script>
+      res.end(`<!doctype html><main><label>Inicio<input name="horarioAtendimentoInicio"></label><div><div><h3>Mensagem automática fora de horário de atendimento</h3></div><button role="switch" aria-checked="false" onclick="/* source: src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:356 */ this.setAttribute('aria-checked',this.getAttribute('aria-checked')==='true'?'false':'true');document.querySelector('#chat').hidden=this.getAttribute('aria-checked')!=='true';if(${toggleClearsMessage})message.textContent=''">Ativar</button></div><div id="chat" hidden><div><div><textarea placeholder="Crie uma mensagem..."></textarea></div></div><button aria-label="Enviar" onclick="/* source: src/components/shared/Chat/components/ChatView/index.tsx:210 */ const value=document.querySelector('textarea').value;if(value)message.textContent=value"><svg class="w-6"></svg>Enviar</button></div><p class="whitespace-pre-line" id="message"></p><button ${req.url?.includes('role=denied') ? 'disabled' : ''}>Salvar Alterações</button></main><script>
         const denied=new URLSearchParams(location.search).has('role');const message=document.querySelector('#message');
         document.querySelector('[name=horarioAtendimentoInicio]').value=localStorage.getItem('proof-hour')||'';
         message.textContent=localStorage.getItem('proof-recado')??${JSON.stringify(initialRecado)};
@@ -105,6 +105,31 @@ async function mutateScript(path, edit, label, pattern) {
 }
 try {
   const report = await run('journey');
+  const recado = { guide: recadoGuide };
+  const recadoSteps = report.steps.filter(step => step.guideId === recadoGuide.guideId);
+  // A fixture emite o mesmo formato do runner; só o ambiente, SHA e escopo mudam.
+  const { outcome: _fixtureOutcome, ...emitted } = report;
+  const verified = { ...emitted, mode: 'staging', appSha: 'a'.repeat(40), steps: recadoSteps };
+  const evaluate = (changed) => proofOutcome(changed, { guides: [recado], appSha: verified.appSha });
+  assert.deepEqual(evaluate(verified), { ok: true, pending: [] }, 'blocked no perfil negado é prova correta');
+  const failed = (changed, reason) => {
+    const outcome = evaluate(changed);
+    assert.equal(outcome.ok, false);
+    assert.ok(outcome.pending.some(item => item.includes(reason)), JSON.stringify(outcome.pending));
+  };
+  failed({ ...verified, steps: [] }, 'recado-fora-do-horario');
+  const authorized = recadoSteps.find(step => step.role === 'authorized' && step.status === 'passed');
+  const denied = recadoSteps.find(step => step.role === 'denied' && step.status === 'blocked');
+  assert.ok(authorized && denied, 'fixture deve emitir ambos os perfis');
+  failed({ ...verified, cleanupPending: [{ guideId: recadoGuide.guideId, reason: 'restauração não persistiu' }] }, 'cleanupPending');
+  failed({ ...verified, warning: 'limpeza pendente' }, 'warning');
+  failed({ ...verified, foo: 'novo problema do runner' }, 'foo');
+  failed({ ...verified, steps: [...recadoSteps, { ...authorized, status: 'manual_required' }] }, 'manual_required');
+  failed({ ...verified, steps: recadoSteps.map(step => step === authorized ? { ...step, status: 'manual_required' } : step) }, `${authorized.guideId}/${authorized.stepId}`);
+  failed({ ...verified, steps: recadoSteps.filter(step => step !== authorized) }, `${authorized.guideId}/${authorized.stepId}`);
+  failed({ ...verified, steps: recadoSteps.map(step => step === denied ? { ...step, status: 'passed' } : step) }, `${denied.guideId}/${denied.stepId}`);
+  failed({ ...verified, appSha: 'b'.repeat(40) }, 'SHA');
+  failed({ ...verified, mode: 'fixture' }, 'staging');
   assert.equal(report.authorized, 'passed');
   assert.equal(report.denied, 'passed');
   assert.ok(report.cleanup.some(x => x.guideId === 'usuario-acesso' && x.status === 'removed'));

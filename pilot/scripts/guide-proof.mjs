@@ -7,6 +7,59 @@ import productActions from '../architecture/product-actions.json' with { type: '
 const root = new URL('../public/guides/', import.meta.url);
 const scriptsRoot = new URL('./guide-proof/roteiros/', import.meta.url);
 
+const reportFields = {
+  mode: value => value === 'staging',
+  appSha: (value, expected) => Boolean(expected) && value === expected,
+  guides: value => Array.isArray(value) && value.every(item => item && Object.keys(item).every(key => ['id', 'version'].includes(key)) && typeof item.id === 'string' && Number.isInteger(item.version)),
+  authorized: value => value === 'passed',
+  denied: value => value === 'passed',
+  qr: value => value === 'passed' || value === 'manual_required',
+  steps: value => Array.isArray(value) && value.every(item => item && Object.keys(item).every(key => ['guideId', 'stepId', 'role', 'status'].includes(key)) && typeof item.guideId === 'string' && typeof item.stepId === 'string' && ['authorized', 'denied'].includes(item.role) && ['passed', 'blocked', 'manual_required'].includes(item.status)),
+  screenshots: value => Array.isArray(value) && value.every(item => typeof item === 'string' && item.endsWith('.png')),
+  cleanup: value => Array.isArray(value) && value.every(item => item && Object.keys(item).every(key => ['guideId', 'status'].includes(key)) && typeof item.guideId === 'string' && ['restored', 'removed'].includes(item.status)),
+  cleanupPending: value => Array.isArray(value) && value.length === 0,
+  warning: value => value == null || value === '' || Array.isArray(value) && value.length === 0,
+  warnings: value => value == null || Array.isArray(value) && value.length === 0,
+  errors: value => value == null || Array.isArray(value) && value.length === 0,
+  outcome: value => value == null || value?.ok === true && Array.isArray(value.pending) && value.pending.length === 0,
+};
+const optionalReportFields = new Set(['warning', 'warnings', 'errors', 'outcome']);
+
+export function proofOutcome(report, { guides, appSha }) {
+  const pending = [];
+  if (!report || typeof report !== 'object' || Array.isArray(report)) return { ok: false, pending: ['relatório ausente ou inválido'] };
+  for (const [name, value] of Object.entries(report)) {
+    if (!Object.hasOwn(reportFields, name)) pending.push(`${name}: campo desconhecido`);
+    else if (!reportFields[name](value, appSha)) pending.push(`${name}: evidência ausente ou pendente`);
+  }
+  for (const name of Object.keys(reportFields)) {
+    if (!optionalReportFields.has(name) && !Object.hasOwn(report, name)) pending.push(`${name}: campo ausente`);
+  }
+  if (report.mode !== 'staging') pending.push('prova no navegador exige staging');
+  if (!appSha || report.appSha !== appSha) pending.push(`SHA da prova divergente de ${appSha}`);
+  if (report.authorized !== 'passed') pending.push('perfil authorized não concluído');
+  if (report.denied !== 'passed') pending.push('perfil denied não concluído');
+  const steps = Array.isArray(report?.steps) ? report.steps : [];
+  for (const entry of guides ?? []) {
+    const guide = entry.guide ?? entry;
+    if (guide.guideId === 'reconectar-canal-qr' && report.qr !== 'passed') pending.push(`${guide.guideId}: qr pendente`);
+    if (!Array.isArray(report.guides) || !report.guides.some(item => item?.id === guide.guideId && item.version === guide.version)) pending.push(`${guide.guideId}: guia/versão ausente da prova`);
+    for (const { stepId } of guide.steps) {
+      const matched = steps.filter(step => step?.guideId === guide.guideId && step.stepId === stepId && step.role === 'authorized');
+      if (matched.some(step => step.status === 'manual_required')) pending.push(`${guide.guideId}/${stepId}: manual_required`);
+      if (matched.some(step => step.status === 'blocked')) pending.push(`${guide.guideId}/${stepId}: authorized blocked`);
+      if (!matched.some(step => step.status === 'passed')) pending.push(`${guide.guideId}/${stepId}: authorized ausente ou não passou`);
+      if (matched.some(step => step.status === 'passed') && (!Array.isArray(report.screenshots) || !report.screenshots.includes(`${guide.guideId}-${stepId}.png`))) pending.push(`${guide.guideId}/${stepId}: screenshots ausentes`);
+    }
+    const denied = steps.filter(step => step?.guideId === guide.guideId && step.role === 'denied');
+    if (!denied.some(step => step.status === 'blocked')) pending.push(`${guide.guideId}: bloqueio do perfil denied ausente`);
+    for (const step of denied) {
+      if (step.status !== 'blocked') pending.push(`${guide.guideId}/${step.stepId}: perfil denied ${step.status}`);
+    }
+  }
+  return { ok: pending.length === 0, pending };
+}
+
 export async function publishedGuides(packageRoot = root) {
   const dir = packageRoot instanceof URL ? packageRoot : new URL(`file://${packageRoot}/`);
   const { current } = JSON.parse(await readFile(new URL('manifest.json', dir), 'utf8'));
@@ -120,7 +173,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
             const step = guide.steps[index];
             const plan = plans[index];
             if (!plan.control) {
-              if (role === 'authorized') report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'manual_required' });
+              if (role === 'authorized') report.steps.push({ guideId: guide.guideId, stepId: step.stepId, role, status: 'manual_required' });
               continue;
             }
             // Only a published catalog route may change the current URL.
@@ -144,7 +197,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
             const control = instruction.type === 'fields' ? null : locator(page, instruction);
             if (role === 'denied' && control && !(await control.isEnabled())) {
               deniedBlocked = true;
-              report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'blocked' });
+              report.steps.push({ guideId: guide.guideId, stepId: step.stepId, role, status: 'blocked' });
               continue;
             }
             if (control) {
@@ -181,7 +234,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
               const fieldStep = instruction.verifyField;
               const fieldIndex = guide.steps.findIndex(item => item.stepId === fieldStep);
               if (!filled.has(fieldStep) || fieldIndex < 0) {
-                if (role === 'authorized') report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'manual_required' });
+                if (role === 'authorized') report.steps.push({ guideId: guide.guideId, stepId: step.stepId, role, status: 'manual_required' });
                 continue;
               }
               const source = plans[fieldIndex].control;
@@ -249,7 +302,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
             }
             if (blocked.length) throw new Error(`${guide.guideId}: pedido fora do host autorizado`);
             if (role === 'authorized') {
-              report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'passed' });
+              report.steps.push({ guideId: guide.guideId, stepId: step.stepId, role, status: 'passed' });
               await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
               await chmod(evidenceDir, 0o700);
               const name = `${guide.guideId}-${step.stepId}.png`;
@@ -296,6 +349,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
     if (report.cleanupPending.some(item => item.item)) throw new Error('limpeza pendente: item criado não removido pela interface');
     return report;
   } finally {
+    report.outcome = proofOutcome(report, { guides: published, appSha });
     await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
     await writeFile(join(evidenceDir, 'report.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
     await browser.close();

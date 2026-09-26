@@ -11,7 +11,8 @@ if (stagingUrl) {
     credentials: credentialsFromEnv(),
     appSha: process.env[names.appSha],
   });
-  console.log(JSON.stringify({ mode: result.mode, authorized: result.authorized, denied: result.denied, qr: result.qr, warning: result.warning, cleanupPending: result.cleanupPending }));
+  console.log(JSON.stringify({ mode: result.mode, authorized: result.authorized, denied: result.denied, outcome: result.outcome, qr: result.qr, warning: result.warning, cleanupPending: result.cleanupPending }));
+  if (!result.outcome.ok) process.exitCode = 1;
 } else {
   console.log('pendente: conta de teste de homologação (Bruno)');
   await import('../mcp/guide-proof-rework.test.mjs');
