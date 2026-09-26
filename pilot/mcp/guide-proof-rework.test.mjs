@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { runGuideProof } from '../scripts/guide-proof.mjs';
+import { proofOutcome, runGuideProof } from '../scripts/guide-proof.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'guide-proof-rework-'));
 const packageRoot = join(root, 'package');
@@ -105,6 +105,25 @@ async function mutateScript(path, edit, label, pattern) {
 }
 try {
   const report = await run('journey');
+  const recado = { guide: recadoGuide };
+  const recadoSteps = report.steps.filter(step => step.guideId === recadoGuide.guideId);
+  const verified = { ...report, mode: 'staging', appSha: 'a'.repeat(40), steps: recadoSteps };
+  const evaluate = (changed) => proofOutcome(changed, { guides: [recado], appSha: verified.appSha });
+  assert.deepEqual(evaluate(verified), { ok: true, pending: [] }, 'blocked no perfil negado é prova correta');
+  const failed = (changed, reason) => {
+    const outcome = evaluate(changed);
+    assert.equal(outcome.ok, false);
+    assert.ok(outcome.pending.some(item => item.includes(reason)), JSON.stringify(outcome.pending));
+  };
+  failed({ ...verified, steps: [] }, 'recado-fora-do-horario');
+  const authorized = recadoSteps.find(step => step.role === 'authorized' && step.status === 'passed');
+  const denied = recadoSteps.find(step => step.role === 'denied' && step.status === 'blocked');
+  assert.ok(authorized && denied, 'fixture deve emitir ambos os perfis');
+  failed({ ...verified, steps: recadoSteps.map(step => step === authorized ? { ...step, status: 'manual_required' } : step) }, `${authorized.guideId}/${authorized.stepId}`);
+  failed({ ...verified, steps: recadoSteps.filter(step => step !== authorized) }, `${authorized.guideId}/${authorized.stepId}`);
+  failed({ ...verified, steps: recadoSteps.map(step => step === denied ? { ...step, status: 'passed' } : step) }, `${denied.guideId}/${denied.stepId}`);
+  failed({ ...verified, appSha: 'b'.repeat(40) }, 'SHA');
+  failed({ ...verified, mode: 'fixture' }, 'staging');
   assert.equal(report.authorized, 'passed');
   assert.equal(report.denied, 'passed');
   assert.ok(report.cleanup.some(x => x.guideId === 'usuario-acesso' && x.status === 'removed'));
