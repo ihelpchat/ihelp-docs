@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, realpath } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdtemp, mkdir, writeFile, realpath, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { searchLocalProductContext } from './local-product-context.mjs';
@@ -55,9 +56,18 @@ try {
   assert.equal(atLimit.matches[0]?.path, 'Robots.tsx', '256000 bytes aceitos');
   await writeFile(source, prefix + ' '.repeat(256_001 - Buffer.byteLength(prefix)));
   boundaryGit('add', '-A'); boundaryGit('commit', '-qm', '256001 bytes');
-  const aboveLimit = await search();
+  const fakeBin = join(base, 'fake-bin');
+  await mkdir(fakeBin);
+  const rgCalled = join(base, 'rg-called');
+  await writeFile(join(fakeBin, 'rg'), `#!/bin/sh\ntouch '${rgCalled}'\nexit 1\n`);
+  await chmod(join(fakeBin, 'rg'), 0o755);
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${fakeBin}:${oldPath}`;
+  let aboveLimit;
+  try { aboveLimit = await search(); } finally { process.env.PATH = oldPath; }
   assert.equal(aboveLimit.code[0].available, true, aboveLimit.code[0].reason);
   assert.deepEqual(aboveLimit.matches, [], '256001 bytes recusados antes da busca');
+  assert.equal(existsSync(rgCalled), false, 'rg não é chamado para arquivo acima do teto');
 
   const many = join(base, 'many');
   await mkdir(many);
