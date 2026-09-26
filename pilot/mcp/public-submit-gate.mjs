@@ -5,7 +5,7 @@ import { validateCanonicalGuide } from '../lib/canonical-guides.mjs';
 import { validatePublicArtifact } from '../lib/guide-package.mjs';
 import approvedMap from '../product-map/approved.json' with { type: 'json' };
 import { sensitiveKinds } from './sensitive-data.mjs';
-import { contentRoutes, internalLinkIssues, parseMdx, plainText, publishedContent, visit } from './editorial-standard.mjs';
+import { contentRoutes, internalLinkIssues, parseArticle, parseMdx, plainText, publishedContent, visit } from './editorial-standard.mjs';
 import publishedBaseline from './public-submit-baseline.json' with { type: 'json' };
 
 // A mesma lista protege texto submetido ao MCP e passos dos guias submetidos.
@@ -93,7 +93,11 @@ export async function assertPublicSubmit(root, items, deletes = [], { ignoreBase
     if (article.path.startsWith('docs/') || article.path.startsWith('tutoriais/')) {
       checkJargon([article.title, article.description, article.body, ...(article.guide?.steps ?? []).map(({ text }) => text)].join('\n'));
     }
-    const unchangedBaseline = !ignoreBaseline && publishedBaseline[article.path] === createHash('sha256').update(rendered).digest('hex');
+    const reviewNote = /\n\n\{\/\* Revisão editorial pendente: front [a-f0-9]{40}; back [a-f0-9]{40}; (?:atualizar|avisar) (?:route|marker|label|permission)(?:, (?:atualizar|avisar) (?:route|marker|label|permission))*\. \*\/\}(?=\n$)/u;
+    const baselineText = rendered.replace(reviewNote, '');
+    const prior = published.get(article.path);
+    const reviewOnly = baselineText !== rendered && prior && JSON.stringify(parseArticle(prior, article.path)) === JSON.stringify(parseArticle(baselineText, article.path));
+    const unchangedBaseline = !ignoreBaseline && (publishedBaseline[article.path] === createHash('sha256').update(baselineText).digest('hex') || reviewOnly);
     if (!unchangedBaseline) {
       for (const text of [article.title, article.description, article.body, ...(article.guide?.steps ?? []).map(({ text }) => text)]) checkInterfaceLabels(text, article.path);
     }

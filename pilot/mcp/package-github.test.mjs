@@ -76,12 +76,24 @@ const originalToken = process.env.GITHUB_TOKEN;
 process.env.GITHUB_TOKEN = 'mock-token';
 let pulls = 0;
 let refs = 0;
+const deterministicPulls = new Map();
 globalThis.fetch = async (url, init = {}) => {
-  const path = new URL(url).pathname;
+  const parsed = new URL(url);
+  const path = parsed.pathname;
   const method = init.method ?? 'GET';
+  if (path.endsWith('/pulls') && method === 'GET') {
+    const head = parsed.searchParams.get('head')?.split(':').at(-1);
+    return { ok: true, json: async () => deterministicPulls.has(head) ? [deterministicPulls.get(head)] : [] };
+  }
   if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: 'base-sha' } }) };
   if (path.endsWith('/git/refs')) { refs += 1; return { ok: true, json: async () => ({}) }; }
-  if (path.endsWith('/pulls')) { pulls += 1; return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/321' }) }; }
+  if (path.endsWith('/pulls')) {
+    pulls += 1;
+    const request = JSON.parse(init.body);
+    const result = { html_url: `https://github.com/ihelpchat/ihelp-docs/pull/${pulls}` };
+    deterministicPulls.set(request.head, result);
+    return { ok: true, json: async () => result };
+  }
   const file = decodeURIComponent(path.split('/contents/')[1] ?? '');
   if (!file) throw Error(`Unexpected GitHub call: ${method} ${path}`);
   if (method === 'GET') return branch.has(file)
@@ -125,6 +137,16 @@ try {
   const updated = await submitContentPackage(root, [realArticle], 'pull_request', 'user:tester');
   assert.equal(updated.status, 'pull_request', 'mesmo caminho de docs_update_article deve aceitar o artigo real');
   assert.ok(mutations.some(({ method, file, payload }) => method === 'PUT' && file.endsWith('/api/crm/funis/listar-funis.mdx') && payload.sha === 'sha-pilot/content/docs/api/crm/funis/listar-funis.mdx'));
+  const deterministic = { branch: 'docs/deploy-guia-aaaaaaaaaaaaaaaa', base: 'integration/claricia-v2', draft: true,
+    title: 'Revisar guia após deploy', body: 'SHAs implantados: front e back; revisão humana pendente.' };
+  const firstPull = await submitContentPackage(root, [realArticle], 'pull_request', 'user:tester', [], deterministic);
+  const written = mutations.length;
+  const opened = pulls;
+  const repeatPull = await submitContentPackage(root, [realArticle], 'pull_request', 'user:tester', [], deterministic);
+  assert.equal(firstPull.branch, deterministic.branch);
+  assert.equal(repeatPull.reused, true, 'busca a PR pela branch determinística');
+  assert.equal(pulls, opened, 'evento repetido não abre outra PR');
+  assert.equal(mutations.length, written, 'evento repetido não reescreve conteúdo');
   await assert.rejects(submitContentPackage(root, [], 'pull_request', 'user:tester', ['docs/contatos/inexistente']), /não encontrado/i);
   const failed = (await readFile(join(root, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
   assert.deepEqual(failed.slice(-2).map(({ result }) => result), ['attempt', 'failure']);

@@ -9,9 +9,10 @@ import { generateContentPackage, planContent } from './content-ai-service.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
 import { authorizeTool, registerToolPolicy, requestIdentity } from './access-control.mjs';
 import { createGuide } from './create-guide.mjs';
+import { atualizarPorDeploy } from './update-by-deploy.mjs';
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
-const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia']);
+const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy']);
 const requestedBySchema = z.string().optional().describe('Ator opcional; se informado, deve coincidir com o ator da credencial');
 const contentRequestSchema = z.object({
   topic: z.string().min(3).max(120),
@@ -157,6 +158,15 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
   }, async (args) => {
     try { return textResult(await createGuide(root, args)); }
     catch (error) { return textResult({ error: error instanceof Error ? error.message : 'Falha ao criar guia' }, true); }
+  });
+
+  registerTool('atualizar_por_deploy', {
+    mutates: true,
+    description: 'Propõe revisão dos guias afetados por snapshots de uma versão implantada, sempre em PR draft.',
+    inputSchema: z.strictObject({ before: z.unknown(), after: z.unknown(), prova: z.unknown().optional(), requestedBy: requestedBySchema }),
+  }, async ({ requestedBy, before, after, prova }) => {
+    try { return textResult(await atualizarPorDeploy(root, { before, after, prova, requestedBy })); }
+    catch (error) { return textResult({ error: error instanceof Error ? error.message : String(error) }, true); }
   });
 
   registerTool('docs_submit_package', {

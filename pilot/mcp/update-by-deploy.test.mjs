@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { McpServer } from '@modelcontextprotocol/server';
 import { buildServer } from './server.mjs';
 import { atualizarPorDeploy } from './update-by-deploy.mjs';
+import { readArticle } from './editorial-standard.mjs';
+import { renderArticle } from './content-service.mjs';
+import { assertPublicSubmit } from './public-submit-gate.mjs';
 
 const sha = (letter) => letter.repeat(40);
 const route = (index) => ({ path: `/guide-${index}`, label: `Guia ${index}` });
@@ -21,10 +24,10 @@ function harness() {
     package: async () => ({ catalog: { guides }, sources: {} }), actions,
     read: async (_, path) => article(Number(path.split('-').at(-1))),
     submit: async (_, items, mode, actor, deletes, options) => {
-      writes.push({ items, mode, actor, deletes, options });
       assert.equal(mode, 'pull_request');
       const current = pulls.get(options.branch);
-      if (current) return current;
+      if (current) return { ...current, reused: true };
+      writes.push({ items, mode, actor, deletes, options });
       const pull = { status: 'pull_request', branch: options.branch, url: `https://github.com/ihelpchat/ihelp-docs/pull/${pulls.size + 1}` };
       pulls.set(options.branch, pull);
       return pull;
@@ -51,6 +54,10 @@ const noImpact = harness();
 const empty = await noImpact.run({ after: snapshot('c', before.manifest.routes) });
 assert.equal(empty.status, 'sem impacto');
 assert.equal(noImpact.writes.length, 0);
+const direct = await atualizarPorDeploy({ before, after: snapshot('c', before.manifest.routes), requestedBy: 'service:deploy' }, {
+  package: async () => ({ catalog: { guides }, sources: {} }), actions,
+});
+assert.equal(direct.status, 'sem impacto', 'assinatura pública aceita o objeto do evento');
 
 const mismatch = harness();
 const wrongProof = await mismatch.run({ prova: { mode: 'staging', appSha: sha('d'), authorized: 'passed', denied: 'passed', steps: [] } });
@@ -75,4 +82,11 @@ McpServer.prototype.registerTool = function (name, config, callback) {
 };
 try { buildServer('/fixture'); } finally { McpServer.prototype.registerTool = originalRegister; }
 assert.equal(registered.get('atualizar_por_deploy')?.mutates, true, 'ferramenta entra na derivação de escrita');
+const root = new URL('../', import.meta.url).pathname;
+const canonical = await readArticle(root, 'docs/principais-motivos-de-suporte/usuario-acesso');
+const note = `\n\n{/* Revisão editorial pendente: front ${sha('c')}; back ${sha('b')}; atualizar route. */}`;
+const reviewOnly = { ...canonical, body: canonical.body + note };
+await assertPublicSubmit(root, [{ article: reviewOnly, rendered: renderArticle(reviewOnly) }]);
+const changedText = { ...reviewOnly, body: `${canonical.body}\n\nClique em Botão imaginário.${note}` };
+await assert.rejects(assertPublicSubmit(root, [{ article: changedText, rendered: renderArticle(changedText) }]), /frase não aprovada|rótulo fora do mapa/u);
 console.log('Atualização por deploy: idempotência, teto, proof, gate e política OK');

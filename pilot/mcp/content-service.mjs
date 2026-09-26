@@ -389,16 +389,27 @@ function safeArticleList(articles, deletes = []) {
   return upserts;
 }
 
-async function createPackagePullRequest(items, deletes, actor, beforePull) {
+async function createPackagePullRequest(items, deletes, actor, beforePull, options = {}) {
   const repository = process.env.GITHUB_REPOSITORY ?? 'ihelpchat/ihelp-docs';
-  const base = process.env.GITHUB_BASE_BRANCH ?? 'main';
+  const base = options.base ?? process.env.GITHUB_BASE_BRANCH ?? 'main';
   const [owner, repo] = repository.split('/');
   if (!owner || !repo) throw new Error('GITHUB_REPOSITORY inválido');
   const submittedAt = new Date().toISOString();
   const targets = [...items.map(({ article }) => article.path), ...deletes.map((path) => `-${path}`)].join(', ');
-  const title = items.length ? `docs: pacote ${items[0].article.title}` : `docs: remove ${deletes.length === 1 ? deletes[0] : `${deletes.length} artigos`}`;
-  const body = `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`;
+  const title = options.title ?? (items.length ? `docs: pacote ${items[0].article.title}` : `docs: remove ${deletes.length === 1 ? deletes[0] : `${deletes.length} artigos`}`);
+  const body = options.body ?? `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`;
   rejectSensitive(`${title}\n${body}`);
+  const branch = options.branch ?? `docs/ia-pacote-${Date.now()}`;
+  if (options.branch && !/^docs\/deploy-[a-z0-9-]+-[a-f0-9]{16}$/.test(branch)) throw new SubmitArticleError('INVALID_BRANCH', 'Branch determinística inválida');
+  const existingPull = async () => options.branch ? (await githubRequest(`/repos/${owner}/${repo}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}&base=${encodeURIComponent(base)}`))[0] : null;
+  const reuse = async (pull) => {
+    if (typeof pull.body === 'string' && pull.body !== body && Number.isInteger(pull.number)) {
+      await githubRequest(`/repos/${owner}/${repo}/pulls/${pull.number}`, { method: 'PATCH', body: JSON.stringify({ body }) });
+    }
+    return { status: 'pull_request', url: pull.html_url, branch, articles: items.map(({ article }) => article.path), deleted: deletes, reused: true };
+  };
+  let existing = await existingPull();
+  if (existing) return reuse(existing);
   const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(base)}`);
   const contentFile = (path) => `pilot/content/docs/${path}.mdx`;
   const fileAt = (path, revision) => `/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(revision)}`;
@@ -408,8 +419,12 @@ async function createPackagePullRequest(items, deletes, actor, beforePull) {
     if (deletes.includes(path) && !previous) throw new SubmitArticleError('ARTICLE_NOT_FOUND', `Artigo não encontrado: ${path}`);
     previousByPath.set(path, previous);
   }
-  const branch = `docs/ia-pacote-${Date.now()}`;
-  await githubRequest(`/repos/${owner}/${repo}/git/refs`, { method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: ref.object.sha }) });
+  try { await githubRequest(`/repos/${owner}/${repo}/git/refs`, { method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: ref.object.sha }) }); }
+  catch (error) {
+    existing = await existingPull();
+    if (existing) return reuse(existing);
+    throw error;
+  }
   const affectedDirectories = new Map();
   const remember = (path, operation) => {
     const parts = path.split('/');
@@ -461,15 +476,20 @@ async function createPackagePullRequest(items, deletes, actor, beforePull) {
     }
   }
   await beforePull(branch);
-  const pull = await githubRequest(`/repos/${owner}/${repo}/pulls`, {
+  let pull;
+  try { pull = await githubRequest(`/repos/${owner}/${repo}/pulls`, {
     method: 'POST',
     body: JSON.stringify({
       title,
       head: branch,
       base,
       body,
+      ...(options.draft ? { draft: true } : {}),
     }),
-  });
+  }); } catch (error) {
+    pull = await existingPull();
+    if (!pull) throw error;
+  }
   return { status: 'pull_request', url: pull.html_url, branch, articles: items.map(({ article }) => article.path), deleted: deletes };
 }
 
@@ -498,7 +518,7 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
       result = { status: 'draft', articles: drafts };
     } else if (mode === 'pull_request') {
       const gate = await assertPublicSubmit(root, items, deletes);
-      result = { ...await createPackagePullRequest(items, deletes, actor, (branch) => auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'external_request', reference: branch })), ...gate };
+      result = { ...await createPackagePullRequest(items, deletes, actor, (branch) => auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'external_request', reference: branch }), draftOptions), ...gate };
     } else {
       throw new SubmitArticleError('INVALID_MODE', 'mode deve ser draft ou pull_request');
     }

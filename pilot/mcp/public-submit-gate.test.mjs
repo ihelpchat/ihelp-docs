@@ -36,7 +36,7 @@ McpServer.prototype.registerTool = function (name, config, callback) {
 try {
   buildServer(root);
   const writers = [...registered].filter(([, { config }]) => config.mutates).map(([name]) => name);
-  assert.deepEqual(writers.sort(), ['criar_guia', 'docs_delete_article', 'docs_submit_article', 'docs_submit_package', 'docs_update_article'].sort(), 'nova ferramenta mutates precisa entrar no teste');
+  assert.deepEqual(writers.sort(), ['atualizar_por_deploy', 'criar_guia', 'docs_delete_article', 'docs_submit_article', 'docs_submit_package', 'docs_update_article'].sort(), 'nova ferramenta mutates precisa entrar no teste');
 
   const actionVerbs = ['Clique em', 'Toque em', 'Aperte', 'Selecione', 'Escolha', 'Marque', 'Desmarque', 'Abra', 'Vá em', 'Acesse', 'Ative', 'Desative', 'Preencha', 'Digite em'];
   const rejected = [
