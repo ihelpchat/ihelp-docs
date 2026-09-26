@@ -14,8 +14,14 @@ const ok = { status: 'completed', output_text: '{}', usage: { input_tokens: 10, 
 const call = (client, config = fixed) => createBudgetedResponse(client, payload, config);
 try {
   let calls = 0;
-  const slow = { responses: { create: async () => { calls++; await new Promise((resolve) => setTimeout(resolve, 30)); return ok; } } };
-  const simultaneous = await Promise.all([call(slow), call(slow), call(slow)]);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const slow = { responses: { create: async () => { calls++; await gate; return ok; } } };
+  const pending = [call(slow), call(slow)];
+  while (calls < 2) await new Promise((resolve) => setTimeout(resolve, 5));
+  const third = await call(slow);
+  release();
+  const simultaneous = [...await Promise.all(pending), third];
   assert.equal(simultaneous.filter((result) => result.kind === 'ok').length, 2, 'reserva atômica limita chamadas concorrentes');
   assert.equal(calls, 2);
   assert.equal(simultaneous[2].kind, 'budget_exhausted');
