@@ -240,7 +240,7 @@ test('pedido explícito libera apenas endpoint extraído no fluxo de plano e pac
     await mkdir(controllers, { recursive: true });
     await writeFile(join(controllers, 'ContactsController.cs'), `[ApiVersion("2")][Route("api/v{version:apiVersion}/contacts")]
 public class ContactsController {
-  [HttpGet("details/{id}")] public IActionResult Details(int id) { return null; }
+  [HttpGet("details/{IdRef}")] public IActionResult Details(string idRef) { return null; }
 }`);
     execFileSync('git', ['init', '-q', backend]);
     execFileSync('git', ['-C', backend, 'add', '.']);
@@ -258,13 +258,13 @@ public class ContactsController {
     const full = { topic: 'API de Contatos', module: 'api', description: 'Documentar GET /api/v2/contacts/details/{id}' };
     const planned = await planContent(root, full, options);
     assert.equal(prompts.length, 1, JSON.stringify(planned));
-    assert.match(prompts[0], /"route":"\/api\/v2\/contacts\/details\/\{id\}"/);
-    assert.deepEqual(planned.pending, ['campos de resposta não verificáveis: GET /api/v2/contacts/details/{id}']);
+    assert.match(prompts[0], /"route":"\/api\/v2\/contacts\/details\/\{IdRef\}"/);
+    assert.deepEqual(planned.pending, ['campos de resposta não verificáveis: GET /api/v2/contacts/details/{IdRef}']);
     const short = { topic: 'API de Contatos', module: 'api', description: 'Referência de contatos', details: 'GET /contacts/details/{id}' };
     const generated = await generateContentPackage(root, short, { ...options, plan: { status: 'ready' } });
     assert.equal(prompts.length, 2, JSON.stringify(generated));
-    assert.match(prompts[1], /"route":"\/api\/v2\/contacts\/details\/\{id\}"/);
-    assert.deepEqual(generated.pending, ['campos de resposta não verificáveis: GET /api/v2/contacts/details/{id}']);
+    assert.match(prompts[1], /"route":"\/api\/v2\/contacts\/details\/\{IdRef\}"/);
+    assert.deepEqual(generated.pending, ['campos de resposta não verificáveis: GET /api/v2/contacts/details/{IdRef}']);
     const missing = await generateContentPackage(root, { ...short, details: 'GET /contacts/unknown/{id}' }, { ...options, plan: { status: 'ready' } });
     assert.ok(missing.pending.includes('endpoint citado não encontrado (GET /contacts/unknown/{id})'), JSON.stringify(missing));
     const wrongVersion = await generateContentPackage(root, { ...short, details: 'GET /api/v9/contacts/details/{id}' }, { ...options, plan: { status: 'ready' } });
