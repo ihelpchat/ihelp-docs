@@ -48,10 +48,12 @@ async function stepPlan(guide, step) {
   const route = action?.route ?? guide.steps.map(item => productActions[item.actionId]?.route).find(Boolean);
   if (!route) throw new Error(`${guide.guideId}/${step.stepId}: rota ausente no catálogo`);
   const script = JSON.parse(await readFile(new URL(`${guide.guideId}.json`, scriptsRoot), 'utf8').catch(() => '{}'));
-  return { route, control: script[step.stepId] ?? null };
+  const control = script[step.stepId] ?? null;
+  return { route, control: control?.source?.file && control?.source?.sha && control?.source?.line ? control : null };
 }
 
 function locator(page, control) {
+  if (control.nearText) return page.getByText(control.nearText, { exact: true }).locator('..').locator('..').getByRole(control.role);
   const area = control.container ? page.locator(control.container) : page;
   if (control.selector) return area.locator(control.selector);
   return area.getByRole(control.role ?? 'button', { name: control.name, exact: true });
@@ -111,6 +113,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
           const filled = new Map();
           const original = new Map();
           let created = null;
+          let deniedBlocked = false;
           try {
           for (let index = 0; index < guide.steps.length; index++) {
             const step = guide.steps[index];
@@ -128,13 +131,25 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
               if (await marker.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: marcador ausente ${plan.control.marker}`);
             }
             const instruction = plan.control;
+            if (role === 'denied' && deniedBlocked) continue;
             const control = instruction.type === 'fields' ? null : locator(page, instruction);
-            if (role === 'denied' && control && !(await control.isEnabled())) break;
+            if (role === 'denied' && control && !(await control.isEnabled())) {
+              deniedBlocked = true;
+              report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'blocked' });
+              continue;
+            }
             if (control) {
               await control.waitFor({ state: 'visible', timeout: 5000 });
               if (await control.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: controle ambíguo ${instruction.name}`);
             }
             if (instruction.type === 'fields') {
+              if (instruction.enter) {
+                const entry = locator(page, instruction.enter);
+                if (await entry.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: entrada ambígua`);
+                await entry.click();
+                await page.waitForURL(new RegExp(instruction.enter.path));
+              }
+              if (instruction.enable && !(await page.locator(instruction.fields[0].selector).isVisible())) await locator(page, instruction.enable).click();
               const area = instruction.container ? page.locator(instruction.container) : page;
               if (instruction.container && await area.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: container ambíguo`);
               for (const field of instruction.fields) {
@@ -144,11 +159,13 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
                 } else {
                   const input = field.selector ? area.locator(field.selector) : area.getByRole('textbox', { name: field.name, exact: true });
                   if (await input.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: campo ambíguo`);
-                  if (!original.has(step.stepId)) original.set(step.stepId, await input.inputValue());
+                  if (!original.has(step.stepId)) original.set(step.stepId, instruction.verifySelector ? (await page.locator(instruction.verifySelector).count() ? await page.locator(instruction.verifySelector).textContent() : '') : await input.inputValue());
                   await input.fill(value);
                 }
                 if (!filled.has(step.stepId)) filled.set(step.stepId, value);
               }
+              if (instruction.commit?.press) await area.locator(instruction.commit.selector).press(instruction.commit.press);
+              else if (instruction.commit) await locator(page, instruction.commit).click();
             } else if (instruction.type === 'save') {
               const fieldStep = instruction.verifyField;
               const fieldIndex = guide.steps.findIndex(item => item.stepId === fieldStep);
@@ -158,7 +175,8 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
               }
               const source = plans[fieldIndex].control;
               const firstField = source.fields[0];
-              const field = locator(page, { container: source.container, selector: firstField.selector, role: 'textbox', name: firstField.name });
+              const field = source.verifySelector ? page.locator(source.verifySelector) : locator(page, { container: source.container, selector: firstField.selector, role: 'textbox', name: firstField.name });
+              const readField = async () => source.verifySelector ? (await field.count() ? field.textContent() : '') : field.inputValue();
               const candidate = filled.get(fieldStep);
               const before = original.get(fieldStep);
               await control.click({ timeout: 3000 });
@@ -171,14 +189,23 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
                 if (role === 'denied' && exists) throw new Error(`${guide.guideId}/${step.stepId}: perfil negado alterou dados`);
               } else {
                 await page.reload({ waitUntil: 'domcontentloaded' });
-                const after = await field.inputValue();
+                const after = await readField();
                 if (role === 'authorized' && after !== candidate) throw new Error(`${guide.guideId}/${step.stepId}: gravação não persistiu`);
                 if (role === 'denied' && after !== before) throw new Error(`${guide.guideId}/${step.stepId}: perfil negado alterou dados`);
                 if (role === 'authorized') {
-                  await field.fill(before);
+                  const earlier = guide.guideId === 'recado-fora-do-horario' ? plans.find(item => item.control?.fields?.[0]?.selector === 'input[name=horarioAtendimentoInicio]')?.control : null;
+                  const earlierField = earlier ? page.locator(earlier.fields[0].selector) : null;
+                  if (earlierField) await earlierField.fill(original.get('configurar-horario'));
+                  if (source.verifySelector) {
+                    if (source.enable && !(await page.locator(firstField.selector).isVisible())) await locator(page, source.enable).click();
+                    await page.locator(firstField.selector).fill(before);
+                    if (source.commit?.press) await page.locator(source.commit.selector).press(source.commit.press);
+                    else await locator(page, source.commit).click();
+                  } else await field.fill(before);
                   await locator(page, instruction).click();
                   await page.reload({ waitUntil: 'domcontentloaded' });
-                  if (await field.inputValue() !== before) throw new Error(`${guide.guideId}/${step.stepId}: restauração não persistiu`);
+                  if (await readField() !== before) throw new Error(`${guide.guideId}/${step.stepId}: restauração não persistiu`);
+                  if (earlierField && await earlierField.inputValue() !== original.get('configurar-horario')) throw new Error(`${guide.guideId}/${step.stepId}: horário não restaurado`);
                   report.cleanup.push({ guideId: guide.guideId, status: 'restored' });
                 }
               }
@@ -198,6 +225,18 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
               await sanitizedScreenshot(page, join(evidenceDir, name));
               await chmod(join(evidenceDir, name), 0o600);
               report.screenshots.push(name);
+            }
+          }
+          if (role === 'denied' && deniedBlocked) {
+            const saves = page.getByRole('button', { name: /Salvar/u });
+            const count = await saves.count();
+            for (let saveIndex = 0; saveIndex < count; saveIndex++) {
+              await page.reload({ waitUntil: 'domcontentloaded' });
+              const before = await page.locator('body').innerHTML();
+              const save = saves.nth(saveIndex);
+              if (await save.isEnabled()) await save.click({ timeout: 3000 });
+              await page.reload({ waitUntil: 'domcontentloaded' });
+              if (await page.locator('body').innerHTML() !== before) throw new Error(`${guide.guideId}: perfil negado alterou dados`);
             }
           }
           } finally {

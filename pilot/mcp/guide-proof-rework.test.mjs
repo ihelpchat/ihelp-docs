@@ -47,10 +47,12 @@ const app = createServer((req, res) => {
     if (!req.url.includes('/demo')) {
       res.end(`<main data-tour-id="guide-department-open"><button onclick="${brokenClick ? '' : "this.dataset.done='yes'"}">Departamentos</button><table><tr><td onclick="location.href='/configuracoes/department/demo'+location.search">Demo</td></tr></table></main>`);
     } else {
-      res.end(`<!doctype html><main><label>Inicio<input name="horarioAtendimentoInicio"></label><button aria-label="Mensagem automática fora de horário de atendimento" role="switch" onclick="document.querySelector('#chat').hidden=false">Ativar</button><div id="chat" hidden><textarea aria-label="Mensagem"></textarea><button onclick="document.querySelector('#message').textContent=document.querySelector('textarea').value">Enviar</button></div><span id="message"></span><button>Salvar Alterações</button></main><script>
+      res.end(`<!doctype html><main><label>Inicio<input name="horarioAtendimentoInicio"></label><div><div><h3>Mensagem automática fora de horário de atendimento</h3></div><button role="switch" onclick="document.querySelector('#chat').hidden=false">Ativar</button></div><div id="chat" hidden><textarea placeholder="Crie uma mensagem..."></textarea></div><p class="whitespace-pre-line" id="message"></p><button>Salvar Alterações</button></main><script>
         const denied=new URLSearchParams(location.search).has('role');const message=document.querySelector('#message');
+        document.querySelector('textarea').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();message.textContent=e.target.value}};
+        document.querySelector('[name=horarioAtendimentoInicio]').value=localStorage.getItem('proof-hour')||'';
         message.textContent=localStorage.getItem('proof-recado')||'';
-        document.querySelector('button:last-of-type').onclick=()=>{if(!denied&&!${brokenSave})localStorage.setItem('proof-recado',message.textContent)};
+        document.querySelector('main > button:last-of-type').onclick=()=>{if(!denied&&!${brokenSave}){localStorage.setItem('proof-recado',message.textContent);localStorage.setItem('proof-hour',document.querySelector('[name=horarioAtendimentoInicio]').value)}};
       </script>`);
     }
   } else if (req.url?.startsWith('/configuracoes/channel')) {
@@ -66,7 +68,7 @@ const app = createServer((req, res) => {
       };
     </script>`);
   } else {
-    res.end(`<!doctype html>${externalScript ? '<script src="/external-script"></script>' : ''}<main data-tour-id="${markerRemoved ? 'removed' : 'guide-user-open'}"><button onclick="${brokenClick ? '' : "this.dataset.done='yes'"}">Usuários</button><button ${disabledCreate && req.url?.includes('denied') ? 'disabled' : ''} onclick="location.href='/configuracoes/usuarios'+location.search">Novo usuário</button><section><button onclick="if(new URLSearchParams(location.search).has('role')&&${straySaveWrites})localStorage.setItem('proof-stray','written')">Salvar Alterações</button></section></main>`);
+    res.end(`<!doctype html>${externalScript ? '<script src="/external-script"></script>' : ''}<main data-tour-id="${markerRemoved ? 'removed' : 'guide-user-open'}"><button onclick="${brokenClick ? '' : "this.dataset.done='yes'"}">Usuários</button><button ${disabledCreate && req.url?.includes('denied') ? 'disabled' : ''} onclick="location.href='/configuracoes/usuarios'+location.search">Novo usuário</button><section><button onclick="if(new URLSearchParams(location.search).has('role')&&${straySaveWrites})localStorage.setItem('proof-stray','written')">Salvar Alterações</button></section><output data-proof-state></output></main><script>document.querySelector('[data-proof-state]').textContent=localStorage.getItem('proof-stray')||''</script>`);
   }
 });
 app.listen(0, '127.0.0.1');
