@@ -12,7 +12,8 @@ const payload = {
   code: null, sources: [legacy], suggestions: [], resolution: 'complete', found: true,
 };
 const nested = JSON.stringify(JSON.stringify(payload));
-const client = { responses: { create: async () => ({ model: 'fixture', output_text: nested }) } };
+const client = { responses: { create: async () => ({ model: 'fixture',
+  output_text: JSON.stringify({ ...payload, sources: [guide] }) }) } };
 
 for (const output of [
   nested,
@@ -67,7 +68,7 @@ const fakeOpenAI = createServer(async (request, response) => {
   response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
     id: 'resp_fixture', object: 'response', created_at: 1, model: 'fixture', status: 'completed',
     output: [{ type: 'message', id: 'msg_fixture', status: 'completed', role: 'assistant',
-      content: [{ type: 'output_text', text: nested, annotations: [] }] }],
+      content: [{ type: 'output_text', text: JSON.stringify({ ...payload, sources: [guide] }), annotations: [] }] }],
   }));
 });
 try {

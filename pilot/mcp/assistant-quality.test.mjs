@@ -309,7 +309,7 @@ const changedTopicClient = {
           sections: [],
           steps: [],
           code: null,
-          sources: ['/docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha'],
+          sources: ['/docs/principais-motivos-de-suporte/campanhas'],
           suggestions: ['Como preparo a planilha?'],
           resolution: 'complete',
           found: true,
