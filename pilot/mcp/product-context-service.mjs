@@ -1,9 +1,10 @@
 const treeCache = new Map();
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { redactSensitiveData } from './sensitive-data.mjs';
 import { join } from 'node:path';
 import { searchLocalProductContext } from './local-product-context.mjs';
 import { envCompatibility, githubReadToken } from './env-compat.mjs';
+import { parse } from 'yaml';
 const CACHE_MS = 5 * 60_000;
 const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|cs)$/;
 const PINNED_PATHS = new Set([
@@ -134,8 +135,63 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     .slice(0, 5)
     .map(({ score: _score, ...item }) => item);
   const relevantCoverage = coverage.filter((item) => terms.some((term) => normalize(item.module).includes(term) || (ALIASES[normalize(item.module)] ?? []).includes(term)));
+  let endpoints = [];
+  let apiExamples = [];
+  let contextCode = code;
+  let pending = [];
+  if (normalize(module) === 'api' || /\bendpoint\b|\/api\/v\d/iu.test(topic)) {
+    endpoints = code.flatMap((source) => source.endpoints ?? []);
+    const docsRoot = join(provided.publicReferenceRoot ?? root, 'content/docs/api');
+    const pages = (await readdir(docsRoot, { recursive: true }).catch(() => []))
+      .filter((path) => path.endsWith('.mdx'))
+      .sort((left, right) => Number(normalize(right).includes(terms.find((term) => term !== 'api') ?? '\0')) - Number(normalize(left).includes(terms.find((term) => term !== 'api') ?? '\0')));
+    const documented = new Set();
+    for (const page of pages) {
+      const raw = await readFile(join(docsRoot, page), 'utf8');
+      const match = raw.match(/^---\n([\s\S]*?)\n---/u);
+      if (!match) continue;
+      const frontmatter = parse(match[1]);
+      if (frontmatter?.source === 'api' && frontmatter?.method && frontmatter?.endpoint) {
+        documented.add(`${frontmatter.method} ${String(frontmatter.endpoint).toLowerCase().replace(/\{[^}]+\}/gu, '{}')}`);
+        apiExamples.push({ frontmatter: { source: frontmatter.source, contentType: frontmatter.contentType,
+          method: frontmatter.method, endpoint: frontmatter.endpoint },
+        sections: [...raw.matchAll(/^## (.+)$/gmu)].map((section) => section[1]) });
+      }
+    }
+    const requested = provided.explicitEndpoints ?? [];
+    const routeKey = (route) => String(route).replace(/\{[A-Za-z][A-Za-z0-9_]*(?::[^{}]+)?\??\}/gu, '{}').replace(/\/+$/u, '').toLowerCase();
+    const cited = (item, endpoint) => endpoint.verb === item.verb &&
+      (routeKey(endpoint.route) === routeKey(item.route) ||
+        (!/^\/api\/v\d+\//iu.test(endpoint.route) && routeKey(endpoint.route) === routeKey(item.route.replace(/^\/api\/v\d+/iu, ''))));
+    const documentedFor = (item) => /^\/api\/v2\//iu.test(item.route) &&
+      [item.route, item.optionalAlias].filter(Boolean).some((route) =>
+        documented.has(`${item.verb} ${route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')}`));
+    const publicControllers = new Set(endpoints.filter(documentedFor)
+      .map((item) => item.file));
+    endpoints = endpoints.map((item) => ({ ...item,
+      documented: documentedFor(item),
+      explicit: requested.some((endpoint) => cited(item, endpoint)),
+      public: publicControllers.has(item.file)
+      || requested.some((endpoint) => cited(item, endpoint)) }));
+    const endpointPending = endpoints.flatMap((item) => item.public
+      ? item.pending ?? []
+      : [`endpoint não público: confirmar (${item.verb} ${item.route})`]);
+    endpointPending.push(...requested.filter((endpoint) => !endpoints.some((item) => cited(item, endpoint)))
+      .map((endpoint) => `endpoint citado não encontrado (${endpoint.verb} ${endpoint.route})`));
+    const allowedBackendFiles = new Set(endpoints.filter((item) => item.public).map((item) => item.file));
+    endpoints = endpoints.filter((item) => item.public);
+    contextCode = code.map((source) => {
+      const backend = source.role === 'backend' || source.repository === 'ihelpchat/olah-ihelp';
+      return { ...source,
+        endpoints: backend ? (source.endpoints ?? []).filter((item) => allowedBackendFiles.has(item.file)) : (source.endpoints ?? []),
+        matches: backend ? source.matches.filter((match) => allowedBackendFiles.has(match.path)) : source.matches,
+      };
+    });
+    apiExamples = apiExamples.slice(0, 4);
+    pending = endpointPending;
+  }
   return {
-    code,
+    code: contextCode,
     groundingRequired: local,
     support: {
       source: supportSignals.source,
@@ -144,7 +200,14 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
       rules: supportSignals.rules,
     },
     coverage: relevantCoverage,
-    matches: code.flatMap((source) => source.matches.map((match) => ({ ...match, repository: source.repository, ref: source.ref, role: source.role }))),
+    endpoints,
+    pending,
+    apiExamples,
+    matches: [...contextCode.flatMap((source) => source.matches.map((match) => ({ ...match, repository: source.repository, ref: source.ref, role: source.role }))),
+      ...endpoints.filter((item) => item.documented || item.explicit).flatMap((item) => [item, ...item.parameters, ...(item.responseFields ?? [])]
+        .map((fact) => ({ repository: 'ihelpchat/olah-ihelp', role: 'backend',
+          path: fact.source.split(':')[0], line: Number(fact.source.split(':').at(-1)),
+          sha: item.sha, ref: item.sha, excerpt: JSON.stringify(fact) })))],
     repository: code[0]?.repository ?? repositories[0].repository,
     ref: code[0]?.ref ?? repositories[0].ref,
   };
