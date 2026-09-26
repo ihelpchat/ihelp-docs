@@ -1,0 +1,106 @@
+// A narrow C# lexer: comments and string bodies cannot create attributes.
+function tokens(source) {
+  const result = [];
+  for (let i = 0; i < source.length;) {
+    const rest = source.slice(i);
+    if (/^\s/u.test(rest)) { i++; continue; }
+    if (rest.startsWith('//')) { i = source.indexOf('\n', i + 2); if (i < 0) break; continue; }
+    if (rest.startsWith('/*')) { const end = source.indexOf('*/', i + 2); i = end < 0 ? source.length : end + 2; continue; }
+    const prefix = rest.match(/^\$*@|^@\$|^\$|^@/u)?.[0] ?? '';
+    const quoteAt = i + prefix.length;
+    if (source[quoteAt] === '"') {
+      const raw = source.slice(quoteAt).match(/^"{3,}/u)?.[0];
+      if (raw) { const end = source.indexOf(raw, quoteAt + raw.length); i = end < 0 ? source.length : end + raw.length; continue; }
+      let j = quoteAt + 1;
+      let value = '';
+      const verbatim = prefix.includes('@');
+      while (j < source.length) {
+        if (source[j] === '"') {
+          if (verbatim && source[j + 1] === '"') { value += '"'; j += 2; continue; }
+          j++; break;
+        }
+        if (!verbatim && source[j] === '\\') { j += 2; continue; }
+        value += source[j++];
+      }
+      if (!prefix.includes('$')) result.push({ kind: 'string', value });
+      i = j; continue;
+    }
+    if (rest[0] === "'") {
+      let j = i + 1;
+      while (j < source.length && source[j] !== "'") j += source[j] === '\\' ? 2 : 1;
+      i = j + 1; continue;
+    }
+    const word = rest.match(/^[A-Za-z_][A-Za-z_0-9]*/u);
+    if (word) { result.push({ kind: 'word', value: word[0] }); i += word[0].length; continue; }
+    result.push({ kind: 'punct', value: rest[0] }); i++;
+  }
+  return result;
+}
+
+const attr = (list, name) => list.find((item) => item.name === name);
+function attributes(items) {
+  const result = [];
+  for (let i = 0; i < items.length;) {
+    const name = items[i++]?.value;
+    if (!name) break;
+    const args = [];
+    if (items[i]?.value === '(') {
+      i++;
+      while (i < items.length && items[i].value !== ')') args.push(items[i++]);
+      i++;
+    }
+    result.push({ name: name?.replace(/Attribute$/u, ''), args });
+    while (i < items.length && items[i].value !== ',') i++;
+    i++;
+  }
+  return result;
+}
+const stringArg = (item) => item?.args.find((token) => token.kind === 'string')?.value;
+const normalizeRoute = (route) => route.replace(/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\??\}/gu, ':$1');
+function policyOf(attrs) {
+  const auth = attr(attrs, 'Authorize');
+  if (!auth) return null;
+  const value = stringArg(auth);
+  const role = auth.args.some((token) => token.value === 'Roles');
+  return value ? `${role ? 'role:' : ''}${value}` : 'authenticated';
+}
+
+export function readCsharpEndpoints(source, file) {
+  const t = tokens(source);
+  const endpoints = [];
+  let pending = [];
+  let depth = 0;
+  let controller = null;
+  for (let i = 0; i < t.length; i++) {
+    const value = t[i].value;
+    if (value === '[') {
+      let end = i + 1;
+      while (end < t.length && t[end].value !== ']') end++;
+      pending.push(...attributes(t.slice(i + 1, end)));
+      i = end; continue;
+    }
+    if (value === 'class' && t[i + 1]?.kind === 'word') {
+      const name = t[i + 1].value;
+      const brace = t.findIndex((token, index) => index > i && token.value === '{');
+      controller = { name, attrs: pending, depth: depth + 1 };
+      pending = [];
+      if (brace < 0) break;
+      continue;
+    }
+    const http = pending.find((item) => /^Http(Get|Post|Put|Patch|Delete|Head|Options)$/u.test(item.name));
+    if (http && controller && depth === controller.depth && value === '(' && t[i - 1]?.kind === 'word') {
+      const method = t[i - 1].value;
+      const anonymous = Boolean(attr(pending, 'AllowAnonymous') || attr(controller.attrs, 'AllowAnonymous'));
+      const policy = anonymous ? 'anonymous' : policyOf(pending) ?? policyOf(controller.attrs) ?? 'anonymous';
+      const route = normalizeRoute([stringArg(attr(controller.attrs, 'Route')) ?? '', stringArg(http) ?? ''].filter(Boolean).join('/'));
+      endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy });
+      pending = [];
+    }
+    if (value === '{') depth++;
+    if (value === '}') {
+      depth--;
+      if (controller && depth < controller.depth) controller = null;
+    }
+  }
+  return endpoints;
+}
