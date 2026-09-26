@@ -52,6 +52,7 @@ function apiIssues(article, context) {
   for (const match of body.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(?:https?:\/\/[^/\s]+)?(\/api\/v\d+\/[^\s`"']+|\/[a-z][\w/-]*(?:\{[^}]+\})?)/gu)) {
     if (match[1] !== endpoint.verb || routeShape(match[2].split('?')[0]) !== routeShape(endpoint.route)) return ['rota divergente no artigo'];
   }
+  if (endpoint.responseFields === null && /```json\b/iu.test(body)) return ['campos de resposta não verificáveis'];
   for (const match of body.matchAll(/```json\s*([\s\S]*?)```/gu)) {
     let value;
     try { value = JSON.parse(match[1]); } catch { return ['JSON de resposta inválido']; }
