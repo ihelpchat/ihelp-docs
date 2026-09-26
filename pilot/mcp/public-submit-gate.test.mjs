@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
@@ -11,6 +11,8 @@ import { assertPublicSubmit } from './public-submit-gate.mjs';
 const root = await mkdtemp(join(tmpdir(), 'm537-public-gate-'));
 const body = 'Abra Contatos no menu lateral. Confira a lista antes de continuar. Selecione a opção de importar. Revise o arquivo escolhido e confirme as colunas. Corrija as linhas inválidas antes de concluir. Aguarde o resultado aparecer na tela. Pesquise um contato recém cadastrado para confirmar o sucesso. Se o contato não aparecer, revise o número e repita apenas a linha corrigida. Este procedimento mantém os demais contatos já cadastrados na conta.';
 const article = { path: 'docs/teste/contatos', title: 'Importar contatos', description: 'Passo a passo público para importar contatos no iHelp.', source: 'produto', contentType: 'tutorial', body };
+await mkdir(join(root, 'content/docs/docs/teste'), { recursive: true });
+await writeFile(join(root, 'content/docs/docs/teste/contatos.mdx'), '# Contatos\n');
 const calls = [];
 const oldFetch = globalThis.fetch;
 const oldToken = process.env.GITHUB_TOKEN;
@@ -35,8 +37,14 @@ try {
   const writers = [...registered].filter(([, { config }]) => config.mutates).map(([name]) => name);
   assert.deepEqual(writers.sort(), ['criar_guia', 'docs_delete_article', 'docs_submit_article', 'docs_submit_package', 'docs_update_article'].sort(), 'nova ferramenta mutates precisa entrar no teste');
 
+  const actionVerbs = ['Clique em', 'Toque em', 'Aperte', 'Selecione', 'Escolha', 'Marque', 'Desmarque', 'Abra', 'Vá em', 'Acesse', 'Ative', 'Desative', 'Preencha', 'Digite em'];
   const rejected = [
-    { ...article, body: `${body}\n\nClique no botão "Botão imaginário" para continuar.` },
+    ...actionVerbs.map((verb) => ({ ...article, body: `${body}\n\n${verb} "Botão imaginário" para continuar.` })),
+    { ...article, body: `${body}\n\nClique em “Botão imaginário” para continuar.` },
+    { ...article, body: `${body}\n\nClique em **Botão imaginário** para continuar.` },
+    { ...article, body: `${body}\n\n[Abra a página](/docs/nao-existe-em-lugar-nenhum).` },
+    { ...article, body: `${body}\n\n[Abra a página](./nao-existe-em-lugar-nenhum).` },
+    { ...article, body: `${body}\n\n[Abra a página](/docs/nao-existe-em-lugar-nenhum#passo).` },
     { ...article, body: `${body}\n\n[Instrução interna](https://intranet.example.test/manual).` },
     { ...article, body: `${body}\n\n[Abra o link](https://evil.example.test/coleta).` },
     { ...article, body: `${body}\n\n![Print de teste](/img/help/print-nao-aprovado.png)` },
@@ -47,6 +55,10 @@ try {
     await assert.rejects(submitContentPackage(root, [unsafe], 'pull_request', 'user:tester'), /gate|fonte|link|print|jargão|aprovad|mapa/i);
     assert.equal(calls.length, before, 'pacote inválido não pode consultar nem escrever no GitHub');
   }
+
+  const validLabel = { ...article, body: `${body}\n\nClique em “IMPORTAR CONTÁTOS” para continuar. [Veja esta página](/docs/teste/contatos#inicio).` };
+  const validLabelResult = await submitContentPackage(root, [validLabel], 'pull_request', 'user:tester');
+  assert.equal(validLabelResult.status, 'pull_request', 'rótulo aprovado com variação de acento e link existente passa');
 
   const beforeIndividual = calls.length;
   await assert.rejects(submitArticle(root, rejected[2], 'pull_request', 'user:tester'), /gate|link|aprovad/i);
