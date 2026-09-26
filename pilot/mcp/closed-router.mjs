@@ -198,6 +198,15 @@ function routerPayload(safeQuestion, catalog, history = []) {
 let selfCheck;
 let transientCheck;
 let retryAt = 0;
+function providerFailureCode(status, message) {
+  if (status === 401 || status === 403) return 'auth_failed';
+  if (status === 400) {
+    if (/unsupported (?:value|parameter).*\bmodel\b|\bmodel\b.*(?:unsupported|not supported)/iu.test(message)) return 'unsupported_model';
+    if (/unsupported (?:value|parameter)|not supported/iu.test(message)) return 'unsupported_parameter';
+    if (/invalid (?:request|parameter|value)/iu.test(message)) return 'invalid_request';
+  }
+  return 'provider_rejected';
+}
 export function routerSelfCheck() {
   if (!process.env.OPENAI_API_KEY) return Promise.resolve({ ok: true, skipped: true });
   if (!selfCheck && transientCheck && Date.now() < retryAt) return Promise.resolve(transientCheck);
@@ -209,11 +218,12 @@ export function routerSelfCheck() {
         { guideId: 'verificar-dois', title: 'Verificação dois', question: 'Verificar dois' },
       ];
       const result = await createBudgetedResponse(client, routerPayload('Verificar triagem', catalog), { bypassAdmission: true });
-      return result.kind === 'ok' ? { ok: true } : { ok: false, reason: result.kind, retryable: true };
+      return result.kind === 'ok' ? { ok: true } : { ok: false, reason: 'provider_rejected', retryable: true };
     } catch (error) {
       const status = error?.status;
-      const detail = typeof error?.message === 'string' ? error.message.match(/Unsupported value[^\n]*/u)?.[0] : undefined;
-      return { ok: false, reason: detail?.slice(0, 200) ?? (Number.isInteger(status) ? `Provider HTTP ${status}` : 'Provider indisponível'),
+      const message = typeof error?.message === 'string' ? error.message : String(error);
+      console.error('Router self-check provider error:', redactSensitiveData(message));
+      return { ok: false, reason: providerFailureCode(status, message),
         retryable: !(Number.isInteger(status) && status >= 400 && status < 500 && status !== 408 && status !== 429) };
     }
   })();
