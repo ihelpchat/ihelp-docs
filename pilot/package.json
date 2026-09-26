@@ -8,7 +8,7 @@
     "start": "serve out",
     "types:check": "next typegen && tsc --noEmit",
     "lint": "eslint",
-    "qa:ui": "node scripts/ui-smoke.mjs",
+    "qa:ui": "node scripts/ui-smoke-ci.test.mjs && node scripts/run-ui-smoke.mjs",
     "qa:guide": "node scripts/run-guide-browser-journey.mjs",
     "qa:visual": "node scripts/visual-fidelity.mjs",
     "qa:assistant": "node scripts/visual/assistant-legibility.mjs",
