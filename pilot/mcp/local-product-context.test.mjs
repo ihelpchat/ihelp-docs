@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, symlink, realpath, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -97,6 +98,17 @@ try {
   const timedOut = await searchLocalProductContext('Criar robô de atendimento', '', { repositoryIds: ['frontend'] });
   assert.equal(timedOut.code[0].available, false, 'rg sem timeout não pode travar a busca');
   assert.match(timedOut.code[0].reason, /tempo|timeout/i);
+} finally { process.env.PATH = oldPath; }
+const noRgBin = join(base, 'no-rg-bin');
+await mkdir(noRgBin);
+const gitBin = oldPath.split(':').map((part) => join(part, 'git')).find(existsSync);
+assert.ok(gitBin);
+await symlink(gitBin, join(noRgBin, 'git'));
+process.env.PATH = noRgBin;
+try {
+  const withoutRg = await searchLocalProductContext('Criar robô de atendimento', '', { repositoryIds: ['frontend'] });
+  assert.equal(withoutRg.code[0].available, true, 'CI sem rg usa leitura local limitada');
+  assert.equal(withoutRg.matches[0]?.path, 'src/pages/Robots/index.tsx');
 } finally { process.env.PATH = oldPath; }
 
 const request = { topic: 'Criar robô de atendimento', module: 'Robôs', description: 'Explicar a tela.' };
