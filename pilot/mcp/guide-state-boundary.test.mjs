@@ -62,9 +62,12 @@ try {
   const next = await post('Concluí este passo', { ...first.guide });
   assert.equal(next.guide.stepId, 'final');
   assert.equal(calls, 0);
+  safe(await post('Concluir guia', first.guide));
   safe(await post('Concluir guia', state('final')));
+  safe(await post('Avançar', { ...state(), guideId: 'campanhas' }));
   safe(await post('Avançar', state('inexistente')));
   safe(await post('Avançar', state('inicio', { version: 2 })));
+  safe(await post('Avançar', state('inicio', { stateToken: 'invalid' })));
   safe(await post('Avançar', state('final', { stateToken: first.guide.stateToken })));
   assert.equal(calls, 0, 'estado inválido não pode alcançar provider');
   const done = await post('Concluir guia', next.guide);

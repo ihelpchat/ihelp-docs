@@ -60,6 +60,7 @@ export type AssistantRequestV1 = {
   pendingChoiceId?: string;
   pendingChoice?: string;
   choiceId?: string;
+  stateToken?: string;
 };
 };
 
@@ -133,6 +134,7 @@ export type AssistantReplyV1 = {
   pendingChoiceId?: string;
   pendingChoice?: string;
   choiceId?: string;
+  stateToken?: string;
 };
   actions?: Array<{
   id: "importar-contatos" | "abrir-robos" | "abrir-usuarios" | "abrir-canais" | "abrir-campanhas" | "abrir-departamentos" | "abrir-atendimento" | "abrir-crm";

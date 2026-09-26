@@ -29,6 +29,7 @@ const stateSchema = z.object({
   pendingChoiceId: id.optional(),
   pendingChoice: id.optional(),
   choiceId: id.optional(),
+  stateToken: z.string().max(128).optional(),
 }).strict();
 const choiceSchema = z.object({ id, label: z.string().trim().min(1).max(100), nextStepId: id.optional() }).strict();
 const stepSchema = z.object({

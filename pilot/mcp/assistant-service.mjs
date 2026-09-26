@@ -497,8 +497,7 @@ function detailedProcedureQuestion(question) {
 export async function answerQuestion(root, question, options = {}) {
   question = redactSensitiveData(question);
   if (options.guide) {
-    const guided = await answerGuide(root, question, options.guide, options);
-    if (guided) return guided;
+    return answerGuide(root, question, options.guide, options);
   }
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   if (!apiKey && !options.client) throw new Error('OPENAI_API_KEY não configurada');

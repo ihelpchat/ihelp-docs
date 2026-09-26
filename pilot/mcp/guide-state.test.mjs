@@ -48,29 +48,29 @@ Conteúdo de teste.
   assert.equal(first.steps[0].text, 'Abra a tela de canais.');
   const offline = await answerQuestion(root, 'Preciso de ajuda', { guide: state(), apiKey: '' });
   assert.equal(offline.guide.stepId, 'inicio', 'passo funciona sem chave OpenAI e sem client');
-  const next = await run('Concluí este passo', state(), [
+  const next = await run('Concluí este passo', first.guide, [
     { role: 'assistant', content: 'Fonte usada: /docs/principais-motivos-de-suporte/campanhas\nPasso 9: publicar campanha' },
   ]);
   assert.equal(next.guide.stepId, 'escolha', 'troca de assunto não pode recuperar passo do histórico');
   assert.deepEqual(next.suggestions, ['Android', 'iPhone']);
-  const branch = await run('Android', state('escolha', { pendingChoiceId: 'escolha', choiceId: 'android' }));
+  const branch = await run('Android', { ...next.guide, choiceId: 'android' });
   assert.equal(branch.guide.stepId, 'android');
   assert.equal(branch.steps[0].text, 'Toque nos três pontos.');
-  const replay = await run('Android', state('android', { choiceId: 'android' }));
-  assert.equal(replay.guide.stepId, 'android');
-  assert.match(replay.answer, /decisão|escolha|passo/i);
-  const help = await run('Preciso de ajuda', state('android'));
+  const replay = await run('Android', { ...branch.guide, choiceId: 'android' });
+  assert.equal(replay.guide, undefined);
+  assert.deepEqual(replay.suggestions, ['Recomeçar', 'Falar com uma pessoa']);
+  const help = await run('Preciso de ajuda', branch.guide);
   assert.equal(help.guide.stepId, 'android');
   assert.equal(help.steps[0].text, 'Toque nos três pontos.');
-  const back = await run('Voltar', state('android'));
+  const back = await run('Voltar', branch.guide);
   assert.equal(back.guide.stepId, 'escolha');
   const invalid = await run('Avançar', state('android', { version: 2 }));
   assert.equal(invalid.guide, undefined);
-  assert.match(invalid.answer, /versão|atualiz/i);
-  const no = await run('Deu certo? Não', state('iphone'));
+  assert.deepEqual(invalid.suggestions, ['Recomeçar', 'Falar com uma pessoa']);
+  const no = await run('Deu certo? Não', branch.guide);
   assert.equal(no.resolution, 'partial');
   assert.equal(no.escalation.intent, 'connect_channel');
-  assert.equal(no.guide.stepId, 'iphone');
+  assert.equal(no.guide.stepId, 'android');
   const human = await run('Quero falar com uma pessoa', state('inicio'));
   assert.equal(human.resolution, 'partial');
   assert.equal(human.escalation.intent, 'connect_channel');
