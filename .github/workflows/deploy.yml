@@ -62,6 +62,19 @@ jobs:
         env:
           CHROME_PATH: /usr/bin/google-chrome
           NEXT_PUBLIC_BASE_PATH: /ihelp-docs
+      - name: Prove guide fixture in Chrome
+        run: npm run qa:guide-proof
+        working-directory: pilot
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+      - name: Keep private guide proof briefly
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guide-proof-fixture
+          path: pilot/.guide-proof/
+          retention-days: 1
+          if-no-files-found: ignore
       - name: Check assistant legibility
         run: CHROME_PATH=/usr/bin/google-chrome NEXT_PUBLIC_BASE_PATH=/ihelp-docs npm run qa:assistant && CHROME_PATH=/usr/bin/google-chrome NEXT_PUBLIC_BASE_PATH=/ihelp-docs node scripts/visual/assistant-legibility.test.mjs
         working-directory: pilot
