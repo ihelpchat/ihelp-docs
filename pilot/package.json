@@ -21,6 +21,7 @@
     "mcp:start": "node mcp/server.mjs",
     "mcp:http": "node mcp/http.mjs",
     "mcp:test": "node scripts/run-tests-runner.check.mjs && node scripts/workflow-concurrency.check.mjs && node mcp/run-tests.mjs",
+    "grounding:golden": "node scripts/grounding-golden.mjs",
     "product-map:approve": "node scripts/product-map.mjs --approve",
     "qa:visual:baseline": "node scripts/visual/design-baseline.mjs"
   },
