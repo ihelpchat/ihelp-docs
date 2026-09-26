@@ -1,1 +1,1 @@
-export const pagesData = [{ path: '/configuracoes/channel', title: 'Canais', element: <ChannelPage /> }];
+export const pagesData = [{ path: '/configuracoes/channel', title: 'Canais', element: <div /> }];
