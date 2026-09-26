@@ -142,6 +142,33 @@ try {
       }
       await page.close();
     }
+    for (const zoom of [1, 2]) {
+      const page = await browser.newPage({ viewport: dimensions, deviceScaleFactor: zoom });
+      await page.goto(`${site.url}${basePath}/docs/guias/?origem=suporte`, { waitUntil: 'networkidle' });
+      const catalog = page.locator('.ih-guide-catalog');
+      assert.ok(await catalog.isVisible(), `catálogo/${viewport}/${zoom}: catálogo ausente`);
+      assert.equal(await catalog.locator('a.ih-guide-card').count(), 3, 'catálogo vem dos três guias canônicos');
+      failures.push(...(await catalog.evaluate(audit)).failures.map((item) => `catálogo/${viewport}/${zoom}: ${item}`));
+      const link = catalog.getByRole('link', { name: /Reconectar o WhatsApp/ });
+      await link.focus();
+      assert.ok(await link.evaluate((el) => el.matches(':focus-visible')), 'catálogo: foco por teclado');
+      await link.click();
+      await page.waitForURL(/reconectar-canal-qr/);
+      assert.equal(new URL(page.url()).searchParams.get('origem'), 'suporte', 'origem preservada');
+      const guide = page.locator('.ih-guide-page');
+      assert.ok(await guide.isVisible(), 'página do guia canônico');
+      assert.equal(await guide.locator('a.ih-guide-app').count(), 1, 'Fazer no app');
+      assert.match(await guide.locator('a.ih-guide-app').getAttribute('href'), /ihelpGuide=reconectar-canal-qr/);
+      assert.ok(await guide.getByRole('link', { name: 'Falar com uma pessoa' }).isVisible(), 'humano sempre disponível');
+      await guide.getByRole('button', { name: 'Uso Android' }).click();
+      assert.ok(await guide.getByText(/No Android, abra WhatsApp/).isVisible());
+      await guide.getByRole('button', { name: 'Voltar' }).click();
+      await guide.getByRole('button', { name: 'Uso iPhone' }).click();
+      assert.ok(await guide.getByText(/No iPhone, abra WhatsApp/).isVisible(), 'escolha corrigível');
+      failures.push(...(await guide.evaluate(audit)).failures.map((item) => `guia/${viewport}/${zoom}: ${item}`));
+      assert.equal(await page.getByText(/Procedimento não documentado|Parte da resposta exige atendimento/i).count(), 0, 'sem etiquetas');
+      await page.close();
+    }
   }
 } finally {
   await browser.close();
