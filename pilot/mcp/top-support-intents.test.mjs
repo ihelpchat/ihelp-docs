@@ -13,8 +13,8 @@ const { normalizeReply, supportMessageFor } = await import(`data:text/javascript
 const root = new URL('../', import.meta.url).pathname;
 const cases = [
   ['Como consultar cobrança e plano?', 'cobranca-plano', 'billing', null, 2, /cobrança|plano|fatura/i],
-  ['Como gerenciar usuário e acesso?', 'usuario-acesso', 'manage_users', 'abrir-usuarios', 5, /Usuários/],
-  ['Como reconectar canal pelo QR?', 'reconectar-canal-qr', 'connect_channel', 'abrir-canais', 5, /Canais/],
+  ['Como gerenciar usuário e acesso?', 'usuario-acesso', 'manage_users', 'abrir-usuarios', 6, /Usuários/],
+  ['Como reconectar canal pelo QR?', 'reconectar-canal-qr', 'connect_channel', 'abrir-canais', 6, /Canais/],
   ['Como comparar API Oficial e QR?', 'api-oficial-qr-coexistencia', 'connect_channel', 'abrir-canais', 3, /Canais/],
   ['Como criar uma campanha?', 'campanhas', 'campaigns', 'abrir-campanhas', 7, /Campanhas/],
   ['Como configurar permissões e departamentos?', 'permissoes-departamentos', 'departments', 'abrir-departamentos', 5, /Departamentos/],

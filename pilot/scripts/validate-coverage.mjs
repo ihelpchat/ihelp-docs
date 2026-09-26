@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { validateCanonicalGuide } from '../lib/canonical-guides.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
+for (const [file, id] of [
+  ['principais-motivos-de-suporte/reconectar-canal-qr.mdx', 'reconectar-canal-qr'],
+  ['principais-motivos-de-suporte/usuario-acesso.mdx', 'usuario-acesso'],
+  ['sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario.mdx', 'recado-fora-do-horario'],
+]) validateCanonicalGuide(await readFile(join(root, 'content/docs/docs', file), 'utf8'), id);
 const matrix = JSON.parse(await readFile(join(root, 'architecture/coverage-matrix.json'), 'utf8'));
 const seenModules = new Set();
 const allowedCoverage = new Set(['complete', 'partial', 'missing']);

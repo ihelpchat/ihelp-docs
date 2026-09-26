@@ -14,6 +14,8 @@ const sourceRoot = new URL('../', import.meta.url).pathname;
 const root = await mkdtemp(join(tmpdir(), 'm5-01-roundtrip-'));
 const paths = [
   'docs/principais-motivos-de-suporte/reconectar-canal-qr',
+  'docs/principais-motivos-de-suporte/usuario-acesso',
+  'docs/sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario',
   'docs/principais-motivos-de-suporte/crm',
   'api/crm/visoes-salvas/atualizar-visao-salva',
   'blog/encerramento-automatico-e-filtros',
