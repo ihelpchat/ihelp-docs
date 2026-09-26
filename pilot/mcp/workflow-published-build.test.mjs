@@ -80,6 +80,9 @@ try {
     ['rebuild no Vercel', (s) => s.replace('npx vercel@', 'npm run build\n          npx vercel@'), /Vercel não pode reconstruir artifact/],
     ['Vercel sem environment', (s) => s.replace(/(  deploy-production-vercel:\n(?:.*\n)*?    environment:) production/, '$1 staging'), /Vercel exige environment production/],
     ['token em outro job', (s) => s.replace('  deploy-service:\n', '  deploy-service:\n    env:\n      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}\n'), /VERCEL_TOKEN só no job Vercel/],
+    ['deploy sem project', (s) => s.replace(' --project "$VERCEL_PROJECT_ID"', ''), /vercel deploy.*--project.*VERCEL_PROJECT_ID/i],
+    ['deploy sem scope', (s) => s.replace(' --scope "$VERCEL_SCOPE"', ''), /vercel deploy.*--scope.*VERCEL_SCOPE/i],
+    ['deploy sem prebuilt', (s) => s.replace(' --prebuilt', ''), /vercel deploy.*--prebuilt/i],
   ];
   for (const [label, mutate, reason] of vercelMutations) {
     const changed = mutate(workflow);
