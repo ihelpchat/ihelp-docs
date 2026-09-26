@@ -40,6 +40,8 @@ let disabledCreate = false;
 let straySaveWrites = false;
 let channelDetailMissing = false;
 let recadoTogglePersists = true;
+let initialRecado = '';
+let initialToggle = false;
 const app = createServer((req, res) => {
   if (req.url === '/login-redirect') { res.writeHead(302, { Location: `${externalUrl}/production` }); res.end(); return; }
   if (req.url === '/external-script') { res.writeHead(302, { Location: `${externalUrl}/production-script` }); res.end(); return; }
@@ -50,11 +52,11 @@ const app = createServer((req, res) => {
     if (!req.url.includes('/demo')) {
       res.end(`<main data-tour-id="guide-department-open"><button onclick="/* source: src/store/slices/tab/tab.slice.ts:16 */ ${brokenClick ? '' : "this.dataset.done='yes'"}">Departamentos</button><table><tr><td onclick="/* source: src/components/ui/components/Tables/components/TableCommonDepartments/index.tsx:235 */ location.href='/configuracoes/department/demo'+location.search">Demo</td></tr></table></main>`);
     } else {
-      res.end(`<!doctype html><main><label>Inicio<input name="horarioAtendimentoInicio"></label><div><div><h3>Mensagem automática fora de horário de atendimento</h3></div><button role="switch" aria-checked="false" onclick="/* source: src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:356 */ this.setAttribute('aria-checked',this.getAttribute('aria-checked')==='true'?'false':'true');document.querySelector('#chat').hidden=this.getAttribute('aria-checked')!=='true';message.textContent=''">Ativar</button></div><div id="chat" hidden><div><div><textarea placeholder="Crie uma mensagem..."></textarea></div></div><button aria-label="Enviar" onclick="/* source: src/components/shared/Chat/components/ChatView/index.tsx:423 */ message.textContent=document.querySelector('textarea').value"><svg class="w-6"></svg>Enviar</button></div><p class="whitespace-pre-line" id="message"></p><button>Salvar Alterações</button></main><script>
+      res.end(`<!doctype html><main><label>Inicio<input name="horarioAtendimentoInicio"></label><div><div><h3>Mensagem automática fora de horário de atendimento</h3></div><button role="switch" aria-checked="false" onclick="/* source: src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:356 */ this.setAttribute('aria-checked',this.getAttribute('aria-checked')==='true'?'false':'true');document.querySelector('#chat').hidden=this.getAttribute('aria-checked')!=='true';message.textContent=''">Ativar</button></div><div id="chat" hidden><div><div><textarea placeholder="Crie uma mensagem..."></textarea></div></div><button aria-label="Enviar" onclick="/* source: src/components/shared/Chat/components/ChatView/index.tsx:210 */ const value=document.querySelector('textarea').value;if(value)message.textContent=value"><svg class="w-6"></svg>Enviar</button></div><p class="whitespace-pre-line" id="message"></p><button>Salvar Alterações</button></main><script>
         const denied=new URLSearchParams(location.search).has('role');const message=document.querySelector('#message');
         document.querySelector('[name=horarioAtendimentoInicio]').value=localStorage.getItem('proof-hour')||'';
-        message.textContent=localStorage.getItem('proof-recado')||'';
-        document.querySelector('[role=switch]').setAttribute('aria-checked',localStorage.getItem('proof-toggle')||'false');
+        message.textContent=localStorage.getItem('proof-recado')??${JSON.stringify(initialRecado)};
+        document.querySelector('[role=switch]').setAttribute('aria-checked',localStorage.getItem('proof-toggle')??${JSON.stringify(String(initialToggle))});
         document.querySelector('#chat').hidden=document.querySelector('[role=switch]').getAttribute('aria-checked')!=='true';
         document.querySelector('main > button:last-of-type').onclick=()=>{if(!denied&&!${brokenSave}){localStorage.setItem('proof-recado',message.textContent);localStorage.setItem('proof-hour',document.querySelector('[name=horarioAtendimentoInicio]').value);if(${recadoTogglePersists})localStorage.setItem('proof-toggle',document.querySelector('[role=switch]').getAttribute('aria-checked'))}}; // source: src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:469
       </script>`);
@@ -109,6 +111,12 @@ try {
   assert.ok(report.steps.some(x => x.stepId === 'salvar-usuario' && x.status === 'passed'));
   assert.ok(report.steps.some(x => x.stepId === 'ler-codigo' && x.status === 'manual_required'));
   assert.ok(report.cleanup.some(x => x.guideId === 'recado-fora-do-horario' && x.status === 'restored'));
+  initialRecado = 'Recado anterior de teste';
+  initialToggle = true;
+  const preexisting = await run('preexisting-recado');
+  assert.ok(preexisting.cleanup.some(x => x.guideId === 'recado-fora-do-horario' && x.status === 'restored'));
+  initialRecado = '';
+  initialToggle = false;
   await mutateScript(qrScriptPath, script => { delete script.conectar.enter; return script; }, 'connect-without-detail', /Conectar|Timeout/u);
   await mutateScript(recadoScriptPath, script => { script['escrever-recado'].commit = { selector: 'textarea[placeholder="Crie uma mensagem..."]', press: 'Enter' }; return script; }, 'enter-instead-of-button', /gravação não persistiu|restaura/u);
   const runnerSource = await readFile(runnerPath, 'utf8');
