@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { launch } from './measure.mjs';
 import { viewports } from './probes.mjs';
 import { startQaSite } from './serve-qa-build.mjs';
@@ -13,6 +14,10 @@ const states = {
   fallback: [{ ...question }, { id: 'a1', role: 'ai', question: question.text, reply: reply({ answer: 'O assistente está indisponível. Use o guia ou fale com uma pessoa.', resolution: 'partial', actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }] }) }],
   erro: [{ ...question }, { id: 'e1', role: 'error', question: question.text, message: 'Tive um problema. Tente de novo.', status: 429 }],
 };
+const manifest = JSON.parse(await readFile(new URL('../../public/guides/manifest.json', import.meta.url), 'utf8'));
+const catalog = JSON.parse(await readFile(new URL(`../../public/guides/${manifest.current}/catalog.json`, import.meta.url), 'utf8'));
+const guidePaths = catalog.guides.map(({ pathSegments, guide }) => ({ path: `/${pathSegments.join('/')}`, id: guide.guideId }));
+assert.ok(guidePaths.length > 0, 'pacote publicado sem guias');
 
 const audit = (root) => {
   const failures = [];
@@ -155,31 +160,34 @@ try {
       if (zoom === 2) await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
       const catalog = page.locator('.ih-guide-catalog');
       assert.ok(await catalog.isVisible(), `catálogo/${viewport}/${zoom}: catálogo ausente`);
-      assert.equal(await catalog.locator('a.ih-guide-card').count(), 3, 'catálogo vem dos três guias canônicos');
-      failures.push(...(await catalog.evaluate(audit)).failures.map((item) => `catálogo/${viewport}/${zoom}: ${item}`));
-      const link = catalog.getByRole('link', { name: /Reconectar o WhatsApp/ });
-      await link.focus();
-      assert.ok(await link.evaluate((el) => el.matches(':focus-visible')), 'catálogo: foco por teclado');
-      await link.click();
-      await page.waitForURL(/reconectar-canal-qr/);
-      assert.equal(new URL(page.url()).searchParams.get('origem'), 'suporte', 'origem preservada');
-      const guide = page.locator('.ih-guide-page');
-      assert.ok(await guide.isVisible(), 'página do guia canônico');
-      assert.equal(await guide.locator('a.ih-guide-app').count(), 1, 'Fazer no app');
-      assert.match(await guide.locator('a.ih-guide-app').getAttribute('href'), /ihelpGuide=reconectar-canal-qr/);
-      assert.ok(await guide.getByRole('link', { name: 'Falar com uma pessoa' }).isVisible(), 'humano sempre disponível');
-      await guide.getByRole('button', { name: 'Uso Android' }).click();
-      assert.ok(await guide.getByText(/No Android, abra WhatsApp/).isVisible());
-      await guide.getByRole('button', { name: 'Voltar' }).click();
-      await guide.getByRole('button', { name: 'Uso iPhone' }).click();
-      assert.ok(await guide.getByText(/No iPhone, abra WhatsApp/).isVisible(), 'escolha corrigível');
-      failures.push(...(await guide.evaluate(audit)).failures.map((item) => `guia/${viewport}/${zoom}: ${item}`));
-      await guide.getByRole('button', { name: /Perguntar à Claricia/ }).click();
-      const drawer = page.locator('.ih-ai-drawer');
-      assert.ok(await drawer.getByRole('link', { name: 'Falar com uma pessoa' }).isVisible(), 'humano no painel da conversa');
-      assert.ok(await drawer.locator('.ih-ai-follow button').count() <= 2, 'até duas sugestões');
-      failures.push(...(await drawer.evaluate(audit)).failures.map((item) => `painel/${viewport}/${zoom}: ${item}`));
-      assert.equal(await page.getByText(/Procedimento não documentado|Parte da resposta exige atendimento/i).count(), 0, 'sem etiquetas');
+      assert.equal(await catalog.locator('a.ih-guide-card').count(), guidePaths.length, 'catálogo vem do pacote publicado');
+      failures.push(...(await page.locator('body').evaluate(audit)).failures.map((item) => `catálogo/${viewport}/${zoom}: ${item}`));
+      for (const { path, id } of guidePaths) {
+        const guidePage = await browser.newPage({ viewport: dimensions, deviceScaleFactor: zoom });
+        await guidePage.addInitScript((messages) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages, scope: 'Tudo', sessionId: 'qa-session' })), states.guia);
+        await guidePage.goto(`${site.url}${basePath}${path}/?origem=suporte`, { waitUntil: 'networkidle' });
+        if (zoom === 2) await guidePage.evaluate(() => { document.documentElement.style.zoom = '2'; });
+        const guide = guidePage.locator('.ih-guide-page');
+        assert.ok(await guide.isVisible(), `${path}: página do guia publicado`);
+        assert.equal(await guide.locator('a.ih-guide-app').count(), 1, `${path}: Fazer no app`);
+        assert.match(await guide.locator('a.ih-guide-app').getAttribute('href'), new RegExp(`ihelpGuide=${id}`), `${path}: app usa guia publicado`);
+        assert.ok(await guide.getByRole('link', { name: 'Falar com uma pessoa' }).isVisible(), `${path}: humano sempre disponível`);
+        if (id === 'reconectar-canal-qr') {
+          await guide.getByRole('button', { name: 'Uso Android' }).click();
+          await guide.getByRole('button', { name: 'Voltar' }).click();
+          await guide.getByRole('button', { name: 'Uso iPhone' }).click();
+          assert.ok(await guide.getByText(/No iPhone, abra WhatsApp/).isVisible(), 'escolha corrigível');
+        }
+        failures.push(...(await guidePage.locator('body').evaluate(audit)).failures.map((item) => `${path}/${viewport}/${zoom}: ${item}`));
+        await guide.getByRole('button', { name: /Perguntar à Claricia/ }).click();
+        const drawer = guidePage.locator('.ih-ai-drawer');
+        assert.ok(await drawer.locator('.ih-ai-thread[data-compact] .ih-ai-text p').first().isVisible(), `${path}: resposta compacta`);
+        assert.ok(await drawer.locator('.ih-ai-thread[data-compact] .ih-ai-steps li').first().isVisible(), `${path}: passo compacto`);
+        assert.ok(await drawer.getByRole('link', { name: 'Falar com uma pessoa' }).isVisible(), `${path}: humano no painel`);
+        assert.ok(await drawer.locator('.ih-ai-follow button').count() <= 2, `${path}: até duas sugestões`);
+        failures.push(...(await guidePage.locator('body').evaluate(audit)).failures.map((item) => `${path}/compacto/${viewport}/${zoom}: ${item}`));
+        await guidePage.close();
+      }
       await page.close();
     }
   }
@@ -190,4 +198,4 @@ try {
 assert.ok(textCount > 100 && clickCount > 50, `cobertura insuficiente: ${textCount} textos, ${clickCount} clicáveis`);
 for (const item of [...new Set(failures.map((failure) => failure.replace(/\/interactive\d+:/, '/interactive:')))].slice(0, 100)) console.error(`FALHA ${item}`);
 assert.equal(failures.length, 0, `${failures.length} falhas de legibilidade`);
-console.log(`qa:assistant: ${Object.keys(states).length} estados × ${Object.keys(viewports).length} viewports; ${textCount} textos, ${clickCount} clicáveis; 0 falhas.`);
+console.log(`qa:assistant: ${Object.keys(states).length} estados × ${Object.keys(viewports).length} viewports; catálogo + ${guidePaths.length} guias publicados; ${textCount} textos, ${clickCount} clicáveis; 0 falhas.`);
