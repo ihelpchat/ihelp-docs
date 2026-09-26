@@ -60,6 +60,7 @@ try {
     assert.equal(event.guideId, 'campanhas', 'guia vem da fonte resolvida pelo servidor');
     assert.equal(event.stepId, 'passo-1', 'passo vem da etapa resolvida pelo servidor');
     assert.equal(event.topic, 'abrir-campanhas', 'tópico é calculado no servidor');
+    assert.equal(event.action, 'criar', 'ação de procedimento é calculada no servidor');
     assert.equal(event.issue, 'usage', 'diagnóstico saneado é calculado no servidor');
     assert.match(event.sessionId, /^session-[a-f0-9]{16}$/);
     assert.notEqual(event.sessionId, 'fixture-session', 'ID do cliente não é gravado cru');
@@ -82,6 +83,9 @@ try {
       ['Erro ao abrir campanhas', undefined, 'incident'],
       ['Não tenho permissão em usuários', undefined, 'permission'],
       ['Meu canal QR está desconectado', { module: 'channels', channels: [{ kind: 'whatsapp', state: 'disconnected' }] }, 'account_state'],
+      ['O QR caiu de novo', undefined, 'unknown'],
+      ['Parou de funcionar', undefined, 'unknown'],
+      ['Como reconectar QR?', undefined, 'usage'],
     ]) {
       const diagnostic = await fetch(`http://127.0.0.1:${httpServer.address().port}/assistant`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -90,8 +94,16 @@ try {
       assert.equal(diagnostic.status, 200);
       const recorded = JSON.parse((await readFile(eventFile, 'utf8')).trim().split('\n').at(-1));
       assert.equal(recorded.issue, expectedIssue, 'diagnóstico calculado no servidor');
-      assert.ok(recorded.topic, 'tópico fechado calculado no servidor');
+      if (question !== 'Parou de funcionar') assert.ok(recorded.topic, 'tópico fechado calculado no servidor');
+      if (question === 'Como reconectar QR?') assert.equal(recorded.action, 'reconectar');
+      else assert.equal(recorded.action, undefined, 'sintoma não produz ação documentável');
     }
+
+    const invalidAction = await fetch(`http://127.0.0.1:${httpServer.address().port}/assistant`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: 'Como reconectar QR?', action: 'teletransportar' }),
+    });
+    assert.equal(invalidAction.status, 400, 'payload HTTP não aceita action arbitrária');
 
     const feedback = await fetch(`http://127.0.0.1:${httpServer.address().port}/feedback`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

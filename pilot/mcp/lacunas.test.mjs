@@ -21,20 +21,21 @@ assert.equal(topicForQuestion('assunto sem área reconhecida'), undefined);
 assert.equal(normalizeSessionEvent({ ...base, sessionId: 'fixture-1', topic: 'tema-livre' }).topic, undefined,
   'tópico fora do enum é descartado');
 
-await add('fixture-1', { topic: 'importar-contatos' });
-await add('fixture-1', { topic: 'importar-contatos' });
-await add('fixture-2', { topic: 'importar-contatos' });
+await add('fixture-1', { topic: 'importar-contatos', action: 'importar' });
+await add('fixture-1', { topic: 'importar-contatos', action: 'importar' });
+await add('fixture-2', { topic: 'importar-contatos', action: 'importar' });
 assert.deepEqual((await collectGaps(root, file, { now })).documentable, [], '2 sessões: abaixo do mínimo');
-await add('fixture-3', { topic: 'importar-contatos' });
+await add('fixture-3', { topic: 'importar-contatos', action: 'importar' });
 await add('fixture-4', { topic: 'tema-livre' });
 let gaps = await collectGaps(root, file, { now });
 assert.equal(gaps.documentable.length, 1, 'perguntas equivalentes formam uma lacuna');
 assert.equal(gaps.documentable[0].topic, 'importar-contatos');
+assert.equal(gaps.documentable[0].action, 'importar');
 assert.equal(gaps.documentable[0].sessions, 3);
 assert.equal(gaps.documentable[0].proposal, 'criar');
 assert.equal(gaps.documentable[0].criar_guia.guideId, 'guia-importar-contatos');
 
-for (let i = 1; i <= 3; i++) await add(`canal-${i}`, { topic: 'abrir-canais' });
+for (let i = 1; i <= 3; i++) await add(`canal-${i}`, { topic: 'abrir-canais', action: 'reconectar' });
 gaps = await collectGaps(root, file, { now });
 assert.equal(gaps.documentable.find(({ topic }) => topic === 'abrir-canais').proposal, 'atualizar');
 assert.equal(gaps.documentable.find(({ topic }) => topic === 'abrir-canais').guideId, 'reconectar-canal-qr');
@@ -56,7 +57,7 @@ assert.doesNotMatch(JSON.stringify(gaps), /(?:fixture|canal|erro|sem|permissao|e
 assert.equal((await readFile(file, 'utf8')).includes('tema-livre'), false);
 const expiredFile = join(await mkdtemp(join(tmpdir(), 'm540-expired-')), 'events.jsonl');
 for (let i = 1; i <= 3; i++) await saveSessionEvent(expiredFile, {
-  ...base, sessionId: `old-${i}`, topic: 'importar-contatos',
+  ...base, sessionId: `old-${i}`, topic: 'importar-contatos', action: 'importar',
   createdAt: new Date(now - 31 * 24 * 60 * 60_000).toISOString(),
 }, { now });
 assert.deepEqual((await collectGaps(root, expiredFile, { now })).documentable, [], 'retention elimina sessões antigas');
