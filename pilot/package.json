@@ -11,6 +11,7 @@
     "qa:ui": "node scripts/ui-smoke.mjs",
     "qa:guide": "node scripts/run-guide-browser-journey.mjs",
     "qa:visual": "node scripts/visual-fidelity.mjs",
+    "qa:assistant": "node scripts/visual/assistant-legibility.mjs",
     "content:migrate": "node scripts/migrate-content.mjs && node scripts/normalize-content.mjs",
     "content:normalize": "node scripts/normalize-content.mjs",
     "content:audit": "node scripts/audit-content.mjs",

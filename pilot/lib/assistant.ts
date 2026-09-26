@@ -46,6 +46,7 @@ export type AssistantReply = {
   code: { language: string; content: string } | null;
   sources: AssistantSource[];
   suggestions: string[];
+  actions?: { type: 'link'; destination: 'support'; label: 'Falar com uma pessoa' }[];
   resolution: AssistantResolution;
   found: boolean;
   guide?: AssistantGuideState;
@@ -304,6 +305,8 @@ export function normalizeReply(data: unknown): AssistantReply {
       .slice(0, 4)
       .map((item) => ({ title: item.title, path: item.path, kind: kindOf(item.path), excerpt: typeof item.excerpt === 'string' ? item.excerpt : undefined, media: safeMedia(item.media) })),
     suggestions: strings(raw.suggestions, 5),
+    actions: Array.isArray(raw.actions) && raw.actions.some((action) => action && typeof action === 'object' && action.type === 'link' && action.destination === 'support' && action.label === 'Falar com uma pessoa')
+      ? [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }] : [],
     resolution,
     found: resolution !== 'not_found' && raw.found !== false,
     ...(guide ? { guide } : {}),

@@ -8,6 +8,7 @@ import { parseAssistantSuggestions } from './conversational-contract.mjs';
 import { sanitizeWidgetContext, diagnoseState, diagnosticQuestion, escalationFor } from './real-state.mjs';
 import { redactSensitiveData } from './sensitive-data.mjs';
 import { answerGuide } from './guide-state.mjs';
+import { createBudgetedResponse } from './provider-budget.mjs';
 
 const STOP_WORDS = new Set([
   'a', 'ao', 'aos', 'as', 'como', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'eu',
@@ -499,8 +500,15 @@ export async function answerQuestion(root, question, options = {}) {
   if (options.guide) {
     return answerGuide(root, question, options.guide, options);
   }
+  if (/\b(?:falar|conversar) com (?:uma? )?(?:pessoa|atendente|humano)|\b(?:quero|preciso de) (?:um )?(?:atendente|humano|suporte)\b/i.test(normalize(question))) {
+    return {
+      answer: 'Você pode falar com nosso time de atendimento pelo WhatsApp.',
+      sections: [], steps: [], code: null, sources: [], suggestions: [],
+      actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
+      resolution: 'partial', found: false,
+    };
+  }
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
-  if (!apiKey && !options.client) throw new Error('OPENAI_API_KEY não configurada');
   const scope = Object.hasOwn(ASSISTANT_SCOPES, options.scope ?? '') ? options.scope : 'Tudo';
   const pagePath = String(options.page?.path ?? '').split(/[?#]/u)[0];
   const page = /^\/(?!\/)[a-z0-9/_-]*$/iu.test(pagePath) ? {
@@ -564,7 +572,18 @@ export async function answerQuestion(root, question, options = {}) {
     };
   }
 
-  const client = options.client ?? new OpenAI({ apiKey });
+  const fixedFallback = (failed = false) => ({
+    answer: failed ? 'Tive um problema, tente de novo. Você pode seguir o guia abaixo ou falar com uma pessoa.'
+      : 'Siga o guia abaixo. Se precisar, fale com uma pessoa.',
+    sections: [],
+    steps: sources[0]?.documentedSteps.slice(0, 3).map((text) => ({ text })) ?? [],
+    code: null,
+    sources: sources.slice(0, 3).map(({ title, path, description }) => ({ title, path, kind: kindOf(path), excerpt: description })),
+    suggestions: [],
+    actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
+    resolution: 'partial', found: true,
+  });
+  const client = options.client ?? (apiKey ? new OpenAI({ apiKey, maxRetries: 0, ...(options.baseURL ? { baseURL: options.baseURL } : {}) }) : null);
   const context = sources.map((source, index) => [
     `FONTE ${index + 1}: ${source.title}`,
     `URL: ${source.path}`,
@@ -576,7 +595,7 @@ export async function answerQuestion(root, question, options = {}) {
     source.media ? `MÍDIA DISPONÍVEL: ${source.media.kind === 'tango' ? 'Tango interativo' : 'vídeo'} | ${source.media.url}` : '',
     ...source.productActions.map((action) => `AÇÃO ${action.id}: ${action.label} | rota=${action.route}${action.target ? ` | alvo=${action.target}` : ''}`),
   ].filter(Boolean).join('\n')).join('\n\n---\n\n');
-  const response = await client.responses.create({
+  const payload = {
     model: options.model ?? process.env.OPENAI_MODEL ?? 'gpt-6-luna',
     store: false,
     reasoning: { effort: 'medium' },
@@ -608,7 +627,16 @@ export async function answerQuestion(root, question, options = {}) {
       ...history,
       { role: 'user', content: `Pergunta: ${question}\n\nDocumentação disponível:\n\n${context}` },
     ],
-  });
+  };
+  if (!client) return fixedFallback();
+  let budgeted;
+  try {
+    budgeted = options.client && !options.budget
+      ? { kind: 'ok', response: await client.responses.create(payload) }
+      : await createBudgetedResponse(client, payload, options.budget);
+  } catch { return fixedFallback(true); }
+  if (budgeted.kind !== 'ok') return fixedFallback(budgeted.kind === 'provider_failed');
+  const response = budgeted.response;
 
   const parsed = parseAnswer(response.output_text);
   const byPath = new Map(sources.map((source) => [source.path, source]));
