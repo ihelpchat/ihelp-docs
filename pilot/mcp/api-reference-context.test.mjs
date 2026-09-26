@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readCsharpEndpoints } from '../lib/csharp-endpoints.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
-import { planContent } from './content-ai-service.mjs';
+import { planContent, generateContentPackage } from './content-ai-service.mjs';
 import { mkdtemp, mkdir, writeFile, rm, realpath, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -154,6 +154,59 @@ test('coleta DTO de saída no checkout e impede controller privado no prompt fin
     assert.doesNotMatch(captured[0], /private\/\{id\}|InternalController/);
     assert.equal(context.endpoints.some(({ public: visible }) => visible === false), false);
     assert.equal(context.matches.some(({ path }) => path.includes('InternalController')), false);
+  } finally {
+    if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('endpoint sem página continua pendente quando outro controller é público', async () => {
+  const root = await mkdtemp(join(await realpath(tmpdir()), 'api-mixed-surface-'));
+  const backend = join(root, 'back');
+  const previous = process.env.BACKEND_LOCAL_CHECKOUT;
+  try {
+    const controllers = join(backend, 'Comzada.Application/Controllers/V2');
+    await mkdir(controllers, { recursive: true });
+    await writeFile(join(controllers, 'ContactsController.cs'), `[ApiVersion("2")][Route("api/v{version:apiVersion}/contacts")]
+public class ContactsController {
+  [HttpGet("")] public Task<IActionResult> Get() { return null; }
+}`);
+    await writeFile(join(controllers, 'InternalContactsController.cs'), `[ApiVersion("2")][Route("api/v{version:apiVersion}/internal-contacts")]
+public class InternalContactsController {
+  [HttpGet("private")] public Task<IActionResult> Get() { return null; }
+}`);
+    execFileSync('git', ['init', '-q', backend]);
+    execFileSync('git', ['-C', backend, 'add', '.']);
+    execFileSync('git', ['-C', backend, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']);
+    await mkdir(join(root, 'architecture'), { recursive: true });
+    await writeFile(join(root, 'architecture/support-signals.json'), JSON.stringify({ categories: [], rules: [] }));
+    await writeFile(join(root, 'architecture/coverage-matrix.json'), '[]');
+    await mkdir(join(root, 'content/docs/api/contatos'), { recursive: true });
+    await writeFile(join(root, 'content/docs/api/contatos/buscar.mdx'), '---\nsource: api\ncontentType: referencia\nmethod: GET\nendpoint: /contacts\n---\n');
+    process.env.BACKEND_LOCAL_CHECKOUT = backend;
+    const context = await getIhelpContext(root, 'API de Contatos', 'api', { requireLocal: true, repositoryIds: ['backend'] });
+    assert.deepEqual(context.endpoints.map(({ route }) => route), ['/api/v2/contacts']);
+    assert.ok(context.pending.includes('endpoint não público: confirmar (GET /api/v2/internal-contacts/private)'), context.pending.join('; '));
+    const prompts = [];
+    const result = await planContent(root, { topic: 'API de Contatos', module: 'api' }, {
+      productContext: context, client: { responses: { create: async (payload) => {
+        prompts.push(JSON.stringify(payload));
+        return { output_text: JSON.stringify({ status: 'needs_information', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [] }), model: 'fake' };
+      } } },
+    });
+    assert.equal(prompts.length, 1);
+    assert.doesNotMatch(prompts[0], /internal-contacts|InternalContactsController/);
+    assert.ok(result.pending.includes('endpoint não público: confirmar (GET /api/v2/internal-contacts/private)'), JSON.stringify(result));
+    const packageResult = await generateContentPackage(root, { topic: 'API de Contatos', module: 'api' }, {
+      productContext: context, plan: { ...result, status: 'ready' }, client: { responses: { create: async (payload) => {
+        prompts.push(JSON.stringify(payload));
+        return { output_text: JSON.stringify({ status: 'needs_information', summary: '', questions: [], articles: [], grounding: [] }), model: 'fake' };
+      } } },
+    });
+    assert.equal(prompts.length, 2);
+    assert.doesNotMatch(prompts[1], /internal-contacts|InternalContactsController/);
+    assert.ok(packageResult.pending.includes('endpoint não público: confirmar (GET /api/v2/internal-contacts/private)'), JSON.stringify(packageResult));
   } finally {
     if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
     else process.env.BACKEND_LOCAL_CHECKOUT = previous;
