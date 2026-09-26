@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -19,16 +19,28 @@ const expected = [
   ].map((name) => `${name}.test.mjs`),
 ];
 
-const run = (directory) => spawnSync(process.execPath, [runner, directory], { encoding: 'utf8' });
+const run = (directory, ...args) => spawnSync(process.execPath, [runner, directory, ...args], { encoding: 'utf8' });
 const actual = readdirSync(mcpDir).filter((name) => name === 'test.mjs' || name.endsWith('.test.mjs'));
-assert.deepEqual([...actual].sort(), [...expected].sort(), 'current MCP test set changed');
+for (const name of expected) assert.ok(actual.includes(name), `missing baseline test: ${name}`);
+const discovered = [
+  ...['test.mjs', 'update-roundtrip.test.mjs'].filter((name) => actual.includes(name)),
+  ...actual.filter((name) => name !== 'test.mjs' && name !== 'update-roundtrip.test.mjs').sort(),
+];
+const listed = run(mcpDir, '--list');
+assert.equal(listed.status, 0, listed.stderr);
+assert.deepEqual(listed.stdout.trim().split('\n'), [
+  `MCP tests (${discovered.length}):`,
+  ...discovered.map((name) => `mcp/${name}`),
+]);
 
 const temporary = mkdtempSync(join(tmpdir(), 'mcp-runner-'));
 try {
   assert.notEqual(run(temporary).status, 0, 'zero tests must fail');
 
   writeFileSync(join(temporary, 'test.mjs'), 'process.exit(1);\n');
+  writeFileSync(join(temporary, 'zz-next.test.mjs'), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(join(temporary, 'ran-next'))}, 'yes');\n`);
   assert.equal(run(temporary).status, 1, 'test failure must return status 1');
+  assert.equal(existsSync(join(temporary, 'ran-next')), false, 'runner must stop at first failure');
 
   writeFileSync(join(temporary, 'test.mjs'), 'throw new Error("intentional exception");\n');
   assert.notEqual(run(temporary).status, 0, 'uncaught exception must fail');
