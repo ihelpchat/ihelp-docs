@@ -3,8 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHash } from 'node:crypto';
-import { validateCanonicalGuide } from '../lib/canonical-guides.mjs';
+import { hashApprovedSentence, validateCanonicalGuide } from '../lib/canonical-guides.mjs';
 
 const root = new URL('../content/docs/docs/', import.meta.url);
 const cases = [
@@ -38,6 +37,9 @@ assert.throws(() => validateCanonicalGuide(qr.replace('No iHelp, abra Configura�
 assert.throws(() => validateCanonicalGuide(qr.replace('label="Abrir a tela Canais"',
   'label="As mensagens perdidas serão recuperadas"'), 'reconectar-canal-qr'),
   /frase não aprovada/u, 'label renderizado do ProductAction também reprova');
+assert.doesNotThrow(() => validateCanonicalGuide(qr.replace('No iHelp, abra Configurações e depois Canais.',
+  'No iHelp, abra Configurações e depois Ca\u200bnais.'), 'reconectar-canal-qr'),
+  'invisível numa frase aprovada preserva o hash canônico');
 
 const directory = await mkdtemp(join(tmpdir(), 'guides-approve-'));
 try {
@@ -53,12 +55,13 @@ try {
   const first = run();
   const approved = JSON.parse(await readFile(output, 'utf8'));
   assert.equal(approved.aprovadoPor, 'pendente: Bruno');
-  assert.ok(approved.aprovadoEm);
+  assert.equal(approved.aprovadoEm, null);
+  assert.ok(approved.geradoEm);
   for (const [, id] of cases) {
     assert.ok(approved.guides[id].length > 5);
     for (const entry of approved.guides[id]) {
       assert.match(entry.hash, /^[a-f0-9]{64}$/u);
-      assert.equal(entry.hash, createHash('sha256').update(entry.canonical).digest('hex'));
+      assert.equal(entry.hash, hashApprovedSentence(entry.sentence));
     }
   }
   assert.match(first, /novas:/u);
