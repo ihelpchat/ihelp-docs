@@ -10,9 +10,9 @@ import { saveSessionEvent, pruneSessionEvents } from './session-events.mjs';
 import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { publishedPathOrNull } from './published-paths.mjs';
 import { opaqueId } from './opaque-id.mjs';
+import { authenticate, loadCredentials, requestIdentity } from './access-control.mjs';
 
-const apiKey = process.env.DOCS_MCP_API_KEY;
-if (apiKey && apiKey.length < 24) throw new Error('DOCS_MCP_API_KEY precisa ter ao menos 24 caracteres');
+const credentials = loadCredentials(process.env.DOCS_MCP_CREDENTIALS);
 
 const mcpHandler = createMcpHandler(() => buildServer());
 const handler = toNodeHandler(mcpHandler);
@@ -198,15 +198,16 @@ export const httpServer = createServer(async (request, response) => {
     response.writeHead(404).end();
     return;
   }
-  if (!apiKey) {
+  if (!credentials.length) {
     response.writeHead(503, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'MCP não configurado' }));
     return;
   }
-  if (request.headers.authorization !== `Bearer ${apiKey}`) {
+  const identity = authenticate(credentials, request.headers.authorization);
+  if (!identity) {
     response.writeHead(401, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'unauthorized' }));
     return;
   }
-  await handler(request, response);
+  await requestIdentity.run(identity, () => handler(request, response));
 });
 
 httpServer.listen(port, '0.0.0.0', () => console.error(`iHelp Docs MCP ouvindo na porta ${port}`));

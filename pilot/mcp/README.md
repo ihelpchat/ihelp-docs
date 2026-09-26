@@ -47,13 +47,17 @@ npm run mcp:start
 
 ## HTTP remoto e assistente GPT
 
-Configure `DOCS_MCP_API_KEY` com ao menos 24 caracteres. Para abrir pull requests, configure também `GITHUB_TOKEN`, `GITHUB_REPOSITORY=ihelpchat/ihelp-docs` e `GITHUB_BASE_BRANCH`. Para ativar o assistente, configure `OPENAI_API_KEY`; o modelo padrão é `gpt-6-luna` e pode ser trocado por `OPENAI_MODEL`.
+Configure `DOCS_MCP_CREDENTIALS` como JSON de credenciais individuais: `[{"actor":"user:operador-1","role":"reader","key":"<chave aleatória com 24+ caracteres>"},{"actor":"service:docs-writer","role":"writer","key":"<outra chave aleatória com 24+ caracteres>"}]`. Cada ator e chave devem ser únicos. O HTTP deriva o ator da chave e rejeita `requestedBy` diferente no pedido. Remover uma entrada e reiniciar o serviço revoga a chave. O reader acessa contexto do front e back, mas não envia artigos; o writer envia artigos, mas não consulta código privado. O limite é de 30 chamadas por ator por minuto.
+
+Use `GITHUB_READ_TOKEN` com acesso de leitura apenas a `front-react` e `olah-ihelp`. Use `GITHUB_TOKEN` separado, com acesso de escrita apenas a `ihelp-docs`, para abrir pull requests; configure `GITHUB_REPOSITORY=ihelpchat/ihelp-docs` e `GITHUB_BASE_BRANCH`. Para ativar o assistente, configure `OPENAI_API_KEY`; o modelo padrão é `gpt-6-luna` e pode ser trocado por `OPENAI_MODEL`.
 
 ```bash
-DOCS_MCP_API_KEY=... OPENAI_API_KEY=... ASSISTANT_ALLOWED_ORIGINS=https://docs.exemplo.com npm run mcp:http
+DOCS_MCP_CREDENTIALS='[...]' OPENAI_API_KEY=... ASSISTANT_ALLOWED_ORIGINS=https://docs.exemplo.com npm run mcp:http
 ```
 
-O endpoint `/mcp` exige `Authorization: Bearer <DOCS_MCP_API_KEY>`. O endpoint público `/assistant` aceita somente perguntas curtas, aplica rate limit, envia apenas trechos recuperados da documentação e chama a OpenAI com `store: false`. A chave permanece exclusivamente no servidor.
+O endpoint `/mcp` exige `Authorization: Bearer <chave individual>`. O endpoint público `/assistant` aceita somente perguntas curtas, aplica rate limit, envia apenas trechos recuperados da documentação e chama a OpenAI com `store: false`. As chaves permanecem exclusivamente no servidor.
+
+Defina `MCP_STATE_DIR` para um volume persistente separado de `/app` (a imagem usa `/data`). Monte o volume antes de iniciar o serviço. Para migrar, pare o serviço, copie `.audit/` e `.drafts/` do diretório antigo para o volume preservando permissões, confira arquivos e proprietário, configure as novas credenciais e reinicie. Não altere o conteúdo imutável para restaurar drafts; backup e rollback devem incluir o volume. A ativação e migração em produção exigem operação controlada.
 
 ### Decisões por padrão: IP usado nos limites
 
