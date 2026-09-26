@@ -38,6 +38,16 @@ assert.doesNotMatch(recordedFeedback, /sentinela@example\.test|FAKESECRET0123456
 assert.equal(feedback.question, undefined, 'texto da conversa não é persistido por padrão');
 assert.equal(feedback.userAgent, undefined, 'user agent livre não é necessário à métrica');
 assert.throws(() => normalizeFeedback({ type: 'assistant', value: 'up', path: '/assistente?token=fake' }), /Feedback inválido/);
+const publishedPath = '/docs/principais-motivos-de-suporte/campanhas';
+const hostilePath = `/docs/${token}`;
+const hostileFeedback = await saveFeedback(feedbackFile, {
+  type: 'article', value: 'down', path: hostilePath,
+  sources: [publishedPath, hostilePath],
+});
+assert.equal(hostileFeedback.path, null);
+assert.deepEqual(hostileFeedback.sources, [publishedPath]);
+assert.equal(normalizeFeedback({ type: 'article', value: 'up', path: publishedPath }).path, publishedPath);
+assert.doesNotMatch(await readFile(feedbackFile, 'utf8'), /FAKESECRET012345678901234567890/);
 
 const event = {
   sessionId: 'fixture-session-1', origin: 'faq', guideId: 'reconectar-canal-qr',
@@ -56,11 +66,16 @@ for (const invalid of [
 
 const eventFile = join(tmp, 'session-events.jsonl');
 const now = Date.now();
+const hostileEvent = await saveSessionEvent(eventFile, { ...event, sessionId: 'fixture-session-2', path: hostilePath }, { now });
+assert.equal(hostileEvent.path, null);
+assert.throws(() => normalizeSessionEvent({ ...event, sources: [hostilePath] }), /Evento inválido/);
+assert.equal(normalizeSessionEvent({ ...event, path: publishedPath }).path, publishedPath);
+assert.doesNotMatch(await readFile(eventFile, 'utf8'), /FAKESECRET012345678901234567890/);
 await saveSessionEvent(eventFile, { ...event, createdAt: new Date(now - 31 * 24 * 60 * 60_000).toISOString() }, { now });
 await saveSessionEvent(eventFile, { ...event, sessionId: 'fixture-session-2' }, { now });
 assert.equal(await pruneSessionEvents(eventFile, { now, retentionDays: 30 }), 1);
 let rows = (await readFile(eventFile, 'utf8')).trim().split('\n').map(JSON.parse);
-assert.deepEqual(rows.map(({ sessionId }) => sessionId), ['fixture-session-2']);
-assert.equal(await discardSessionEvents(eventFile, 'fixture-session-2'), 1);
+assert.deepEqual(rows.map(({ sessionId }) => sessionId), ['fixture-session-2', 'fixture-session-2']);
+assert.equal(await discardSessionEvents(eventFile, 'fixture-session-2'), 2);
 assert.equal(await readFile(eventFile, 'utf8'), '');
 console.log('data minimization: ok');
