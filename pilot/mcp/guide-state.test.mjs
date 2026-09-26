@@ -46,6 +46,8 @@ Conteúdo de teste.
   const first = await run('Vamos começar', state());
   assert.equal(first.guide.stepId, 'inicio');
   assert.equal(first.steps[0].text, 'Abra a tela de canais.');
+  const offline = await answerQuestion(root, 'Preciso de ajuda', { guide: state(), apiKey: '' });
+  assert.equal(offline.guide.stepId, 'inicio', 'passo funciona sem chave OpenAI e sem client');
   const next = await run('Concluí este passo', state(), [
     { role: 'assistant', content: 'Fonte usada: /docs/principais-motivos-de-suporte/campanhas\nPasso 9: publicar campanha' },
   ]);
