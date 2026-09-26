@@ -6,6 +6,7 @@ import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { isCatalogAction } from './product-actions.mjs';
 import { conversationalIssues } from './conversational-contract.mjs';
 import { stringify } from 'yaml';
+import { articleFields } from './article-fields.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -30,17 +31,6 @@ function escapeYaml(value) {
   return JSON.stringify(value.replaceAll('\r', '').trim());
 }
 
-function publicArticleText(article) {
-  const fields = [];
-  const collect = (value) => {
-    if (typeof value === 'string') fields.push(value);
-    else if (Array.isArray(value)) value.forEach(collect);
-    else if (value && typeof value === 'object') Object.values(value).forEach(collect);
-  };
-  collect(article);
-  return fields.join('\n');
-}
-
 function rejectSensitive(value) {
   if (!containsSensitiveData(value)) return;
   const kinds = sensitiveKinds(value);
@@ -60,6 +50,7 @@ function safeContentPath(root, contentPath) {
 
 export function validateArticle(article) {
   const issues = [];
+  for (const key of Object.keys(article)) if (!articleFields.has(key)) issues.push(`campo desconhecido: ${key}`);
   if (!article.title || article.title.trim().length < 4) issues.push('title precisa ter ao menos 4 caracteres');
   if (!article.description || article.description.trim().length < 40) issues.push('description precisa ter ao menos 40 caracteres');
   if (!SOURCES.has(article.source)) issues.push('source inválido');
@@ -73,8 +64,7 @@ export function validateArticle(article) {
   if (/ihelpchat\.github\.io\/ihelp-docs/i.test(article.body ?? '')) issues.push('links legados não são permitidos');
   if (/^## Tutorial Guiado$/m.test(article.body ?? '')) issues.push('use um Tango público no campo tangoUrl em vez de rodapé genérico');
   if (/^#{2,6}\s+\*\*/m.test(article.body ?? '')) issues.push('headings não devem usar negrito redundante');
-  const publicText = publicArticleText(article);
-  const sensitive = sensitiveKinds(publicText);
+  const sensitive = sensitiveKinds(stringify(article, { lineWidth: 0 }));
   if (sensitive.credential) issues.push('possível credencial detectada');
   if (sensitive.personal) issues.push('possível dado pessoal detectado');
   if (article.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(article.tangoUrl)) {
@@ -97,6 +87,8 @@ export function validateArticle(article) {
 
 export function renderArticle(article) {
   const validation = validateArticle(article);
+  if (validation.issues.includes('possível credencial detectada')) throw new SubmitArticleError('CREDENTIAL', 'Artigo contém possível credencial');
+  if (validation.issues.includes('possível dado pessoal detectado')) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém possível dado pessoal');
   if (!validation.valid) throw new Error(validation.issues.join('; '));
   const tangoId = article.tangoUrl?.split('/').pop()?.split('?')[0].replaceAll('-', '');
   const tangoSlug = article.title.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -115,7 +107,9 @@ export function renderArticle(article) {
   const reserved = new Set(['path', 'body', 'tangoUrl', 'productActions']);
   const metadata = Object.fromEntries(Object.entries(article).filter(([key, value]) => !reserved.has(key) && value !== undefined));
   const body = article.body.trim();
-  return `---\n${stringify(metadata, { lineWidth: 0 })}---\n\n${body}${actionBlock}${tutorial}\n`;
+  const rendered = `---\n${stringify(metadata, { lineWidth: 0 })}---\n\n${body}${actionBlock}${tutorial}\n`;
+  rejectSensitive(rendered);
+  return rendered;
 }
 
 async function walk(root) {
@@ -334,14 +328,13 @@ function safeArticleList(articles, deletes = []) {
   if (!Array.isArray(articles) || !Array.isArray(deletes) || articles.length + deletes.length < 1 || articles.length + deletes.length > 8) throw new SubmitArticleError('INVALID_PACKAGE', 'O pacote precisa ter entre 1 e 8 operações');
   const paths = new Set();
   const upserts = articles.map((article) => {
-    rejectSensitive(publicArticleText(article));
     if (paths.has(article.path)) throw new SubmitArticleError('INVALID_PACKAGE', `Path duplicado no pacote: ${article.path}`);
     paths.add(article.path);
     safeContentPath(process.cwd(), article.path);
     const reserved = new Set(['path', 'body', 'productActions', 'tangoUrl']);
     for (const [key, value] of Object.entries(article)) {
       if (reserved.has(key)) continue;
-      if (!/^[A-Za-z][A-Za-z0-9]*$/.test(key) || (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean' && !(Array.isArray(value) && value.every((item) => typeof item === 'string')))) {
+      if (!articleFields.has(key) || (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean' && !(Array.isArray(value) && value.every((item) => typeof item === 'string')))) {
         throw new SubmitArticleError('INVALID_PACKAGE', `Metadado inválido: ${key}`);
       }
     }

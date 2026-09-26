@@ -2,33 +2,11 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod/v4';
 import { createHash } from 'node:crypto';
-import { parseAssistantSuggestions } from './conversational-contract.mjs';
+import { articleSchema } from './article-fields.mjs';
 import { auditOperation, deleteArticle, getInventory, isSafeRequestedBy, searchContent, SubmitArticleError, submitArticle, submitContentPackage, validateArticle } from './content-service.mjs';
 import { auditContent, readArticle } from './editorial-standard.mjs';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
-
-const productActionSchema = z.object({
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]{2,63}$/).describe('ID estável do guia, como importar-contatos'),
-  label: z.string().min(3).max(80),
-  route: z.string().regex(/^\/(?!\/)[a-z0-9/_-]*$/).describe('Rota interna do iHelp, como /contact'),
-  target: z.string().regex(/^[a-z][a-z0-9-]{2,63}$/).optional().describe('Valor de data-help-id no produto, sem seletor CSS'),
-});
-
-const articleSchema = z.looseObject({
-  path: z.string().describe('Caminho sem extensão, começando com docs/, tutoriais/, api/ ou blog/'),
-  title: z.string(),
-  description: z.string(),
-  source: z.enum(['produto', 'suporte', 'api']),
-  contentType: z.enum(['faq', 'tutorial', 'guia', 'referencia']),
-  body: z.string().describe('Conteúdo Markdown sem frontmatter'),
-  tangoUrl: z.string().url().optional(),
-  productActions: z.array(productActionSchema).max(12).optional(),
-  assistantQuestion: z.string().optional().describe('Pergunta canônica que a Claricia deve reconhecer'),
-  assistantOverview: z.string().optional().describe('Visão inicial curta para quem acabou de entrar no produto'),
-  assistantInitialSteps: z.coerce.number().int().optional().describe('Quantidade de passos concretos iniciais no body, entre 1 e 3'),
-  assistantSuggestions: z.union([z.array(z.string()), z.string().transform(parseAssistantSuggestions)]).optional().describe('De 1 a 3 próximas perguntas ou ações distintas'),
-});
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
 const requestedBySchema = z.string().refine(isSafeRequestedBy, 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais').describe('ID opaco não sensível, como user:bruno; obrigatório para IA e escrita');

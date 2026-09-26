@@ -2,6 +2,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join, normalize, relative } from 'node:path';
 import { conversationalIssues, parseAssistantSuggestions } from './conversational-contract.mjs';
 import { parseDocument, stringify } from 'yaml';
+import { frontmatterFields } from './article-fields.mjs';
 
 const GENERIC_DESCRIPTION = /^(?:Entenda .+ e veja como usar esse recurso no iHelp\.|Referência técnica da API do iHelp para .+\.)$/i;
 const LEGACY_TUTORIAL = /\n+(?:(?:\*\*\*|---)\n+\n+)?## Tutorial Guiado\n+\n+Prefere seguir o passo a passo interativo\?[^\n]*(?:\n|$)/gi;
@@ -267,5 +268,7 @@ export async function readArticle(root, contentPath) {
     throw error;
   }
   const article = parseArticle(raw, contentPath);
+  const unknown = Object.keys(article.metadata).filter((key) => !frontmatterFields.has(key));
+  if (unknown.length) throw new Error(`frontmatter contém campo desconhecido: ${unknown.join(', ')}`);
   return { path: contentPath, ...article.metadata, body: article.body };
 }
