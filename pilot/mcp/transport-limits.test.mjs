@@ -177,6 +177,29 @@ await verifyIpSource(undefined, 'railway-default');
 delete process.env.RAILWAY_ENVIRONMENT_NAME;
 delete process.env.TRUSTED_IP_SOURCE;
 
+delete process.env.ASSISTANT_IP_LIMIT;
+delete process.env.TRUST_PROXY_HOPS;
+const { httpServer: defaultLimitServer } = await import('./http.mjs?default-ip-limit');
+if (!defaultLimitServer.listening) await once(defaultLimitServer, 'listening');
+const defaultLimitUrl = `http://127.0.0.1:${defaultLimitServer.address().port}/assistant`;
+try {
+  for (let n = 1; n <= 100; n += 1) {
+    const reply = await fetch(defaultLimitUrl, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: 'mcp', sessionId: `default-limit-session-${n}` }),
+    });
+    assert.equal(reply.status, 200, `${n}ª sessão no mesmo IP é aceita pelo teto padrão`);
+  }
+  const limited = await fetch(defaultLimitUrl, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: 'mcp', sessionId: 'default-limit-session-101' }),
+  });
+  assert.equal(limited.status, 429, '101ª sessão no mesmo IP excede o teto padrão');
+  assert.match(limited.headers.get('retry-after') ?? '', /^[1-9]\d*$/, 'teto padrão informa Retry-After');
+} finally {
+  await new Promise((resolve, reject) => defaultLimitServer.close((error) => error ? reject(error) : resolve()));
+}
+
 const source = await readFile(new URL('../lib/assistant.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 async function exerciseClient(responses) {
