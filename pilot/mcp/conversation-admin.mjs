@@ -1,3 +1,13 @@
+export function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character]);
+}
+
+export function renderRows(items) {
+  return items.map((values) => `<tr>${values.map((value) => `<td class="question">${escapeHtml(value)}</td>`).join('')}</tr>`).join('');
+}
+
 const style = `<style>
   body{font:17px/1.5 system-ui,sans-serif;color:#15202b;background:#f5f7f8;max-width:1200px;margin:0 auto;padding:24px}
   h1,h2{line-height:1.2} form,.cards,table{background:white;border:1px solid #ccd5dc;border-radius:8px;padding:16px}
@@ -13,7 +23,7 @@ export const adminLoginPage = `<!doctype html><html lang="pt-BR"><meta charset="
 <script>async function enter(token){const response=await fetch(location.pathname,{headers:{Authorization:'Bearer '+token}});if(!response.ok){sessionStorage.removeItem('clariciaAdminToken');document.querySelector('#error').textContent='Credencial inválida.';return}sessionStorage.setItem('clariciaAdminToken',token);document.open();document.write(await response.text());document.close()};document.querySelector('#login').addEventListener('submit',e=>{e.preventDefault();enter(document.querySelector('#token').value)});if(sessionStorage.getItem('clariciaAdminToken'))enter(sessionStorage.getItem('clariciaAdminToken'));</script></html>`;
 
 export const adminPage = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conversas da Claricia</title>${style}
-<h1>Conversas da Claricia</h1><p>Veja as perguntas feitas e onde a ajuda precisa melhorar.</p>
+<h1>Conversas da Claricia</h1><p>Veja as perguntas feitas e onde a ajuda precisa melhorar. Os percentuais usam sessões; cada sessão conta uma vez.</p>
 <form id="filters"><label>De<input name="from" type="date"></label><label>Até<input name="to" type="date"></label>
 <label>Origem<select name="origin"><option value="">Todas</option><option value="faq">Central de Ajuda</option><option value="app">App</option></select></label>
 <label>Empresa<input name="companyId" type="number" min="1"></label>
@@ -25,8 +35,9 @@ export const adminPage = `<!doctype html><html lang="pt-BR"><meta charset="utf-8
 <p id="pagination"></p><button id="previous" type="button">Anterior</button> <button id="next" type="button">Próxima</button>
 <script>
 const token=sessionStorage.getItem('clariciaAdminToken');let page=1,totalPages=1;
-const cell=(row,value,klass)=>{const td=document.createElement('td');td.textContent=value??'';if(klass)td.className=klass;row.append(td)};
-const table=(selector,rows,values)=>{const body=document.querySelector(selector);body.replaceChildren();for(const item of rows){const tr=document.createElement('tr');for(const value of values)cell(tr,value(item),'question');body.append(tr)}};
+const escapeHtml=${escapeHtml.toString()};
+const renderRows=${renderRows.toString()};
+const table=(selector,rows,values)=>{document.querySelector(selector).innerHTML=renderRows(rows.map((item)=>values.map((value)=>value(item))))};
 async function load(){const params=new URLSearchParams(new FormData(document.querySelector('#filters')));params.set('page',String(page));
  const response=await fetch('/admin/claricia/data?'+params,{headers:{Authorization:'Bearer '+token}});
  if(!response.ok){document.querySelector('#error').textContent=response.status===401?'Credencial inválida. Reabra a página para entrar.':'Não foi possível carregar as conversas.';return}

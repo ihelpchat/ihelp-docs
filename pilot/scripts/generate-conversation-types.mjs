@@ -10,6 +10,8 @@ const schemas = {
   AssistantReplyV1: z.toJSONSchema(assistantReplySchema),
   ProductActionV1: z.toJSONSchema(productActionSchema),
 };
+schemas.AssistantRequestV1.if = { required: ['companyId'] };
+schemas.AssistantRequestV1.then = { properties: { origin: { const: 'app' } }, required: ['origin'] };
 const literalUnion = (values) => values.map((value) => JSON.stringify(value)).join(' | ');
 function typeOf(schema, key = '') {
   if (schema.anyOf) return schema.anyOf.map((item) => typeOf(item)).join(' | ');

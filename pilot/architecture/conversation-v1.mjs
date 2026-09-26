@@ -97,7 +97,9 @@ export const assistantRequestSchema = z.object({
   page: z.object({ path: z.string().regex(/^\/(?!\/)[a-z0-9/_-]+$/i), title: z.string().max(200) }).strict().optional(),
   widgetContext: widgetContextSchema.optional(),
   guide: stateSchema.optional(),
-}).strict();
+}).strict().refine((request) => request.companyId === undefined || request.origin === 'app', {
+  message: 'companyId exige origin app', path: ['companyId'],
+});
 export const assistantReplySchema = z.object({
   schemaVersion: z.literal(schemaVersion).optional(),
   answer: z.string().trim().min(1),

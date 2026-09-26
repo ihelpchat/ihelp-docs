@@ -416,7 +416,22 @@
       "required": [
         "question"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "if": {
+        "required": [
+          "companyId"
+        ]
+      },
+      "then": {
+        "properties": {
+          "origin": {
+            "const": "app"
+          }
+        },
+        "required": [
+          "origin"
+        ]
+      }
     },
     "AssistantReplyV1": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

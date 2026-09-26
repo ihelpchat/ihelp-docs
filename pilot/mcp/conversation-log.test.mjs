@@ -96,7 +96,7 @@ try {
     }));
     const fixtureFile = join(dir, 'fixture.jsonl');
     for (const row of fixture) await saveConversation(fixtureFile, row);
-    const selected = summarizeConversations(await listConversations(fixtureFile), { from: '2026-09-03', to: '2026-09-08', origin: 'app', companyId: 42, resolution: 'partial' });
+    const selected = summarizeConversations(await listConversations(fixtureFile), { from: '2026-09-03', to: '2026-09-08', origin: 'app', companyId: 42, resolution: 'partial' }, { now: Date.parse('2026-09-05T12:15:00Z') });
     assert.equal(selected.total, 1, 'filtros sobre fixture JSONL com 10 conversas');
 
     await rm(file);
@@ -117,17 +117,17 @@ const rows = Array.from({ length: 10 }, (_, i) => ({
   topic: i < 5 ? 'abrir-canais' : 'abrir-usuarios', action: 'abrir',
   resolution: ['complete', 'complete', 'complete', 'complete', 'partial', 'not_found', 'escalated', 'abandoned', 'in_progress', 'complete'][i],
 }));
-const summary = summarizeConversations(rows, { page: 1, pageSize: 10 });
+const summary = summarizeConversations(rows, { page: 1, pageSize: 10 }, { now: Date.parse('2026-09-26T12:00:00Z') });
 assert.equal(summary.total, 10);
 assert.equal(summary.percentages.complete, 50);
-assert.equal(summary.percentages.partial, 10);
+assert.equal(summary.percentages.partial, 0);
 assert.equal(summary.percentages.not_found, 10);
 assert.equal(summary.percentages.escalated, 10);
-assert.equal(summary.percentages.abandoned, 10);
+assert.equal(summary.percentages.abandoned, 30);
 assert.equal(summary.byTopic.find((row) => row.topic === 'abrir-canais / abrir').resolvedPercent, 80);
 assert.equal(summary.byCompany[0].companyId, 42);
-assert.equal(summary.unresolved[0].question, 'Pergunta 6', 'não resolvidas mais recentes primeiro');
-const filtered = summarizeConversations(rows, { from: '2026-09-03', to: '2026-09-08', origin: 'app', companyId: 42, resolution: 'partial' });
+assert.equal(summary.unresolved[0].question, 'Pergunta 8', 'não resolvidas mais recentes primeiro');
+const filtered = summarizeConversations(rows, { from: '2026-09-03', to: '2026-09-08', origin: 'app', companyId: 42, resolution: 'partial' }, { now: Date.parse('2026-09-05T12:15:00Z') });
 assert.equal(filtered.total, 1, 'filtros combinados');
 assert.equal(filtered.unresolved[0].question, 'Pergunta 4');
 const directDir = await mkdtemp(join(tmpdir(), 'claricia-conversations-direct-'));
