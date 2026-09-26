@@ -8,6 +8,7 @@ import { readArticle } from './editorial-standard.mjs';
 import { parseDocument } from 'yaml';
 import { docsPageSchema } from '../lib/docs-page-schema.mjs';
 import { renderArticle, validateArticle } from './content-service.mjs';
+import { articleSchema } from './article-fields.mjs';
 
 const sourceRoot = new URL('../', import.meta.url).pathname;
 const root = await mkdtemp(join(tmpdir(), 'm5-01-roundtrip-'));
@@ -127,6 +128,11 @@ try {
   const unknown = await call('docs_update_article', { ...individual, campoDesconhecido: 'valor', requestedBy: 'service:roundtrip' });
   assert.equal(unknown.isError, true, 'update não pode aceitar campo desconhecido');
   assert.equal(await readFile(join(root, 'writes.log'), 'utf8'), before, 'campo desconhecido deve causar zero writes');
+  assert.equal(articleSchema.safeParse({ ...individual, campoDesconhecido: 'valor' }).success, false, 'schema MCP precisa rejeitar campo desconhecido');
+  const unknownPath = 'docs/principais-motivos-de-suporte/legado-desconhecido';
+  const unknownFile = join(root, 'content/docs', `${unknownPath}.mdx`);
+  await writeFile(unknownFile, (await readFile(join(root, 'content/docs', `${paths[0]}.mdx`), 'utf8')).replace('\n---\n\n', '\ncampoDesconhecido: valor\n---\n\n'));
+  await assert.rejects(readArticle(root, unknownPath), /campo desconhecido/i, 'leitor usa a mesma lista fechada');
 
   const canonical = { id: 'abrir-canais', label: 'Abrir a tela Canais', route: '/configuracoes/channel' };
   const inline = '<ProductAction id="abrir-canais" label="Abrir a tela Canais" route="/configuracoes/channel" />';
@@ -147,6 +153,11 @@ try {
       if (mode === 'draft') await assert.rejects(readFile(join(root, '.drafts', `${article.path}.mdx`)), { code: 'ENOENT' }, `${reason} não deve criar draft`);
     }
   }
+  const individualDraftPath = 'docs/principais-motivos-de-suporte/draft-acao-invalida';
+  const invalidDraft = { ...individual, path: individualDraftPath, body: `${individual.body}\n<ProductAction id="abrir-canais" label="Abrir a tela Canais" route="/configuracoes/channel" onclick="x" />` };
+  const draftResult = await call('docs_submit_article', { ...invalidDraft, mode: 'draft', requestedBy: 'service:roundtrip' });
+  assert.equal(draftResult.isError, true, 'submit individual em draft precisa validar o pacote');
+  await assert.rejects(readFile(join(root, '.drafts', `${individualDraftPath}.mdx`)), { code: 'ENOENT' }, 'draft individual inválido não deve ser escrito');
   const original = await readArticle(root, paths[0]);
   const rejected = await call('docs_submit_article', { ...original, body: `${original.body}\n<ProductAction id="abrir-canais" label="Abrir a tela Canais" route="/configuracoes/channel" />`, mode: 'pull_request', requestedBy: 'service:roundtrip' });
   assert.equal(rejected.isError, true, 'submit individual deve rejeitar ProductAction duplicado');
