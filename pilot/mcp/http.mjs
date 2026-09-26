@@ -19,7 +19,7 @@ import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { publishedPathOrNull } from './published-paths.mjs';
 import { opaqueId } from './opaque-id.mjs';
 import { authenticate, requestIdentity } from './access-control.mjs';
-import { assistantRouterModel, assistantRouterEffort, mcpCredentialsFromEnv } from './env-compat.mjs';
+import { assistantRouterModel, assistantRouterEffort, conversationsRetentionDays, mcpCredentialsFromEnv } from './env-compat.mjs';
 
 const credentials = mcpCredentialsFromEnv();
 if (!credentials.length) throw new Error('Configure DOCS_MCP_CREDENTIALS ou DOCS_MCP_API_KEY antes de iniciar o MCP');
@@ -33,7 +33,7 @@ const root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname;
 const feedbackFile = process.env.FEEDBACK_FILE ?? '/tmp/ihelp-docs-feedback.jsonl';
 const sessionEventsFile = process.env.SESSION_EVENTS_FILE ?? '/tmp/ihelp-docs-session-events.jsonl';
 const conversationsFile = process.env.CONVERSATIONS_FILE ?? '/tmp/ihelp-docs-conversations.jsonl';
-const conversationsRetentionDays = process.env.CONVERSATIONS_RETENTION_DAYS;
+const retentionDays = conversationsRetentionDays();
 const feedbackAdminToken = process.env.FEEDBACK_ADMIN_TOKEN;
 const allowedOrigins = new Set((process.env.ASSISTANT_ALLOWED_ORIGINS ?? 'http://127.0.0.1:4173,http://localhost:4173').split(',').map((value) => value.trim()).filter(Boolean));
 let lastSessionPrune = 0;
@@ -210,10 +210,6 @@ export const httpServer = createServer(async (request, response) => {
       const origin = body.origin === 'app' ? 'app' : 'faq';
       const resolution = result.resolution ?? 'not_found';
       try {
-        if (conversationsRetentionDays && recordedAt - lastConversationPrune > 24 * 60 * 60_000) {
-          await pruneConversations(conversationsFile, { now: recordedAt, retentionDays: Number(conversationsRetentionDays) });
-          lastConversationPrune = recordedAt;
-        }
         await saveConversation(conversationsFile, {
           at: new Date(recordedAt).toISOString(), eventId, sessionId: sessionOpaqueId, origin,
           ...(body.companyId ? { companyId: body.companyId } : {}), path: pagePath ?? '/assistente',
@@ -226,6 +222,14 @@ export const httpServer = createServer(async (request, response) => {
         });
       } catch {
         console.error('Falha ao registrar conversa');
+      }
+      try {
+        if (retentionDays !== undefined && recordedAt - lastConversationPrune > 24 * 60 * 60_000) {
+          await pruneConversations(conversationsFile, { now: recordedAt, retentionDays });
+          lastConversationPrune = recordedAt;
+        }
+      } catch {
+        console.error('Falha ao limpar conversas antigas');
       }
       try {
         const now = recordedAt;

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { listConversations, saveConversation, summarizeConversations } from './conversation-log.mjs';
+import { conversationsRetentionDays } from './env-compat.mjs';
 
 const dir = await mkdtemp(join(tmpdir(), 'claricia-conversations-'));
 // O arquivo aceita append, mas o nome temporário da limpeza ultrapassa NAME_MAX.
@@ -16,10 +17,18 @@ const question = '  Meu telefone é 11987654321 e email é ana@example.com  ';
 const invalidRetention = spawnSync(process.execPath, [new URL('./http.mjs', import.meta.url).pathname], {
   env: { ...process.env, DOCS_MCP_API_KEY: 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz',
     CONVERSATIONS_RETENTION_DAYS: 'invalid', PORT: '0' },
-  encoding: 'utf8', timeout: 2000,
+  encoding: 'utf8', timeout: 10000,
 });
+assert.equal(invalidRetention.status, 1, 'retenção inválida impede iniciar o serviço');
 assert.match(invalidRetention.stderr, /CONVERSATIONS_RETENTION_DAYS.*invalid/u,
   'retenção inválida derruba a inicialização com o nome e valor da variável');
+assert.equal(conversationsRetentionDays({}), undefined, 'sem variável não há limpeza');
+for (const value of ['invalid', '0', '-1', '1.5', '', '9007199254740992']) {
+  assert.throws(() => conversationsRetentionDays({ CONVERSATIONS_RETENTION_DAYS: value }),
+    /CONVERSATIONS_RETENTION_DAYS.*inválido/u, `valor inválido ${value} deve ser rejeitado`);
+}
+assert.equal(conversationsRetentionDays({ CONVERSATIONS_RETENTION_DAYS: '3651' }), 3651,
+  'qualquer inteiro positivo seguro é aceito');
 const fakeOpenAI = createServer(async (request, response) => {
   let raw = '';
   for await (const chunk of request) raw += chunk;

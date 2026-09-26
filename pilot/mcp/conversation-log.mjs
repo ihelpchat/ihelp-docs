@@ -15,7 +15,7 @@ export async function saveConversation(file, input) {
 export const listConversations = readJsonl;
 
 export async function pruneConversations(file, { now = Date.now(), retentionDays } = {}) {
-  if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 3650) throw new Error('Retenção inválida.');
+  if (!Number.isSafeInteger(retentionDays) || retentionDays < 1) throw new Error('Retenção inválida.');
   return serialize(file, async () => {
     const rows = await readJsonl(file);
     const kept = rows.filter((row) => Date.parse(row.at) >= now - retentionDays * DAY_MS);
