@@ -1,17 +1,22 @@
-name: Deploy to GitHub Pages
+name: Validate and publish docs and Claricia
 
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        type: choice
+        options: [staging, production]
+        default: staging
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Permite apenas um deploy concorrente
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'pages' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -41,23 +46,43 @@ jobs:
       - name: Typecheck and lint
         run: npm run types:check && npm run lint
         working-directory: pilot
+      - name: Prepare release metadata
+        run: node scripts/release.mjs prepare
+        working-directory: pilot
+        env:
+          CLARICIA_DEPLOY_ENABLED: ${{ vars.CLARICIA_DEPLOY_ENABLED }}
+          NEXT_PUBLIC_ASSISTANT_URL: ${{ vars.NEXT_PUBLIC_ASSISTANT_URL }}
       - name: Build website
         run: npm run build
         working-directory: pilot
         env:
           NEXT_PUBLIC_BASE_PATH: /ihelp-docs
+          NEXT_PUBLIC_ASSISTANT_URL: ${{ vars.NEXT_PUBLIC_ASSISTANT_URL }}
+      - name: Smoke public artifact
+        run: node scripts/release.mjs artifact out
+        working-directory: pilot
+        env:
+          CLARICIA_DEPLOY_ENABLED: ${{ vars.CLARICIA_DEPLOY_ENABLED }}
       - name: Check assistant legibility
         run: CHROME_PATH=/usr/bin/google-chrome NEXT_PUBLIC_BASE_PATH=/ihelp-docs npm run qa:assistant && CHROME_PATH=/usr/bin/google-chrome NEXT_PUBLIC_BASE_PATH=/ihelp-docs node scripts/visual/assistant-legibility.test.mjs
         working-directory: pilot
+      - name: Save release artifact for staging
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-release
+          path: pilot/out
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: pilot/out
+      - name: Deploy disabled
+        if: vars.CLARICIA_DEPLOY_ENABLED != 'true'
+        run: "echo 'pendente: deploy da Claricia desativado (CLARICIA_DEPLOY_ENABLED)'"
 
   deploy:
     name: Deploy to GitHub Pages
-    needs: build
-    if: github.event_name != 'pull_request'
+    needs: [build, deploy-service]
+    if: github.event_name != 'pull_request' && github.event_name == 'workflow_dispatch' && inputs.target == 'production' && vars.CLARICIA_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -66,3 +91,68 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  deploy-service:
+    name: Deploy Claricia and check versions
+    needs: build
+    if: github.event_name != 'pull_request' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CLARICIA_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Prepare service image metadata
+        run: node scripts/release.mjs prepare
+        working-directory: pilot
+        env:
+          CLARICIA_DEPLOY_ENABLED: ${{ vars.CLARICIA_DEPLOY_ENABLED }}
+          NEXT_PUBLIC_ASSISTANT_URL: ${{ vars.NEXT_PUBLIC_ASSISTANT_URL }}
+      - name: Stage public release metadata for Railway upload
+        run: cp public/release.json deploy-release.json
+        working-directory: pilot
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+      - name: Deploy and wait for service verdict
+        working-directory: pilot
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+          RAILWAY_SERVICE_ID: ${{ vars.RAILWAY_SERVICE_ID }}
+          RAILWAY_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'staging' }}
+          CLARICIA_HEALTH_URL: ${{ vars.CLARICIA_HEALTH_URL }}
+          CLARICIA_DOCS_ORIGIN: ${{ vars.CLARICIA_DOCS_URL }}
+        run: |
+          test -n "$RAILWAY_TOKEN" && test -n "$RAILWAY_PROJECT_ID" && test -n "$RAILWAY_SERVICE_ID" && test -n "$CLARICIA_HEALTH_URL"
+          railway up --ci --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT" --service "$RAILWAY_SERVICE_ID" -m "docs $GITHUB_SHA"
+          node scripts/release.mjs service public "$CLARICIA_HEALTH_URL"
+
+  deploy-docs-staging:
+    name: Deploy staging docs and check content SHA
+    needs: [build, deploy-service]
+    if: (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'staging')) && vars.CLARICIA_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: docs-release
+          path: pilot/out
+      - name: Stage static artifact for Railway upload
+        run: tar -czf release-dist.tar.gz -C out .
+        working-directory: pilot
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+      - name: Deploy staging site and verify SHA
+        working-directory: pilot
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+          RAILWAY_DOCS_SERVICE_ID: ${{ vars.RAILWAY_DOCS_SERVICE_ID }}
+          CLARICIA_DOCS_URL: ${{ vars.CLARICIA_DOCS_URL }}
+        run: |
+          test -n "$RAILWAY_TOKEN" && test -n "$RAILWAY_PROJECT_ID" && test -n "$RAILWAY_DOCS_SERVICE_ID" && test -n "$CLARICIA_DOCS_URL"
+          railway up --ci --project "$RAILWAY_PROJECT_ID" --environment staging --service "$RAILWAY_DOCS_SERVICE_ID" -m "docs $GITHUB_SHA"
+          node scripts/release.mjs site out "$CLARICIA_DOCS_URL"

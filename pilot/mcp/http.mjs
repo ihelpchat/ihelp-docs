@@ -1,4 +1,6 @@
 import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { isIP } from 'node:net';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
@@ -106,6 +108,20 @@ async function readJson(request) {
 export const httpServer = createServer(async (request, response) => {
   cors(request, response);
   const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
+  if (pathname === '/health' && request.method === 'GET') {
+    try {
+      const manifest = JSON.parse(await readFile(join(root, 'public/guides/manifest.json'), 'utf8'));
+      const catalog = JSON.parse(await readFile(join(root, 'public/guides', manifest.current, 'catalog.json'), 'utf8'));
+      const release = JSON.parse(await readFile(join(root, 'public/release.json'), 'utf8'));
+      const codeSha = release.codeSha;
+      if (!/^[a-f0-9]{40}$/u.test(codeSha ?? '') || manifest.current !== catalog.contentSha256?.slice(0, 12)) throw new Error('versão indisponível');
+      response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+        .end(JSON.stringify({ codeSha, contentSha256: catalog.contentSha256 }));
+    } catch {
+      response.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ error: 'versão indisponível' }));
+    }
+    return;
+  }
   if (request.method === 'OPTIONS') {
     response.writeHead(204).end();
     return;
