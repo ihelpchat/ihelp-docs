@@ -19,7 +19,10 @@ try {
   const slow = { responses: { create: async () => { calls++; await gate; return ok; } } };
   const pending = [call(slow), call(slow)];
   while (calls < 2) await new Promise((resolve) => setTimeout(resolve, 5));
-  const third = await call(slow);
+  const third = await Promise.race([
+    call(slow),
+    new Promise((resolve) => setTimeout(() => resolve({ kind: 'unexpected_provider_call' }), 200)),
+  ]);
   release();
   const simultaneous = [...await Promise.all(pending), third];
   assert.equal(simultaneous.filter((result) => result.kind === 'ok').length, 2, 'reserva atômica limita chamadas concorrentes');
