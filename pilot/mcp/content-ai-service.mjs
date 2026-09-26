@@ -266,7 +266,7 @@ export async function planContent(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpoints(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
-  if (request.module === 'api' && !productContext.endpoints?.length) return apiPending('endpoints estruturados ausentes');
+  if (request.module === 'api' && !productContext.endpoints?.length) return apiPending(productContext.nonPublicEndpoints ? 'endpoint não público: confirmar' : 'endpoints estruturados ausentes');
   if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return apiPending('endpoint não público: confirmar');
   const pending = groundingPending(productContext);
   if (pending) return pending;
@@ -295,7 +295,7 @@ export async function generateContentPackage(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpoints(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
-  if (request.module === 'api' && !productContext.endpoints?.length) return apiPending('endpoints estruturados ausentes');
+  if (request.module === 'api' && !productContext.endpoints?.length) return apiPending(productContext.nonPublicEndpoints ? 'endpoint não público: confirmar' : 'endpoints estruturados ausentes');
   if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return apiPending('endpoint não público: confirmar');
   const pending = groundingPending(productContext);
   if (pending) return pending;
