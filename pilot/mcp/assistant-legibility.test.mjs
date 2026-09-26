@@ -40,7 +40,7 @@ css.walkRules((rule) => {
     const size = pixels(declarations['font-size']);
     if (!Number.isFinite(size) || size < 16) failures.push(`${rule.source.start.line}: ${rule.selector} font-size ${declarations['font-size']}`);
   }
-  const clickable = rule.selector.split(',').some((part) => /(?:\bbutton|\ba|\bsummary|\.ih-ai-launcher|\.ih-ai-send|\.ih-ai-new|\.ih-ai-product-action|\.ih-ai-chip)$/.test(part.trim()))
+  const clickable = rule.selector.split(',').some((part) => /(?:\bbutton|\ba|\bsummary|\.ih-ai-launcher|\.ih-ai-send|\.ih-ai-new|\.ih-ai-product-action|\.ih-ai-chip|\.ih-button|\.ih-chip)$/.test(part.trim()))
     && !/(?:\bsvg\b|::|:hover|:disabled|:focus|\[aria-|\[data-compact\])/.test(rule.selector);
   if (clickable) {
     measuredTargets++;
