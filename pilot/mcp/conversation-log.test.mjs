@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
+import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,9 +9,17 @@ import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { listConversations, saveConversation, summarizeConversations } from './conversation-log.mjs';
 
 const dir = await mkdtemp(join(tmpdir(), 'claricia-conversations-'));
-const file = join(dir, 'conversations.jsonl');
+// O arquivo aceita append, mas o nome temporário da limpeza ultrapassa NAME_MAX.
+const file = join(dir, `${'c'.repeat(220)}.jsonl`);
 const sessionFile = join(dir, 'sessions.jsonl');
 const question = '  Meu telefone é 11987654321 e email é ana@example.com  ';
+const invalidRetention = spawnSync(process.execPath, [new URL('./http.mjs', import.meta.url).pathname], {
+  env: { ...process.env, DOCS_MCP_API_KEY: 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz',
+    CONVERSATIONS_RETENTION_DAYS: 'invalid', PORT: '0' },
+  encoding: 'utf8', timeout: 2000,
+});
+assert.match(invalidRetention.stderr, /CONVERSATIONS_RETENTION_DAYS.*invalid/u,
+  'retenção inválida derruba a inicialização com o nome e valor da variável');
 const fakeOpenAI = createServer(async (request, response) => {
   let raw = '';
   for await (const chunk of request) raw += chunk;
@@ -34,8 +43,10 @@ try {
   process.env.DOCS_MCP_API_KEY = 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz';
   process.env.FEEDBACK_ADMIN_TOKEN = 'fixture-admin-token';
   process.env.CONVERSATIONS_FILE = file;
+  process.env.CONVERSATIONS_RETENTION_DAYS = '1';
   process.env.SESSION_EVENTS_FILE = sessionFile;
   process.env.FEEDBACK_FILE = join(dir, 'feedback.jsonl');
+  await saveConversation(file, { at: '2020-01-01T00:00:00.000Z', question: 'registro antigo', origin: 'faq' });
   const { httpServer } = await import('./http.mjs');
   try {
     if (!httpServer.listening) await once(httpServer, 'listening');
@@ -45,7 +56,9 @@ try {
     const reply = await post(base);
     assert.equal(reply.status, 200);
     const replyBody = await reply.json();
-    const conversation = JSON.parse((await readFile(file, 'utf8')).trim());
+    const firstRows = (await readFile(file, 'utf8')).trim().split('\n').map(JSON.parse);
+    assert.equal(firstRows.length, 2, 'falha na limpeza não impede gravar a pergunta atual');
+    const conversation = firstRows.at(-1);
     assert.equal(conversation.question, question, 'registro novo preserva espaços, telefone e e-mail');
     assert.equal(conversation.companyId, 42);
     assert.equal(conversation.answer, 'Não encontrei o guia.\nFale com a equipe.');
