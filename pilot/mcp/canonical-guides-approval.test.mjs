@@ -73,6 +73,8 @@ try {
   assert.match(delta, /alteradas: 1/u);
   assert.match(delta, /No iHelp, abra Configurações, e depois Canais\./u);
   assert.match(delta, /No iHelp, abra Configurações e depois Canais\./u);
+  await writeFile(join(content, cases[0][0]), changed.replace('No iHelp, abra Configurações, e depois Canais.', ''));
+  assert.match(run(), /removidas: 1/u);
 } finally {
   await rm(directory, { recursive: true, force: true });
 }
