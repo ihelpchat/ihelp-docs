@@ -271,6 +271,7 @@ export async function readArticle(root, contentPath) {
   const sensitive = sensitiveKinds(raw);
   if (sensitive.credential) throw new Error('artigo de origem contém possível credencial');
   if (sensitive.personal) throw new Error('artigo de origem contém possível dado pessoal');
+  if (sensitive.internal || sensitive.control) throw new Error('artigo de origem contém conteúdo interno ou caractere invisível');
   const article = parseArticle(raw, contentPath);
   const unknown = Object.keys(article.metadata).filter((key) => !frontmatterFields.has(key));
   if (unknown.length) throw new Error(`frontmatter contém campo desconhecido: ${unknown.join(', ')}`);

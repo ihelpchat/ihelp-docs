@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { parseAssistantSuggestions } from './conversational-contract.mjs';
+import { guideSchema } from '../architecture/conversation-v1.mjs';
 
 // Contrato único dos campos públicos lidos do MDX e aceitos pelo MCP.
 export const articleSchema = z.strictObject({
@@ -9,6 +10,7 @@ export const articleSchema = z.strictObject({
   source: z.enum(['produto', 'suporte', 'api']),
   contentType: z.enum(['faq', 'tutorial', 'guia', 'referencia']),
   body: z.string(),
+  guide: guideSchema.optional(),
   tangoUrl: z.string().url().optional(),
   productActions: z.array(z.strictObject({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]{2,63}$/),

@@ -68,6 +68,10 @@ O endpoint `/mcp` exige `Authorization: Bearer <chave individual>`. O endpoint p
 
 Defina `MCP_STATE_DIR` para um volume persistente separado de `/app` (a imagem usa `/data`). Monte o volume antes de iniciar o serviço. Para migrar, pare o serviço, copie `.audit/` e `.drafts/` do diretório antigo para o volume preservando permissões, confira arquivos e proprietário, configure as novas credenciais e reinicie. Não altere o conteúdo imutável para restaurar drafts; backup e rollback devem incluir o volume. A ativação e migração em produção exigem operação controlada.
 
+### Decisões por padrão: conteúdo interno
+
+Conteúdo público é barrado por marcador, não pela palavra em prosa: bolinhas 🟡 e 🔴, `INTERNO` ou `CONFIDENCIAL` em maiúsculas como palavra, ou `interno:` e `confidencial:` como rótulos. A inspeção normaliza homóglifos e remove caracteres invisíveis antes da comparação; não faz casefold do marcador em maiúsculas. Assim, "canal interno de comunicação" continua publicável. O corpus do MCP é percorrido no teste M5.19 r3; falhas editoriais anteriores constam no baseline exato até serem resolvidas em tarefa própria.
+
 ### Decisões por padrão: IP usado nos limites
 
 `TRUSTED_IP_SOURCE` aceita `x-real-ip`, `xff-hops` ou `socket`. Em `RAILWAY_ENVIRONMENT_NAME=production`, o padrão é `x-real-ip`, conforme o header de cliente documentado pelo Railway. Fora desse ambiente, o padrão mantém `xff-hops`; `TRUST_PROXY_HOPS` (1 por padrão) escolhe o salto contado da direita. `socket` ignora headers de IP. Valor ausente ou inválido na fonte escolhida usa o endereço do socket. Configure `TRUSTED_IP_SOURCE=socket` quando o serviço for acessado diretamente, sem proxy confiável. **`x-real-ip` e `xff-hops` só são seguros atrás de um proxy que sobrescreva o header escolhido**; se o cliente puder fornecê-lo, poderá trocar o IP usado na cota.
