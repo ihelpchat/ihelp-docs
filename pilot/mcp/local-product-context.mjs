@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { isAbsolute, join, relative, sep, dirname, parse } from 'node:path';
-import { redactSensitiveData } from './sensitive-data.mjs';
+import { redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 import { envCompatibility } from './env-compat.mjs';
 
 const run = promisify(execFile);
@@ -143,6 +143,7 @@ async function scan(source, topic, module) {
       let content;
       try { content = await handle.readFile('utf8'); } finally { await handle.close(); }
       if (content.includes('\0')) return null;
+      if (sensitiveKinds(content).internal) return null;
       const lines = content.split('\n');
       const pathScore = pathRelevance(path, terms, moduleTerms);
       let best = null;
