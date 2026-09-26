@@ -58,6 +58,7 @@ try {
     assert.equal(event.guideId, 'campanhas', 'guia vem da fonte resolvida pelo servidor');
     assert.equal(event.stepId, 'passo-1', 'passo vem da etapa resolvida pelo servidor');
     assert.equal(event.sessionId, 'fixture-session');
+    assert.equal(event.path, null, 'caminho não publicado não entra no evento');
     assert.ok(providerInputs.length > 0, 'a pergunta deve chamar o provider');
     assert.doesNotMatch(providerInputs.join('\n'), /FAKESECRET012345678901234567890/, 'page.path não chega ao provider');
     assert.doesNotMatch(await readFile(eventFile, 'utf8'), /FAKESECRET012345678901234567890/, 'page.path não chega ao JSONL');
@@ -69,6 +70,8 @@ try {
     assert.equal(published.status, 200);
     assert.match(providerInputs.at(-1), /A pessoa está vendo a página/);
     assert.ok(providerInputs.at(-1).includes(guide), 'caminho publicado chega ao prompt');
+    const publishedEvent = JSON.parse((await readFile(eventFile, 'utf8')).trim().split('\n').at(-1));
+    assert.equal(publishedEvent.path, guide, 'caminho publicado chega ao evento');
 
     const feedback = await fetch(`http://127.0.0.1:${httpServer.address().port}/feedback`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
