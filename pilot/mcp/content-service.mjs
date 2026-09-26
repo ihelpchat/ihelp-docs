@@ -7,6 +7,7 @@ import { isExactCatalogAction } from './product-actions.mjs';
 import { conversationalIssues } from './conversational-contract.mjs';
 import { stringify } from 'yaml';
 import { articleFields } from './article-fields.mjs';
+import { guideSchema } from '../architecture/conversation-v1.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -55,6 +56,7 @@ export function validateArticle(article) {
   if (!article.description || article.description.trim().length < 40) issues.push('description precisa ter ao menos 40 caracteres');
   if (!SOURCES.has(article.source)) issues.push('source inválido');
   if (!CONTENT_TYPES.has(article.contentType)) issues.push('contentType inválido');
+  if (article.guide !== undefined && !guideSchema.safeParse(article.guide).success) issues.push('guide inválido');
   if (!article.path || !SAFE_PATH.test(article.path) || article.path.includes('..')) issues.push('path inválido');
   if (!article.body || article.body.trim().split(/\s+/).filter(Boolean).length < 60) issues.push('body precisa ter ao menos 60 palavras');
   if (/<script\b/i.test(article.body ?? '')) issues.push('scripts não são permitidos');
