@@ -155,7 +155,6 @@ test('referência completa aceita curl, fetch e JSON de resposta com fatos', () 
 });
 
 for (const [label, mutate, reason] of [
-  ['source diferente de api', (a) => ({ ...a, source: 'produto', body: a.body.replace('campo name', 'campo segredoInterno') }), /campo inexistente: segredoInterno/i],
   ['versão inventada', (a) => ({ ...a, endpoint: a.endpoint.replace('/v2/', '/v9/') }), /rota divergente/i],
   ['rota em prosa', (a) => ({ ...a, body: `${a.body}\nRota /api/v9/contacts.` }), /rota divergente.*v9/i],
   ['rota em fetch', (a) => ({ ...a, body: a.body.replace('fetch("/api/v2/', 'fetch("/api/v9/') }), /rota divergente.*v9/i],
@@ -170,9 +169,30 @@ for (const [label, mutate, reason] of [
   if (reason) assert.match(issues.join(' '), reason);
 });
 
-test('path api passa pelo gate mesmo com source e contentType diferentes', () => {
+test('pedido api valida source produto com uma mudança no módulo', () => {
+  const changed = { ...verifiedArticle, source: 'produto', body: verifiedArticle.body.replace('campo name', 'campo segredoInterno') };
+  assert.equal(validateGroundedOutput(changed, { ...verifiedContext, module: 'docs' }, []), true);
   const issues = [];
-  const changed = { ...verifiedArticle, path: 'api/contatos/referencia', source: 'produto', contentType: 'faq', body: verifiedArticle.body.replace('campo name', 'campo segredoInterno') };
   assert.equal(validateGroundedOutput(changed, verifiedContext, [], issues), false);
   assert.match(issues.join(' '), /campo inexistente: segredoInterno/i);
+});
+
+test('path api passa pelo gate mesmo com source e contentType diferentes', () => {
+  const issues = [];
+  const base = { ...verifiedArticle, source: 'produto', contentType: 'faq', path: 'docs/contatos/referencia', body: verifiedArticle.body.replace('campo name', 'campo segredoInterno') };
+  const docsContext = { ...verifiedContext, module: 'docs' };
+  assert.equal(validateGroundedOutput(base, docsContext, []), true);
+  assert.equal(validateGroundedOutput({ ...base, path: 'api/contatos/referencia' }, docsContext, [], issues), false);
+  assert.match(issues.join(' '), /campo inexistente: segredoInterno/i);
+});
+
+test('descrição e prosa de resposta sem DTO também passam pelo gate', () => {
+  for (const changed of [
+    { ...verifiedArticle, description: 'Use /api/v9/contacts para consultar.' },
+    { ...article, body: `${article.body}\n\n## Resposta\nO campo page indica a página.` },
+  ]) {
+    const issues = [];
+    assert.equal(validateGroundedOutput(changed, changed.description ? verifiedContext : context, [], issues), false);
+    assert.match(issues.join(' '), changed.description ? /rota divergente.*v9/i : /campos de resposta não verificáveis.*page/i);
+  }
 });

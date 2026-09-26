@@ -20,27 +20,76 @@ const GROUNDING_SCHEMA = { type: 'array', items: {
   properties: { text: { type: 'string' }, citations: { type: 'array', items: CITATION_SCHEMA } },
 } };
 
-const publicRoute = (route) => String(route ?? '').replace(/^\/api\/v\d+/iu, '').toLowerCase();
-const routeShape = (route) => publicRoute(route).replace(/\{[^}]+\}/gu, '{}');
+const routeShape = (route) => String(route ?? '').toLowerCase().replace(/\{[^}]+\}/gu, '{}');
+const relativeRoute = (route) => String(route ?? '').replace(/^\/api\/v\d+/iu, '').toLowerCase();
+const keysOf = (node) => Array.isArray(node) ? node.flatMap(keysOf)
+  : node && typeof node === 'object' ? Object.entries(node).flatMap(([key, value]) => [key, ...keysOf(value)]) : [];
 function apiIssues(article, context) {
-  if (article.source !== 'api') return [];
+  if (context.module !== 'api' && article.source !== 'api' && !/^api\//u.test(article.path ?? '')) return [];
   if (!context.endpoints?.length) return ['endpoints estruturados ausentes'];
-  const endpoint = context.endpoints.find((item) => item.verb === article.method && routeShape(item.route) === routeShape(article.endpoint));
+  const endpoint = context.endpoints.find((item) => item.verb === article.method &&
+    (routeShape(item.route) === routeShape(article.endpoint) ||
+      (!/^\/api\/v\d+/iu.test(article.endpoint ?? '') && routeShape(relativeRoute(item.route)) === routeShape(article.endpoint))));
   if (!endpoint) return ['rota divergente: method/endpoint sem fato extraído'];
   if (endpoint.public !== undefined && !endpoint.public) return ['endpoint não público: confirmar'];
   const names = new Set(endpoint.parameters?.map(({ name }) => name.toLowerCase()) ?? []);
   const aliases = new Map();
-  const claimedParts = publicRoute(article.endpoint).split('/');
-  const actualParts = publicRoute(endpoint.route).split('/');
+  const claimedParts = relativeRoute(article.endpoint).split('/');
+  const actualParts = relativeRoute(endpoint.route).split('/');
   for (let index = 0; index < claimedParts.length; index++) if (/^\{\w+\}$/u.test(claimedParts[index]) && /^\{\w+\}$/u.test(actualParts[index])) {
     const alias = claimedParts[index].slice(1, -1).toLowerCase();
     names.add(alias);
     aliases.set(alias, actualParts[index].slice(1, -1).toLowerCase());
   }
-  const body = article.body ?? '';
-  const cited = [...body.matchAll(/<Param\s+[^>]*name=["']([^"']+)["']/gu)].map((match) => match[1]);
-  for (const match of body.matchAll(/[?&]([A-Za-z][\w]*)=/gu)) cited.push(match[1]);
-  for (const name of cited) if (!names.has(name.toLowerCase()) && !(endpoint.responseFields ?? []).some((field) => field.name.toLowerCase() === name.toLowerCase())) return [`parâmetro inexistente: ${name}`];
+  const body = [article.title, article.description, article.body].filter(Boolean).join('\n');
+  const requestNames = new Set([...names, ...aliases.keys()]);
+  const responseNames = new Set((endpoint.responseFields ?? []).map(({ name }) => name.toLowerCase()));
+  const general = new Set(['get', 'post', 'put', 'patch', 'delete', 'authorization', 'bearer', 'content-type', 'application/json', ...endpoint.route.split('/').map((part) => part.toLowerCase())]);
+  const sections = body.split(/(?=^##\s+)/gmu);
+  for (const section of sections) {
+    const response = /^##\s*(?:resposta|response)\b/iu.test(section);
+    const allowed = response ? responseNames : requestNames;
+    const check = (name, kind) => {
+      const value = name.toLowerCase();
+      if (allowed.has(value) || general.has(value)) return null;
+      if (response && endpoint.responseFields === null) return `campos de resposta não verificáveis: ${name}`;
+      return `${kind}: ${name}`;
+    };
+    const routeText = section.replace(/https?:\/\/[^/\s"'`]+/gu, '').replace(/<\/?[A-Za-z][^>]*>/gu, '');
+    for (const match of routeText.matchAll(/(?<![\w/])\/[A-Za-z][\w-]*(?:\/(?:[A-Za-z0-9_{}:-]+))*/gu)) {
+      const route = match[0];
+      if (route === '/json' && routeText.slice(Math.max(0, match.index - 11), match.index).endsWith('application')) continue;
+      if (/^\/(?:docs|blog|tutoriais)\//u.test(route) && /\]\([^)]*$/u.test(routeText.slice(0, match.index))) continue;
+      if (routeShape(route) !== routeShape(endpoint.route) &&
+        !(routeShape(route) === routeShape(relativeRoute(endpoint.route)) && !/^\/api\/v\d+/iu.test(route))) return [`rota divergente no artigo: ${route}`];
+    }
+    for (const match of section.matchAll(/[?&]([A-Za-z][\w]*)=/gu)) {
+      const issue = check(match[1], response ? 'campo inexistente' : 'parâmetro inexistente');
+      if (issue) return [issue];
+    }
+    for (const match of section.matchAll(/\b(?:campo|parâmetro|propriedade)\s+([A-Za-z][\w]*)/giu)) {
+      const issue = check(match[1], response ? 'campo inexistente' : 'parâmetro inexistente');
+      if (issue) return [issue];
+    }
+    for (const match of section.matchAll(/<Param\s+[^>]*name=["']([^"']+)["']/gu)) {
+      const issue = check(match[1], response ? 'campo inexistente' : 'parâmetro inexistente');
+      if (issue) return [issue];
+    }
+    for (const match of section.matchAll(/`([^`\n]+)`(?!`)/gu)) {
+      const value = match[1];
+      if (!/^[A-Za-z][\w-]*$/u.test(value)) continue;
+      const issue = check(value, response ? 'campo inexistente' : 'parâmetro inexistente');
+      if (issue) return [issue];
+    }
+    for (const match of section.matchAll(/```json\s*([\s\S]*?)```/gu)) {
+      let value;
+      try { value = JSON.parse(match[1]); } catch { return ['JSON de resposta inválido']; }
+      for (const key of keysOf(value)) {
+        const issue = check(key, response ? 'campo inexistente' : 'parâmetro inexistente');
+        if (issue) return [issue];
+      }
+    }
+  }
   for (const match of body.matchAll(/<Param\s+([^>]+)>/gu)) {
     const name = match[1].match(/name=["']([^"']+)["']/u)?.[1];
     const type = match[1].match(/type=["']([^"']+)["']/u)?.[1];
@@ -50,16 +99,7 @@ function apiIssues(article, context) {
   }
   for (const match of body.matchAll(/^##\s+`?(GET|POST|PUT|PATCH|DELETE)`?\s*$/gmu)) if (match[1] !== endpoint.verb) return ['method divergente no artigo'];
   for (const match of body.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(?:https?:\/\/[^/\s]+)?(\/api\/v\d+\/[^\s`"']+|\/[a-z][\w/-]*(?:\{[^}]+\})?)/gu)) {
-    if (match[1] !== endpoint.verb || routeShape(match[2].split('?')[0]) !== routeShape(endpoint.route)) return ['rota divergente no artigo'];
-  }
-  if (endpoint.responseFields === null && /```json\b/iu.test(body)) return ['campos de resposta não verificáveis'];
-  for (const match of body.matchAll(/```json\s*([\s\S]*?)```/gu)) {
-    let value;
-    try { value = JSON.parse(match[1]); } catch { return ['JSON de resposta inválido']; }
-    const allowed = new Set([...(endpoint.responseFields ?? []), ...(endpoint.parameters ?? [])].map(({ name }) => name.toLowerCase()));
-    function keysOf(node) { if (Array.isArray(node)) return node.flatMap(keysOf); if (!node || typeof node !== 'object') return [];
-      return Object.entries(node).flatMap(([key, child]) => [key, ...keysOf(child)]); }
-    for (const key of keysOf(value)) if (!allowed.has(key.toLowerCase())) return [`campo inexistente: ${key}`];
+    if (match[1] !== endpoint.verb || (routeShape(match[2].split('?')[0]) !== routeShape(endpoint.route) && routeShape(match[2].split('?')[0]) !== routeShape(relativeRoute(endpoint.route)))) return ['rota divergente no artigo'];
   }
   return [];
 }
@@ -328,7 +368,7 @@ export async function generateContentPackage(root, request, options = {}) {
   if (request.module === 'api' && !parsed.articles.length) return apiPending('nenhuma página de API gerada');
   const groundingIssues = [];
   if (!validateGroundedOutput(parsed, productContext, ['summary']) || parsed.articles.some((article) =>
-    !validateGroundedOutput(article, productContext, ['description', 'body', 'assistantOverview', 'assistantSuggestions'], groundingIssues))) {
+    !validateGroundedOutput(article, { ...productContext, module: request.module }, ['description', 'body', 'assistantOverview', 'assistantSuggestions'], groundingIssues))) {
     return groundingIssues.length ? apiPending(groundingIssues.join('; ')) : evidencePending();
   }
   const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => ({
