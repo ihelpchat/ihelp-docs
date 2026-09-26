@@ -125,6 +125,8 @@ try {
       const root = page.locator('.ih-ai-screen');
       await root.waitFor();
       await page.locator('.ih-ai-thread').waitFor();
+      const expected = { normal: '.ih-ai-sources', guia: '.ih-ai-steps li', fallback: '.ih-ai-human-action', erro: '.ih-ai-error' };
+      assert.ok(await root.locator(expected[state]).first().isVisible(), `${state}/${viewport}: estado não foi renderizado`);
       const targets = await page.locator('.ih-ai-screen a, .ih-ai-screen button, .ih-ai-screen textarea, .ih-ai-screen summary').evaluateAll((els) => els.flatMap((el, i) => el.getClientRects().length && !el.matches(':disabled') ? [i] : []));
       for (const [mode, target] of [['normal', null], ...targets.map((i) => ['interactive', i])]) {
         if (target !== null) {

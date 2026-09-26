@@ -3945,6 +3945,7 @@ button {
   flex: 1;
   min-width: 0;
   max-height: 160px;
+  min-height: 44px;
   padding: 6px 0;
   color: var(--ih-ink);
   font: inherit;
@@ -4138,6 +4139,11 @@ button {
   min-width: 0;
 }
 
+.ih-ai-scopes .ih-chip {
+  min-height: 44px;
+  font-size: 16px;
+}
+
 .ih-ai-new {
   display: flex;
   align-items: center;
@@ -4262,6 +4268,16 @@ button {
   color: var(--ih-slate-500);
   font-size: 16px;
   line-height: 1.6;
+}
+
+.ih-ai-panel-list a > span:not(.ih-ai-panel-head) {
+  font-size: 16px;
+}
+
+.ih-ai-screen .ih-pill,
+.ih-ai-drawer .ih-pill,
+.ih-ai-screen .ih-tech-mark[data-compact] {
+  font-size: 16px;
 }
 
 .ih-ai-panel-list small {
