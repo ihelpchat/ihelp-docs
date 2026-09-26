@@ -90,6 +90,10 @@ const assertStep = (reply, guideId) => {
 try {
   for (const guideId of guideIds) {
     const initial = await post('Começar', undefined, startState(guideId));
+    if (!initial.guide) {
+      try { await post('Concluí este passo', initial); } catch {}
+      assert.equal(providerCalls, 0, `${guideId}: clique sem guide caiu no provider`);
+    }
     assert.equal(initial.guide.stepId, 'inicio');
     assert.notEqual(initial.resolution, 'complete', `${guideId}: início não conclui o guia`);
     const queue = [{ reply: initial, depth: 0 }];
