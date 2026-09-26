@@ -138,6 +138,10 @@ export type AssistantReplyV1 = {
   choiceId?: string;
   stateToken?: string;
 };
+  guideChoices?: Array<{
+  id: string;
+  label: string;
+}>;
   actions?: Array<{
   id: "importar-contatos" | "abrir-robos" | "abrir-usuarios" | "abrir-canais" | "abrir-campanhas" | "abrir-departamentos" | "abrir-atendimento" | "abrir-crm";
   label?: string;

@@ -49,6 +49,7 @@ export type AssistantReply = {
   resolution: AssistantResolution;
   found: boolean;
   guide?: AssistantGuideState;
+  guideChoices?: { id: string; label: string }[];
   escalation?: AssistantEscalation;
 };
 
@@ -226,7 +227,7 @@ function safeGuide(value: unknown): AssistantGuideState | undefined {
 export function buildAssistantRequest(question: string, priorReply: AssistantReply | undefined, options: Omit<AssistantRequest, 'question'>): AssistantRequest {
   const guide = options.guide ?? (priorReply?.resolution === 'in_progress' ? priorReply.guide : undefined);
   const choice = guide?.pendingChoiceId && priorReply?.suggestions.includes(question)
-    ? question.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim().replace(/\s+/g, '-') : undefined;
+    ? priorReply.guideChoices?.find((item) => item.label === question)?.id : undefined;
   return { ...options, question, ...(guide ? { guide: { ...guide, ...(choice ? { choiceId: choice } : {}) } } : {}) };
 }
 
@@ -242,6 +243,10 @@ export function normalizeReply(data: unknown): AssistantReply {
     : raw.found === false ? 'not_found' : 'complete';
   const escalation = safeEscalation(raw.escalation);
   const guide = safeGuide(raw.guide);
+  const guideChoices = Array.isArray(raw.guideChoices) ? raw.guideChoices.slice(0, 6).flatMap((item) => {
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !/^[a-z0-9][a-z0-9-]{2,63}$/.test(item.id) || typeof item.label !== 'string' || !item.label.trim()) return [];
+    return [{ id: item.id, label: item.label.trim().slice(0, 100) }];
+  }) : undefined;
   return {
     answer,
     sections: Array.isArray(raw.sections)
@@ -264,6 +269,7 @@ export function normalizeReply(data: unknown): AssistantReply {
     resolution,
     found: resolution !== 'not_found' && raw.found !== false,
     ...(guide ? { guide } : {}),
+    ...(guideChoices ? { guideChoices } : {}),
     ...(escalation ? { escalation } : {}),
   };
 }

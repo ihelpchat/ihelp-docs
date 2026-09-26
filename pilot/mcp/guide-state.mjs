@@ -55,6 +55,7 @@ function reply(source, step, answer, options = {}) {
     suggestions: step.choices?.map((choice) => choice.label)
       ?? (guideLastStep(source.guide, step) ? ['Deu certo? Sim', 'Deu certo? Não', 'Preciso de ajuda'] : ['Concluí este passo', 'Preciso de ajuda']),
     resolution: 'in_progress', found: true, guide: state,
+    ...(step.choices?.length ? { guideChoices: step.choices.map(({ id, label }) => ({ id, label })) } : {}),
     ...options,
   };
 }

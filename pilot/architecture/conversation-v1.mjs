@@ -120,6 +120,7 @@ export const assistantReplySchema = z.object({
     stepId: id.optional(),
   }).strict().optional(),
   guide: stateSchema.optional(),
+  guideChoices: z.array(choiceSchema.pick({ id: true, label: true })).max(6).optional(),
   actions: z.array(productActionSchema).max(8).optional(),
   model: z.string().optional(),
 }).strict();
