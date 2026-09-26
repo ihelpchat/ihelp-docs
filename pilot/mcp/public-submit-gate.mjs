@@ -5,7 +5,7 @@ import { validateCanonicalGuide } from '../lib/canonical-guides.mjs';
 import { validatePublicArtifact } from '../lib/guide-package.mjs';
 import approvedMap from '../product-map/approved.json' with { type: 'json' };
 import { sensitiveKinds } from './sensitive-data.mjs';
-import { internalLinkIssues, parseMdx, plainText, visit } from './editorial-standard.mjs';
+import { contentRoutes, internalLinkIssues, parseMdx, plainText, publishedContent, visit } from './editorial-standard.mjs';
 import publishedBaseline from './public-submit-baseline.json' with { type: 'json' };
 
 // A mesma lista protege texto submetido ao MCP e passos dos guias submetidos.
@@ -68,6 +68,11 @@ function checkJargon(text) {
 }
 
 export async function assertPublicSubmit(root, items, deletes = [], { ignoreBaseline = false } = {}) {
+  const published = await publishedContent(root);
+  const after = new Map(published);
+  for (const path of deletes) after.delete(path);
+  for (const { article, rendered } of items) after.set(article.path, rendered);
+  const routesAfter = contentRoutes(after.keys());
   for (const { article, rendered } of items) {
     const kinds = sensitiveKinds(rendered);
     if (kinds.credential || kinds.personal || kinds.internal || kinds.control) reject('fonte interna ou dado privado');
@@ -92,7 +97,7 @@ export async function assertPublicSubmit(root, items, deletes = [], { ignoreBase
     if (!unchangedBaseline) {
       for (const text of [article.title, article.description, article.body, ...(article.guide?.steps ?? []).map(({ text }) => text)]) checkInterfaceLabels(text, article.path);
     }
-    const brokenLinks = await internalLinkIssues(root, article.path, article.body);
+    const brokenLinks = await internalLinkIssues(root, article.path, article.body, routesAfter, after);
     if (brokenLinks.length) reject(brokenLinks[0]);
     for (const [raw] of article.body.matchAll(/https?:\/\/[^\s<)"']+/giu)) {
       let url;
@@ -121,6 +126,19 @@ export async function assertPublicSubmit(root, items, deletes = [], { ignoreBase
     }
   }
   for (const path of deletes) if (sensitiveKinds(path).internal) reject('fonte interna');
+  const changedExisting = items.some(({ article, rendered }) => published.has(article.path) && published.get(article.path) !== rendered);
+  if (deletes.length || changedExisting) {
+    const routesBefore = contentRoutes(published.keys());
+    const packagePaths = new Set([...items.map(({ article }) => article.path), ...deletes]);
+    const incoming = [];
+    for (const [path, raw] of published) {
+      if (packagePaths.has(path)) continue;
+      const before = new Set(await internalLinkIssues(root, path, raw, routesBefore, published));
+      const issues = await internalLinkIssues(root, path, raw, routesAfter, after);
+      for (const issue of issues) if (!before.has(issue)) incoming.push(`${path}: ${issue}`);
+    }
+    if (incoming.length) reject(`links de entrada quebrados: ${incoming.join('; ')}`);
+  }
   const reviewRequired = items.some(({ article }) => Boolean(article.guide));
   return reviewRequired ? { reviewRequired: true, proofStatus: 'manual_required' } : {};
 }

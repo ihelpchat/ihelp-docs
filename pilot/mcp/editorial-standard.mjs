@@ -241,7 +241,7 @@ export async function auditContent(root) {
   return { total: files.length, valid: files.length - articles.length, invalid: articles.length, articles };
 }
 
-function contentRoutes(paths) {
+export function contentRoutes(paths) {
   const routes = new Set(['/', ...approvedMap.manifest.routes.map(({ path }) => path)]);
   for (const path of paths) {
     routes.add(`/${path}`);
@@ -250,8 +250,23 @@ function contentRoutes(paths) {
   return routes;
 }
 
+export async function publishedContent(root) {
+  const contentRoot = join(root, 'content/docs');
+  const publishedRoot = new URL('../content/docs/', import.meta.url).pathname.replace(/\/$/u, '');
+  const pages = new Map();
+  for (const directory of new Set([publishedRoot, contentRoot])) {
+    for (const file of await walk(directory).catch((error) => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    })) {
+      pages.set(relative(directory, file).replace(/\.mdx$/u, ''), await readFile(file, 'utf8'));
+    }
+  }
+  return pages;
+}
+
 // Usado pelo audit do conteúdo publicado e pelo gate antes de qualquer escrita.
-export async function internalLinkIssues(root, path, raw, routes) {
+export async function internalLinkIssues(root, path, raw, routes, content) {
   let tree;
   try { tree = parseMdx(raw); } catch { return ['MDX inválido']; }
   const { targets, issues } = mdxTargets(tree);
@@ -287,7 +302,7 @@ export async function internalLinkIssues(root, path, raw, routes) {
       if (pathname !== `/${path}`) {
         targetRaw = '';
         for (const suffix of [`${pathname.slice(1)}.mdx`, `${pathname.slice(1)}/index.mdx`]) {
-          targetRaw = await readFile(join(root, 'content/docs', suffix), 'utf8').catch(async () =>
+          targetRaw = content?.get(suffix.replace(/\.mdx$/u, '')) ?? await readFile(join(root, 'content/docs', suffix), 'utf8').catch(async () =>
             readFile(new URL(`../content/docs/${suffix}`, import.meta.url), 'utf8').catch(() => ''));
           if (targetRaw) break;
         }
