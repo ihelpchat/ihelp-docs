@@ -16,6 +16,7 @@ const versionOf = (output) => output.manifest.contentSha256.slice(0, 12);
 const serialized = (value) => `${canonical(value)}\n`;
 
 const allowedCharacters = /^[A-Za-zÀÁÂÃÇÉÊÍÓÔÕÚÜàáâãçéêíóôõúü0-9 .,;:!?()\[\]{}'"“”‘’…•●○◉—–\-_/\\@#%&+=*<>|$]+$/u;
+export const routeSentenceEndPunctuation = /[.,;:!?)[\]}"'`“”‘’…]+$/u;
 
 function validatePublicArtifact(artifact, name) {
   function visit(value, location, key) {
@@ -30,7 +31,7 @@ function validatePublicArtifact(artifact, name) {
       if (key !== 'contentSha256' && (kinds.credential || kinds.personal || kinds.internal || kinds.control)) throw new Error(`${name}.${location}: dado privado ou interno`);
       for (const match of value.matchAll(/\/\S*/gu)) {
         const token = match[0];
-        const route = token.replace(/[.,;:!?)[\]}"'`“”‘’]+$/u, '');
+        const route = token.replace(routeSentenceEndPunctuation, '');
         if (token.includes('?') || token.includes('#') || !publicRoutes.has(route)) throw new Error(`${name}.${location}: rota fora do catálogo: ${token}`);
       }
     } else if (Array.isArray(value)) {
