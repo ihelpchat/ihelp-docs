@@ -598,7 +598,8 @@
           "enum": [
             "complete",
             "partial",
-            "not_found"
+            "not_found",
+            "in_progress"
           ]
         },
         "found": {
@@ -823,6 +824,23 @@
                   "reported_stuck"
                 ]
               }
+            },
+            "guideId": {
+              "type": "string",
+              "enum": [
+                "guia-importar-contatos",
+                "robo-de-atendimento",
+                "usuario-acesso",
+                "reconectar-canal-qr",
+                "campanhas",
+                "permissoes-departamentos",
+                "arquivos",
+                "crm"
+              ]
+            },
+            "stepId": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
             }
           },
           "required": [

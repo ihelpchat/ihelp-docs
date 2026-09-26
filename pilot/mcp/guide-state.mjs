@@ -50,10 +50,16 @@ function reply(source, step, answer, options = {}) {
     answer,
     steps: [{ text: step.text }],
     sources: [{ title: source.title, path: source.path }],
-    suggestions: step.choices?.map((choice) => choice.label) ?? ['Concluí este passo', 'Preciso de ajuda'],
-    resolution: 'complete', found: true, guide: state,
+    suggestions: step.choices?.map((choice) => choice.label)
+      ?? (guideLastStep(source.guide, step) ? ['Deu certo? Sim', 'Deu certo? Não', 'Preciso de ajuda'] : ['Concluí este passo', 'Preciso de ajuda']),
+    resolution: 'in_progress', found: true, guide: state,
     ...options,
   };
+}
+
+function guideLastStep(guide, step) {
+  return guide.steps.some((candidate) => candidate.choices?.some((choice) => choice.nextStepId === step.stepId))
+    || !guide.steps[guide.steps.findIndex((candidate) => candidate.stepId === step.stepId) + 1];
 }
 
 export async function answerGuide(root, question, state, options = {}) {
@@ -62,11 +68,21 @@ export async function answerGuide(root, question, state, options = {}) {
   const context = sanitizeWidgetContext(options.widgetContext);
   const guide = source?.guide;
   const current = guide?.steps.find((step) => step.stepId === state.stepId);
+  if (command === 'recomecar') {
+    if (!source) return { answer: 'Este guia não está mais disponível. Fale com uma pessoa.', steps: [],
+      suggestions: ['Falar com uma pessoa'], resolution: 'not_found', found: false };
+    const initial = guide.steps.find((step) => step.stepId === guide.initialStepId);
+    return reply(source, initial, 'Vamos recomeçar pelo primeiro passo.');
+  }
   if (human(command) || failure(command)) {
     const subject = state.guideId.replaceAll('-', ' ');
     const diagnosis = diagnoseState(subject, context);
     const escalation = escalationFor(subject, diagnosis, context, []);
     escalation.attempts = failure(command) ? ['documented_guide', 'reported_stuck'] : ['documented_guide'];
+    if (source && current) {
+      escalation.guideId = guide.guideId;
+      escalation.stepId = current.stepId;
+    }
     const answer = 'Vou passar seu caso a uma pessoa com o guia e o passo em que você parou.';
     if (!source || !current || state.version !== guide.version || state.mode !== guide.mode) {
       return { answer, steps: [], suggestions: [], resolution: 'partial', found: false, diagnosis, escalation };
@@ -110,7 +126,7 @@ export async function answerGuide(root, question, state, options = {}) {
   const next = branched ? null : guide.steps[index + 1];
   if (concluding) {
     if (next) return safe;
-    return reply(source, current, 'Você concluiu o guia.', { steps: [], suggestions: [] });
+    return reply(source, current, 'Você concluiu o guia.', { steps: [], suggestions: [], resolution: 'complete' });
   }
   if (!next || !advancing) {
     return reply(source, current, next ? 'Este é o passo atual.' : 'Você chegou ao último passo. Deu certo?');

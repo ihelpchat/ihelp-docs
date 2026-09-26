@@ -144,7 +144,7 @@ export const httpServer = createServer(async (request, response) => {
           origin: body.origin === 'app' ? 'app' : 'faq',
           ...resolvedStep,
           durationMs: Math.min(now - startedAt, 300_000),
-          result: ['complete', 'partial', 'not_found'].includes(result.resolution) ? result.resolution : 'not_found',
+          result: ['complete', 'partial', 'not_found', 'in_progress'].includes(result.resolution) ? result.resolution : 'not_found',
           path: pagePath ?? '/assistente',
         }, { now });
       } catch {
