@@ -81,6 +81,10 @@ try {
     'pedido de pessoa funciona sem provider e antes da triagem');
   const cida = await retrieveContext(root, 'NÃO é campanha, quero fazer recado fora do horário no whatsapp');
   assert.notEqual(cida[0]?.path, '/docs/guias/campanhas', 'sem guia não prioriza campanha negada');
+  const productionCida = await retrieveContext(new URL('../', import.meta.url).pathname,
+    'NÃO é campanha, quero fazer recado fora do horário no whatsapp');
+  assert.ok(productionCida.some((source) => source.path === '/docs/sobre-o-sistema/configuracoes/departamentos'),
+    'sem guia inclui a fonte publicada do recado fora do horário');
   const models = [];
   const splitClient = { responses: { create: async (payload) => {
     models.push(payload.model);
