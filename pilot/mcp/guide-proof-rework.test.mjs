@@ -107,7 +107,9 @@ try {
   const report = await run('journey');
   const recado = { guide: recadoGuide };
   const recadoSteps = report.steps.filter(step => step.guideId === recadoGuide.guideId);
-  const verified = { ...report, mode: 'staging', appSha: 'a'.repeat(40), steps: recadoSteps };
+  // A fixture emite o mesmo formato do runner; só o ambiente, SHA e escopo mudam.
+  const { outcome: _fixtureOutcome, ...emitted } = report;
+  const verified = { ...emitted, mode: 'staging', appSha: 'a'.repeat(40), steps: recadoSteps };
   const evaluate = (changed) => proofOutcome(changed, { guides: [recado], appSha: verified.appSha });
   assert.deepEqual(evaluate(verified), { ok: true, pending: [] }, 'blocked no perfil negado é prova correta');
   const failed = (changed, reason) => {
@@ -119,6 +121,10 @@ try {
   const authorized = recadoSteps.find(step => step.role === 'authorized' && step.status === 'passed');
   const denied = recadoSteps.find(step => step.role === 'denied' && step.status === 'blocked');
   assert.ok(authorized && denied, 'fixture deve emitir ambos os perfis');
+  failed({ ...verified, cleanupPending: [{ guideId: recadoGuide.guideId, reason: 'restauração não persistiu' }] }, 'cleanupPending');
+  failed({ ...verified, warning: 'limpeza pendente' }, 'warning');
+  failed({ ...verified, foo: 'novo problema do runner' }, 'foo');
+  failed({ ...verified, steps: [...recadoSteps, { ...authorized, status: 'manual_required' }] }, 'manual_required');
   failed({ ...verified, steps: recadoSteps.map(step => step === authorized ? { ...step, status: 'manual_required' } : step) }, `${authorized.guideId}/${authorized.stepId}`);
   failed({ ...verified, steps: recadoSteps.filter(step => step !== authorized) }, `${authorized.guideId}/${authorized.stepId}`);
   failed({ ...verified, steps: recadoSteps.map(step => step === denied ? { ...step, status: 'passed' } : step) }, `${denied.guideId}/${denied.stepId}`);
