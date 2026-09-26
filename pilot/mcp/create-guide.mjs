@@ -8,7 +8,7 @@ import { readArticle } from './editorial-standard.mjs';
 import { submitContentPackage, validateArticle, isSafeRequestedBy } from './content-service.mjs';
 import { containsSensitiveData, redactSensitiveData } from './sensitive-data.mjs';
 
-const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const digest = (value) => createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex');
 const storeRoot = (root) => join(process.env.MCP_STATE_DIR ?? root, '.guide-plans');
 const sourceDigest = (context) => digest({ code: context.code?.map(({ repository, ref, available }) => ({ repository, ref, available })), matches: context.matches?.map(({ repository, path, line, sha, excerpt }) => ({ repository, path, line, sha, excerpt })) });
 const safeId = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -106,14 +106,16 @@ export async function createGuide(root, input, options = {}) {
     const context = await getContext(request);
     const result = await plan(root, request, { productContext: context });
     const id = randomBytes(32).toString('hex');
-    const stored = { actor: input.requestedBy, request, plan: result, source: sourceDigest(context), guide: await existing(root, input.guideId), status: 'planned', expiresAt: now + ttl };
+    const questionIds = (result.questions ?? []).map((question, index) => digest({ index, question }).slice(0, 16));
+    const stored = { actor: input.requestedBy, requestHash: digest(request), planHash: digest(result), questionIds,
+      source: sourceDigest(context), guideHash: digest(await existing(root, input.guideId)), status: 'planned', expiresAt: now + ttl };
     await save(await planFile(root, id), stored, true);
-    return { status: 'planned', planId: id, questions: result.questions ?? [], guidance: result.guidance ?? result.summary ?? '' };
+    return { status: 'planned', planId: id, questions: result.questions ?? [], questionIds, plan: result, guidance: result.guidance ?? result.summary ?? '' };
   }
 
   if (!safeId(input.planId)) throw new Error('planId inválido');
   if (expired.has(input.planId)) throw new Error('plano expirado, refaça');
-  if (input.guideId !== undefined || input.topic !== undefined || input.module !== undefined || input.description !== undefined || input.details !== undefined) throw new Error('Retomada aceita apenas planId e answers');
+  const request = { guideId: input.guideId, topic: input.topic, module: input.module, description: input.description, details: input.details ?? '' };
   const file = await planFile(root, input.planId);
   return locked(file, async () => {
     const stored = JSON.parse(await readFile(file, 'utf8').catch((error) => {
@@ -125,29 +127,32 @@ export async function createGuide(root, input, options = {}) {
       throw new Error('plano expirado, refaça');
     }
     if (stored.actor !== input.requestedBy) throw new Error('Plano pertence a outro ator');
-    if (!Array.isArray(input.answers) || input.answers.length !== stored.plan.questions?.length
+    if (digest(request) !== stored.requestHash || digest(input.plan) !== stored.planHash
+      || digest(input.questions) !== digest(input.plan?.questions)
+      || digest(input.questionIds) !== digest(stored.questionIds)) throw new Error('plano não confere, refaça');
+    if (!Array.isArray(input.answers) || input.answers.length !== input.plan.questions?.length
       || input.answers.some((answer) => typeof answer !== 'string' || !answer.trim() || answer.length > 2000)) throw new Error('Responda todas as perguntas do plano');
     const answerHash = digest(input.answers.map((answer) => answer.trim()));
     const answers = input.answers.map((answer) => redactSensitiveData(answer.trim()));
     if (stored.answerHash && stored.answerHash !== answerHash) throw new Error('Plano já retomado com respostas diferentes');
-    const context = await getContext(stored.request);
+    const context = await getContext(request);
     if (sourceDigest(context) !== stored.source) throw new Error('As fontes mudaram; refaça o plano');
-    const current = await existing(root, stored.request.guideId);
-    if (digest(current) !== digest(stored.guide)) throw new Error('O guia de origem mudou; refaça o plano');
+    const current = await existing(root, request.guideId);
+    if (digest(current) !== stored.guideHash) throw new Error('O guia de origem mudou; refaça o plano');
     if (stored.status === 'draft') return stored.result;
     stored.answerHash = answerHash;
     await save(file, stored);
-    const request = { ...stored.request, details: redactSensitiveData(`${stored.request.details}\n${stored.plan.questions.map((question, i) => `${question}: ${answers[i]}`).join('\n')}`) };
-    const packageResult = await generate(root, request, { plan: { ...stored.plan, status: 'ready' }, productContext: context, existingGuide: current });
+    const generationRequest = { ...request, details: redactSensitiveData(`${request.details}\n${input.plan.questions.map((question, i) => `${question}: ${answers[i]}`).join('\n')}`) };
+    const packageResult = await generate(root, generationRequest, { plan: { ...input.plan, status: 'ready' }, productContext: context, existingGuide: current });
     if (packageResult.status !== 'ready' || packageResult.articles?.length !== 1) return { status: packageResult.status, questions: packageResult.questions ?? [] };
     const article = packageResult.articles[0];
-    if (article.contentType !== 'guia' || article.guide?.guideId !== stored.request.guideId) throw new Error('Gerador não devolveu guia canônico');
+    if (article.contentType !== 'guia' || article.guide?.guideId !== request.guideId) throw new Error('Gerador não devolveu guia canônico');
     article.path = current?.path ?? article.path;
     article.guide.version = current?.guide?.version ? current.guide.version + 1 : 1;
     article.guide.schemaVersion = 1;
     if (!guideSchema.safeParse(article.guide).success || !validateArticle(article).valid) throw new Error('Guia gerado não passou pela validação');
-    if (sourceDigest(await getContext(stored.request)) !== stored.source
-      || digest(await existing(root, stored.request.guideId)) !== digest(stored.guide)) throw new Error('As fontes mudaram; refaça o plano');
+    if (sourceDigest(await getContext(request)) !== stored.source
+      || digest(await existing(root, request.guideId)) !== stored.guideHash) throw new Error('As fontes mudaram; refaça o plano');
     const draftHash = digest(article);
     if (stored.draftHash && stored.draftHash !== draftHash) throw new Error('Conflito: guia gerado diferente na retomada');
     const retry = stored.draftHash === draftHash;

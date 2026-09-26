@@ -150,6 +150,8 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       guideId: z.string().optional(), topic: z.string().min(3).max(120).optional(),
       module: z.string().min(2).max(80).optional(), description: z.string().min(10).max(1_000).optional(),
       details: z.string().max(8_000).optional(), planId: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+      plan: z.unknown().optional(), questions: z.array(z.string()).max(20).optional(),
+      questionIds: z.array(z.string().regex(/^[a-f0-9]{16}$/)).max(20).optional(),
       answers: z.array(z.string().min(1).max(2_000)).max(20).optional(), requestedBy: requestedBySchema,
     }),
   }, async (args) => {
