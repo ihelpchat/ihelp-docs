@@ -48,6 +48,7 @@ try {
   await client.connect(transport);
   const tools = await client.listTools();
   assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
+    'criar_guia',
     'docs_audit_content',
     'docs_delete_article',
     'docs_generate_package',
