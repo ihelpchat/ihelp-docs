@@ -11,7 +11,9 @@ const channels = 'src/components/pages/Configuration/pages/Channels/index.tsx';
 const users = 'src/components/pages/Configuration/pages/Users/index.tsx';
 const identifier = 'mensagemForaHorarioAtendimento';
 const files = {
-  [department]: `export function DepartmentConfigExtras() {
+  [department]: `import MessageText from '../../../../../../shared/Chat/components/MessageText';
+import DistribuicaoAtendimentos from '../DistribuicaoAtendimentos';
+export function DepartmentConfigExtras() {
   // Configurar horário de atendimento e recado fora do horário.
   const ${identifier} = 'Mensagem automática fora de horário';
   return ${identifier};
