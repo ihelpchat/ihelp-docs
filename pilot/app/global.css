@@ -1048,6 +1048,46 @@ button {
   line-height: 1.7;
 }
 
+/* Guias publicados: o mesmo conteúdo do MDX, com entrada legível no celular. */
+.ih-article:has(.ih-guide-page) .ih-prose { font-size: 16px; }
+.ih-guide-catalog { display: grid; gap: 14px; margin: 24px 0; }
+.ih-guide-card {
+  display: grid;
+  gap: 4px;
+  min-height: 88px;
+  padding: 16px;
+  color: var(--ih-ink);
+  font-size: 16px;
+  line-height: 1.5;
+  border: 1px solid var(--ih-slate-200);
+  border-radius: 10px;
+  background: var(--ih-white);
+}
+.ih-guide-card:hover, .ih-guide-card:focus-visible { border-color: var(--ih-coral-cta); outline: 2px solid var(--ih-coral-cta); }
+.ih-guide-card span { color: var(--ih-slate-700); }
+.ih-guide-page { display: grid; gap: 16px; margin: 24px 0; color: var(--ih-ink); font-size: 16px; }
+.ih-guide-back { display: inline-flex; align-items: center; min-height: 44px; color: var(--ih-slate-700); }
+.ih-guide-actions, .ih-guide-phone-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.ih-guide-actions a, .ih-guide-actions button, .ih-guide-phone button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 9px 14px;
+  color: var(--ih-ink);
+  font: inherit;
+  border: 1px solid var(--ih-slate-700);
+  border-radius: 8px;
+  background: var(--ih-white);
+  cursor: pointer;
+}
+.ih-guide-actions .ih-guide-app { color: var(--ih-white); border-color: var(--ih-coral-cta); background: var(--ih-coral-cta); }
+.ih-guide-actions a:focus-visible, .ih-guide-actions button:focus-visible, .ih-guide-phone button:focus-visible { outline: 3px solid var(--ih-coral-cta); outline-offset: 2px; }
+.ih-guide-phone { padding: 16px; border: 1px solid var(--ih-slate-200); border-radius: 10px; background: var(--ih-white); }
+.ih-guide-phone p { margin: 0 0 12px; }
+.ih-guide-phone p:last-child { margin: 12px 0 0; }
+.ih-ai-drawer-human { display: flex; align-items: center; justify-content: center; min-height: 44px; margin-bottom: 8px; color: var(--ih-ink); font-size: 16px; border: 1px solid var(--ih-slate-700); border-radius: 8px; background: var(--ih-white); }
+
 .ih-prose > :first-child {
   margin-top: 0;
 }
@@ -4316,6 +4356,17 @@ button {
   border-radius: 7px;
 }
 
+.ih-ai-screen-human {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  width: fit-content;
+  color: var(--ih-ink);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 /* Conversa */
 .ih-ai-thread {
   display: flex;
@@ -5763,3 +5814,25 @@ button {
     width: 100%;
   }
 }
+
+/* FAQ público: leitura e alvos de toque em toda a página, inclusive navegação. */
+.ih-header .ih-brand, .ih-header .ih-nav-link, .ih-header .ih-header-search,
+.ih-header .ih-header-cta, .ih-header .ih-menu-button, .ih-sidebar .ih-side-all,
+.ih-sidebar .ih-side-group-toggle, .ih-sidebar .ih-side-link,
+.ih-sidebar .ih-side-promo a, .ih-toc .ih-toc-link, .ih-toc .ih-toc-ask,
+.ih-breadcrumb a, .ih-prose h2 a { min-height: 44px; }
+.ih-header .ih-nav-link, .ih-header .ih-header-search span,
+.ih-header .ih-header-search kbd, .ih-header .ih-header-cta,
+.ih-sidebar .ih-side-kicker, .ih-sidebar .ih-side-all,
+.ih-sidebar .ih-side-group-title, .ih-sidebar .ih-side-count,
+.ih-sidebar .ih-side-label, .ih-sidebar .ih-side-promo strong,
+.ih-sidebar .ih-side-promo p, .ih-sidebar .ih-side-promo a,
+.ih-breadcrumb, .ih-meta, .ih-meta-pill, .ih-toc .ih-toc-kicker,
+.ih-toc .ih-toc-link, .ih-toc .ih-toc-ask,
+.ih-feedback > p, .ih-feedback .ih-button,
+.ih-related .ih-eyebrow, .ih-related-grid span, .ih-related-grid strong,
+.ih-prose .ih-product-action small { font-size: 16px; }
+.ih-prose { font-size: 16px; }
+.ih-feedback .ih-button { min-height: 44px; }
+.ih-breadcrumb a, .ih-prose h2 a { display: inline-flex; align-items: center; }
+.ih-ai-drawer .ih-tech-mark span, .ih-ai-drawer .ih-tech-mark strong { font-size: 16px; }

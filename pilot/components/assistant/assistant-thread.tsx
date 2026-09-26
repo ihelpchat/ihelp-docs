@@ -8,8 +8,9 @@ import { useSearchContext } from 'fumadocs-ui/contexts/search';
 import { useAssistant, type ChatMessage } from '@/components/assistant/assistant-context';
 import { setPendingQuery } from '@/lib/search-query';
 import { clickablesFor, type AssistantReply } from '@/lib/assistant';
-import { supportUrl } from '@/lib/links';
+import { supportUrl, supportLink, supportGuideFromPage, supportGuideFromReply } from '@/lib/links';
 import { productActionUrl } from '@/lib/links';
+import { assistantDisplayName } from '@/lib/assistant-name';
 
 function useCopy() {
   const [copied, setCopied] = useState<string | null>(null);
@@ -95,15 +96,17 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
   const paragraphs = reply.answer.split(/\n{2,}/).map((text) => text.trim()).filter(Boolean);
   const clickables = clickablesFor(reply, { supportUrl, productActionUrl, requestOptions });
   const support = clickables.find((item) => item.slot === 'support');
+  const humanHref = supportLink({
+    guide: supportGuideFromPage() ?? supportGuideFromReply(reply),
+    message: support?.kind === 'link' ? new URL(support.href).searchParams.get('text') ?? undefined : undefined,
+  });
   const followups = clickables.filter((item) => item.kind === 'request');
 
   return (
     <div className="ih-ai-row">
       {compact ? null : <Avatar />}
       <div className="ih-ai-body">
-        {compact ? null : <p className="ih-ai-name">Claricia · assistente de IA do iHelp</p>}
-        {reply.resolution === 'partial' ? <p className="ih-ai-flag">Parte da resposta exige atendimento</p> : null}
-        {reply.resolution === 'not_found' ? <p className="ih-ai-flag">Procedimento não documentado</p> : null}
+        {compact ? null : <p className="ih-ai-name">{assistantDisplayName}</p>}
         <div className="ih-ai-text">
           {paragraphs.map((text, index) => <p key={index}>{text}</p>)}
         </div>
@@ -173,14 +176,14 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
               <strong>Precisa concluir este procedimento?</strong>
               <span>Nosso time de atendimento continua com você pelo WhatsApp.</span>
             </div>
-            <a href={support.href} target="_blank" rel="noreferrer noopener">
+            <a href={humanHref} target="_blank" rel="noreferrer noopener">
               <MessageCircle aria-hidden="true" />
               {support.label}
             </a>
           </div>
         ) : null}
         {reply.actions?.map((action) => action.type === 'link' && action.destination === 'support' ? (
-          <a className="ih-ai-human-action" key={action.destination} href={support?.kind === 'link' ? support.href : supportUrl} target="_blank" rel="noreferrer noopener">
+          <a className="ih-ai-human-action" key={action.destination} href={humanHref} target="_blank" rel="noreferrer noopener">
             {action.label}
           </a>
         ) : null)}
@@ -220,7 +223,7 @@ function OfflineMessage({ question, compact }: { question: string; compact: bool
     <div className="ih-ai-row">
       {compact ? null : <Avatar />}
       <div className="ih-ai-body">
-        {compact ? null : <p className="ih-ai-name">Claricia · assistente de IA do iHelp</p>}
+        {compact ? null : <p className="ih-ai-name">{assistantDisplayName}</p>}
         <p className="ih-ai-flag">Assistente não conectado</p>
         <div className="ih-ai-text">
           <p>O assistente de IA ainda não está conectado neste ambiente, então não há resposta gerada. A busca da documentação encontra artigos, endpoints e tutoriais sobre a sua pergunta.</p>
@@ -260,6 +263,7 @@ export function AssistantBusy({ compact }: { compact: boolean }) {
 export function AssistantThread({ compact = false }: { compact?: boolean }) {
   const { messages, busy, retry } = useAssistant();
   const lastAi = [...messages].reverse().find((message) => message.role === 'ai')?.id;
+  const latestReply = [...messages].reverse().find((message) => message.role === 'ai')?.reply;
 
   return (
     <div className="ih-ai-thread" aria-live="polite" data-compact={compact || undefined}>
@@ -279,7 +283,7 @@ export function AssistantThread({ compact = false }: { compact?: boolean }) {
             <span>{message.status === 429 ? message.message : compact ? 'Não consegui responder agora.' : 'Não consegui responder agora. Tente de novo em alguns segundos.'}</span>
             <div className="ih-ai-error-actions">
               <button type="button" onClick={() => retry(message.id)}>Tentar de novo</button>
-              {message.status === 429 ? <a href={supportUrl} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a> : null}
+              {message.status === 429 ? <a href={supportLink({ guide: supportGuideFromPage() ?? supportGuideFromReply(latestReply) })} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a> : null}
             </div>
           </div>
         );

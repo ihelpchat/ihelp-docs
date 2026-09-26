@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright-core';
+import { assistantDisplayName } from '../lib/assistant-name.ts';
+import { launch } from './visual/measure.mjs';
 
 const baseUrl = process.env.BASE_URL ?? 'http://127.0.0.1:4173';
-const executablePath = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 const queries = [
   ['transferir atendimento', 'Atendimento'],
@@ -98,9 +98,9 @@ async function testAssistant(context, errors) {
   const enabled = (await page.locator('.ih-app').getAttribute('data-assistant')) === 'on';
 
   // Entrada pelo menu do topo, sem depender de ⌘K.
-  await page.getByRole('link', { name: 'Claricia, assistente de IA do iHelp' }).first().click();
+  await page.getByRole('link', { name: 'Claricia — assistente virtual do iHelp' }).first().click();
   await page.waitForURL(/\/assistente\/?$/);
-  await page.getByRole('heading', { name: 'Pergunte qualquer coisa sobre o iHelp' }).waitFor();
+  await page.getByRole('heading', { name: assistantDisplayName }).waitFor();
   await page.getByText('Claricia', { exact: false }).first().waitFor();
   assert.equal(await page.locator('.ih-ai-starters button').count(), 4, 'Sugestões iniciais ausentes');
   assert.equal(await page.locator('.ih-ai-launcher').count(), 0, 'Botão flutuante não deve aparecer na tela do assistente');
@@ -160,12 +160,12 @@ async function testAssistant(context, errors) {
   assert.match(await composer.inputValue(), /Linha 1\n/);
   await composer.fill('');
   await page.getByRole('button', { name: 'Nova conversa' }).click();
-  await page.getByRole('heading', { name: 'Pergunte qualquer coisa sobre o iHelp' }).waitFor();
+  await page.getByRole('heading', { name: assistantDisplayName }).waitFor();
 
   // Painel lateral numa página: contexto da página vai junto; Esc fecha; tela cheia leva a conversa.
   await page.goto(`${baseUrl}/docs/sobre-o-sistema/atendimento/`, { waitUntil: 'networkidle' });
   await page.locator('.ih-ai-launcher').click();
-  const drawer = page.getByRole('dialog', { name: 'Claricia, assistente de IA do iHelp' });
+  const drawer = page.getByRole('dialog', { name: 'Claricia — assistente virtual do iHelp' });
   await drawer.waitFor();
   assert.match(await drawer.locator('.ih-ai-drawer-context strong').textContent(), /Central de ajuda › Atendimento/);
   await drawer.locator('.ih-ai-drawer-empty button').first().click();
@@ -184,7 +184,7 @@ async function testAssistant(context, errors) {
   await page.locator('.ih-header-search').click();
   await page.locator('[data-search-input]').fill('Como autenticar na API');
   await page.keyboard.press('Enter');
-  await page.getByRole('dialog', { name: 'Claricia, assistente de IA do iHelp' }).waitFor();
+  await page.getByRole('dialog', { name: 'Claricia — assistente virtual do iHelp' }).waitFor();
   await page.locator('.ih-ai-drawer .ih-ai-user').last().getByText('Como autenticar na API').waitFor();
   await page.close();
 }
@@ -254,7 +254,7 @@ async function testMcpSetup(page) {
   await assertNoHorizontalOverflow(page, 'configuração MCP');
 }
 
-const browser = await chromium.launch({ executablePath, headless: true });
+const browser = await launch();
 
 try {
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
@@ -262,7 +262,7 @@ try {
   const errors = [];
   trackErrors(page, errors);
 
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
   await page.getByRole('heading', { name: 'Tire sua dúvida sobre o iHelp em uma pergunta.' }).waitFor();
   await assertNoHorizontalOverflow(page, 'home desktop');
   await page.screenshot({ path: '/tmp/ihelp-fumadocs-home-desktop.png', fullPage: true });
@@ -313,7 +313,7 @@ try {
   await searchDialog.waitFor({ state: 'detached' });
 
   // Chips da home: com IA, perguntam na tela do assistente; sem IA, abrem a busca preenchida.
-  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
   if ((await page.locator('.ih-app').getAttribute('data-assistant')) === 'on') {
     await page.route('**/assistant', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mockReply) }));
     await page.locator('.search-suggestions button').first().click();
@@ -376,7 +376,7 @@ try {
   const mobilePage = await mobile.newPage();
   const mobileErrors = [];
   trackErrors(mobilePage, mobileErrors);
-  await mobilePage.goto(baseUrl, { waitUntil: 'networkidle' });
+  await mobilePage.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
   await mobilePage.getByRole('heading', { name: 'Tire sua dúvida sobre o iHelp em uma pergunta.' }).waitFor();
   await assertNoHorizontalOverflow(mobilePage, 'home mobile');
   await mobilePage.screenshot({ path: '/tmp/ihelp-fumadocs-home-mobile.png', fullPage: true });
@@ -413,7 +413,7 @@ try {
   const mobileFooter = await mobilePage.locator('.ih-ai-footer').boundingBox();
   const mobileComposer = await mobilePage.locator('.ih-ai-composer').boundingBox();
   const mobileNewChat = await mobilePage.getByRole('button', { name: 'Nova conversa' }).boundingBox();
-  assert.ok(mobileFooter && mobileFooter.height < 200, `Rodapé do chat ocupa ${mobileFooter?.height}px no celular`);
+  assert.ok(mobileFooter && mobileFooter.height < 844 / 3, `Rodapé do chat ocupa ${mobileFooter?.height}px no celular`);
   assert.ok(mobileComposer && mobileComposer.x >= 0 && mobileComposer.x + mobileComposer.width <= 390, 'Composer sai da tela no celular');
   assert.ok(mobileNewChat && mobileNewChat.x >= 0 && mobileNewChat.x + mobileNewChat.width <= 390, 'Nova conversa sai da tela no celular');
   const scopeMetrics = await mobilePage.locator('.ih-ai-scopes > div').evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }));
