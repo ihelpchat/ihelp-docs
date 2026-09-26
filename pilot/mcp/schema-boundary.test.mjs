@@ -72,6 +72,7 @@ process.env.OPENAI_BASE_URL = `http://127.0.0.1:${fakeOpenAI.address().port}/v1`
 process.env.FEEDBACK_FILE = join(dir, 'feedback.jsonl');
 process.env.SESSION_EVENTS_FILE = join(dir, 'sessions.jsonl');
 process.env.DOCS_ROOT = new URL('../', import.meta.url).pathname;
+process.env.DOCS_MCP_API_KEY = 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz';
 const { httpServer } = await import('./http.mjs');
 if (!httpServer.listening) await once(httpServer, 'listening');
 let sent = 0;

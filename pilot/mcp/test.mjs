@@ -62,7 +62,7 @@ try {
     'docs_validate_article',
   ]);
   for (const name of ['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_update_article', 'docs_delete_article', 'docs_submit_article']) {
-    assert.ok(tools.tools.find((tool) => tool.name === name).inputSchema.required.includes('requestedBy'), `${name} sem requestedBy obrigatório`);
+    assert.equal(tools.tools.find((tool) => tool.name === name).inputSchema.required?.includes('requestedBy') ?? false, false, `${name} exige requestedBy no corpo`);
   }
 
   const validation = await client.callTool({ name: 'docs_validate_article', arguments: article });
@@ -95,7 +95,7 @@ try {
   const audit = await client.callTool({ name: 'docs_audit_content', arguments: {} });
   const articleCount = (await readdir(join(testRoot, 'content/docs'), { recursive: true })).filter((path) => path.endsWith('.mdx')).length;
   assert.equal(JSON.parse(audit.content[0].text).total, articleCount);
-  assert.equal((await client.listTools()).tools.find((tool) => tool.name === 'docs_submit_article').inputSchema.required.includes('requestedBy'), true);
+  assert.equal((await client.listTools()).tools.find((tool) => tool.name === 'docs_submit_article').inputSchema.required?.includes('requestedBy') ?? false, false);
   const faqPath = join(testRoot, 'content/docs/docs/principais-duvidas.mdx');
   const faqOriginal = await readFile(faqPath, 'utf8');
   await writeFile(faqPath, `${faqOriginal}\n[Link quebrado](/docs/pagina-inexistente)\n`);

@@ -1,0 +1,196 @@
+{
+  "api/atendimentos/buscar-atendimento-por-telefone": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/atendimentos/buscar-historico-de-mensagens": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/atendimentos/buscar-metadados": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/atendimentos/pegar-ids-departamento-canal": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/atendimentos/resumir-conversa": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/atendimentos/transcrever-audio": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/conceitos/obter-token": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/contatos/buscar-contatos": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/contatos/buscar-detalhes-do-contato": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/crm/automacoes/atualizar-automacao": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/crm/automacoes/criar-automacao": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/crm/funis/importar-cards-e-contatos": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/crm/movimentacao/mover-por-telefone": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/crm/perfil-da-empresa/atualizar-perfil-da-empresa": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/crm/permissoes-da-pipeline/resolver-email-de-membro": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/crm/propostas/atualizar-proposta": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/crm/propostas/criar-proposta": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/index": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/mensagens/enviar-midia": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/mensagens/mensagem-comum": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/mensagens/mensagem-em-grupo": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/menus-de-lista": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/templates/regras-da-meta-e-logs-de-erro": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/templates/template-criar-novo-chat": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/templates/template-enviar-chat-existente": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "blog/calendario-agendamento-e-robo-ligacao": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "blog/edicao-de-mensagens": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "blog/listas-personalizadas": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "blog/nova-tela-de-senha": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/primeiros-passos/acessando-a-plataforma": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/principais-duvidas": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "docs/principais-motivos-de-suporte/api-oficial-qr-coexistencia": [
+    "assistantSuggestions obrigatório no contrato conversacional",
+    "assistantOverview precisa ser curta e orientar iniciante com ação concreta",
+    "assistantSuggestions precisa ter de 1 a 3 sugestões distintas e acionáveis"
+  ],
+  "docs/principais-motivos-de-suporte/arquivos": [
+    "assistantSuggestions obrigatório no contrato conversacional",
+    "assistantSuggestions precisa ter de 1 a 3 sugestões distintas e acionáveis"
+  ],
+  "docs/principais-motivos-de-suporte/campanhas": [
+    "assistantSuggestions obrigatório no contrato conversacional",
+    "assistantSuggestions precisa ter de 1 a 3 sugestões distintas e acionáveis"
+  ],
+  "docs/principais-motivos-de-suporte/cobranca-plano": [
+    "assistantSuggestions obrigatório no contrato conversacional",
+    "assistantOverview precisa ser curta e orientar iniciante com ação concreta",
+    "assistantInitialSteps exige passos iniciais concretos, suficientes e sem duplicação no body",
+    "assistantSuggestions precisa ter de 1 a 3 sugestões distintas e acionáveis"
+  ],
+  "docs/principais-motivos-de-suporte/crm": [
+    "assistantSuggestions obrigatório no contrato conversacional",
+    "assistantSuggestions precisa ter de 1 a 3 sugestões distintas e acionáveis"
+  ],
+  "docs/principais-motivos-de-suporte/permissoes-departamentos": [
+    "assistantSuggestions obrigatório no contrato conversacional",
+    "assistantSuggestions precisa ter de 1 a 3 sugestões distintas e acionáveis"
+  ],
+  "docs/principais-motivos-de-suporte/reconectar-canal-qr": [
+    "assistantSuggestions obrigatório no contrato conversacional",
+    "assistantSuggestions precisa ter de 1 a 3 sugestões distintas e acionáveis"
+  ],
+  "docs/principais-motivos-de-suporte/templates": [
+    "assistantSuggestions obrigatório no contrato conversacional",
+    "assistantSuggestions precisa ter de 1 a 3 sugestões distintas e acionáveis"
+  ],
+  "docs/principais-motivos-de-suporte/usuario-acesso": [
+    "assistantSuggestions obrigatório no contrato conversacional",
+    "assistantSuggestions precisa ter de 1 a 3 sugestões distintas e acionáveis"
+  ],
+  "docs/sobre-o-ihelp/contato-e-suporte": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "docs/sobre-o-sistema/agenda-de-contatos": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/sobre-o-sistema/atendimento": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/sobre-o-sistema/campanhas/campanhas-na-api-oficial": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "docs/sobre-o-sistema/campanhas/index": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "docs/sobre-o-sistema/campanhas/preparando-a-planilha-de-campanhas": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "docs/sobre-o-sistema/configuracoes/alterar-senha": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/sobre-o-sistema/configuracoes/atalhos": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/sobre-o-sistema/configuracoes/canais": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/sobre-o-sistema/configuracoes/configuracoes-gerais": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/sobre-o-sistema/configuracoes/departamentos/index": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/sobre-o-sistema/configuracoes/gerenciamento-de-usuarios": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/sobre-o-sistema/crm/index": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/sobre-o-sistema/dashboard": [
+    "vídeo não faz parte do pacote editorial"
+  ],
+  "docs/sobre-o-sistema/menu-de-opcoes-do-robo": [
+    "assistantSuggestions obrigatório no contrato conversacional",
+    "assistantQuestion precisa ser uma pergunta canônica não vazia",
+    "assistantInitialSteps exige passos iniciais concretos, suficientes e sem duplicação no body",
+    "assistantSuggestions precisa ter de 1 a 3 sugestões distintas e acionáveis"
+  ],
+  "docs/sobre-o-sistema/robo-de-atendimento": [
+    "vídeo não faz parte do pacote editorial",
+    "assistantQuestion obrigatório no contrato conversacional",
+    "assistantQuestion precisa ser uma pergunta canônica não vazia",
+    "assistantOverview precisa ser curta e orientar iniciante com ação concreta",
+    "assistantInitialSteps exige passos iniciais concretos, suficientes e sem duplicação no body",
+    "assistantSuggestions precisa ter de 1 a 3 sugestões distintas e acionáveis"
+  ],
+  "docs/whatsapp-business-api/configuracao/gupshup/como-adicionar-creditos": [
+    "vídeo não faz parte do pacote editorial"
+  ]
+}

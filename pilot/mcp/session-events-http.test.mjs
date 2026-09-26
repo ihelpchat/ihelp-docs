@@ -38,6 +38,7 @@ try {
   process.env.DOCS_ROOT = root;
   process.env.SESSION_EVENTS_FILE = eventFile;
   process.env.FEEDBACK_FILE = feedbackFile;
+  process.env.DOCS_MCP_API_KEY = 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz';
   const { httpServer } = await import('./http.mjs');
   try {
     if (!httpServer.listening) await once(httpServer, 'listening');

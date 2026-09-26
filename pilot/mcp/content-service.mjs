@@ -7,6 +7,8 @@ import { isExactCatalogAction } from './product-actions.mjs';
 import { conversationalIssues } from './conversational-contract.mjs';
 import { stringify } from 'yaml';
 import { articleFields } from './article-fields.mjs';
+import { githubWriteToken } from './env-compat.mjs';
+import { guideSchema } from '../architecture/conversation-v1.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -15,6 +17,7 @@ const SAFE_ACTOR = /^(?:user|service):[a-z0-9][a-z0-9_-]{2,63}$/;
 const SAFE_ACTION_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
 const SAFE_PRODUCT_ROUTE = /^\/(?!\/)[a-z0-9/_-]*$/;
 export const isSafeRequestedBy = (value) => typeof value === 'string' && SAFE_ACTOR.test(value);
+const stateRoot = (root) => process.env.MCP_STATE_DIR ?? root;
 export class SubmitArticleError extends Error {
   constructor(code, message, options) {
     super(message, options);
@@ -36,6 +39,7 @@ function rejectSensitive(value) {
   const kinds = sensitiveKinds(value);
   if (kinds.credential) throw new SubmitArticleError('CREDENTIAL', 'Artigo contém possível credencial');
   if (kinds.personal) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém possível dado pessoal');
+  if (kinds.internal || kinds.control) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém conteúdo interno ou caractere invisível');
 }
 
 function safeContentPath(root, contentPath) {
@@ -55,6 +59,7 @@ export function validateArticle(article) {
   if (!article.description || article.description.trim().length < 40) issues.push('description precisa ter ao menos 40 caracteres');
   if (!SOURCES.has(article.source)) issues.push('source inválido');
   if (!CONTENT_TYPES.has(article.contentType)) issues.push('contentType inválido');
+  if (article.guide !== undefined && !guideSchema.safeParse(article.guide).success) issues.push('guide inválido');
   if (!article.path || !SAFE_PATH.test(article.path) || article.path.includes('..')) issues.push('path inválido');
   if (!article.body || article.body.trim().split(/\s+/).filter(Boolean).length < 60) issues.push('body precisa ter ao menos 60 palavras');
   if (/<script\b/i.test(article.body ?? '')) issues.push('scripts não são permitidos');
@@ -67,6 +72,7 @@ export function validateArticle(article) {
   const sensitive = sensitiveKinds(stringify(article, { lineWidth: 0 }));
   if (sensitive.credential) issues.push('possível credencial detectada');
   if (sensitive.personal) issues.push('possível dado pessoal detectado');
+  if (sensitive.internal || sensitive.control) issues.push('conteúdo interno ou caractere invisível detectado');
   if (article.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(article.tangoUrl)) {
     issues.push('tangoUrl precisa ser uma URL oficial de embed ou workflow do Tango');
   }
@@ -89,6 +95,7 @@ export function renderArticle(article) {
   const validation = validateArticle(article);
   if (validation.issues.includes('possível credencial detectada')) throw new SubmitArticleError('CREDENTIAL', 'Artigo contém possível credencial');
   if (validation.issues.includes('possível dado pessoal detectado')) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém possível dado pessoal');
+  if (validation.issues.includes('conteúdo interno ou caractere invisível detectado')) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém conteúdo interno ou caractere invisível');
   if (!validation.valid) throw new Error(validation.issues.join('; '));
   const tangoId = article.tangoUrl?.split('/').pop()?.split('?')[0].replaceAll('-', '');
   const tangoSlug = article.title.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -167,7 +174,7 @@ export async function getInventory(root) {
 }
 
 async function githubRequest(path, init = {}, allowNotFound = false) {
-  const token = process.env.GITHUB_TOKEN;
+  const token = githubWriteToken();
   if (!token) throw new SubmitArticleError('GITHUB_NOT_CONFIGURED', 'GITHUB_TOKEN não configurado');
   const response = await fetch(`https://api.github.com${path}`, {
     ...init,
@@ -219,7 +226,7 @@ async function createPullRequest(article, rendered, actor, beforePull) {
 }
 
 async function appendAudit(root, actor, mode, target, result, reference) {
-  const directory = join(root, '.audit');
+  const directory = join(stateRoot(root), '.audit');
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const directoryStat = await lstat(directory);
   if (!directoryStat.isDirectory() || (directoryStat.mode & 0o077) !== 0) throw new Error('diretório de audit inseguro');
@@ -238,7 +245,7 @@ async function appendAudit(root, actor, mode, target, result, reference) {
 
 export async function auditOperation(root, { actor, operation, mode = null, target = null, result, reference }) {
   if (!isSafeRequestedBy(actor)) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
-  const directory = join(root, '.audit');
+  const directory = join(stateRoot(root), '.audit');
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const directoryStat = await lstat(directory);
   if (!directoryStat.isDirectory() || (directoryStat.mode & 0o077) !== 0) throw new Error('diretório de audit inseguro');
@@ -289,7 +296,7 @@ async function submitArticleAudited(root, article, mode, requestedBy) {
 }
 
 async function createDraft(root, article, rendered) {
-  const draftRoot = join(root, '.drafts');
+  const draftRoot = join(stateRoot(root), '.drafts');
   const parts = article.path.split('/');
   let directory = draftRoot;
   for (const part of ['', ...parts.slice(0, -1)]) {
@@ -313,7 +320,7 @@ async function createDraft(root, article, rendered) {
   } finally {
     await file.close();
   }
-  return { status: 'draft', path: relative(root, target) };
+  return { status: 'draft', path: relative(stateRoot(root), target) };
 }
 
 async function submitValidatedArticle(root, article, mode, actor, beforePull) {
@@ -334,7 +341,7 @@ function safeArticleList(articles, deletes = []) {
     const reserved = new Set(['path', 'body', 'productActions', 'tangoUrl']);
     for (const [key, value] of Object.entries(article)) {
       if (reserved.has(key)) continue;
-      if (!articleFields.has(key) || (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean' && !(Array.isArray(value) && value.every((item) => typeof item === 'string')))) {
+      if (!articleFields.has(key) || (key === 'guide' ? !guideSchema.safeParse(value).success : (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean' && !(Array.isArray(value) && value.every((item) => typeof item === 'string'))))) {
         throw new SubmitArticleError('INVALID_PACKAGE', `Metadado inválido: ${key}`);
       }
     }
