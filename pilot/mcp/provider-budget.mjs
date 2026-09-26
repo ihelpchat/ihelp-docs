@@ -75,7 +75,7 @@ export async function createBudgetedResponse(client, payload, options = {}) {
     const admitted = await locked(config.file, (ledger) => {
       if (ledger.day !== day) { ledger.day = day; ledger.spent = 0; ledger.reservations = {}; }
       const reserved = Object.values(ledger.reservations).reduce((total, value) => total + value, 0);
-      if (ledger.spent + reserved + reserve > config.dailyLimit) return { value: false, write: true };
+      if (!options.bypassAdmission && ledger.spent + reserved + reserve > config.dailyLimit) return { value: false, write: true };
       ledger.reservations[id] = reserve;
       return { value: true, write: true };
     });
@@ -108,4 +108,14 @@ export async function createBudgetedResponse(client, payload, options = {}) {
     if (options.signal?.aborted || response.status !== 'incomplete') return { kind: 'provider_failed' };
   }
   return { kind: 'provider_failed' };
+}
+
+export async function budgetState(options = {}) {
+  const config = settings(options);
+  const day = config.now().toISOString().slice(0, 10);
+  return locked(config.file, (ledger) => {
+    const reserved = ledger.day === day ? Object.values(ledger.reservations).reduce((total, value) => total + value, 0) : 0;
+    const spent = ledger.day === day ? ledger.spent : 0;
+    return { value: spent + reserved + config.reserve > config.dailyLimit ? 'exhausted' : 'available', write: false };
+  });
 }

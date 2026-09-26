@@ -10,6 +10,7 @@ import { normalizeFeedback, saveFeedback, summarizeFeedback } from './feedback-s
 import { sanitizeWidgetContext } from './real-state.mjs';
 import { saveSessionEvent, pruneSessionEvents } from './session-events.mjs';
 import { topicForQuestion, routerSelfCheck } from './closed-router.mjs';
+import { budgetState } from './provider-budget.mjs';
 import { actionForQuestion, issueForQuestion } from './gap-classification.mjs';
 import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { publishedPathOrNull } from './published-paths.mjs';
@@ -125,8 +126,9 @@ export const httpServer = createServer(async (request, response) => {
           .end(JSON.stringify({ error: 'triagem rejeitada pelo provider', reason: check.reason }));
         return;
       }
+      const budget = await budgetState();
       response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
-        .end(JSON.stringify({ codeSha, contentSha256: catalog.contentSha256 }));
+        .end(JSON.stringify({ codeSha, contentSha256: catalog.contentSha256, budget }));
     } catch {
       response.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ error: 'versão indisponível' }));
     }
