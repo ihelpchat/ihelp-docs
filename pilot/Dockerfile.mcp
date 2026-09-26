@@ -2,6 +2,7 @@ FROM node:24-alpine
 
 WORKDIR /app
 ENV NODE_ENV=production
+ENV MCP_STATE_DIR=/data
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
@@ -11,5 +12,6 @@ COPY content ./content
 COPY mcp ./mcp
 
 EXPOSE 3100
+VOLUME /data
 
 CMD ["npm", "run", "mcp:http"]

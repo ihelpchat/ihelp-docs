@@ -28,6 +28,7 @@ process.env.OPENAI_BASE_URL = `http://127.0.0.1:${fakeOpenAI.address().port}/v1`
 process.env.FEEDBACK_FILE = join(scratch, 'feedback.jsonl');
 process.env.ASSISTANT_IP_LIMIT = '20';
 process.env.ASSISTANT_ALLOWED_ORIGINS = 'https://faq.example.test';
+process.env.DOCS_MCP_API_KEY = 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz';
 const { httpServer } = await import('./http.mjs');
 if (!httpServer.listening) await once(httpServer, 'listening');
 const url = `http://127.0.0.1:${httpServer.address().port}`;
