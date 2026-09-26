@@ -22,6 +22,7 @@ const expected = [
   'Departamentos',
   'Buscar usuários',
   'Ajuda',
+  'Campo nome',
 ];
 const sources = { fixture: expected.map((target, index) => ({ side: 'front', file, line: index + 1, stepId: `step-${index}`, target })) };
 const guides = [{ guide: { guideId: 'fixture', steps: expected.map((_, index) => ({ stepId: `step-${index}` })) } }];
@@ -34,12 +35,12 @@ try {
     export const Screen = () => <>
       <Title>Mensagem automática fora de horário de atendimento</Title>
       <strong>WhatsApp → Aparelhos conectados → Conectar um aparelho</strong>
-      <span>{connected ? "Conectado" : "Desconectado"}</span>
+      <StyledGreenSpan>{connected ? "Conectado" : "Desconectado"}</StyledGreenSpan>
       <Button labelText={connected ? "Desconectar" : "Conectar"} />
       <Button labelText="Novo usuário" />
       <Title>Visualizar Departamentos</Title>
       <CustomTooltip title={tooltip} />
-      <Input placeholder="Buscar usuários" aria-label="Ajuda" />
+      <Input placeholder="Buscar usuários" aria-label="Ajuda" label="Campo nome" />
     </>;
   `);
   const manifest = (await buildProductMap({ frontRoot: front, backRoot: back, guides, actions: {} })).manifest;
