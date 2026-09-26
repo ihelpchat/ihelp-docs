@@ -20,7 +20,52 @@ const GROUNDING_SCHEMA = { type: 'array', items: {
   properties: { text: { type: 'string' }, citations: { type: 'array', items: CITATION_SCHEMA } },
 } };
 
-export function validateGroundedOutput(output, context, fields) {
+const publicRoute = (route) => String(route ?? '').replace(/^\/api\/v\d+/iu, '').toLowerCase();
+const routeShape = (route) => publicRoute(route).replace(/\{[^}]+\}/gu, '{}');
+function apiIssues(article, context) {
+  if (article.source !== 'api') return [];
+  if (!context.endpoints?.length) return ['endpoints estruturados ausentes'];
+  const endpoint = context.endpoints.find((item) => item.verb === article.method && routeShape(item.route) === routeShape(article.endpoint));
+  if (!endpoint) return ['rota divergente: method/endpoint sem fato extraído'];
+  if (endpoint.public !== undefined && !endpoint.public) return ['endpoint não público: confirmar'];
+  const names = new Set(endpoint.parameters?.map(({ name }) => name.toLowerCase()) ?? []);
+  const aliases = new Map();
+  const claimedParts = publicRoute(article.endpoint).split('/');
+  const actualParts = publicRoute(endpoint.route).split('/');
+  for (let index = 0; index < claimedParts.length; index++) if (/^\{\w+\}$/u.test(claimedParts[index]) && /^\{\w+\}$/u.test(actualParts[index])) {
+    const alias = claimedParts[index].slice(1, -1).toLowerCase();
+    names.add(alias);
+    aliases.set(alias, actualParts[index].slice(1, -1).toLowerCase());
+  }
+  const body = article.body ?? '';
+  const cited = [...body.matchAll(/<Param\s+[^>]*name=["']([^"']+)["']/gu)].map((match) => match[1]);
+  for (const match of body.matchAll(/[?&]([A-Za-z][\w]*)=/gu)) cited.push(match[1]);
+  for (const name of cited) if (!names.has(name.toLowerCase()) && !(endpoint.responseFields ?? []).some((field) => field.name.toLowerCase() === name.toLowerCase())) return [`parâmetro inexistente: ${name}`];
+  for (const match of body.matchAll(/<Param\s+([^>]+)>/gu)) {
+    const name = match[1].match(/name=["']([^"']+)["']/u)?.[1];
+    const type = match[1].match(/type=["']([^"']+)["']/u)?.[1];
+    const fact = [...endpoint.parameters ?? [], ...endpoint.responseFields ?? []].find((item) => item.name.toLowerCase() === (aliases.get(name?.toLowerCase()) ?? name?.toLowerCase()));
+    const expected = fact && (/^(?:int|long|double|decimal|float|short)$/iu.test(fact.type) ? 'number' : /^bool(?:ean)?$/iu.test(fact.type) ? 'boolean' : 'string');
+    if (fact && type && expected !== type) return [`tipo divergente: ${name}`];
+  }
+  for (const match of body.matchAll(/^##\s+`?(GET|POST|PUT|PATCH|DELETE)`?\s*$/gmu)) if (match[1] !== endpoint.verb) return ['method divergente no artigo'];
+  for (const match of body.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(?:https?:\/\/[^/\s]+)?(\/api\/v\d+\/[^\s`"']+|\/[a-z][\w/-]*(?:\{[^}]+\})?)/gu)) {
+    if (match[1] !== endpoint.verb || routeShape(match[2].split('?')[0]) !== routeShape(endpoint.route)) return ['rota divergente no artigo'];
+  }
+  for (const match of body.matchAll(/```json\s*([\s\S]*?)```/gu)) {
+    let value;
+    try { value = JSON.parse(match[1]); } catch { return ['JSON de resposta inválido']; }
+    const allowed = new Set([...(endpoint.responseFields ?? []), ...(endpoint.parameters ?? [])].map(({ name }) => name.toLowerCase()));
+    function keysOf(node) { if (Array.isArray(node)) return node.flatMap(keysOf); if (!node || typeof node !== 'object') return [];
+      return Object.entries(node).flatMap(([key, child]) => [key, ...keysOf(child)]); }
+    for (const key of keysOf(value)) if (!allowed.has(key.toLowerCase())) return [`campo inexistente: ${key}`];
+  }
+  return [];
+}
+
+export function validateGroundedOutput(output, context, fields, issues = []) {
+  const api = apiIssues(output, context);
+  if (api.length) { issues.push(...api); return false; }
   if (!context.groundingRequired) return true;
   const claims = output.grounding;
   if (!Array.isArray(claims)) return false;
@@ -42,6 +87,13 @@ export function validateGroundedOutput(output, context, fields) {
 function evidencePending() {
   return { status: 'needs_evidence', summary: 'A resposta não está vinculada às linhas do código recuperado.',
     questions: ['Confirme a fonte e as citações de cada afirmação.'], articles: [] };
+}
+function apiPending(reason) {
+  return { status: 'needs_information', summary: reason, questions: [reason], articles: [] };
+}
+function explicitEndpoints(request) {
+  return [...Object.values(request).filter((value) => typeof value === 'string').join(' ').matchAll(/(?:\/api\/v\d+)?\/(?:[A-Za-z][\w-]*\/)*[A-Za-z][\w-]*(?:\/\{\w+\})?/gu)]
+    .map((match) => match[0]);
 }
 
 export function normalizeCatalogLabel(action) {
@@ -116,6 +168,12 @@ const PACKAGE_SCHEMA = {
     grounding: GROUNDING_SCHEMA,
   },
 };
+const API_ARTICLE_FIELDS = Object.fromEntries(Object.entries(ARTICLE_SCHEMA.properties)
+  .filter(([key]) => !key.startsWith('assistant')));
+const API_PACKAGE_SCHEMA = { ...PACKAGE_SCHEMA, properties: { ...PACKAGE_SCHEMA.properties,
+  articles: { type: 'array', items: { ...ARTICLE_SCHEMA,
+    required: [...ARTICLE_SCHEMA.required.filter((key) => !key.startsWith('assistant')), 'method', 'endpoint'],
+    properties: { ...API_ARTICLE_FIELDS, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, endpoint: { type: 'string' } } } } } };
 
 function checkRequest(request) {
   const value = Object.values(request).filter((item) => typeof item === 'string').join('\n');
@@ -159,6 +217,7 @@ function parseJson(response) {
 }
 
 function requestText(request, existing, productContext) {
+  const selectedEndpoints = (productContext.endpoints ?? []).filter((item) => item.documented || item.explicit);
   return [
     `Tema: ${request.topic}`,
     `Módulo: ${request.module}`,
@@ -169,6 +228,7 @@ function requestText(request, existing, productContext) {
     request.tangoUrl ? `Tango já existente: ${request.tangoUrl}` : '',
     `Documentação publicada semelhante (fonte editorial):\n${existing.length ? existing.map((item) => `- ${item.title} (${item.path}): ${item.description}\n${item.body ?? ''}`).join('\n') : '- Nenhum'}`,
     `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${redactSensitiveData(item.path)} LINHA ${item.line ?? 'não informada'} SHA ${item.sha ?? item.ref}\n${redactSensitiveData(item.excerpt)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
+    request.module === 'api' ? `FATOS ESTRUTURADOS DE ENDPOINTS (somente public=true é gerável):\n${JSON.stringify(selectedEndpoints.length ? selectedEndpoints : productContext.endpoints ?? [])}\nFORMATO REAL DAS PÁGINAS API:\n${JSON.stringify(productContext.apiExamples ?? [])}` : '',
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
     `Regras do suporte:\n${productContext.support?.rules?.map((item) => `- ${item}`).join('\n') ?? '- Nenhuma'}`,
     `Matriz de cobertura:\n${productContext.coverage?.map((item) => `- ${item.module}: ${item.coverage}; rotas=${item.productRoutes.join(', ')}; permissão=${item.permission}`).join('\n') ?? '- Nenhuma correspondência'}`,
@@ -205,7 +265,9 @@ async function related(root, request) {
 export async function planContent(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
-  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpoints(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  if (request.module === 'api' && !productContext.endpoints?.length) return apiPending('endpoints estruturados ausentes');
+  if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return apiPending('endpoint não público: confirmar');
   const pending = groundingPending(productContext);
   if (pending) return pending;
   const response = await modelResponse(options, baseRequest('plano_documentacao', PLAN_SCHEMA, [
@@ -217,7 +279,7 @@ export async function planContent(root, request, options = {}) {
         'Identifique conflitos, informação ausente, duplicidade e nomes de telas ou botões que precisam ser confirmados.',
         'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
         'Sugira ações no produto somente com rota fornecida ou sustentada pelos detalhes. target é um identificador data-help-id estável, nunca um seletor CSS.',
-        'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
+        request.module === 'api' ? 'Planeje páginas de referência da API. Para tema amplo, foque nos endpoints documented=true. Não peça dados já presentes nos fatos estruturados. Endpoint sem public=true exige confirmação.' : 'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
         'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].join(' '),
     },
@@ -232,26 +294,28 @@ export async function planContent(root, request, options = {}) {
 export async function generateContentPackage(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
-  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpoints(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  if (request.module === 'api' && !productContext.endpoints?.length) return apiPending('endpoints estruturados ausentes');
+  if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return apiPending('endpoint não público: confirmar');
   const pending = groundingPending(productContext);
   if (pending) return pending;
   const plan = options.plan ?? await planContent(root, request, { ...options, productContext });
   if (plan.status !== 'ready') {
     return { status: plan.status, summary: plan.summary ?? plan.guidance, questions: plan.questions, articles: [], existing, model: plan.model };
   }
-  const response = await modelResponse(options, baseRequest('pacote_documentacao', PACKAGE_SCHEMA, [
+  const response = await modelResponse(options, baseRequest('pacote_documentacao', request.module === 'api' ? API_PACKAGE_SCHEMA : PACKAGE_SCHEMA, [
     {
       role: 'developer',
       content: [
         'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.',
-        'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
-        'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
-        'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
+        request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
+        request.module === 'api' ? 'Gere páginas api/ de referência apenas para endpoints com public=true nos fatos. Para tema amplo, gere os endpoints documented=true. Use source=api, contentType=referencia, method e endpoint do fato, com o formato das páginas API fornecidas. Não invente parâmetros ou campos. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
+        request.module === 'api' ? 'Organize método, endpoint, parâmetros e resposta nas seções reais da referência.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
-        'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
-        'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
-        'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
+        request.module === 'api' ? 'Não inclua campos assistant nas páginas de referência; siga o frontmatter das páginas API existentes.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
+        request.module === 'api' ? 'Se faltar método, rota, parâmetros ou autorização, use needs_information e deixe articles vazio.' : 'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
+        request.module === 'api' ? 'Cada body precisa ter pelo menos 60 palavras. Use as seções das páginas API reais como formato. Só cite campos de resposta quando estiverem presentes em responseFields; sem esses fatos, não gere JSON de resposta nem nomes de campos de resposta.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
         'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].join(' '),
     },
@@ -260,8 +324,12 @@ export async function generateContentPackage(root, request, options = {}) {
   const parsed = parseJson(response);
   const { grounding: _grounding, ...safePackage } = parsed;
   if (parsed.status !== 'ready') return { ...safePackage, articles: [], existing, model: response.model };
+  if (request.module === 'api' && !parsed.articles.length) return apiPending('nenhuma página de API gerada');
+  const groundingIssues = [];
   if (!validateGroundedOutput(parsed, productContext, ['summary']) || parsed.articles.some((article) =>
-    !validateGroundedOutput(article, productContext, ['description', 'body', 'assistantOverview', 'assistantSuggestions']))) return evidencePending();
+    !validateGroundedOutput(article, productContext, ['description', 'body', 'assistantOverview', 'assistantSuggestions'], groundingIssues))) {
+    return groundingIssues.length ? apiPending(groundingIssues.join('; ')) : evidencePending();
+  }
   const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => ({
     ...article,
     productActions: article.productActions.map(normalizeCatalogLabel),
