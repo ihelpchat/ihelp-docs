@@ -19,7 +19,7 @@ const guide = {
   schemaVersion: 1, guideId: 'reconectar-canal-qr', version: 1, mode: 'real', initialStepId: 'inicio',
   steps: [{ stepId: 'inicio', text: 'Abra a tela Canais.', actionId: 'abrir-canais', choices: [{ id: 'achei', label: 'Achei' }] }],
 };
-const body = 'Orientação pública de exemplo. '.repeat(65);
+const body = 'Orientação pública de exemplo. '.repeat(65).trim();
 const metadata = { title, description, source: 'produto', contentType: 'guia', guide };
 const mdx = (fields) => `---\n${stringify(fields, { lineWidth: 0 })}---\n\n${body}\n`;
 await writeFile(join(content, 'exemplo.mdx'), mdx(metadata));
