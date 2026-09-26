@@ -144,7 +144,14 @@ try {
     }
     for (const zoom of [1, 2]) {
       const page = await browser.newPage({ viewport: dimensions, deviceScaleFactor: zoom });
+      await page.addInitScript(() => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages: [{
+        id: 'a1', role: 'ai', question: 'Ajuda', reply: {
+          answer: 'Abra Configurações e confira o canal.', sections: [], steps: [], code: null, sources: [],
+          suggestions: ['Achei', 'Não achei', 'Mais uma opção'], resolution: 'complete', found: true, actions: [],
+        },
+      }], scope: 'Tudo', sessionId: 'qa-session' })));
       await page.goto(`${site.url}${basePath}/docs/guias/?origem=suporte`, { waitUntil: 'networkidle' });
+      if (zoom === 2) await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
       const catalog = page.locator('.ih-guide-catalog');
       assert.ok(await catalog.isVisible(), `catálogo/${viewport}/${zoom}: catálogo ausente`);
       assert.equal(await catalog.locator('a.ih-guide-card').count(), 3, 'catálogo vem dos três guias canônicos');
@@ -166,6 +173,11 @@ try {
       await guide.getByRole('button', { name: 'Uso iPhone' }).click();
       assert.ok(await guide.getByText(/No iPhone, abra WhatsApp/).isVisible(), 'escolha corrigível');
       failures.push(...(await guide.evaluate(audit)).failures.map((item) => `guia/${viewport}/${zoom}: ${item}`));
+      await guide.getByRole('button', { name: /Perguntar à Claricia/ }).click();
+      const drawer = page.locator('.ih-ai-drawer');
+      assert.ok(await drawer.getByRole('link', { name: 'Falar com uma pessoa' }).isVisible(), 'humano no painel da conversa');
+      assert.ok(await drawer.locator('.ih-ai-follow button').count() <= 2, 'até duas sugestões');
+      failures.push(...(await drawer.evaluate(audit)).failures.map((item) => `painel/${viewport}/${zoom}: ${item}`));
       assert.equal(await page.getByText(/Procedimento não documentado|Parte da resposta exige atendimento/i).count(), 0, 'sem etiquetas');
       await page.close();
     }
