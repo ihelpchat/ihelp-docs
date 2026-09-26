@@ -236,6 +236,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: pilot/package-lock.json
+      - name: Install routing converter
+        run: npm ci
+        working-directory: pilot
       - name: Package verified static artifact for Vercel
         working-directory: pilot
         run: node scripts/prepare-vercel-release.mjs out deploy-vercel

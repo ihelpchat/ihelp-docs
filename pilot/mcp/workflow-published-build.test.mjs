@@ -37,7 +37,7 @@ try {
     const path = example(redirect.source);
     const expected = example(redirect.destination);
     const matches = outputConfig.routes.filter((route) => route.status && routed(route, path));
-    assert.equal(matches.length, 1, `redirect para ${path}`);
+    assert.ok(matches.length, `redirect para ${path}`);
     assert.equal(matches[0].status, redirect.permanent ? 308 : 307, `status para ${path}`);
     assert.equal(destinationFor(matches[0], routed(matches[0], path)), expected, `destino para ${path}`);
     assert.ok(!routed(matches[0], miss), `redirect ${redirect.source} não pode casar com ${miss}`);

@@ -1,5 +1,6 @@
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { getTransformedRoutes } from '@vercel/routing-utils';
 
 const [out, deployment] = process.argv.slice(2);
 if (!out || !deployment) throw new Error('Uso: prepare-vercel-release.mjs <out> <deploy-dir>');
@@ -16,19 +17,11 @@ await mkdir(join(output, 'static/ihelp-docs'), { recursive: true });
 await cp(out, join(output, 'static/ihelp-docs'), { recursive: true });
 await cp(new URL('../vercel.json', import.meta.url), join(deployment, 'vercel.json'));
 
-// --prebuilt reads config.json, not vercel.json. Mirror its redirects and headers there.
-const pattern = (value) => {
-  if (!/^\/[\w/.-]*(?::path\*)?\/?$/u.test(value)) throw new Error(`Rota Vercel não suportada: ${value}`);
-  return `^${value.replace(':path*', '(.*)').replaceAll('.', '\\.')}$`;
-};
-const destination = (value) => value.replace(':path*', '$1');
+// --prebuilt reads config.json, not vercel.json. Use Vercel's own conversion.
+const transformed = getTransformedRoutes(source);
+if (transformed.error) throw transformed.error;
 const routes = [
-  ...source.redirects.map(({ source: from, destination: to, permanent }) => ({
-    src: pattern(from), status: permanent ? 308 : 307, headers: { Location: destination(to) },
-  })),
-  ...source.headers.map(({ source: from, headers }) => ({
-    src: pattern(from), headers: Object.fromEntries(headers.map(({ key, value }) => [key, value])), continue: true,
-  })),
+  ...transformed.routes,
   { handle: 'filesystem' },
   { src: '^/ihelp-docs/(.*)/$', dest: '/ihelp-docs/$1/index.html' },
 ];
