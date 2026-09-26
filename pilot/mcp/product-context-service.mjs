@@ -3,6 +3,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { redactSensitiveData } from './sensitive-data.mjs';
 import { join } from 'node:path';
 import { searchLocalProductContext } from './local-product-context.mjs';
+import { routeMatches } from './api-route-match.mjs';
 import { envCompatibility, githubReadToken } from './env-compat.mjs';
 import { parse } from 'yaml';
 const CACHE_MS = 5 * 60_000;
@@ -119,7 +120,8 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     { repository: process.env.PRODUCT_GITHUB_REPOSITORY ?? 'ihelpchat/front-react', ref: process.env.PRODUCT_GITHUB_REF ?? 'master', role: 'Interface, rotas, permissões visíveis e textos de botões' },
     { repository: process.env.BACKEND_GITHUB_REPOSITORY ?? 'ihelpchat/olah-ihelp', ref: process.env.BACKEND_GITHUB_REF ?? 'master', role: 'Regras de negócio, APIs, permissões e validações' },
   ];
-  const localResult = local ? await searchLocalProductContext(topic, module, { repositoryIds: provided.repositoryIds, explicitEndpoints: provided.explicitEndpoints }) : null;
+  const localResult = local ? await searchLocalProductContext(topic, module, { repositoryIds: provided.repositoryIds,
+    explicitEndpoints: provided.explicitEndpoints, readFile: provided.readFile, cache: provided.cache }) : null;
   const code = localResult?.code ?? [];
   if (!local) for (const source of repositories) {
     const result = await searchProductContext(topic, module, { fetch: fetcher, token, repository: source.repository, ref: source.ref }).catch((error) => ({ available: false, repository: source.repository, ref: source.ref, matches: [], reason: error.message }));
@@ -166,15 +168,9 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     }
     const requested = provided.explicitEndpoints ?? [];
     const routesOf = (item) => [item.route, ...(item.optionalAliases ?? (item.optionalAlias ? [item.optionalAlias] : []))];
-    const routeMatches = (fact, requested) => {
-      const left = fact.toLowerCase().split('/').filter(Boolean);
-      const right = requested.toLowerCase().split('/').filter(Boolean);
-      return left.length === right.length && left.every((segment, index) =>
-        /^\{[^}]+\}$/u.test(segment) ? Boolean(right[index]) : segment === right[index]);
-    };
     const cited = (item, endpoint) => endpoint.verb === item.verb && routesOf(item).some((route) =>
-      routeMatches(route, endpoint.route) ||
-      (!/^\/api\/v\d+\//iu.test(endpoint.route) && routeMatches(route.replace(/^\/api\/v\d+/iu, ''), endpoint.route)));
+      routeMatches(endpoint.route, route) ||
+      (!/^\/api\/v\d+\//iu.test(endpoint.route) && routeMatches(endpoint.route, route.replace(/^\/api\/v\d+/iu, ''))));
     const documentedFor = (item) => /^\/api\/v2\//iu.test(item.route) &&
       routesOf(item).some((route) =>
         documented.has(`${item.verb} ${route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')}`));
