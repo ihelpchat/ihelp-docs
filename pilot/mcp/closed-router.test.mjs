@@ -45,6 +45,8 @@ try {
   const route = (question, options = {}) => routeMessage(question, { catalog, client, budget, ...options });
   assert.deepEqual(await route('Criar campanhas'), { kind: 'guide', guideId: 'campanhas' }, 'plural');
   assert.equal(calls.length, 1, 'uma chamada para classificar');
+  await route('Criar campanhas para contato pessoa@exemplo.com');
+  assert.doesNotMatch(JSON.stringify(calls.at(-1).input), /pessoa@exemplo\.com/, 'redaction antes do classificador');
   assert.deepEqual(await route('NÃO é campanha, quero departamentos'), { kind: 'none' }, 'Cida: negação explícita veta campanha');
   assert.deepEqual(await route('NÃO é campanha, quero recado fora do horário'), { kind: 'none' },
     'Cida: negação veta campanha mesmo sem título alternativo no catálogo');
