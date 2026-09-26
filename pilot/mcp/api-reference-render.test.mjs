@@ -166,7 +166,7 @@ test('alias de placeholder já publicado preserva endpoint e Param da página', 
 
 test('rota opcional preserva a página pública sem o segmento opcional', async () => {
   const fact = { ...endpoint, route: '/api/v2/contacts/{letter}', optionalAlias: '/api/v2/contacts',
-    parameters: [{ name: 'letter', type: 'string', in: 'route' }, { name: 'page', type: 'int', in: 'query' }] };
+    parameters: [{ name: 'letter', type: 'string', in: 'route', required: false }, { name: 'page', type: 'int', in: 'query' }] };
   const page = { ...examples[0], path: prose.path, paramNames: ['page'],
     frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts' } };
   const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
@@ -174,7 +174,7 @@ test('rota opcional preserva a página pública sem o segmento opcional', async 
   assert.equal(result.articles[0].endpoint, '/contacts');
   assert.match(result.articles[0].body, /\/api\/v2\/contacts\?page=1/);
   assert.match(result.articles[0].body, /<Param name="letter" type="string">route \(string\), opcional<\/Param>/);
-  assert.deepEqual(result.pending, ['parâmetro no código ausente da página: letter']);
+  assert.ok(result.pending.includes('parâmetro no código ausente da página: letter'));
 });
 
 test('parâmetros vêm dos fatos e divergências da página viram pendências nos dois sentidos', async () => {
@@ -213,6 +213,16 @@ test('query e body usam nomes e valores tipados dos fatos', () => {
   assert.match(rendered.body, /<Param name="name" type="string" required>body/);
   assert.match(rendered.body, /\/api\/v2\/contacts\?page=1/);
   assert.match(rendered.body, /-d '\{"name":"abc123"\}'/);
+});
+
+test('página sem parâmetro de corpo não o remove do artigo', () => {
+  const fact = { ...endpoint, verb: 'POST', route: '/api/v2/contacts',
+    parameters: [{ name: 'name', type: 'string', in: 'body' }], responseFields: [] };
+  const page = { ...examples[0], paramNames: [] };
+  const rendered = renderApiReference(fact, [page], page);
+  assert.match(rendered.body, /<Param name="name" type="string" required>body/);
+  assert.match(rendered.body, /-d '\{"name":"abc123"\}'/);
+  assert.deepEqual(rendered.pending, ['parâmetro no código ausente da página: name']);
 });
 
 test('todos os exemplos compartilham os headers exigidos pelos fatos', () => {

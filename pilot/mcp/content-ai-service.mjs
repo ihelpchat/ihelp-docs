@@ -387,9 +387,8 @@ export async function generateContentPackage(root, request, options = {}) {
       if (!validateGroundedOutput(prose, productContext, ['description', 'intro', 'notas'])) return withPending(evidencePending());
       const technical = renderApiReference(endpoint, productContext.apiExamples, page);
       const renderedParams = [...technical.body.matchAll(/<Param\s+[^>]*name="([^"]+)"/gu)].map((match) => match[1]);
-      if (page?.paramNames && (renderedParams.length !== page.paramNames.length
-        || renderedParams.some((name, at) => name !== page.paramNames[at]))) {
-        return withPending(apiPending(`parâmetro da página sem fato: ${prose.path}`));
+      if (renderedParams.length !== endpoint.parameters.length) {
+        return withPending(apiPending(`parâmetros renderizados sem correspondência com o fato: ${prose.path}`));
       }
       pending.push(...technical.pending);
       const body = [prose.intro, ...prose.notas, technical.body].filter(Boolean).join('\n\n');

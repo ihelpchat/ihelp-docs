@@ -22,7 +22,7 @@ export function renderApiReference(endpoint, examples, page) {
     const at = factParts.findIndex((part) => part.toLowerCase() === `{${item.name.toLowerCase()}}`);
     return at >= 0 && /^\{\w+\}$/u.test(displayParts[at])
       ? { ...item, name: displayParts[at].slice(1, -1) } : item;
-  }).filter((item) => !Array.isArray(page?.paramNames) || page.paramNames.some((name) => name.toLowerCase() === item.name.toLowerCase()));
+  });
   const query = parameters.filter((item) => item.in === 'query');
   const bodyFields = parameters.filter((item) => item.in === 'body');
   const requestBody = Object.fromEntries(bodyFields.map((item) => [item.name, /^(?:int|long|double|decimal|float|short|number)$/iu.test(item.type) ? 1 : /^bool(?:ean)?$/iu.test(item.type) ? true : 'abc123']));
@@ -73,7 +73,15 @@ export function renderApiReference(endpoint, examples, page) {
   const order = (kind) => kind === 'autorização' ? -1 : sections.findIndex((section) => section.toLowerCase().startsWith(kind === 'campos' ? 'campos relevantes' : kind));
   const rank = (kind) => kind === 'autorização' ? -1 : order(kind) < 0 ? 100 : order(kind);
   paragraphs.sort((left, right) => rank(left.kind) - rank(right.kind));
+  const pageNames = new Set(page?.paramNames?.map((name) => name.toLowerCase()) ?? []);
+  const factNames = new Set(parameters.map((item) => item.name.toLowerCase()));
+  const parameterPending = Array.isArray(page?.paramNames) ? [
+    ...page.paramNames.filter((name) => !factNames.has(name.toLowerCase()))
+      .map((name) => `parâmetro na página sem fato no código: ${name}`),
+    ...parameters.filter((item) => !pageNames.has(item.name.toLowerCase()))
+      .map((item) => `parâmetro no código ausente da página: ${item.name}`),
+  ] : [];
   return { source: 'api', contentType: 'referencia', method: endpoint.verb,
     endpoint: displayRoute, body: paragraphs.map((item) => item.body).join('\n\n'),
-    pending: endpoint.responseFields === null ? [`campos de resposta não verificáveis: ${endpoint.verb} ${endpoint.route}`] : [] };
+    pending: [...parameterPending, ...(endpoint.responseFields === null ? [`campos de resposta não verificáveis: ${endpoint.verb} ${endpoint.route}`] : [])] };
 }
