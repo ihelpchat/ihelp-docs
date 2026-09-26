@@ -30,7 +30,7 @@ function proseIssue(article, endpoint) {
   const headerNames = new Set(['Authorization', 'Content-Type']);
   const names = new Set([...parameterNames, ...fieldNames, ...headerNames]);
   const inlineNames = new Set([...parameterNames, ...fieldNames]);
-  for (const route of [endpoint.route, endpoint.optionalAlias]) {
+  for (const route of [endpoint.route, ...(endpoint.optionalAliases ?? (endpoint.optionalAlias ? [endpoint.optionalAlias] : []))]) {
     for (const segment of (route ?? '').split('/')) {
       if (segment) names.add(segment.replace(/^\{([^}]+)\}$/u, '$1'));
     }
@@ -249,7 +249,7 @@ function requestText(request, existing, productContext) {
 }
 
 function pageMatchesEndpoint(page, endpoint) {
-  return page?.frontmatter?.method && page?.frontmatter?.endpoint && endpoint.verb === page.frontmatter.method && [endpoint.route, endpoint.optionalAlias].filter(Boolean)
+  return page?.frontmatter?.method && page?.frontmatter?.endpoint && endpoint.verb === page.frontmatter.method && [endpoint.route, ...(endpoint.optionalAliases ?? (endpoint.optionalAlias ? [endpoint.optionalAlias] : []))]
     .some((route) => route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')
       === page.frontmatter.endpoint.toLowerCase().replace(/\{[^}]+\}/gu, '{}'));
 }
@@ -387,9 +387,8 @@ export async function generateContentPackage(root, request, options = {}) {
       if (!validateGroundedOutput(prose, productContext, ['description', 'intro', 'notas'])) return withPending(evidencePending());
       const technical = renderApiReference(endpoint, productContext.apiExamples, page);
       const renderedParams = [...technical.body.matchAll(/<Param\s+[^>]*name="([^"]+)"/gu)].map((match) => match[1]);
-      if (page?.paramNames && (renderedParams.length !== page.paramNames.length
-        || renderedParams.some((name, at) => name !== page.paramNames[at]))) {
-        return withPending(apiPending(`parâmetro da página sem fato: ${prose.path}`));
+      if (renderedParams.length !== endpoint.parameters.length) {
+        return withPending(apiPending(`parâmetros renderizados sem correspondência com o fato: ${prose.path}`));
       }
       pending.push(...technical.pending);
       const body = [prose.intro, ...prose.notas, technical.body].filter(Boolean).join('\n\n');

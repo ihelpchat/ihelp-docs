@@ -8,6 +8,7 @@ import { envCompatibility } from './env-compat.mjs';
 import ts from 'typescript';
 import uiSynonyms from './ui-synonyms.json' with { type: 'json' };
 import { readCsharpEndpoints } from '../lib/csharp-endpoints.mjs';
+import { routeMatches } from './api-route-match.mjs';
 
 const run = promisify(execFile);
 const SOURCE = /\.(?:ts|tsx|js|jsx|cs)$/iu;
@@ -23,6 +24,7 @@ const DEFAULT_DEADLINE_MS = 10_000;
 const listedCache = new Map();
 const eligibleCache = new Map();
 const fileCache = new Map();
+const controllerCache = new Map();
 const SOURCES = Object.freeze({
   frontend: { repository: 'ihelpchat/front-react', role: 'frontend', env: envCompatibility.localCheckouts.frontend,
     folders: ['src/components', 'src/pages', 'src/features', 'src/routes'] },
@@ -274,26 +276,37 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
       const apiTerms = terms.filter((term) => term !== 'api');
       const controllerPaths = paths.filter((path) => /Controller\.cs$/u.test(path));
       const citedControllers = [];
-      const citedContent = new Map();
+      const scannedControllers = new Map();
+      async function controllerData(path) {
+        if (scannedControllers.has(path)) return scannedControllers.get(path);
+        const full = join(root, path);
+        const mtimeMs = (await deadline.wait(lstat(full))).mtimeMs;
+        const cached = cache ? controllerCache.get(full) : null;
+        if (cached?.mtimeMs === mtimeMs) {
+          scannedControllers.set(path, cached);
+          return cached;
+        }
+        const content = await deadline.wait(reader(full, { signal: deadline.signal }));
+        const data = { mtimeMs, content, shallow: readCsharpEndpoints(content, path, { dtoSources: [] }) };
+        scannedControllers.set(path, data);
+        if (cache) controllerCache.set(full, data);
+        return data;
+      }
       for (const path of controllerPaths) {
         if (!explicitEndpoints.length || await hasSymlink(join(root, path), root)) continue;
-        const content = await deadline.wait(reader(join(root, path), { signal: deadline.signal }));
-        const shallow = readCsharpEndpoints(content, path, { dtoSources: [] });
-        const matches = shallow.some(({ controllerRoute }) => controllerRoute && explicitEndpoints.some(({ route }) => {
-          const prefix = controllerRoute.toLowerCase();
-          const requested = route.toLowerCase();
-          const shortPrefix = prefix.replace(/^\/api\/v\d+/u, '');
-          return [prefix, shortPrefix].some((base) => requested === base || requested.startsWith(`${base}/`));
-        }));
-        if (matches) { citedControllers.push(path); citedContent.set(path, content); }
+        const { shallow } = await controllerData(path);
+        const matches = shallow.some((endpoint) => explicitEndpoints.some(({ route }) =>
+          [endpoint.route, ...(endpoint.optionalAliases ?? [])].some((effective) =>
+            routeMatches(route, effective) ||
+            (!/^\/api\/v\d+\//iu.test(route) && routeMatches(route, effective.replace(/^\/api\/v\d+/iu, ''))))));
+        if (matches) citedControllers.push(path);
       }
       const topicControllers = controllerPaths.filter((path) => apiTerms.some((term) => normalize(path).includes(term)))
         .sort((left, right) => pathRelevance(right, apiTerms, []) - pathRelevance(left, apiTerms, [])).slice(0, 16);
       const controllers = [...new Set([...citedControllers, ...topicControllers])];
       for (const path of controllers) {
         if (await hasSymlink(join(root, path), root)) continue;
-        const content = citedContent.get(path) ?? await deadline.wait(reader(join(root, path), { signal: deadline.signal }));
-        const shallow = readCsharpEndpoints(content, path, { dtoSources: [] });
+        const { content, shallow } = await controllerData(path);
         const types = new Set(shallow.flatMap((endpoint) => endpoint.dtoTypes ?? []));
         const dtoSources = [];
         for (const dtoPath of paths.filter((candidate) => types.has(candidate.split('/').at(-1).replace(/\.cs$/u, ''))).slice(0, 16)) {

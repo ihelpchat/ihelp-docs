@@ -166,14 +166,52 @@ test('alias de placeholder já publicado preserva endpoint e Param da página', 
 
 test('rota opcional preserva a página pública sem o segmento opcional', async () => {
   const fact = { ...endpoint, route: '/api/v2/contacts/{letter}', optionalAlias: '/api/v2/contacts',
-    parameters: [{ name: 'letter', type: 'string', in: 'route' }, { name: 'page', type: 'int', in: 'query' }] };
+    parameters: [{ name: 'letter', type: 'string', in: 'route', required: false }, { name: 'page', type: 'int', in: 'query' }] };
   const page = { ...examples[0], path: prose.path, paramNames: ['page'],
     frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts' } };
   const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   assert.equal(result.articles[0].endpoint, '/contacts');
   assert.match(result.articles[0].body, /\/api\/v2\/contacts\?page=1/);
-  assert.doesNotMatch(result.articles[0].body, /<Param name="letter"/);
+  assert.match(result.articles[0].body, /<Param name="letter" type="string">route \(string\), opcional<\/Param>/);
+  assert.ok(result.pending.includes('parâmetro no código ausente da página: letter'));
+});
+
+test('parâmetros vêm dos fatos e divergências da página viram pendências nos dois sentidos', async () => {
+  const fact = { ...endpoint, route: '/api/v2/contacts/{letter}', optionalAlias: '/api/v2/contacts',
+    parameters: [
+      { name: 'letter', type: 'string', in: 'route', required: false },
+      { name: 'page', type: 'int', in: 'query' },
+      { name: 'limit', type: 'int', in: 'query' },
+    ], responseFields: [] };
+  const page = { ...examples[0], path: prose.path, paramNames: ['searchData', 'page', 'limit'],
+    frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts' } };
+  const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+  assert.deepEqual([...result.articles[0].body.matchAll(/<Param name="([^"]+)"/gu)].map((match) => match[1]), ['letter', 'page', 'limit']);
+  assert.match(result.articles[0].body, /<Param name="letter" type="string">route \(string\), opcional<\/Param>/);
+  assert.deepEqual(result.pending, [
+    'parâmetro na página sem fato no código: searchData',
+    'parâmetro no código ausente da página: letter',
+  ]);
+});
+
+test('página alinhada aos fatos não cria pendência de parâmetro', async () => {
+  const fact = { ...endpoint, responseFields: [] };
+  const page = { ...examples[0], path: prose.path, paramNames: ['IdRef'],
+    frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts/details/{IdRef}' } };
+  const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+  assert.deepEqual(result.pending, []);
+});
+
+test('pacote rejeita artigo sem Param para parâmetro de rota factual', async () => {
+  const page = { ...examples[0], path: prose.path, components: ['CodeTabs', 'Response'],
+    frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts/details/{IdRef}' } };
+  const result = await generate((value) => value, { ...context, apiExamples: [page] });
+  assert.equal(result.status, 'needs_information');
+  assert.deepEqual(result.articles, []);
+  assert.match(result.questions.join(' '), /parâmetros renderizados sem correspondência com o fato/i);
 });
 
 test('query e body usam nomes e valores tipados dos fatos', () => {
@@ -184,6 +222,16 @@ test('query e body usam nomes e valores tipados dos fatos', () => {
   assert.match(rendered.body, /<Param name="name" type="string" required>body/);
   assert.match(rendered.body, /\/api\/v2\/contacts\?page=1/);
   assert.match(rendered.body, /-d '\{"name":"abc123"\}'/);
+});
+
+test('página sem parâmetro de corpo não o remove do artigo', () => {
+  const fact = { ...endpoint, verb: 'POST', route: '/api/v2/contacts',
+    parameters: [{ name: 'name', type: 'string', in: 'body' }], responseFields: [] };
+  const page = { ...examples[0], paramNames: [] };
+  const rendered = renderApiReference(fact, [page], page);
+  assert.match(rendered.body, /<Param name="name" type="string" required>body/);
+  assert.match(rendered.body, /-d '\{"name":"abc123"\}'/);
+  assert.deepEqual(rendered.pending, ['parâmetro no código ausente da página: name']);
 });
 
 test('todos os exemplos compartilham os headers exigidos pelos fatos', () => {

@@ -179,14 +179,26 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       const action = stringArg(http) ?? '';
       const reference = arguments.length > 2;
       const version = stringArg(attr(controller.attrs, 'ApiVersion')) ?? '';
+      const combined = action.startsWith('~/') ? action.slice(2) : action.startsWith('/') ? action : [base, action].filter(Boolean).join('/');
+      const expanded = combined.replace(/\{version:apiVersion\}/gu, version);
+      const normalizeReference = (value) => `/${value.replace(/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\??\}/gu, '{$1}').replace(/^\/+|\/+$/gu, '')}`;
       const route = reference
-        ? `/${[base, action].filter(Boolean).join('/').replace(/\{version:apiVersion\}/gu, version)
-          .replace(/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\??\}/gu, '{$1}').replace(/\/+$/u, '')}`
-        : normalizeRoute([base, action].filter(Boolean).join('/'));
+        ? normalizeReference(expanded)
+        : normalizeRoute(combined.replace(/^\/+|\/+$/gu, ''));
       const controllerRoute = reference && base ? `/${base.replace(/\{version:apiVersion\}/gu, version)
         .replace(/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\??\}/gu, '{$1}').replace(/^\/+|\/+$/gu, '')}` : undefined;
-      const optionalAlias = reference && /(?:^|\/)\{[A-Za-z][A-Za-z0-9_]*(?::[^{}]+)?\?\}$/u.test(action)
-        ? route.replace(/\/\{[A-Za-z][A-Za-z0-9_]*\}$/u, '') : null;
+      const optionalAliases = [];
+      const optionalNames = new Set();
+      if (reference) {
+        let suffix = expanded;
+        let optional;
+        while ((optional = suffix.match(/\/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\?\}$/u))) {
+          optionalNames.add(optional[1].toLowerCase());
+          suffix = suffix.slice(0, -optional[0].length);
+          optionalAliases.push(normalizeReference(suffix));
+        }
+      }
+      const optionalAlias = optionalAliases[0] ?? null;
       let end = i + 1, nesting = 1;
       while (end < t.length && nesting) { if (t[end].value === '(') nesting++; if (t[end].value === ')') nesting--; end++; }
       const location = `${file}:${lineOf(source, t[i - 1].at)}`;
@@ -199,7 +211,7 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       const actionBody = actionBodyOf(source, t, end);
       const assigned = new Set([...actionBody.matchAll(/\b(\w+)\.(\w+)\s*=(?!=)/gu)].map((match) => match[2].toLowerCase()));
       const parameters = rawParameters?.filter((item) => item.in !== 'query' || !assigned.has(item.name.toLowerCase()))
-        .map(({ dtoType: _dtoType, ...item }) => ({ ...item, source: item.source ?? location }));
+        .map(({ dtoType: _dtoType, ...item }) => ({ ...item, ...(item.in === 'route' ? { required: !optionalNames.has(item.name.toLowerCase()) } : {}), source: item.source ?? location }));
       const declaration = source.slice(Math.max(0, source.lastIndexOf('public ', t[i - 1].at)), t[i - 1].at);
       const declaredResultType = responseTypeOf(declaration, pending);
       const resultType = declaredResultType === 'IActionResult' || !declaredResultType
@@ -208,7 +220,7 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       const responseFields = fields.length ? fields : null;
       const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : [];
       endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
-        ...(reference ? { controllerRoute, parameters, responseFields, responseType: resultType, pending: responsePending, optionalAlias, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
+        ...(reference ? { controllerRoute, parameters, responseFields, responseType: resultType, pending: responsePending, optionalAlias, optionalAliases, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
           routeSource, actionRouteSource: verbSource, verbSource, authorizationSource, authorization: policy } : {}) });
       pending = [];
     }
