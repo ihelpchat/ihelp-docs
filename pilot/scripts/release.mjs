@@ -13,6 +13,12 @@ const requireHttps = (value) => {
 };
 const parse = async (file) => JSON.parse(await readFile(file, 'utf8'));
 const validSha = (value, length) => typeof value === 'string' && new RegExp(`^[a-f0-9]{${length}}$`, 'u').test(value);
+const fetchFromOrigin = async (input, options = {}) => {
+  const requested = new URL(input);
+  const response = await fetch(requested, { ...options, redirect: 'error', signal: AbortSignal.timeout(10_000) });
+  if (new URL(response.url).origin !== requested.origin) throw new Error('Resposta fora da origem configurada');
+  return response;
+};
 
 async function prepare() {
   const assistantUrl = process.env.NEXT_PUBLIC_ASSISTANT_URL?.trim() ?? '';
@@ -50,7 +56,7 @@ async function site(out, siteUrl) {
   const expected = await parse(join(out, 'release.json'));
   const url = new URL('release.json', `${siteUrl.replace(/\/$/u, '')}/`);
   if (url.protocol !== 'https:') throw new Error('Staging docs URL deve ser HTTPS');
-  const response = await fetch(url, { signal: AbortSignal.timeout(10_000), headers: { 'Cache-Control': 'no-cache' } });
+  const response = await fetchFromOrigin(url, { headers: { 'Cache-Control': 'no-cache' } });
   if (!response.ok) throw new Error(`Staging docs HTTP ${response.status}`);
   const actual = await response.json();
   if (actual.codeSha !== expected.codeSha || actual.contentSha256 !== expected.contentSha256) throw new Error('Staging docs não publicou SHA esperado');
@@ -68,13 +74,12 @@ async function service(out, expectedUrl) {
   if (docs.protocol !== 'https:' || docs.origin !== origin) throw new Error('CLARICIA_DOCS_ORIGIN deve ser origem HTTPS');
   const siteUrl = process.env.CLARICIA_DOCS_URL?.trim();
   if (!siteUrl || new URL(siteUrl).origin !== origin) throw new Error('CLARICIA_DOCS_ORIGIN difere da URL publicada do site');
-  const response = await fetch(new URL('/health', assistantUrl), { signal: AbortSignal.timeout(10_000) });
+  const response = await fetchFromOrigin(new URL('/health', assistantUrl));
   if (!response.ok) throw new Error(`Health HTTP ${response.status}`);
   if (origin) {
     for (const candidate of [origin, 'https://untrusted.example.test']) {
-      const preflight = await fetch(assistantUrl, {
+      const preflight = await fetchFromOrigin(assistantUrl, {
         method: 'OPTIONS', headers: { Origin: candidate, 'Access-Control-Request-Method': 'POST' },
-        signal: AbortSignal.timeout(10_000),
       });
       const allowed = preflight.headers.get('access-control-allow-origin');
       if (candidate === origin ? preflight.status !== 204 || allowed !== origin : allowed === candidate || allowed === '*') {
