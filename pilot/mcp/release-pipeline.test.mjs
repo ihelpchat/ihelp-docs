@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
-import { once } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -28,25 +27,30 @@ assert.notEqual(run(['artifact', out], { CLARICIA_DEPLOY_ENABLED: 'true' }).stat
 assert.equal(run(['artifact', out], { CLARICIA_DEPLOY_ENABLED: 'false' }).status, 0);
 await writeFile(asset, `const endpoint=${JSON.stringify(url)};`);
 assert.equal(run(['artifact', out], { CLARICIA_DEPLOY_ENABLED: 'true' }).status, 0);
+assert.notEqual(run(['artifact', out, 'https://staging.example.test/assistant'], { CLARICIA_DEPLOY_ENABLED: 'true' }).status, 0, 'build de production com URL de staging deve falhar');
+assert.equal(run(['artifact', out, url], { CLARICIA_DEPLOY_ENABLED: 'true' }).status, 0);
 await writeFile(release, JSON.stringify({ ...metadata, assistantUrl: 'http://127.0.0.1:3100/assistant' }));
 assert.notEqual(run(['artifact', out], { CLARICIA_DEPLOY_ENABLED: 'true' }).status, 0);
 await writeFile(release, JSON.stringify(metadata));
 
-let health = { codeSha: sha, contentSha256: contentSha };
-const http = await import('node:http');
-const service = http.createServer((_req, res) => res.end(JSON.stringify(health)));
-service.listen(0, '127.0.0.1');
-await once(service, 'listening');
-const healthUrl = `http://127.0.0.1:${service.address().port}/health`;
-const runService = () => new Promise((resolve) => {
-  const child = spawn(process.execPath, [script, 'service', out, healthUrl], { cwd: root, stdio: 'ignore' });
-  child.once('exit', (code) => resolve(code));
+const mock = join(fixture, 'mock-fetch.mjs');
+await writeFile(mock, `globalThis.fetch = async (input, options = {}) => {
+  const url = new URL(input);
+  if (url.origin !== 'https://claricia.example.test') throw new Error('health consultou outra origem');
+  if (url.pathname === '/health') return Response.json({ codeSha: '${sha}', contentSha256: process.env.MOCK_MODE === 'wrong-version' ? '${'c'.repeat(64)}' : '${contentSha}' });
+  if (url.pathname !== '/assistant' || options.method !== 'OPTIONS') throw new Error('preflight ausente');
+  const origin = options.headers.Origin;
+  const allowed = origin === 'https://docs.example.test' || process.env.MOCK_MODE === 'bad-cors';
+  return new Response(null, { status: allowed ? 204 : 403, headers: allowed ? { 'access-control-allow-origin': origin } : {} });
+};`);
+const runService = (env = {}, args = ['service', out, url]) => run(args, {
+  NODE_OPTIONS: `--import=${mock}`, CLARICIA_DOCS_ORIGIN: 'https://docs.example.test', ...env,
 });
-try {
-  assert.equal(await runService(), 0);
-  health = { ...health, contentSha256: 'c'.repeat(64) };
-  assert.notEqual(await runService(), 0, 'versão incompatível deve falhar');
-} finally { await new Promise((resolve) => service.close(resolve)); }
+assert.equal(runService().status, 0);
+assert.notEqual(runService({ CLARICIA_DOCS_ORIGIN: '' }).status, 0, 'origem do docs vazia deve falhar');
+assert.notEqual(runService({ MOCK_MODE: 'bad-cors' }).status, 0, 'CORS aberto a outra origem deve falhar');
+assert.notEqual(runService({ MOCK_MODE: 'wrong-version' }).status, 0, 'versão incompatível deve falhar');
+assert.notEqual(runService({}, ['service', out, 'https://staging.example.test/assistant']).status, 0, 'health separado do artifact deve falhar');
 
 const workflow = await readFile(new URL('../../.github/workflows/deploy.yml', import.meta.url), 'utf8');
 assert.match(workflow, /CLARICIA_DEPLOY_ENABLED/);
