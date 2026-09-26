@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 const checker = new URL('../scripts/workflow-concurrency.check.mjs', import.meta.url).pathname;
 const workflow = readFileSync(new URL('../../.github/workflows/deploy.yml', import.meta.url), 'utf8');
+const release = readFileSync(new URL('../../.github/workflows/product-release.yml', import.meta.url), 'utf8');
 const temp = mkdtempSync(join(tmpdir(), 'published-build-'));
 try {
   const safe = join(temp, 'safe.yml');
@@ -30,6 +31,25 @@ try {
     assert.notEqual(changed, workflow, `${label}: fixture não mudou`);
     writeFileSync(bad, changed);
     assert.notEqual(spawnSync(process.execPath, [checker, bad], { encoding: 'utf8' }).status, 0, label);
+  }
+  const releaseFile = join(temp, 'release.yml');
+  const checkRelease = (source) => {
+    writeFileSync(releaseFile, source);
+    return spawnSync(process.execPath, [checker, '--product-release', releaseFile], { encoding: 'utf8' });
+  };
+  assert.equal(checkRelease(release).status, 0, 'workflow de versão seguro passa');
+  const releaseMutations = [
+    ['pull_request', (s) => s.replace('  workflow_dispatch:', '  pull_request:\n  workflow_dispatch:'), /schedule.*workflow_dispatch|pull_request/i],
+    ['GITHUB_TOKEN para escrita', (s) => s.replace('GITHUB_TOKEN: ${{ secrets.DOCS_WRITE_TOKEN }}', 'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}'), /DOCS_WRITE_TOKEN/i],
+    ['base main', (s) => s.replace('DOCS_UPDATE_BASE: ${{ vars.DOCS_UPDATE_BASE }}', 'DOCS_UPDATE_BASE: main'), /DOCS_UPDATE_BASE/i],
+    ['token de leitura fora do checkout', (s) => s.replace('          PRODUCT_READ_TOKEN: ${{ secrets.PRODUCT_READ_TOKEN }}', '          PRODUCT_READ_TOKEN: ${{ secrets.PRODUCT_READ_TOKEN }}\n          EXTRA_READ_TOKEN: ${{ secrets.PRODUCT_READ_TOKEN }}'), /PRODUCT_READ_TOKEN/i],
+  ];
+  for (const [label, mutate, reason] of releaseMutations) {
+    const changed = mutate(release);
+    assert.notEqual(changed, release, `${label}: fixture não mudou`);
+    const verdict = checkRelease(changed);
+    assert.notEqual(verdict.status, 0, label);
+    assert.match(verdict.stderr, reason, `${label}: motivo específico`);
   }
 } finally {
   rmSync(temp, { recursive: true, force: true });
