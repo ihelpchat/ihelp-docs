@@ -97,6 +97,18 @@ test('alias de placeholder já publicado preserva endpoint e Param da página', 
   assert.match(rendered.body, /\/api\/v2\/contactTags\/getContactsTagByContactId\/1/);
 });
 
+test('rota opcional preserva a página pública sem o segmento opcional', async () => {
+  const fact = { ...endpoint, route: '/api/v2/contacts/{letter}', optionalAlias: '/api/v2/contacts',
+    parameters: [{ name: 'letter', type: 'string', in: 'route' }, { name: 'page', type: 'int', in: 'query' }] };
+  const page = { ...examples[0], path: prose.path, paramNames: ['page'],
+    frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts' } };
+  const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+  assert.equal(result.articles[0].endpoint, '/contacts');
+  assert.match(result.articles[0].body, /\/api\/v2\/contacts\?page=1/);
+  assert.doesNotMatch(result.articles[0].body, /<Param name="letter"/);
+});
+
 test('query e body usam nomes e valores tipados dos fatos', () => {
   const fact = { ...endpoint, verb: 'POST', route: '/api/v2/contacts',
     parameters: [{ name: 'page', type: 'int', in: 'query' }, { name: 'name', type: 'string', in: 'body' }] };
