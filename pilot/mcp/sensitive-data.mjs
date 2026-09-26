@@ -48,7 +48,7 @@ function opaqueSequences(value) {
         const start = text.lastIndexOf('\n', match.index - 1) + 1;
         const end = text.indexOf('\n', match.index);
         const line = text.slice(start, end < 0 ? undefined : end);
-        const importedPath = /^\s*(?:\d+:\s*)?import\b.*\bfrom\s*['"]((?:\.{1,2}\/)+[A-Za-z0-9_/-]+)['"]/u.exec(line)?.[1];
+        const importedPath = /^\s*(?:\d+:\s*)?import\b.*\bfrom\s*['"]((?:(?:\.{1,2}|@)\/)+[A-Za-z0-9_/-]+)['"]/u.exec(line)?.[1];
         if (importedPath?.includes(candidate)) return false;
       }
       return opaqueSequence(candidate);

@@ -5,6 +5,8 @@ import { constants } from 'node:fs';
 import { isAbsolute, join, relative, sep, dirname, parse } from 'node:path';
 import { containsSensitiveData, redactSensitiveData } from './sensitive-data.mjs';
 import { envCompatibility } from './env-compat.mjs';
+import ts from 'typescript';
+import uiSynonyms from './ui-synonyms.json' with { type: 'json' };
 
 const run = promisify(execFile);
 const SOURCE = /\.(?:ts|tsx|js|jsx|cs)$/iu;
@@ -35,14 +37,35 @@ function normalize(value) {
 
 function words(topic, module) {
   return [...new Set(`${topic} ${module}`.split(/[^\p{L}\p{N}]+/u).map(normalize)
-    .filter((word) => word.length > 2 && !STOP.has(word))
-    .flatMap((word) => [word, ...(ALIASES[word] ?? [])]))];
+    .filter((word) => word.length > 2)
+    .flatMap((word) => [word, ...(uiSynonyms[word] ?? []), ...(ALIASES[word] ?? [])])
+    .filter((word) => word.length > 2 && !STOP.has(word)))];
+}
+
+function lineKinds(path, content) {
+  if (!/\.[jt]sx?$/u.test(path)) return null;
+  const source = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true,
+    /\.tsx$/u.test(path) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const kinds = new Map();
+  function mark(node, weight) {
+    const first = source.getLineAndCharacterOfPosition(node.getStart(source)).line;
+    const last = source.getLineAndCharacterOfPosition(node.getEnd()).line;
+    for (let line = first; line <= last; line++) kinds.set(line, Math.max(kinds.get(line) ?? 0, weight));
+  }
+  function visit(node) {
+    if (ts.isJsxText(node) && node.getText(source).trim()) mark(node, 120);
+    if (ts.isJsxAttribute(node) && /^(?:labelText|label|title|aria-label|placeholder)$/iu.test(node.name.text)) mark(node, 120);
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return kinds;
 }
 
 export function isAllowedSourcePath(path, role = 'frontend') {
   const folders = SOURCES[role]?.folders ?? [];
+  const publicConfigurationController = role === 'backend' && /^Comzada\.Application\/Controllers\/V2\/Configurations(?:Users|Departments)Controller\.cs$/u.test(path);
   return folders.some((folder) => path.startsWith(`${folder}/`))
-    && SOURCE.test(path) && !BLOCKED.test(path) && !BLOCKED_FILE.test(path)
+    && SOURCE.test(path) && !BLOCKED.test(path) && (publicConfigurationController || !BLOCKED_FILE.test(path))
     && !path.startsWith('/') && !path.split('/').includes('..');
 }
 
@@ -105,8 +128,9 @@ async function hasSymlink(path, stop = parse(path).root) {
 
 async function candidatePaths(root, paths, terms, topic, deadline) {
   const first = terms[0];
+  const originalFirst = normalize(String(topic).split(/[^\p{L}\p{N}]+/u)[0]);
   const accented = String(topic).split(/[^\p{L}\p{N}]+/u).find((word) => normalize(word) === first);
-  const needles = [...new Set([first, accented, ...(ALIASES[first] ?? [])].filter(Boolean))];
+  const needles = [...new Set([first, originalFirst, accented, ...(uiSynonyms[first] ?? []), ...(ALIASES[first] ?? [])].filter(Boolean))];
   const candidates = [];
   for (let index = 0; index < paths.length; index += 500) {
     deadline.remaining();
@@ -216,6 +240,7 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
         if (cache) fileCache.set(fileKey, lines);
       }
       if (!lines) return null;
+      const kinds = lineKinds(path, lines.join('\n'));
       const pathScore = pathRelevance(path, terms, moduleTerms);
       let best = null;
       for (let index = 0; index < lines.length; index += 1) {
@@ -225,7 +250,8 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
         const line = normalize(lines[index]);
         const hits = terms.filter((term) => line.includes(term)).length;
         if (!hits) continue;
-        const score = (phrase && line.includes(phrase) ? 100 : 0) + hits * 12 + pathScore;
+        const typeScore = kinds?.get(index) ?? (/^\s*(?:\/\/|\/\*|\*)/u.test(lines[index]) ? -120 : /\b(?:import|using)\b/u.test(lines[index]) ? -80 : 0);
+        const score = (phrase && line.includes(phrase) ? 100 : 0) + hits * 12 + pathScore + typeScore;
         if (!best || score > best.score) best = { score, line: index + 1, excerpt: lines.slice(Math.max(0, index - 2), index + 3).map((value, offset) => `${Math.max(0, index - 2) + offset + 1}: ${value.slice(0, 400)}`).join('\n').slice(0, 2_000) };
       }
       if (!best && moduleTerms.some((term) => normalize(path).includes(term))) {
