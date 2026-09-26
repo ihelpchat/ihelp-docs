@@ -102,6 +102,17 @@ try {
     assert.equal(result.first.body.reason, 'unsupported_parameter');
     assert.doesNotMatch(JSON.stringify(result.first.body), /sk-|TESTSECRET/u);
     assert.doesNotMatch(result.stderr, /sk-TESTSECRET-EXAMPLE/u, 'log também deve redigir o segredo');
+    assert.match(result.stderr, /Unsupported value: \[segredo removido\]/u, 'diagnóstico redigido fica no log');
+  });
+  await test('modelo não suportado usa código unsupported_model', async () => {
+    const { first } = await scenario(400, true, { providerMessage: 'Unsupported value for model' });
+    assert.equal(first.status, 503);
+    assert.equal(first.body.reason, 'unsupported_model');
+  });
+  await test('requisição inválida usa código invalid_request', async () => {
+    const { first } = await scenario(400, true, { providerMessage: 'Invalid request payload' });
+    assert.equal(first.status, 503);
+    assert.equal(first.body.reason, 'invalid_request');
   });
   await test('401 usa código auth_failed', async () => {
     const { first } = await scenario(401);
