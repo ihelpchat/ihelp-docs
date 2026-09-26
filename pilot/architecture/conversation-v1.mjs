@@ -91,6 +91,7 @@ export const assistantRequestSchema = z.object({
   question: z.string().trim().min(1).max(500),
   sessionId: z.string().min(1).max(128).optional(),
   origin: z.enum(['faq', 'app']).optional(),
+  companyId: z.number().int().positive().optional(),
   history: z.array(historySchema).max(6).optional(),
   scope: z.enum(['Tudo', 'Ajuda e FAQ', 'API', 'Tutoriais', 'Novidades']).optional(),
   page: z.object({ path: z.string().regex(/^\/(?!\/)[a-z0-9/_-]+$/i), title: z.string().max(200) }).strict().optional(),
@@ -123,10 +124,15 @@ export const assistantReplySchema = z.object({
   guideChoices: z.array(choiceSchema.pick({ id: true, label: true })).max(6).optional(),
   actions: z.array(productActionSchema).max(8).optional(),
   model: z.string().optional(),
+  eventId: z.string().regex(/^event-[a-f0-9]{16}$/).optional(),
 }).strict();
 
 export const parseGuide = (value) => guideSchema.parse(value);
-export const parseAssistantRequest = (value) => assistantRequestSchema.parse(value);
+export const parseAssistantRequest = (value) => {
+  const input = value && typeof value === 'object' && !Array.isArray(value) ? { ...value } : value;
+  if (input && (input.origin !== 'app' || !Number.isSafeInteger(input.companyId) || input.companyId <= 0)) delete input.companyId;
+  return assistantRequestSchema.parse(input);
+};
 export const parseAssistantReply = (value) => {
   const reply = assistantReplySchema.parse(value);
   return {

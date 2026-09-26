@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createHash, timingSafeEqual, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isIP } from 'node:net';
@@ -9,6 +10,8 @@ import { answerQuestion } from './assistant-service.mjs';
 import { normalizeFeedback, saveFeedback, summarizeFeedback } from './feedback-service.mjs';
 import { sanitizeWidgetContext } from './real-state.mjs';
 import { saveSessionEvent, pruneSessionEvents } from './session-events.mjs';
+import { saveConversation, listConversations, pruneConversations, summarizeConversations } from './conversation-log.mjs';
+import { adminPage, adminLoginPage } from './conversation-admin.mjs';
 import { topicForQuestion, routerSelfCheck } from './closed-router.mjs';
 import { budgetState } from './provider-budget.mjs';
 import { actionForQuestion, issueForQuestion } from './gap-classification.mjs';
@@ -29,9 +32,12 @@ const port = Number(process.env.PORT ?? 3100);
 const root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname;
 const feedbackFile = process.env.FEEDBACK_FILE ?? '/tmp/ihelp-docs-feedback.jsonl';
 const sessionEventsFile = process.env.SESSION_EVENTS_FILE ?? '/tmp/ihelp-docs-session-events.jsonl';
+const conversationsFile = process.env.CONVERSATIONS_FILE ?? '/tmp/ihelp-docs-conversations.jsonl';
+const conversationsRetentionDays = process.env.CONVERSATIONS_RETENTION_DAYS;
 const feedbackAdminToken = process.env.FEEDBACK_ADMIN_TOKEN;
 const allowedOrigins = new Set((process.env.ASSISTANT_ALLOWED_ORIGINS ?? 'http://127.0.0.1:4173,http://localhost:4173').split(',').map((value) => value.trim()).filter(Boolean));
 let lastSessionPrune = 0;
+let lastConversationPrune = 0;
 const assistantSessions = new Map();
 const assistantIps = new Map();
 const feedbackIps = new Map();
@@ -110,9 +116,39 @@ async function readJson(request) {
   return JSON.parse(raw || '{}');
 }
 
+function adminAuthorized(authorization) {
+  if (!feedbackAdminToken || typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) return false;
+  const expected = createHash('sha256').update(feedbackAdminToken).digest();
+  const actual = createHash('sha256').update(authorization.slice(7)).digest();
+  return timingSafeEqual(expected, actual);
+}
+
 export const httpServer = createServer(async (request, response) => {
-  cors(request, response);
   const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
+  if (pathname === '/admin/claricia' || pathname === '/admin/claricia/data') {
+    response.setHeader('X-Robots-Tag', 'noindex');
+    response.setHeader('Cache-Control', 'no-store');
+    if (!adminAuthorized(request.headers.authorization)) {
+      if (pathname === '/admin/claricia' && request.method === 'GET') response.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' }).end(adminLoginPage);
+      else response.writeHead(401, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    if (request.method !== 'GET') { response.writeHead(405).end(); return; }
+    if (pathname === '/admin/claricia') {
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(adminPage);
+      return;
+    }
+    try {
+      const params = new URL(request.url, 'http://localhost').searchParams;
+      const rows = await listConversations(conversationsFile);
+      const summary = summarizeConversations(rows, Object.fromEntries(params));
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify(summary));
+    } catch {
+      response.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Não foi possível carregar as conversas.' }));
+    }
+    return;
+  }
+  cors(request, response);
   if (pathname === '/health' && request.method === 'GET') {
     try {
       const manifest = JSON.parse(await readFile(join(root, 'public/guides/manifest.json'), 'utf8'));
@@ -141,7 +177,8 @@ export const httpServer = createServer(async (request, response) => {
   if (pathname === '/assistant' && request.method === 'POST') {
     try {
       const startedAt = Date.now();
-      const body = parseAssistantRequest(await readJson(request));
+      const rawBody = await readJson(request);
+      const body = parseAssistantRequest(rawBody);
       const question = typeof body.question === 'string' ? body.question.trim() : '';
       if (question.length < 1 || question.length > 500) throw new Error('A pergunta deve ter entre 1 e 500 caracteres.');
       const ip = clientIp(request);
@@ -167,15 +204,38 @@ export const httpServer = createServer(async (request, response) => {
       const topic = topicForQuestion(question);
       const issue = issueForQuestion(question, widgetContext);
       const action = issue === 'usage' ? actionForQuestion(question) : undefined;
+      const recordedAt = Date.now();
+      const eventId = opaqueId('event', randomUUID());
+      const sessionOpaqueId = opaqueId('session', body.sessionId ?? randomUUID());
+      const origin = body.origin === 'app' ? 'app' : 'faq';
+      const resolution = result.resolution ?? 'not_found';
       try {
-        const now = Date.now();
+        if (conversationsRetentionDays && recordedAt - lastConversationPrune > 24 * 60 * 60_000) {
+          await pruneConversations(conversationsFile, { now: recordedAt, retentionDays: Number(conversationsRetentionDays) });
+          lastConversationPrune = recordedAt;
+        }
+        await saveConversation(conversationsFile, {
+          at: new Date(recordedAt).toISOString(), eventId, sessionId: sessionOpaqueId, origin,
+          ...(body.companyId ? { companyId: body.companyId } : {}), path: pagePath ?? '/assistente',
+          question: rawBody.question, answer: [result.answer, ...(result.steps ?? []).map((step) => step.text)].join('\n'),
+          resolution, guideId: resolvedStep?.guideId ?? result.guide?.guideId,
+          stepId: resolvedStep?.stepId ?? result.guide?.stepId,
+          topic, action, issue,
+          offeredHuman: Boolean(result.actions?.some((item) => item.destination === 'support') || result.escalation),
+          latencyMs: recordedAt - startedAt, model: result.model ?? process.env.OPENAI_MODEL ?? 'fixed',
+        });
+      } catch {
+        console.error('Falha ao registrar conversa');
+      }
+      try {
+        const now = recordedAt;
         if (now - lastSessionPrune > 24 * 60 * 60_000) {
           await pruneSessionEvents(sessionEventsFile, { now });
           lastSessionPrune = now;
         }
         await saveSessionEvent(sessionEventsFile, {
-          sessionId: opaqueId('session', body.sessionId ?? crypto.randomUUID()),
-          origin: body.origin === 'app' ? 'app' : 'faq',
+          sessionId: sessionOpaqueId,
+          origin,
           ...resolvedStep,
           durationMs: Math.min(now - startedAt, 300_000),
           result: ['complete', 'partial', 'not_found', 'in_progress'].includes(result.resolution) ? result.resolution : 'not_found',
@@ -187,7 +247,7 @@ export const httpServer = createServer(async (request, response) => {
       } catch {
         console.error('Falha ao registrar evento de sessão');
       }
-      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(result));
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ ...result, eventId }));
     } catch (error) {
       const unavailable = /OPENAI_API_KEY/.test(error.message);
       const invalid = error.name === 'ZodError' || /pergunta|payload|JSON/i.test(error.message);
@@ -207,7 +267,7 @@ export const httpServer = createServer(async (request, response) => {
       }
       const normalized = {
         ...body,
-        ...(body.eventId === undefined ? {} : { eventId: opaqueId('event', body.eventId) }),
+        ...(body.eventId === undefined ? {} : { eventId: /^event-[a-f0-9]{16}$/u.test(body.eventId) ? body.eventId : opaqueId('event', body.eventId) }),
         path: publishedPathOrNull(body.path),
         ...(body.sources === undefined ? {} : { sources: body.sources.map(publishedPathOrNull).filter(Boolean) }),
       };

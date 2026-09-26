@@ -35,6 +35,7 @@ try {
   process.env.FEEDBACK_ADMIN_TOKEN = 'fixture-admin-token';
   process.env.CONVERSATIONS_FILE = file;
   process.env.SESSION_EVENTS_FILE = sessionFile;
+  process.env.FEEDBACK_FILE = join(dir, 'feedback.jsonl');
   const { httpServer } = await import('./http.mjs');
   try {
     if (!httpServer.listening) await once(httpServer, 'listening');
@@ -43,6 +44,7 @@ try {
     const base = { question, sessionId: 'session-12345678', origin: 'app', companyId: 42 };
     const reply = await post(base);
     assert.equal(reply.status, 200);
+    const replyBody = await reply.json();
     const conversation = JSON.parse((await readFile(file, 'utf8')).trim());
     assert.equal(conversation.question, question, 'registro novo preserva espaços, telefone e e-mail');
     assert.equal(conversation.companyId, 42);
@@ -50,6 +52,12 @@ try {
     assert.equal(conversation.resolution, 'not_found');
     assert.match(conversation.sessionId, /^session-[a-f0-9]{16}$/);
     assert.match(conversation.eventId, /^event-[a-f0-9]{16}$/);
+    assert.equal(replyBody.eventId, conversation.eventId, 'cliente recebe ID que envia com o feedback');
+    const vote = await fetch(`${url}/feedback`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId: conversation.eventId, type: 'assistant', value: 'down', path: '/assistente' }) });
+    assert.equal(vote.status, 201);
+    assert.equal(JSON.parse((await readFile(process.env.FEEDBACK_FILE, 'utf8')).trim()).id, conversation.eventId,
+      'avaliação e conversa usam o mesmo eventId');
     assert.doesNotMatch(await readFile(sessionFile, 'utf8'), /11987654321|ana@example.com/, 'evento M5.03 continua minimizado');
 
     const faq = await post({ ...base, origin: 'faq' });
@@ -67,8 +75,10 @@ try {
 
     const deniedPage = await fetch(`${url}/admin/claricia`);
     assert.equal(deniedPage.status, 401, 'página exige token');
+    assert.match(await deniedPage.text(), /Informe a credencial/, '401 explica como entrar');
     const deniedData = await fetch(`${url}/admin/claricia/data`);
     assert.equal(deniedData.status, 401, 'dados exigem token');
+    assert.equal((await deniedData.json()).error, 'unauthorized', '401 explica o motivo');
     const headers = { Authorization: 'Bearer fixture-admin-token', Origin: 'https://faq.example.test' };
     const page = await fetch(`${url}/admin/claricia`, { headers });
     assert.equal(page.status, 200);
@@ -78,6 +88,16 @@ try {
     const data = await fetch(`${url}/admin/claricia/data`, { headers });
     assert.equal(data.status, 200);
     assert.ok((await data.json()).unresolved.some((row) => row.question === question), 'lista mostra pergunta não resolvida');
+
+    const fixture = Array.from({ length: 10 }, (_, index) => ({
+      at: `2026-09-${String(index + 1).padStart(2, '0')}T12:00:00.000Z`, origin: index < 5 ? 'app' : 'faq',
+      ...(index < 5 ? { companyId: 42 } : {}), question: `Fixture ${index}`, answer: 'Resposta',
+      resolution: ['complete', 'complete', 'complete', 'complete', 'partial', 'not_found', 'escalated', 'abandoned', 'in_progress', 'complete'][index],
+    }));
+    const fixtureFile = join(dir, 'fixture.jsonl');
+    for (const row of fixture) await saveConversation(fixtureFile, row);
+    const selected = summarizeConversations(await listConversations(fixtureFile), { from: '2026-09-03', to: '2026-09-08', origin: 'app', companyId: 42, resolution: 'partial' });
+    assert.equal(selected.total, 1, 'filtros sobre fixture JSONL com 10 conversas');
 
     await rm(file);
     await mkdir(file);
@@ -104,12 +124,16 @@ assert.equal(summary.percentages.partial, 10);
 assert.equal(summary.percentages.not_found, 10);
 assert.equal(summary.percentages.escalated, 10);
 assert.equal(summary.percentages.abandoned, 10);
-assert.equal(summary.byTopic.find((row) => row.topic === 'abrir-canais').resolvedPercent, 80);
+assert.equal(summary.byTopic.find((row) => row.topic === 'abrir-canais / abrir').resolvedPercent, 80);
 assert.equal(summary.byCompany[0].companyId, 42);
 assert.equal(summary.unresolved[0].question, 'Pergunta 6', 'não resolvidas mais recentes primeiro');
 const filtered = summarizeConversations(rows, { from: '2026-09-03', to: '2026-09-08', origin: 'app', companyId: 42, resolution: 'partial' });
 assert.equal(filtered.total, 1, 'filtros combinados');
 assert.equal(filtered.unresolved[0].question, 'Pergunta 4');
-await saveConversation(file, rows[0]);
-assert.equal((await listConversations(file)).length, 1);
+const directDir = await mkdtemp(join(tmpdir(), 'claricia-conversations-direct-'));
+try {
+  const directFile = join(directDir, 'conversations.jsonl');
+  await saveConversation(directFile, rows[0]);
+  assert.equal((await listConversations(directFile)).length, 1);
+} finally { await rm(directDir, { recursive: true, force: true }); }
 console.log('M5.51 conversation log: OK');
