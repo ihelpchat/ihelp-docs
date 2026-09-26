@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { glob, mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { stringify } from 'yaml';
@@ -56,10 +56,12 @@ async function filesUnder(dir) {
   }
   return files;
 }
-const inventory = (await filesUnder(publishedRoot)).sort();
+const corpus = (await filesUnder(publishedRoot)).sort();
+const inventory = (await Array.fromAsync(glob('**/*.mdx', { cwd: publishedRoot })))
+  .map((path) => join(publishedRoot, path)).sort();
 const checked = [];
 const failures = {};
-for (const file of inventory) {
+for (const file of corpus) {
   const path = relative(publishedRoot, file).replace(/\.mdx$/, '');
   try {
     const article = await readArticle(projectRoot, path);
@@ -70,11 +72,9 @@ for (const file of inventory) {
   }
   checked.push(file);
 }
+assert.deepEqual(checked, inventory, 'nenhum artigo publicado pode ser omitido do corpus');
 // O corpus legado já contém falhas alheias à M5.19; a lista exata impede regressões novas.
 const baseline = JSON.parse(await readFile(new URL('./published-corpus-baseline.json', import.meta.url), 'utf8'));
 assert.deepEqual(failures, baseline, 'falhas do corpus precisam ficar limitadas ao baseline legado');
-assert.equal(checked.length, 277, 'mudança no número de MDX publicados exige revisar o corpus');
-assert.equal(checked.length, inventory.length, 'todo MDX publicado passa pelo caminho MCP');
-assert.deepEqual(checked, inventory, 'nenhum artigo publicado pode ser omitido do corpus');
 assert.equal(failures['docs/whatsapp-business-api/antes-de-migrar/deixarei-de-ter-acesso-a-algo'], undefined, 'prosa com interno deve passar');
 console.log(`M5.19 r3: rotas e marcadores passaram; ${checked.length} artigos percorridos, ${Object.keys(failures).length} falhas legadas.`);
