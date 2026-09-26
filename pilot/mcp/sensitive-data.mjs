@@ -20,6 +20,7 @@ const PLACEHOLDER = /^(?:\$[A-Z_][A-Z0-9_]*|\$\{[A-Z_][A-Z0-9_]*\})$/u;
 const NON_SECRET_LITERAL = /^(?:null|true|false|undefined|string|number)$/iu;
 const OPAQUE_SEQUENCE = /[A-Za-z0-9+/=_-]{24,}/gu;
 const HEX_SEQUENCE = /^[A-Fa-f0-9]{32,}$/u;
+const SOURCE_PATH_SEQUENCE = /^\/[A-Za-z_-]+(?:\/[A-Za-z_-]+)*$/u;
 
 function entropy(value) {
   const counts = new Map();
@@ -31,12 +32,27 @@ function entropy(value) {
 }
 
 function opaqueSequence(value) {
-  return HEX_SEQUENCE.test(value) || entropy(value) >= 3.5;
+  if (HEX_SEQUENCE.test(value)) return true;
+  const hasLetters = /[A-Za-z]/u.test(value);
+  const hasTwoDigits = (value.match(/\d/gu) ?? []).length >= 2;
+  const hasBase64Symbols = /[+/=]/u.test(value);
+  return (hasBase64Symbols || (hasLetters && hasTwoDigits)) && entropy(value) >= 3.5;
 }
 
 function opaqueSequences(value) {
-  return [...String(value ?? '').matchAll(OPAQUE_SEQUENCE)]
-    .filter(([candidate]) => opaqueSequence(candidate));
+  const text = String(value ?? '');
+  return [...text.matchAll(OPAQUE_SEQUENCE)]
+    .filter((match) => {
+      const candidate = match[0];
+      if (SOURCE_PATH_SEQUENCE.test(candidate)) {
+        const start = text.lastIndexOf('\n', match.index - 1) + 1;
+        const end = text.indexOf('\n', match.index);
+        const line = text.slice(start, end < 0 ? undefined : end);
+        const importedPath = /^\s*(?:\d+:\s*)?import\b.*\bfrom\s*['"]((?:\.{1,2}\/)+[A-Za-z0-9_/-]+)['"]/u.exec(line)?.[1];
+        if (importedPath?.includes(candidate)) return false;
+      }
+      return opaqueSequence(candidate);
+    });
 }
 
 function secretLike(value) {
