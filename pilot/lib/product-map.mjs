@@ -45,6 +45,55 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
     const path = relative(frontRoot, file);
     const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : file.endsWith('.jsx') ? ts.ScriptKind.JSX : file.endsWith('.ts') ? ts.ScriptKind.TS : ts.ScriptKind.JS;
     const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
+    const constants = new Map();
+    const ambiguousConstants = new Set();
+    const addLabel = (value) => {
+      const clean = (part) => part.replace(/\s+/gu, ' ').trim().replace(/[.:]$/u, '').trim();
+      const full = safe(value.replace(/\s+/gu, ' ').trim());
+      if (full) labels.push({ label: full, file: path });
+      for (const part of value.split('→')) {
+        const label = safe(clean(part));
+        if (label) labels.push({ label, file: path });
+      }
+    };
+    const staticText = (node, seen = new Set()) => {
+      if (!node) return [];
+      if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return [node.text];
+      if (ts.isParenthesizedExpression(node)) return staticText(node.expression, seen);
+      if (ts.isConditionalExpression(node)) return [
+        ...staticText(node.whenTrue, seen), ...staticText(node.whenFalse, seen),
+      ];
+      if (ts.isIdentifier(node) && constants.has(node.text) && !seen.has(node.text)) {
+        return staticText(constants.get(node.text), new Set([...seen, node.text]));
+      }
+      if (ts.isCallExpression(node) && node.arguments.length === 0) {
+        const callee = ts.isParenthesizedExpression(node.expression) ? node.expression.expression : node.expression;
+        if (ts.isArrowFunction(callee) && ts.isBlock(callee.body)) {
+          const values = [];
+          const returns = (current) => {
+            if (ts.isReturnStatement(current)) values.push(...staticText(current.expression, seen));
+            else if (!ts.isFunctionLike(current)) ts.forEachChild(current, returns);
+          };
+          returns(callee.body);
+          return values;
+        }
+      }
+      return [];
+    };
+    const collectConstants = (node) => {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer &&
+          node.parent && ts.isVariableDeclarationList(node.parent) && (node.parent.flags & ts.NodeFlags.Const)) {
+        if (constants.has(node.name.text)) ambiguousConstants.add(node.name.text);
+        else constants.set(node.name.text, node.initializer);
+      }
+      ts.forEachChild(node, collectConstants);
+    };
+    collectConstants(ast);
+    for (const name of ambiguousConstants) constants.delete(name);
+    const screenText = (node) => {
+      const element = node.parent;
+      return ts.isJsxElement(element) && /^(button|Button|Title|Label|strong|StyledGreenSpan)$/u.test(element.openingElement.tagName.getText(ast));
+    };
     const visit = (node) => {
       if (ts.isVariableDeclaration(node) && /^(?:pagesData|[A-Za-z0-9_]*[Rr]outes)$/u.test(node.name.getText(ast)) && node.initializer && ts.isArrayLiteralExpression(node.initializer)) {
           for (const entry of node.initializer.elements) {
@@ -71,15 +120,19 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
           else informational.push(`expressão ou marcador não verificável: ${path}`);
         } else informational.push(`marcador dinâmico: ${path}`);
       }
-      if (ts.isJsxElement(node) && /^(button|Button)$/u.test(node.openingElement.tagName.getText(ast))) {
-        for (const child of node.children) if (ts.isJsxText(child)) {
-          const label = safe(child.getText(ast).trim());
-          if (label) labels.push({ label, file: path });
-        }
+      if (ts.isJsxText(node) && screenText(node)) addLabel(node.getText(ast));
+      if (ts.isJsxExpression(node) && screenText(node)) {
+        for (const value of staticText(node.expression)) addLabel(value);
       }
-      if (ts.isJsxAttribute(node) && node.name.text === 'labelText' && node.initializer && ts.isStringLiteral(node.initializer)) {
-        const label = safe(node.initializer.text);
-        if (label) labels.push({ label, file: path });
+      if (ts.isJsxAttribute(node) && /^(labelText|label|title|placeholder|aria-label)$/u.test(node.name.text)) {
+        const value = node.initializer && ts.isJsxExpression(node.initializer) ? node.initializer.expression : node.initializer;
+        for (const label of staticText(value)) addLabel(label);
+      }
+      if (ts.isPropertyAssignment(node) && node.name.getText(ast) === 'name' &&
+          ts.isObjectLiteralExpression(node.parent) && ts.isArrayLiteralExpression(node.parent.parent) &&
+          ((ts.isPropertyAssignment(node.parent.parent.parent) && node.parent.parent.parent.name.getText(ast) === 'tabs') ||
+           (ts.isVariableDeclaration(node.parent.parent.parent) && node.parent.parent.parent.name.getText(ast) === 'tabs'))) {
+        for (const label of staticText(node.initializer)) addLabel(label);
       }
       ts.forEachChild(node, visit);
     };
