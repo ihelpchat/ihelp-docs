@@ -48,7 +48,7 @@ async function artifact(out, expectedUrl) {
 
 async function site(out, siteUrl) {
   const expected = await parse(join(out, 'release.json'));
-  const url = new URL('ihelp-docs/release.json', `${siteUrl.replace(/\/$/u, '')}/`);
+  const url = new URL('release.json', `${siteUrl.replace(/\/$/u, '')}/`);
   if (url.protocol !== 'https:') throw new Error('Staging docs URL deve ser HTTPS');
   const response = await fetch(url, { signal: AbortSignal.timeout(10_000), headers: { 'Cache-Control': 'no-cache' } });
   if (!response.ok) throw new Error(`Staging docs HTTP ${response.status}`);
