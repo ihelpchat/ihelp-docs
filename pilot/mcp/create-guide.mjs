@@ -33,12 +33,30 @@ async function existingGuide(root, guideId) {
   return visit(base);
 }
 
-async function planFile(root, id) {
+async function planDirectory(root) {
   const base = storeRoot(root);
   await mkdir(base, { recursive: true, mode: 0o700 });
   const stat = await lstat(base);
   if (!stat.isDirectory() || (stat.mode & 0o077)) throw new Error('Store de planos inseguro');
-  return join(base, `${id}.json`);
+  return base;
+}
+
+async function planFile(root, id) { return join(await planDirectory(root), `${id}.json`); }
+
+async function pruneExpired(root, now, ttl) {
+  const base = await planDirectory(root);
+  const expired = new Set();
+  for (const entry of await readdir(base, { withFileTypes: true })) {
+    if (!entry.isFile() || !/^[a-f0-9]{64}\.json$/u.test(entry.name)) continue;
+    const file = join(base, entry.name);
+    const state = JSON.parse(await readFile(file, 'utf8'));
+    const expiry = state.expiresAt ?? (await lstat(file)).mtimeMs + ttl;
+    if (now >= expiry) {
+      expired.add(entry.name.slice(0, -5));
+      await rm(file);
+    }
+  }
+  return expired;
 }
 
 async function save(file, value, exclusive = false) {
@@ -66,6 +84,10 @@ async function locked(file, work) {
 
 export async function createGuide(root, input, options = {}) {
   if (!isSafeRequestedBy(input.requestedBy)) throw new Error('ator inválido');
+  const now = options.now?.() ?? Date.now();
+  const ttl = options.planTtlMs ?? Number(process.env.MCP_GUIDE_PLAN_TTL_MS ?? 86_400_000);
+  if (!Number.isSafeInteger(ttl) || ttl <= 0) throw new Error('TTL de plano inválido');
+  const expired = await pruneExpired(root, now, ttl);
   const getContext = options.getContext ?? ((request) => getIhelpContext(root, request.topic, request.module, { requireLocal: true }));
   const existing = options.existing ?? existingGuide;
   const plan = options.plan ?? planContent;
@@ -84,24 +106,29 @@ export async function createGuide(root, input, options = {}) {
     const context = await getContext(request);
     const result = await plan(root, request, { productContext: context });
     const id = randomBytes(32).toString('hex');
-    const stored = { actor: input.requestedBy, request, plan: result, source: sourceDigest(context), guide: await existing(root, input.guideId), status: 'planned' };
+    const stored = { actor: input.requestedBy, request, plan: result, source: sourceDigest(context), guide: await existing(root, input.guideId), status: 'planned', expiresAt: now + ttl };
     await save(await planFile(root, id), stored, true);
     return { status: 'planned', planId: id, questions: result.questions ?? [], guidance: result.guidance ?? result.summary ?? '' };
   }
 
   if (!safeId(input.planId)) throw new Error('planId inválido');
+  if (expired.has(input.planId)) throw new Error('plano expirado, refaça');
   if (input.guideId !== undefined || input.topic !== undefined || input.module !== undefined || input.description !== undefined || input.details !== undefined) throw new Error('Retomada aceita apenas planId e answers');
   const file = await planFile(root, input.planId);
   return locked(file, async () => {
     const stored = JSON.parse(await readFile(file, 'utf8').catch((error) => {
-      if (error.code === 'ENOENT') throw new Error('planId não encontrado');
+      if (error.code === 'ENOENT') throw new Error('plano expirado, refaça');
       throw error;
     }));
+    if (now >= (stored.expiresAt ?? (await lstat(file)).mtimeMs + ttl)) {
+      await rm(file);
+      throw new Error('plano expirado, refaça');
+    }
     if (stored.actor !== input.requestedBy) throw new Error('Plano pertence a outro ator');
     if (!Array.isArray(input.answers) || input.answers.length !== stored.plan.questions?.length
       || input.answers.some((answer) => typeof answer !== 'string' || !answer.trim() || answer.length > 2000)) throw new Error('Responda todas as perguntas do plano');
+    const answerHash = digest(input.answers.map((answer) => answer.trim()));
     const answers = input.answers.map((answer) => redactSensitiveData(answer.trim()));
-    const answerHash = digest(answers);
     if (stored.answerHash && stored.answerHash !== answerHash) throw new Error('Plano já retomado com respostas diferentes');
     const context = await getContext(stored.request);
     if (sourceDigest(context) !== stored.source) throw new Error('As fontes mudaram; refaça o plano');
@@ -122,7 +149,7 @@ export async function createGuide(root, input, options = {}) {
     if (sourceDigest(await getContext(stored.request)) !== stored.source
       || digest(await existing(root, stored.request.guideId)) !== digest(stored.guide)) throw new Error('As fontes mudaram; refaça o plano');
     const draft = await submit(root, [article], 'draft', input.requestedBy);
-    const result = { status: 'draft', planId: input.planId, article, draft };
+    const result = { status: 'draft', planId: input.planId, draft, reviewRequired: true };
     await save(file, { ...stored, status: 'draft', result });
     return result;
   });

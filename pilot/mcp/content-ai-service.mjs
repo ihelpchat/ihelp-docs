@@ -329,6 +329,7 @@ export async function generateCanonicalGuide(root, request, options = {}) {
       'Mantenha guideId e path existentes quando houver atualização. Não invente botões, rotas, permissões ou ações.',
       'Use ações somente do catálogo. Para campo opcional ausente, use null ou lista vazia.',
       'Cada passo deve ser claro para iniciantes. Sem evidência suficiente, status=needs_information.',
+      'Use somente dados fictícios como Ana Exemplo e Loja Exemplo. Nunca copie nomes de pessoas das respostas no draft.',
       'Cite cada frase de description, body, assistantOverview, assistantSuggestions e cada step.text no grounding do artigo com texto e citação exatos.',
     ].join(' ') },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing ? [existing] : [], productContext)}\nGuideId: ${request.guideId}\nPlano aprovado: ${JSON.stringify(options.plan)}\nGuia anterior: ${JSON.stringify(existing ?? null)}`) },
