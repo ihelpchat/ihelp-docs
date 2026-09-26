@@ -18,6 +18,8 @@ const CREDENTIAL_SEGMENTS = new Set(['token', 'secret', 'password', 'passwd', 'p
 const DESCRIPTIVE_SUFFIXES = new Set(['hint', 'description', 'count', 'name', 'label', 'type', 'enabled', 'example']);
 const PLACEHOLDER = /^(?:\$[A-Z_][A-Z0-9_]*|\$\{[A-Z_][A-Z0-9_]*\})$/u;
 const NON_SECRET_LITERAL = /^(?:null|true|false|undefined|string|number)$/iu;
+const OPAQUE_SEQUENCE = /[A-Za-z0-9+=]{16,}/gu;
+const HEX_SEQUENCE = /^[A-Fa-f0-9]{32,}$/u;
 
 function entropy(value) {
   const counts = new Map();
@@ -26,6 +28,22 @@ function entropy(value) {
     const probability = count / value.length;
     return sum - probability * Math.log2(probability);
   }, 0);
+}
+
+function opaqueSequence(value) {
+  if (HEX_SEQUENCE.test(value)) return true;
+  if ((value.includes('+') || /=+$/u.test(value)) && /^[A-Za-z0-9+]+={0,2}$/u.test(value)) return true;
+  if (value.length < 24) return false;
+  const hasLetters = /[A-Za-z]/u.test(value);
+  const hasTwoDigits = (value.match(/\d/gu) ?? []).length >= 2;
+  const mixedCase = /[a-z]/u.test(value) && /[A-Z]/u.test(value);
+  return hasLetters && hasTwoDigits && mixedCase && entropy(value) >= 3.5;
+}
+
+function opaqueSequences(value) {
+  return [...String(value ?? '').split(/[\/.:{}\-_]/u).flatMap((segment) =>
+    [...segment.matchAll(OPAQUE_SEQUENCE)].map(([candidate]) => candidate))]
+    .filter(opaqueSequence);
 }
 
 function secretLike(value) {
@@ -61,10 +79,11 @@ function credentialPairs(value) {
     const [pair, , key, rawValue] = match;
     const strength = credentialKeyStrength(key);
     if (strength === 'none') {
-      pattern.lastIndex = match.index + pair.indexOf(rawValue);
+      pattern.lastIndex = match.index + Math.max(1, pair.lastIndexOf(rawValue));
       continue;
     }
     const raw = rawValue.replace(/^["']|["']$/gu, '');
+    if (!/^["']/u.test(rawValue) && /\?\.|\(/u.test(rawValue)) continue;
     if (raw.length >= 6 && !PLACEHOLDER.test(raw) && !NON_SECRET_LITERAL.test(raw) && (strength === 'strong' || secretLike(raw))) {
       matches.push({ start: match.index, end: pattern.lastIndex });
     }
@@ -81,7 +100,7 @@ function redact(value, patterns, marker) {
   return patterns.reduce((text, pattern) => text.replace(new RegExp(pattern.source, `${pattern.flags}g`), marker), String(value ?? ''));
 }
 
-export function sensitiveKinds(value) {
+export function sensitiveKinds(value, { detectOpaque = false } = {}) {
   const text = String(value ?? '');
   const visible = text.normalize('NFKC').replace(/[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, '');
   const mapped = visible.replace(/[ІІАВЕКМНОРСТХΥΑΒΕΗΙΚΜΝΟΡΤΧ]/gu, (letter) => ({
@@ -92,14 +111,14 @@ export function sensitiveKinds(value) {
     /\p{Script=Latin}/u.test(word) && /[\p{Script=Cyrillic}\p{Script=Greek}]/u.test(word));
   return {
     personal: matchesAny(text, PERSONAL),
-    credential: matchesAny(text, CREDENTIALS) || credentialPairs(text).length > 0,
+    credential: matchesAny(text, CREDENTIALS) || credentialPairs(text).length > 0 || (detectOpaque && opaqueSequences(text).length > 0),
     internal: /🟡|🔴|\b(?:INTERNO|CONFIDENCIAL)\b|\b(?:interno|confidencial)\s*:/u.test(mapped),
     control: mixedAlphabet || /[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text),
   };
 }
 
-export function containsSensitiveData(value) {
-  const kinds = sensitiveKinds(value);
+export function containsSensitiveData(value, options) {
+  const kinds = sensitiveKinds(value, options);
   return kinds.personal || kinds.credential || kinds.internal || kinds.control;
 }
 
