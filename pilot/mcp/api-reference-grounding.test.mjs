@@ -143,3 +143,36 @@ test('provider simulado entrega referência válida com método e endpoint', asy
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   assert.deepEqual(result.articles.map(({ method, endpoint }) => [method, endpoint]), [['GET', '/contacts']]);
 });
+
+const verifiedEndpoint = { ...endpoints[0], public: true, responseFields: [{ name: 'name', type: 'string' }] };
+const verifiedContext = { ...context, module: 'api', endpoints: [verifiedEndpoint] };
+const verifiedArticle = { ...article, endpoint: verifiedEndpoint.route,
+  body: `## Requisição\n\`GET\` \`${verifiedEndpoint.route}\`\n\`page\`\n\`Authorization\`\n\n\`\`\`bash\ncurl -X GET "https://example.test${verifiedEndpoint.route}?page=1" -H "Authorization: Bearer token"\n\`\`\`\n\n\`\`\`js\nfetch("${verifiedEndpoint.route}?page=1")\n\`\`\`\n\n## Resposta\nO campo name identifica o contato.\n\`\`\`json\n{"name":"Exemplo"}\n\`\`\`` };
+
+test('referência completa aceita curl, fetch e JSON de resposta com fatos', () => {
+  const issues = [];
+  assert.equal(validateGroundedOutput(verifiedArticle, verifiedContext, [], issues), true, issues.join('; '));
+});
+
+for (const [label, mutate, reason] of [
+  ['source diferente de api', (a) => ({ ...a, source: 'produto', body: a.body.replace('campo name', 'campo segredoInterno') }), /campo inexistente: segredoInterno/i],
+  ['versão inventada', (a) => ({ ...a, endpoint: a.endpoint.replace('/v2/', '/v9/') }), /rota divergente/i],
+  ['rota em prosa', (a) => ({ ...a, body: `${a.body}\nRota /api/v9/contacts.` }), /rota divergente.*v9/i],
+  ['rota em fetch', (a) => ({ ...a, body: a.body.replace('fetch("/api/v2/', 'fetch("/api/v9/') }), /rota divergente.*v9/i],
+  ['rota em curl', (a) => ({ ...a, body: a.body.replace('example.test/api/v2/', 'example.test/api/v9/') }), /rota divergente.*v9/i],
+  ['JSON com chave inventada', (a) => ({ ...a, body: a.body.replace('"name":"Exemplo"', '"segredoInterno":"Exemplo"') }), /campo inexistente: segredoInterno/i],
+  ['prosa com campo inventado', (a) => ({ ...a, body: a.body.replace('campo name', 'campo segredoInterno') }), /campo inexistente: segredoInterno/i],
+  ['parâmetro de entrada como resposta', (a) => ({ ...a, body: a.body.replace('"name":"Exemplo"', '"page":1') }), /campo inexistente: page/i],
+]) test(`gate API rejeita ${label}`, () => {
+  const changed = mutate(verifiedArticle);
+  const issues = [];
+  assert.equal(validateGroundedOutput(changed, verifiedContext, [], issues), false);
+  if (reason) assert.match(issues.join(' '), reason);
+});
+
+test('path api passa pelo gate mesmo com source e contentType diferentes', () => {
+  const issues = [];
+  const changed = { ...verifiedArticle, path: 'api/contatos/referencia', source: 'produto', contentType: 'faq', body: verifiedArticle.body.replace('campo name', 'campo segredoInterno') };
+  assert.equal(validateGroundedOutput(changed, verifiedContext, [], issues), false);
+  assert.match(issues.join(' '), /campo inexistente: segredoInterno/i);
+});
