@@ -7,6 +7,7 @@ assert.deepEqual(canonicalGuideIds, [
   'robo-de-atendimento',
   'usuario-acesso',
   'reconectar-canal-qr',
+  'recado-fora-do-horario',
   'campanhas',
   'permissoes-departamentos',
   'arquivos',

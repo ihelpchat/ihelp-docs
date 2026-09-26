@@ -1,0 +1,64 @@
+---
+title: "Colocar um recado fora do horário"
+description: "Escolha o horário do departamento e escreva o recado para quando ele estiver fechado."
+source: produto
+contentType: guia
+assistantQuestion: "Como colocar uma resposta automática quando meu atendimento está fechado?"
+assistantOverview: "Abra Departamentos para configurar o horário e escrever o recado que aparece quando a equipe está fechada."
+assistantSuggestions:
+  - "Como ajusto o horário de atendimento?"
+  - "Onde escrevo o recado fora do horário?"
+assistantInitialSteps: 1
+assistantResolution: partial
+guide:
+  schemaVersion: 1
+  guideId: recado-fora-do-horario
+  version: 1
+  mode: real
+  initialStepId: abrir-departamentos
+  steps:
+    - stepId: abrir-departamentos
+      text: "Abra Configurações e depois Departamentos. Escolha o setor que receberá o recado."
+      actionId: abrir-departamentos
+    - stepId: configurar-horario
+      text: "Confira os horários de atendimento de segunda a sexta. Se houver pausa, ajuste o horário dela."
+    - stepId: escrever-recado
+      text: "Ative Mensagem automática fora de horário de atendimento e escreva o recado."
+      choices:
+        - id: escrevi
+          label: "Escrevi"
+          nextStepId: salvar-recado
+        - id: nao-achei
+          label: "Não achei"
+          nextStepId: pedir-ajuda
+    - stepId: salvar-recado
+      text: "Clique em Salvar Alterações. Confira se o horário e o recado continuam na tela."
+      choices:
+        - id: salvou
+          label: "Salvou"
+        - id: falhou
+          label: "Não salvou"
+          nextStepId: pedir-ajuda
+    - stepId: pedir-ajuda
+      text: "Falar com uma pessoa. Diga qual departamento e qual opção não apareceu."
+---
+
+O recado fora do horário é configurado por departamento. Ele serve para avisar quando a equipe não está atendendo. Confira o horário antes de escrever o texto.
+
+<ProductAction id="abrir-departamentos" label="Abrir a tela Departamentos" route="/configuracoes/department" />
+
+1. Em Configurações, abra **Departamentos**. Escolha o departamento que recebe essas mensagens.
+{/* fonte: abrir-departamentos | front@9c3690b98d81:src/store/slices/tab/tab.slice.ts:16 | alvo: Departamentos */}
+2. Confira o **Horário de atendimento de Seg à Sex**. Preencha início e fim. Se houver pausa, confira o horário de pausa também.
+{/* fonte: configurar-horario | front@9c3690b98d81:src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:63 | alvo: Horário de atendimento de Seg à Sex */}
+3. Ative **Mensagem automática fora de horário de atendimento**. Escreva um recado curto, por exemplo: “Olá! Estamos fora do horário de atendimento. Responderemos quando a equipe voltar.”
+{/* fonte: escrever-recado | front@9c3690b98d81:src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:353 | alvo: Mensagem automática fora de horário de atendimento */}
+4. Clique em **Salvar Alterações**. Volte ao departamento e confira se o horário e o recado continuam preenchidos.
+{/* fonte: salvar-recado | front@9c3690b98d81:src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:472 | alvo: Salvar Alterações */}
+
+**Não achei a opção ou não salvou:** toque em **Falar com uma pessoa** no iHelp. Informe qual departamento e qual opção faltou.
+{/* fonte: pedir-ajuda | front@9c3690b98d81:src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:353 | alvo: Mensagem automática fora de horário de atendimento */}
+
+## Como confirmar
+
+O horário e o recado aparecem ao abrir o departamento novamente. Peça a alguém que envie uma mensagem de outro celular para esse número fora do horário configurado. Confira com essa pessoa se recebeu o recado.
