@@ -7,6 +7,7 @@ import { resolveGuideId } from '../architecture/conversation-v1.mjs';
 import { parseAssistantSuggestions } from './conversational-contract.mjs';
 import { sanitizeWidgetContext, diagnoseState, diagnosticQuestion, escalationFor } from './real-state.mjs';
 import { redactSensitiveData } from './sensitive-data.mjs';
+import { answerGuide } from './guide-state.mjs';
 
 const STOP_WORDS = new Set([
   'a', 'ao', 'aos', 'as', 'como', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'eu',
@@ -218,8 +219,6 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       + sectionBoost
       // Pergunta feita no painel de uma página: essa página entra primeiro no contexto.
       + (onPage ? 100 : 0)
-      // Continuações curtas como “sim, pode me guiar” mantêm a fonte da conversa.
-      + (fromConversation ? 80 : 0)
       + (guideMatch ? 200 : 0)
       + (campaignRequest && assistantIntent === 'campaigns' ? 300 : 0);
     const screenshots = screenshotsOf(raw);
@@ -497,6 +496,10 @@ function detailedProcedureQuestion(question) {
 
 export async function answerQuestion(root, question, options = {}) {
   question = redactSensitiveData(question);
+  if (options.guide) {
+    const guided = await answerGuide(root, question, options.guide, options);
+    if (guided) return guided;
+  }
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   if (!apiKey && !options.client) throw new Error('OPENAI_API_KEY não configurada');
   const scope = Object.hasOwn(ASSISTANT_SCOPES, options.scope ?? '') ? options.scope : 'Tudo';

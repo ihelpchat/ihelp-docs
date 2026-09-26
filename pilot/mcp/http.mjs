@@ -130,7 +130,7 @@ export const httpServer = createServer(async (request, response) => {
         : undefined;
       let resolvedStep;
       const result = await answerQuestion(root, question, {
-        history, scope, page, widgetContext: sanitizeWidgetContext(body.widgetContext),
+        history, scope, page, guide: body.guide, widgetContext: sanitizeWidgetContext(body.widgetContext),
         onResolvedStep: (step) => { resolvedStep = step; },
       });
       try {
