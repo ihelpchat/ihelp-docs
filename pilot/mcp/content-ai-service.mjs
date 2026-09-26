@@ -24,6 +24,14 @@ const GROUNDING_SCHEMA = { type: 'array', items: {
 
 function proseIssue(article, endpoint) {
   const names = new Set([...endpoint.parameters ?? [], ...endpoint.responseFields ?? []].map((field) => field.name));
+  for (const route of [endpoint.route, endpoint.optionalAlias]) {
+    for (const segment of (route ?? '').split('/')) {
+      if (segment) names.add(segment.replace(/^\{([^}]+)\}$/u, '$1'));
+    }
+  }
+  const token = '[\\p{L}\\p{N}_][\\p{L}\\p{N}_-]*';
+  const labelledNames = new RegExp(`\\b(?:campos?|parâmetros?|propriedades?|atributos?|chaves?|headers?|cabeçalhos?)\\s+(?:(?:o|a|os|as)\\s+)?(${token}(?:\\s*(?:,|\\be\\b)\\s*${token})*)`, 'giu');
+  const tokens = new RegExp(token, 'gu');
   for (const value of [article.title, article.description, article.intro, ...article.notas]) {
     if (typeof value !== 'string') return 'prosa inválida';
     const block = value.includes('```') ? value.match(/```[^\n]*/u) : null;
@@ -36,6 +44,16 @@ function proseIssue(article, endpoint) {
     if (method) return `método proibido na prosa: ${method[0]}`;
     for (const code of value.matchAll(/`([^`\n]+)`/gu)) {
       if (!names.has(code[1])) return `código inline proibido: ${code[0]}`;
+    }
+    for (const labelled of value.matchAll(labelledNames)) {
+      for (const name of labelled[1].match(tokens) ?? []) {
+        if (name !== 'e' && !names.has(name)) return `nome técnico sem fato: ${name}`;
+      }
+    }
+    for (const [name] of value.matchAll(tokens)) {
+      const identifier = /\p{Ll}\p{Lu}|\p{L}_\p{L}/u.test(name)
+        || (/\p{L}/u.test(name) && /\d/u.test(name));
+      if (identifier && !names.has(name)) return `nome técnico sem fato: ${name}`;
     }
   }
   return null;
