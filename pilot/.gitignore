@@ -26,6 +26,7 @@ yarn-error.log*
 .vercel
 .drafts/
 .audit/
+.guide-proof/
 next-env.d.ts
 
 /public/release.json

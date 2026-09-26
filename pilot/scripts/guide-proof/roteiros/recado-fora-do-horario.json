@@ -1,0 +1,93 @@
+{
+  "abrir-departamentos": {
+    "type": "click",
+    "marker": "guide-department-open",
+    "name": "Departamentos",
+    "source": {
+      "file": "src/store/slices/tab/tab.slice.ts",
+      "line": 16,
+      "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+    }
+  },
+  "configurar-horario": {
+    "type": "fields",
+    "enter": {
+      "selector": "td:has-text(\"Demo\")",
+      "path": "/configuracoes/department/[^/]+"
+    },
+    "fields": [
+      {
+        "type": "text",
+        "selector": "input[name=horarioAtendimentoInicio]",
+        "value": "09:00"
+      }
+    ],
+    "source": {
+      "file": "src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx",
+      "line": 63,
+      "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+    },
+    "sources": [
+      {
+        "file": "src/components/ui/components/Tables/components/TableCommonDepartments/index.tsx",
+        "line": 235,
+        "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+      },
+      {
+        "file": "src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx",
+        "line": 71,
+        "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+      }
+    ]
+  },
+  "escrever-recado": {
+    "type": "fields",
+    "enable": {
+      "nearText": "Mensagem automática fora de horário de atendimento",
+      "role": "switch"
+    },
+    "fields": [
+      {
+        "type": "text",
+        "selector": "textarea[placeholder=\"Crie uma mensagem...\"]",
+        "value": "Mensagem de teste ${runId}"
+      }
+    ],
+    "commit": {
+      "selector": "div:has(> div > div > textarea[placeholder=\"Crie uma mensagem...\"]) > button:has(svg.w-6)"
+    },
+    "verifySelector": "p.whitespace-pre-line",
+    "source": {
+      "file": "src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx",
+      "line": 353,
+      "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+    },
+    "sources": [
+      {
+        "file": "src/components/ui/components/Forms/Toggle/index.tsx",
+        "line": 10,
+        "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+      },
+      {
+        "file": "src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx",
+        "line": 367,
+        "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+      },
+      {
+        "file": "src/components/shared/Chat/components/ChatView/index.tsx",
+        "line": 413,
+        "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+      }
+    ]
+  },
+  "salvar-recado": {
+    "type": "save",
+    "name": "Salvar Alterações",
+    "verifyField": "escrever-recado",
+    "source": {
+      "file": "src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx",
+      "line": 469,
+      "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+    }
+  }
+}

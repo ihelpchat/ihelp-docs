@@ -1,0 +1,100 @@
+{
+  "abrir-usuarios": {
+    "type": "click",
+    "marker": "guide-user-open",
+    "container": "[data-tour-id=guide-user-open]",
+    "role": "button",
+    "name": "Usuários",
+    "source": {
+      "file": "src/store/slices/tab/tab.slice.ts",
+      "line": 21,
+      "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+    }
+  },
+  "criar-usuario": {
+    "type": "click",
+    "container": "main",
+    "role": "button",
+    "name": "Novo usuário",
+    "source": {
+      "file": "src/components/pages/Configuration/components/TabUser/index.tsx",
+      "line": 120,
+      "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+    }
+  },
+  "preencher-dados": {
+    "type": "fields",
+    "container": "section[aria-label='Dados do usuário'], [class*='basis-1/2']:has(input[name=nome])",
+    "fields": [
+      {
+        "type": "text",
+        "selector": "input[name=nome]",
+        "value": "${runId}"
+      },
+      {
+        "type": "text",
+        "selector": "input[name=email]",
+        "value": "${runId}@example.invalid"
+      },
+      {
+        "type": "text",
+        "selector": "input[name=senha]",
+        "value": "Prova-2026!"
+      },
+      {
+        "type": "text",
+        "selector": "input[name=senhaConfirmacao]",
+        "value": "Prova-2026!"
+      }
+    ],
+    "source": {
+      "file": "src/components/pages/Configuration/pages/UserById/components/UserData/index.tsx",
+      "line": 69,
+      "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+    }
+  },
+  "escolher-departamento": {
+    "type": "fields",
+    "container": "section[aria-label='Dados do usuário'], [class*='basis-1/2']:has(input[name=nome])",
+    "fields": [
+      {
+        "type": "select",
+        "name": "Departamentos",
+        "value": "Demo"
+      }
+    ],
+    "source": {
+      "file": "src/components/pages/Configuration/pages/UserById/components/UserData/index.tsx",
+      "line": 262,
+      "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+    }
+  },
+  "revisar-acesso": {
+    "type": "fields",
+    "container": "section[aria-label='Dados do usuário'], [class*='basis-1/2']:has(input[name=nome])",
+    "fields": [
+      {
+        "type": "select",
+        "name": "Perfil",
+        "value": "Atendente"
+      }
+    ],
+    "source": {
+      "file": "src/components/pages/Configuration/pages/UserById/components/UserData/index.tsx",
+      "line": 79,
+      "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+    }
+  },
+  "salvar-usuario": {
+    "type": "save",
+    "container": "section[aria-label='Dados do usuário'], [class*='basis-1/2']:has(input[name=nome])",
+    "role": "button",
+    "name": "Salvar Alterações",
+    "verifyField": "preencher-dados",
+    "source": {
+      "file": "src/components/pages/Configuration/pages/UserById/components/UserData/index.tsx",
+      "line": 293,
+      "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+    }
+  }
+}

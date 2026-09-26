@@ -1,0 +1,32 @@
+{
+  "abrir-canais": {
+    "type": "click",
+    "marker": "guide-qr-open",
+    "name": "Canais",
+    "source": {
+      "file": "src/store/slices/tab/tab.slice.ts",
+      "line": 14,
+      "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+    }
+  },
+  "conectar": {
+    "type": "click",
+    "name": "Conectar",
+    "enter": {
+      "selector": "td:has-text(\"Canal de teste\")",
+      "path": "/configuracoes/channel/[^/]+"
+    },
+    "source": {
+      "file": "src/components/pages/Configuration/pages/ChannelById/components/ChannelDetails/index.tsx",
+      "line": 122,
+      "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+    },
+    "sources": [
+      {
+        "file": "src/components/ui/components/Tables/components/TableCommonChannels/index.tsx",
+        "line": 175,
+        "sha": "9c3690b98d8114b9136328159cb4a36f81290cf7"
+      }
+    ]
+  }
+}
