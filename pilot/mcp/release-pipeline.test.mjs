@@ -38,10 +38,14 @@ const service = http.createServer((_req, res) => res.end(JSON.stringify(health))
 service.listen(0, '127.0.0.1');
 await once(service, 'listening');
 const healthUrl = `http://127.0.0.1:${service.address().port}/health`;
+const runService = () => new Promise((resolve) => {
+  const child = spawn(process.execPath, [script, 'service', out, healthUrl], { cwd: root, stdio: 'ignore' });
+  child.once('exit', (code) => resolve(code));
+});
 try {
-  assert.equal(run(['service', out, healthUrl]).status, 0);
+  assert.equal(await runService(), 0);
   health = { ...health, contentSha256: 'c'.repeat(64) };
-  assert.notEqual(run(['service', out, healthUrl]).status, 0, 'versão incompatível deve falhar');
+  assert.notEqual(await runService(), 0, 'versão incompatível deve falhar');
 } finally { await new Promise((resolve) => service.close(resolve)); }
 
 const workflow = await readFile(new URL('../../.github/workflows/deploy.yml', import.meta.url), 'utf8');
