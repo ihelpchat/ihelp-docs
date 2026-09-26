@@ -107,8 +107,26 @@ test('descrição comum sem nome técnico é aceita', async () => {
   assert.equal(result.status, 'ready', result.questions?.join('; '));
 });
 
-test('nome de rota citado na prosa é aceito', async () => {
-  const result = await generate((value) => { value.articles[0].intro = 'O parâmetro IdRef identifica o contato.'; return value; });
+test('identificador da rota citado fora de afirmação tipada é aceito', async () => {
+  const result = await generate((value) => { value.articles[0].intro = 'Use IdRef para identificar o contato.'; return value; });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+});
+
+for (const [label, intro, expected] of [
+  ['segmento de rota como campo', 'O campo contacts contém um código privado.', /contacts/],
+  ['segmento de rota como parâmetro', 'O parâmetro contacts identifica o contato.', /contacts/],
+  ['placeholder de rota como parâmetro sem fato', 'O parâmetro IdRef identifica o contato.', /IdRef/],
+  ['parâmetro como campo sem resposta verificável', 'O campo idRef identifica o contato.', /idRef/],
+  ['segmento de rota como header', 'O header contacts identifica a consulta.', /contacts/],
+]) test(`prosa rejeita ${label}`, async () => {
+  const result = await generate((value) => { value.articles[0].intro = intro; return value; });
+  assert.equal(result.status, 'needs_information');
+  assert.match(result.questions.join(' '), expected);
+  assert.deepEqual(result.articles, []);
+});
+
+test('parâmetro factual é aceito na prosa', async () => {
+  const result = await generate((value) => { value.articles[0].intro = 'O parâmetro idRef identifica o contato.'; return value; });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
 });
 
