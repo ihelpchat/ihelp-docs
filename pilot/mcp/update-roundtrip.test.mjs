@@ -7,7 +7,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { readArticle } from './editorial-standard.mjs';
 import { parseDocument } from 'yaml';
 import { docsPageSchema } from '../lib/docs-page-schema.mjs';
-import { renderArticle, validateArticle } from './content-service.mjs';
+import { renderArticle, submitContentPackage, validateArticle } from './content-service.mjs';
 import { articleSchema } from './article-fields.mjs';
 
 const sourceRoot = new URL('../', import.meta.url).pathname;
@@ -154,6 +154,12 @@ try {
   for (const [reason, message, change] of invalidPackages) {
     const article = { ...individual, path: `docs/principais-motivos-de-suporte/rejeitar-${reason}`, ...change };
     for (const mode of ['dry_run', 'draft', 'pull_request']) {
+      if (reason === 'metadata') {
+        await assert.rejects(submitContentPackage(root, [article], mode, 'service:roundtrip'), new RegExp(message, 'i'), `${reason} em ${mode} deve informar o motivo`);
+        assert.equal(await readFile(join(root, 'writes.log'), 'utf8'), before, `${reason} em ${mode} deve causar zero writes`);
+        if (mode === 'draft') await assert.rejects(readFile(join(root, '.drafts', `${article.path}.mdx`)), { code: 'ENOENT' });
+        continue;
+      }
       const response = await call('docs_submit_package', { articles: [article], mode, requestedBy: 'service:roundtrip' });
       assert.equal(response.isError, true, `${reason} deve ser rejeitado em ${mode}`);
       assert.match(response.content[0].text, new RegExp(message, 'i'), `${reason} em ${mode} deve informar o motivo`);
