@@ -72,7 +72,7 @@ function credentialPairs(value) {
     const [pair, , key, rawValue] = match;
     const strength = credentialKeyStrength(key);
     if (strength === 'none') {
-      pattern.lastIndex = match.index + pair.indexOf(rawValue);
+      pattern.lastIndex = match.index + Math.max(1, pair.lastIndexOf(rawValue));
       continue;
     }
     const raw = rawValue.replace(/^["']|["']$/gu, '');

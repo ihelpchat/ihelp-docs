@@ -12,10 +12,14 @@ const BLOCKED = /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.git|node_modules|dist|build|out|
 const BLOCKED_FILE = /(?:^|\/)(?:[^/]*(?:key|secret|token|credential|password|env|config)[^/]*|[^/]*\.(?:min|designer|generated|spec|test)|styles?)\.(?:ts|tsx|js|jsx|cs)$/iu;
 const SHA = /^[a-f0-9]{40}$/u;
 const MAX_LISTED = 10_000;
-const MAX_SEARCH_FILES = 4_096;
+const MAX_SEARCH_FILES = 10_000;
 const MAX_FILE_BYTES = 256_000;
 const MAX_TOTAL_BYTES = 64_000_000;
 const TIMEOUT_MS = 2_000;
+const DEFAULT_DEADLINE_MS = 10_000;
+const listedCache = new Map();
+const eligibleCache = new Map();
+const fileCache = new Map();
 const SOURCES = Object.freeze({
   frontend: { repository: 'ihelpchat/front-react', role: 'frontend', env: envCompatibility.localCheckouts.frontend,
     folders: ['src/components', 'src/pages', 'src/features', 'src/routes'] },
@@ -53,9 +57,43 @@ function pathRelevance(path, terms, moduleTerms) {
     - path.split('/').length * 2;
 }
 
-async function git(root, ...args) {
-  const { stdout } = await run('git', ['-C', root, ...args], { encoding: 'buffer', maxBuffer: 2 * 1024 * 1024, timeout: TIMEOUT_MS });
+class DeadlineError extends Error {}
+
+function deadlineContext(ms) {
+  const until = Date.now() + ms;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  timer.unref();
+  return {
+    signal: controller.signal,
+    remaining() {
+      const left = until - Date.now();
+      if (left <= 0 || controller.signal.aborted) throw new DeadlineError('Prazo da busca local excedido');
+      return left;
+    },
+    async wait(promise) {
+      const left = this.remaining();
+      let timeout;
+      try {
+        return await Promise.race([promise, new Promise((_, reject) => {
+          timeout = setTimeout(() => reject(new DeadlineError('Prazo da busca local excedido')), left);
+        })]);
+      } finally { clearTimeout(timeout); }
+    },
+    close() { clearTimeout(timer); controller.abort(); },
+  };
+}
+
+async function command(commandName, args, options, deadline) {
+  const { stdout } = await deadline.wait(run(commandName, args, {
+    ...options, encoding: 'buffer', maxBuffer: 2 * 1024 * 1024,
+    timeout: Math.min(TIMEOUT_MS, deadline.remaining()), signal: deadline.signal,
+  }));
   return stdout;
+}
+
+async function git(root, deadline, ...args) {
+  return command('git', ['-C', root, ...args], {}, deadline);
 }
 
 async function hasSymlink(path, stop = parse(path).root) {
@@ -65,33 +103,25 @@ async function hasSymlink(path, stop = parse(path).root) {
   return false;
 }
 
-async function candidatePaths(root, paths, terms, topic) {
+async function candidatePaths(root, paths, terms, topic, deadline) {
   const first = terms[0];
   const accented = String(topic).split(/[^\p{L}\p{N}]+/u).find((word) => normalize(word) === first);
   const needles = [...new Set([first, accented, ...(ALIASES[first] ?? [])].filter(Boolean))];
   const candidates = [];
-  async function withoutRg() {
-    const found = [];
-    for (const path of paths) {
-      const full = join(root, path);
-      if (await hasSymlink(full, root)) continue;
-      const handle = await open(full, constants.O_RDONLY | constants.O_NOFOLLOW);
-      let content;
-      try { content = await handle.readFile('utf8'); } finally { await handle.close(); }
-      if (needles.some((needle) => content.toLowerCase().includes(needle.toLowerCase()))) found.push(path);
-    }
-    return found;
-  }
-  for (let index = 0; index < paths.length; index += 100) {
-    const safe = paths.slice(index, index + 100);
+  for (let index = 0; index < paths.length; index += 500) {
+    deadline.remaining();
+    const safe = paths.slice(index, index + 500);
     if (!safe.length) continue;
     try {
-      const { stdout } = await run('rg', ['--hidden', '-l', '-0', '-i', '-F', ...needles.flatMap((term) => ['-e', term]), '--', ...safe], {
-        cwd: root, encoding: 'buffer', maxBuffer: 2 * 1024 * 1024, timeout: TIMEOUT_MS,
-      });
+      const stdout = await command('rg', ['--hidden', '-l', '-0', '-i', '-F', '--max-filesize', `${MAX_FILE_BYTES}`,
+        ...needles.flatMap((term) => ['-e', term]), '--', ...safe], { cwd: root }, deadline);
       candidates.push(...stdout.toString().split('\0').filter(Boolean));
     } catch (error) {
-      if (error.code === 'ENOENT') return withoutRg();
+      if (error.code === 'ENOENT') {
+        const stdout = await git(root, deadline, 'grep', '-z', '-l', '-i', ...needles.flatMap((term) => ['-e', term]), '--', ...safe);
+        candidates.push(...stdout.toString().split('\0').filter(Boolean));
+        continue;
+      }
       if (error.code !== 1) throw error;
     }
   }
@@ -107,59 +137,85 @@ function sensitiveSource(content) {
   return content.includes('\0') || containsSensitiveData(content, { detectOpaque: true }) || containsSensitiveData(normalized, { detectOpaque: true });
 }
 
-async function scan(source, topic, module) {
+async function safeRead(path, { signal }) {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try { return await handle.readFile({ encoding: 'utf8', signal }); }
+  finally { await handle.close(); }
+}
+
+async function scan(source, topic, module, deadline, { readFile: reader = safeRead, cache = true } = {}) {
   if (!source || !isAbsolute(source.root ?? '')) return pending(source ?? {}, 'Checkout autorizado ausente');
   try {
-    if (await hasSymlink(source.root)) return pending(source, 'Checkout por symlink não autorizado');
-    const root = await realpath(source.root);
-    if ((await git(root, 'rev-parse', '--show-toplevel')).toString().trim() !== root) return pending(source, 'Raiz Git divergente');
-    const sha = (await git(root, 'rev-parse', 'HEAD')).toString().trim();
+    if (await deadline.wait(hasSymlink(source.root))) return pending(source, 'Checkout por symlink não autorizado');
+    const root = await deadline.wait(realpath(source.root));
+    if ((await git(root, deadline, 'rev-parse', '--show-toplevel')).toString().trim() !== root) return pending(source, 'Raiz Git divergente');
+    const sha = (await git(root, deadline, 'rev-parse', 'HEAD')).toString().trim();
     if (!SHA.test(sha)) return pending(source, 'SHA do checkout inválido');
     source = { ...source, sha };
-    if ((await git(root, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Checkout com alterações não commitadas');
-    const listed = (await git(root, 'ls-files', '-z')).toString().split('\0').filter(Boolean);
+    if ((await git(root, deadline, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Checkout com alterações não commitadas');
+    const listKey = `${root}\0${sha}\0${source.role}`;
+    let listed = cache ? listedCache.get(listKey) : undefined;
+    if (!listed) {
+      listed = (await git(root, deadline, 'ls-files', '-z')).toString().split('\0').filter(Boolean);
+      if (cache) listedCache.set(listKey, listed);
+    }
     if (listed.length > MAX_LISTED) return pending(source, 'Limite de arquivos listados excedido');
-    const paths = listed.filter((path) => isAllowedSourcePath(path, source.role));
-    if (paths.length > MAX_SEARCH_FILES) return pending(source, 'Limite de arquivos pesquisáveis excedido');
+    const allowed = listed.filter((path) => isAllowedSourcePath(path, source.role));
+    if (allowed.length > MAX_SEARCH_FILES) return pending(source, 'Limite de arquivos pesquisáveis excedido');
+    let paths = cache ? eligibleCache.get(listKey) : undefined;
+    if (!paths) {
+      paths = [];
+      let eligibleBytes = 0;
+      for (let index = 0; index < allowed.length; index += 64) {
+        deadline.remaining();
+        const batch = await deadline.wait(Promise.all(allowed.slice(index, index + 64).map(async (path) => {
+          const full = join(root, path);
+          if (await hasSymlink(full, root)) return null;
+          const size = (await lstat(full)).size;
+          return size <= MAX_FILE_BYTES ? { path, size } : null;
+        })));
+        for (const item of batch) {
+          if (!item) continue;
+          eligibleBytes += item.size;
+          if (eligibleBytes > MAX_TOTAL_BYTES) return pending(source, 'Limite de bytes pesquisados excedido');
+          paths.push(item.path);
+        }
+      }
+      if (cache) eligibleCache.set(listKey, paths);
+    }
     const terms = words(topic, module);
     const moduleTerms = words('', module);
     const phrase = normalize(topic).trim();
     if (!terms.length) return pending(source, 'Tema sem termos pesquisáveis');
     const rawTerms = [...new Set([...terms, ...`${topic} ${module}`.split(/[^\p{L}\p{N}]+/u).map((word) => word.toLowerCase())])];
-    const ranked = paths.sort((a, b) => pathRelevance(b, terms, moduleTerms) - pathRelevance(a, terms, moduleTerms));
-    const eligible = [];
-    let totalBytes = 0;
-    for (const path of ranked) {
-      const full = join(root, path);
-      if (await hasSymlink(full, root)) continue;
-      const size = (await lstat(full)).size;
-      if (size > MAX_FILE_BYTES) continue;
-      totalBytes += size;
-      if (totalBytes > MAX_TOTAL_BYTES) return pending(source, 'Limite de bytes pesquisados excedido');
-      const handle = await open(full, constants.O_RDONLY | constants.O_NOFOLLOW);
-      let content;
-      try { content = await handle.readFile('utf8'); } finally { await handle.close(); }
-      if (sensitiveSource(content)) continue;
-      eligible.push(path);
-    }
-    const textual = await candidatePaths(root, eligible, terms, topic);
-    const candidates = [...new Set([...textual, ...eligible.filter((path) => terms.some((term) => normalize(path).includes(term)))])]
+    const textual = await candidatePaths(root, paths, terms, topic, deadline);
+    const pathFallback = textual.length ? [] : paths.filter((path) => terms.some((term) => normalize(path).includes(term)));
+    const candidates = [...new Set([...textual, ...pathFallback])]
       .sort((a, b) => pathRelevance(b, terms, moduleTerms) - pathRelevance(a, terms, moduleTerms)).slice(0, 64);
+    let totalBytes = 0;
     async function matchFile(path) {
       const full = join(root, path);
-      if (await hasSymlink(full, root)) return null;
-      const actual = await realpath(full);
+      deadline.remaining();
+      if (await deadline.wait(hasSymlink(full, root))) return null;
+      const actual = await deadline.wait(realpath(full));
       const rel = relative(root, actual);
       if (!rel || rel === '..' || rel.startsWith(`..${sep}`)) return null;
-      if ((await lstat(actual)).size > MAX_FILE_BYTES) return null;
-      const handle = await open(actual, constants.O_RDONLY | constants.O_NOFOLLOW);
-      let content;
-      try { content = await handle.readFile('utf8'); } finally { await handle.close(); }
-      if (sensitiveSource(content)) return null;
-      const lines = content.split('\n');
+      const size = (await deadline.wait(lstat(actual))).size;
+      if (size > MAX_FILE_BYTES) return null;
+      totalBytes += size;
+      if (totalBytes > MAX_TOTAL_BYTES) throw new Error('Limite de bytes pesquisados excedido');
+      const fileKey = `${root}\0${sha}\0${path}`;
+      let lines = cache ? fileCache.get(fileKey) : undefined;
+      if (lines === undefined) {
+        const content = await deadline.wait(reader(actual, { encoding: 'utf8', signal: deadline.signal }));
+        lines = sensitiveSource(content) ? null : content.split('\n');
+        if (cache) fileCache.set(fileKey, lines);
+      }
+      if (!lines) return null;
       const pathScore = pathRelevance(path, terms, moduleTerms);
       let best = null;
       for (let index = 0; index < lines.length; index += 1) {
+        deadline.remaining();
         const lower = lines[index].toLowerCase();
         if (!rawTerms.some((term) => term.length > 2 && lower.includes(term))) continue;
         const line = normalize(lines[index]);
@@ -175,27 +231,35 @@ async function scan(source, topic, module) {
       return best ? { repository: source.repository, role: source.role, path, sha: source.sha, ref: source.sha, line: best.line, excerpt: best.excerpt, score: best.score } : null;
     }
     const matches = [];
-    for (let index = 0; index < candidates.length; index += 64) {
-      matches.push(...(await Promise.all(candidates.slice(index, index + 64).map(matchFile))).filter(Boolean));
+    for (const path of candidates) {
+      deadline.remaining();
+      const match = await matchFile(path);
+      if (match) matches.push(match);
     }
-    if ((await git(root, 'rev-parse', 'HEAD')).toString().trim() !== sha || (await git(root, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Fonte alterada durante a leitura');
+    if ((await git(root, deadline, 'rev-parse', 'HEAD')).toString().trim() !== sha || (await git(root, deadline, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Fonte alterada durante a leitura');
     return { available: true, repository: source.repository, ref: source.sha, role: source.role, matches: matches
       .filter(({ path }) => redactSensitiveData(path) === path)
       .sort((a, b) => b.score - a.score).slice(0, 8)
       .map(({ score: _score, path, excerpt, ...match }) => ({ ...match, path, excerpt: redactSensitiveData(excerpt) })) };
   } catch (error) {
+    if (error instanceof DeadlineError || error.code === 'ABORT_ERR') return { ...pending(source, 'Prazo da busca local excedido'), partial: true };
     if (error.killed || error.signal === 'SIGTERM') return pending(source, 'Tempo limite de subprocesso excedido');
     if (error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return pending(source, 'Limite de bytes do subprocesso excedido');
     return pending(source, `Checkout indisponível: ${error.code ?? 'leitura falhou'}`);
   }
 }
 
-export async function searchLocalProductContext(topic, module, { repositoryIds = Object.keys(SOURCES) } = {}) {
+export async function searchLocalProductContext(topic, module, { repositoryIds = Object.keys(SOURCES), deadlineMs = DEFAULT_DEADLINE_MS, readFile, cache = true } = {}) {
+  const deadline = deadlineContext(Math.max(1, deadlineMs));
   const code = [];
-  for (const id of repositoryIds) {
-    const configured = SOURCES[id];
-    if (!configured) { code.push(pending({ repository: id }, 'Repositório não autorizado')); continue; }
-    code.push(await scan({ repository: configured.repository, role: configured.role, root: process.env[configured.env] }, topic, module));
+  try {
+    for (const id of repositoryIds) {
+      const configured = SOURCES[id];
+      if (!configured) { code.push(pending({ repository: id }, 'Repositório não autorizado')); continue; }
+      code.push(await scan({ repository: configured.repository, role: configured.role, root: process.env[configured.env] }, topic, module, deadline, { readFile, cache }));
+    }
+  } finally {
+    deadline.close();
   }
-  return { code, matches: code.flatMap((item) => item.matches), groundingRequired: true };
+  return { code, matches: code.flatMap((item) => item.matches), groundingRequired: true, partial: code.some((item) => item.partial === true) };
 }

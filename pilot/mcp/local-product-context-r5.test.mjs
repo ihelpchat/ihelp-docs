@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { searchLocalProductContext } from './local-product-context.mjs';
+import { containsSensitiveData } from './sensitive-data.mjs';
+
+assert.equal(containsSensitiveData('foo=foo', { detectOpaque: true }), false, 'atribuição comum termina a varredura');
 
 const root = await realpath(await mkdtemp(join(tmpdir(), 'm530-r5-')));
 const checkout = join(root, 'front');
@@ -41,11 +44,23 @@ try {
   assert.equal(again.matches[0]?.path, target);
   assert.equal(reads.length, 1, 'cache por SHA não relê o candidato');
 
+  const slowCheckout = join(root, 'slow');
+  await mkdir(join(slowCheckout, 'src/pages'), { recursive: true });
+  const slowGit = (...args) => execFileSync('git', args, { cwd: slowCheckout, encoding: 'utf8' }).trim();
+  slowGit('init', '-q');
+  slowGit('config', 'user.email', 'test@example.invalid');
+  slowGit('config', 'user.name', 'Fixture');
+  await writeFile(join(slowCheckout, 'src/pages/Robot.tsx'), 'export const label = "Criar robô de atendimento";');
+  slowGit('add', '-A');
+  slowGit('commit', '-qm', 'slow tracked fixture');
+  process.env.PRODUCT_LOCAL_CHECKOUT = slowCheckout;
+  let slowReads = 0;
   const slowStarted = performance.now();
   const slow = await searchLocalProductContext('Criar robô de atendimento', '', {
-    repositoryIds: ['frontend'], deadlineMs: 150, readFile: async () => new Promise((resolve) => setTimeout(() => resolve(''), 2_000)),
+    repositoryIds: ['frontend'], deadlineMs: 150, readFile: async () => { slowReads += 1; return new Promise((resolve) => setTimeout(() => resolve(''), 2_000)); },
     cache: false,
   });
+  assert.equal(slowReads, 1, 'fixture lenta chega à leitura');
   assert.ok(slow.partial || slow.code[0].reason, 'prazo devolve estado explícito');
   assert.ok(performance.now() - slowStarted <= 1_150, 'leitura lenta não pode prender a operação');
 } finally {
