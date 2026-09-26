@@ -8,6 +8,8 @@ O gate compara essas árvores com `product-map/approved.json`, versionado neste 
 
 O relatório temporário inclui os SHAs, rotas, rótulos, marcadores, permissões e diferenças em relação ao commit anterior de cada produto. Só valores literais que passam pela varredura de dado sensível entram no manifest; expressões dinâmicas viram pendências. Marcador ou rota de ação usada por guia publicado que desaparecer bloqueia o check. O relatório não é publicado como artefato. Para uma transição, atualize e publique a nova versão do guia antes de remover o marcador; para rollback, restaure o marcador no front ou volte a versão do guia por PR revisável.
 
+Para calcular propostas editoriais entre dois snapshots, rode `node scripts/guide-impact.mjs product-map/approved.json novo-report.json impacto.json` em `pilot/`. O índice usa ações dos passos do pacote publicado e referências explícitas `kind`, `key`, `file`, `line` quando disponíveis. O resultado contém apenas propostas `atualizar`, `criar` ou `avisar`; não escreve nos guias. Sem snapshot válido, registra pendência. Rótulos ou permissões sem referência explícita não são atribuídos por aproximação; as fontes arquivo:linha dos guias ainda dependem da etapa editorial M5.21.
+
 ## Dados da Claricia
 
 O `/assistant` remove padrões conhecidos de credenciais, email, CPF e telefone da pergunta e do histórico antes da chamada ao provider. A redaction não detecta nomes nem endereços e não é anonimização total. O `/feedback` guarda voto e caminhos, sem pergunta ou user agent. Caminhos com query ou fragmento são rejeitados.

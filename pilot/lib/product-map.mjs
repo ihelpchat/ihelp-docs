@@ -74,8 +74,12 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
       if (ts.isJsxElement(node) && /^(button|Button)$/u.test(node.openingElement.tagName.getText(ast))) {
         for (const child of node.children) if (ts.isJsxText(child)) {
           const label = safe(child.getText(ast).trim());
-          if (label) labels.push({ label });
+          if (label) labels.push({ label, file: path });
         }
+      }
+      if (ts.isJsxAttribute(node) && node.name.text === 'labelText' && node.initializer && ts.isStringLiteral(node.initializer)) {
+        const label = safe(node.initializer.text);
+        if (label) labels.push({ label, file: path });
       }
       ts.forEachChild(node, visit);
     };
