@@ -166,7 +166,7 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
             </ul>
           </div>
         ) : null}
-        {needsSupport ? (
+        {needsSupport && !reply.actions?.length ? (
           <div className="ih-ai-support-cta">
             <div>
               <strong>Precisa concluir este procedimento?</strong>
@@ -178,6 +178,11 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
             </a>
           </div>
         ) : null}
+        {reply.actions?.map((action) => action.type === 'link' && action.destination === 'support' ? (
+          <a className="ih-ai-human-action" key={action.destination} href={`${supportUrl}?text=${encodeURIComponent(supportMessage)}`} target="_blank" rel="noreferrer noopener">
+            {action.label}
+          </a>
+        ) : null)}
         <div className="ih-ai-actions">
           <button type="button" onClick={() => copy('msg', plainText(reply))}>
             {compact ? null : copied === 'msg' ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
