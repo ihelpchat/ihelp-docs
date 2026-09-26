@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readCsharpEndpoints } from '../lib/csharp-endpoints.mjs';
 import { validateGroundedOutput, generateContentPackage } from './content-ai-service.mjs';
+import { getIhelpContext } from './product-context-service.mjs';
+import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const contacts = `[Authorize]
 [ApiVersion("2")]
@@ -65,6 +70,41 @@ test('controller sem página pública exige confirmação', () => {
   const privateContext = { ...context, endpoints: endpoints.map((item) => ({ ...item, public: false })) };
   assert.equal(validateGroundedOutput(article, privateContext, [], issues), false);
   assert.match(issues.join(' '), /endpoint não público: confirmar/i);
+});
+
+test('controller privado no checkout retorna pendência sem entregar fatos ao gerador', async () => {
+  const root = await mkdtemp(join(await realpath(tmpdir()), 'api-private-test-'));
+  const backend = join(root, 'back');
+  const previous = process.env.BACKEND_LOCAL_CHECKOUT;
+  try {
+    await mkdir(join(backend, 'Comzada.Application/Controllers/V2'), { recursive: true });
+    await writeFile(join(backend, 'Comzada.Application/Controllers/V2/InternalController.cs'), `[Route("api/v{version:apiVersion}/internal")]
+[ApiVersion("2")]
+public class InternalController {
+  [HttpGet("private/{id}")]
+  public Task<IActionResult> Get([FromRoute] int id) { return null; }
+}`);
+    execFileSync('git', ['init', '-q', backend]);
+    execFileSync('git', ['-C', backend, 'add', '.']);
+    execFileSync('git', ['-C', backend, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']);
+    await mkdir(join(root, 'architecture'), { recursive: true });
+    await writeFile(join(root, 'architecture/support-signals.json'), JSON.stringify({ categories: [], rules: [] }));
+    await writeFile(join(root, 'architecture/coverage-matrix.json'), '[]');
+    await mkdir(join(root, 'content/docs/api'), { recursive: true });
+    process.env.BACKEND_LOCAL_CHECKOUT = backend;
+    const productContext = await getIhelpContext(root, 'API internal', 'api', { requireLocal: true, repositoryIds: ['backend'] });
+    assert.doesNotMatch(JSON.stringify(productContext), /private\/\{id\}|InternalController/);
+    assert.equal(productContext.nonPublicEndpoints, true);
+    const result = await generateContentPackage(root, { topic: 'API internal', module: 'api' }, {
+      productContext, client: { responses: { create() { throw new Error('provider não deveria ser chamado'); } } },
+    });
+    assert.equal(result.status, 'needs_information');
+    assert.match(result.questions.join(' '), /endpoint não público: confirmar/i);
+  } finally {
+    if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous;
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('provider simulado não consegue devolver artigo com rota divergente', async () => {
