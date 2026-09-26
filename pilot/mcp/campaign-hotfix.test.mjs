@@ -12,7 +12,9 @@ const payload = {
   code: null, sources: [legacy], suggestions: [], resolution: 'complete', found: true,
 };
 const nested = JSON.stringify(JSON.stringify(payload));
-const client = { responses: { create: async () => ({ model: 'fixture', output_text: nested }) } };
+const client = { responses: { create: async (request) => ({ model: 'fixture', status: 'completed',
+  output_text: request.text?.format?.name === 'triagem_fechada' ? '{"choice":"sem guia"}'
+    : JSON.stringify({ ...payload, sources: [guide] }), usage: { input_tokens: 1, output_tokens: 1 } }) } };
 
 for (const output of [
   nested,
@@ -56,7 +58,9 @@ for (const [question, expected] of [
   ['Como usar API para campanha?', '/docs/sobre-o-sistema/campanhas/campanhas-na-api-oficial'],
   ['Como enviar arquivos na campanha?', '/docs/principais-motivos-de-suporte/arquivos'],
 ]) {
-  const relevantClient = { responses: { create: async () => ({ output_text: JSON.stringify({ ...payload, sources: [expected] }) }) } };
+  const relevantClient = { responses: { create: async (request) => ({ status: 'completed',
+    output_text: request.text?.format?.name === 'triagem_fechada' ? '{"choice":"sem guia"}'
+      : JSON.stringify({ ...payload, sources: [expected] }), usage: { input_tokens: 1, output_tokens: 1 } }) } };
   const reply = await answerQuestion(root, question, { client: relevantClient });
   assert.notEqual(reply.sources[0]?.path, guide, `não força campanha: ${question}`);
   assert.notEqual(reply.steps[0]?.action?.id, 'abrir-campanhas', `ação correta: ${question}`);
@@ -64,10 +68,14 @@ for (const [question, expected] of [
 
 const fakeOpenAI = createServer(async (request, response) => {
   assert.equal(request.url, '/v1/responses');
+  let body = '';
+  for await (const chunk of request) body += chunk;
+  const route = JSON.parse(body).text?.format?.name === 'triagem_fechada';
   response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
     id: 'resp_fixture', object: 'response', created_at: 1, model: 'fixture', status: 'completed',
     output: [{ type: 'message', id: 'msg_fixture', status: 'completed', role: 'assistant',
-      content: [{ type: 'output_text', text: nested, annotations: [] }] }],
+      content: [{ type: 'output_text', text: route ? '{"choice":"sem guia"}' : JSON.stringify({ ...payload, sources: [guide] }), annotations: [] }] }],
+    usage: { input_tokens: 1, output_tokens: 1 },
   }));
 });
 try {

@@ -59,7 +59,7 @@ OPENAI_API_KEY=... ASSISTANT_ALLOWED_ORIGINS=http://127.0.0.1:4173 npm run mcp:h
 NEXT_PUBLIC_ASSISTANT_URL=http://127.0.0.1:3100/assistant npm run build
 ```
 
-O serviço pede resposta estruturada (JSON schema), filtra por escopo (“Buscar em”), prioriza a página aberta no painel lateral e só devolve fontes que ele mesmo recuperou, então o modelo não consegue inventar links. O modelo padrão é `gpt-6-luna`; `OPENAI_MODEL` permite trocar sem alterar código. Há limite de 10 perguntas por IP/minuto e perguntas de até 500 caracteres.
+O serviço pede resposta estruturada (JSON schema), filtra por escopo (“Buscar em”), prioriza a página aberta no painel lateral e só devolve fontes que ele mesmo recuperou, então o modelo não consegue inventar links. O modelo da resposta final é `OPENAI_MODEL` (padrão `gpt-6-luna`). Defina `ASSISTANT_ROUTER_MODEL` com um modelo pequeno para classificar mensagens quando houver guias publicados; sem ela, a triagem usa `OPENAI_MODEL` e avisa na subida. Há limite de 10 perguntas por IP/minuto e perguntas de até 500 caracteres.
 
 ## Publicação
 
