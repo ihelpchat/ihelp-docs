@@ -63,7 +63,7 @@ export function validateArticle(article) {
   if (!CONTENT_TYPES.has(article.contentType)) issues.push('contentType inválido');
   if (article.guide !== undefined && !guideSchema.safeParse(article.guide).success) issues.push('guide inválido');
   if (!article.path || !SAFE_PATH.test(article.path) || article.path.includes('..')) issues.push('path inválido');
-  if (!article.body || article.body.trim().split(/\s+/).filter(Boolean).length < 60) issues.push('body precisa ter ao menos 60 palavras');
+  if (!article.body || (article.source !== 'api' && article.body.trim().split(/\s+/).filter(Boolean).length < 60)) issues.push('body precisa ter ao menos 60 palavras');
   if (/<script\b/i.test(article.body ?? '')) issues.push('scripts não são permitidos');
   if (/<iframe\b/i.test(article.body ?? '')) issues.push('iframes devem ser enviados pelo campo tangoUrl');
   if (/<(?:video|VideoEmbed)\b|https?:\/\/\S+\.(?:mp4|webm)\b/i.test(article.body ?? '')) issues.push('vídeo não faz parte do pacote editorial');
