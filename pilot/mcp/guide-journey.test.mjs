@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -63,7 +63,7 @@ if (!httpServer.listening) await once(httpServer, 'listening');
 process.env.NEXT_PUBLIC_ASSISTANT_URL = `http://127.0.0.1:${httpServer.address().port}/assistant`;
 const source = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../lib/assistant.ts', import.meta.url), 'utf8'));
 const compiled = ts.transpileModule(source.replace("from '../architecture/catalog-action.mjs'", `from '${new URL('../architecture/catalog-action.mjs', import.meta.url).href}'`), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { buildAssistantRequest, requestAnswer, normalizeReply, supportMessageFor } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const { buildAssistantRequest, requestAnswer, clickablesFor } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 let requests = 0;
 const originalFetch = globalThis.fetch;
 globalThis.fetch = (input, init) => originalFetch(input, {
@@ -89,6 +89,12 @@ const assertStep = (reply, guideId) => {
     assert.deepEqual(reply.guideChoices, step.choices);
   }
 };
+const clickableOptions = { supportUrl: 'https://wa.me/551730422307', productActionUrl: (action) => `https://app.ihelpchat.com${action.route}?ihelpGuide=${action.id}` };
+const clickables = (reply) => clickablesFor(reply, { ...clickableOptions, requestOptions: { sessionId: `journey-${++requests}`, origin: 'faq' } });
+const thread = await readFile(new URL('../components/assistant/assistant-thread.tsx', import.meta.url), 'utf8');
+assert.match(thread, /clickablesFor\(reply/);
+assert.doesNotMatch(thread, /reply\.suggestions\.map|supportMessageFor\(reply\)|productActionUrl\(step\.action/,
+  'a interface não pode criar cliques de guia fora da fonte única');
 
 try {
   for (const guideId of guideIds) {
@@ -109,30 +115,48 @@ try {
       if (visited.has(key)) continue;
       visited.add(key);
       assertStep(reply, guideId);
-      const offered = [...reply.suggestions, ...(reply.resolution === 'complete' ? [] : ['Falar com uma pessoa'])];
-      for (const option of offered) {
-        const next = await post(option, reply);
-        if (option !== 'Preciso de ajuda') assert.notDeepEqual(next, reply, `${guideId}/${reply.guide.stepId}: ${option} não avançou`);
+      for (const clickable of clickables(reply)) {
+        if (clickable.kind === 'link') {
+          if (clickable.slot === 'support') {
+            const message = new URL(clickable.href).searchParams.get('text');
+            assert.match(message, new RegExp(`${guideId}.*${reply.guide.stepId}`, 's'), 'CTA deve informar guia e passo');
+          }
+          continue;
+        }
+        const option = clickable.label;
+        const next = await requestAnswer(clickable.request);
         assert.equal(providerCalls, 0, 'guia nunca chama o provider');
         if (option === 'Falar com uma pessoa' || option === 'Deu certo? Não') {
           assert.equal(next.resolution, 'partial');
           assert.equal(next.escalation?.guideId, guideId);
           assert.equal(next.escalation?.stepId, reply.guide.stepId);
-          const link = `https://wa.me/551730422307?text=${encodeURIComponent(supportMessageFor(normalizeReply(next)))}`;
-          assert.match(decodeURIComponent(new URL(link).searchParams.get('text')), new RegExp(`${guideId}.*${reply.guide.stepId}`, 's'));
         } else if (next.resolution === 'complete') {
           assert.equal(option, 'Deu certo? Sim', `${guideId}: conclusão prematura`);
           assert.equal(reply.guide.stepId, guideId === 'reconectar-canal-qr' ? 'confirmar' : 'final', `${guideId}: conclusão só no passo terminal`);
           completed = true;
-        } else if (next.guide) queue.push({ reply: next, depth: depth + 1 });
+        } else if (next.guide && option !== 'Voltar') {
+          if (option === 'Preciso de ajuda') assert.equal(next.guide.stepId, reply.guide.stepId);
+          if (option === 'Recomeçar') assert.equal(next.guide.stepId, 'inicio');
+          queue.push({ reply: next, depth: depth + 1 });
+        }
+        if (guideId === 'reconectar-canal-qr' && next.guide?.stepId === 'confirmar' && ['android', 'iphone'].includes(reply.guide.stepId)) {
+          const back = clickables(next).find((item) => item.label === 'Voltar');
+          assert.ok(back, 'Voltar visível no passo de confirmação');
+          assert.equal((await requestAnswer(back.request)).guide.stepId, reply.guide.stepId, 'Voltar deve seguir o ramo percorrido');
+        }
       }
     }
     assert.equal(completed, true, `${guideId}: confirmação final não foi oferecida`);
     const invalid = await post('Avançar', undefined, startState(guideId, { version: 2 }));
     assert.ok(invalid.suggestions.includes('Recomeçar'));
-    const restarted = await post('Recomeçar', undefined, startState(guideId, { version: 2, stateToken: 'invalid' }));
+    const safeClicks = clickables(invalid);
+    const restarted = await requestAnswer(safeClicks.find((item) => item.label === 'Recomeçar').request);
     assert.equal(restarted.guide.stepId, 'inicio', `${guideId}: reinício precisa dispensar token inválido`);
     assert.ok(restarted.guide.stateToken);
+    const safeHuman = await requestAnswer(safeClicks.find((item) => item.label === 'Falar com uma pessoa').request);
+    assert.equal(safeHuman.resolution, 'partial');
+    assert.equal(safeHuman.escalation?.guideId, guideId);
+    assert.match(new URL(safeClicks.find((item) => item.slot === 'support').href).searchParams.get('text'), new RegExp(guideId));
   }
   assert.equal(providerCalls, 0);
 } finally {
