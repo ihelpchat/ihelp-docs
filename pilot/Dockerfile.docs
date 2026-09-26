@@ -1,0 +1,6 @@
+FROM nginx:1.29-alpine
+COPY release-dist.tar.gz /tmp/release-dist.tar.gz
+RUN mkdir -p /usr/share/nginx/html/ihelp-docs \
+    && tar -xzf /tmp/release-dist.tar.gz -C /usr/share/nginx/html/ihelp-docs \
+    && rm /tmp/release-dist.tar.gz
+EXPOSE 80
