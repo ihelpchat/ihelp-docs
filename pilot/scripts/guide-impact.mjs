@@ -13,6 +13,6 @@ const [before, after, guidePackage] = await Promise.all([
   compileGuidePackage(root),
 ]);
 const result = calculateGuideImpact({ before, after, guides: guidePackage.catalog.guides, actions });
-await writeFile(outputFile, `${JSON.stringify(result, null, 2)}\n`);
+await writeFile(outputFile, `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });
 console.log(`${result.proposals.length} propostas; ${result.pending.length} pendências`);
 if (result.pending.length) process.exitCode = 1;
