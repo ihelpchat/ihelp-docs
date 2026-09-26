@@ -88,7 +88,8 @@ for (const details of ['OPENAI_API_KEY="alphaBetaGammaDeltaEpsilon"', 'GITHUB_TO
   await assert.rejects(planContent(testRoot, { ...request, details }, { client: noModel }), /credencial/i);
   await assert.rejects(generateContentPackage(testRoot, { ...request, details }, { client: noModel }), /credencial/i);
 }
-const plan = await planContent(testRoot, request, { client: aiClient });
+const groundedFixture = { groundingRequired: true, code: [{ available: true, repository: 'ihelpchat/front-react', ref: 'a'.repeat(40), role: 'frontend' }], matches: [{ repository: 'ihelpchat/front-react', ref: 'a'.repeat(40), sha: 'a'.repeat(40), role: 'frontend', path: 'src/Contacts/index.tsx', line: 1, excerpt: '1: Importar contatos' }], support: { categories: [], rules: [] }, coverage: [] };
+const plan = await planContent(testRoot, request, { client: aiClient, productContext: groundedFixture });
 assert.equal(plan.status, 'ready');
 assert.equal(plan.suggestedActions[0].route, '/contact');
 assert.deepEqual(plan.suggestedActions[0], { id: 'importar-contatos', label: 'Abrir a tela Contatos', route: '/contact', target: 'contacts-more-options' }, 'plano precisa canonizar label sem alterar destino');
@@ -103,7 +104,7 @@ const secretContext = {
 };
 await planContent(testRoot, request, { client: aiClient, productContext: secretContext });
 await generateContentPackage(testRoot, request, { client: aiClient, productContext: secretContext });
-const generated = await generateContentPackage(testRoot, request, { client: aiClient });
+const generated = await generateContentPackage(testRoot, request, { client: aiClient, productContext: groundedFixture });
 assert.equal(generated.articles.length, 2);
 assert.deepEqual(generated.articles.map(({ contentType }) => contentType), ['faq', 'tutorial']);
 assert.ok(generated.articles.every(({ productActions }) => productActions.length === 1));

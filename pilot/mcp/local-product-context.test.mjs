@@ -19,7 +19,8 @@ const files = {
   'src/pages/ChannelConnection/index.tsx': 'export function ChannelConnection() { return <button>Reconectar canal pelo QR Code</button>; }',
   'src/pages/TabDepartment/index.tsx': 'export function TabDepartment() { return <button>Configurar horário de funcionamento</button>; }',
   'src/pages/Contacts/index.tsx': 'export function Contacts() { return <button>Importar contatos</button>; }',
-  '.env': 'OPENAI_API_KEY=fixture-credential',
+  '.env': 'Criar robô de atendimento fixture-credential',
+  'src/private/credentials.ts': 'Criar robô de atendimento credential-file-marker',
   'src/data/customer.ts': 'export const x = "Criar robô de atendimento operational marker";',
 };
 for (let index = 0; index < 75; index += 1) files[`src/components/AttendanceChat${index}.tsx`] = 'export const AttendanceChat = "atendimento";';
@@ -42,11 +43,11 @@ for (const [topic, expected] of [
   ['Configurar horário de funcionamento', 'src/pages/TabDepartment/index.tsx'],
 ]) {
   const result = await searchLocalProductContext(topic, '', { checkouts: [source] });
-  assert.equal(result.code[0].available, true);
+  assert.equal(result.code[0].available, true, result.code[0].reason);
   assert.equal(result.matches[0]?.path, expected, `implementação causal para ${topic}`);
   assert.equal(result.matches[0]?.sha, sha);
   assert.ok(result.matches[0]?.line > 0);
-  assert.doesNotMatch(JSON.stringify(result), /fixture-credential|operational marker|external marker|\.env|Outside\.tsx/);
+  assert.doesNotMatch(JSON.stringify(result), /fixture-credential|credential-file-marker|operational marker|external marker|\.env|Outside\.tsx/);
 }
 const wrongSha = await searchLocalProductContext('Criar robô de atendimento', '', { checkouts: [{ ...source, sha: '0'.repeat(40) }] });
 assert.equal(wrongSha.code[0].available, false);
