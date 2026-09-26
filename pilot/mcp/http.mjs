@@ -7,9 +7,10 @@ import { toNodeHandler } from '@modelcontextprotocol/node';
 import { buildServer } from './server.mjs';
 import { answerQuestion } from './assistant-service.mjs';
 import { normalizeFeedback, saveFeedback, summarizeFeedback } from './feedback-service.mjs';
-import { sanitizeWidgetContext, diagnosisFor, intentOf } from './real-state.mjs';
+import { sanitizeWidgetContext } from './real-state.mjs';
 import { saveSessionEvent, pruneSessionEvents } from './session-events.mjs';
 import { topicForQuestion } from './closed-router.mjs';
+import { actionForQuestion, issueForQuestion } from './gap-classification.mjs';
 import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { publishedPathOrNull } from './published-paths.mjs';
 import { opaqueId } from './opaque-id.mjs';
@@ -155,7 +156,8 @@ export const httpServer = createServer(async (request, response) => {
         onResolvedStep: (step) => { resolvedStep = step; },
       });
       const topic = topicForQuestion(question);
-      const cause = diagnosisFor(question, widgetContext, intentOf(question, widgetContext)).cause;
+      const issue = issueForQuestion(question, widgetContext);
+      const action = issue === 'usage' ? actionForQuestion(question) : undefined;
       try {
         const now = Date.now();
         if (now - lastSessionPrune > 24 * 60 * 60_000) {
@@ -169,8 +171,8 @@ export const httpServer = createServer(async (request, response) => {
           durationMs: Math.min(now - startedAt, 300_000),
           result: ['complete', 'partial', 'not_found', 'in_progress'].includes(result.resolution) ? result.resolution : 'not_found',
           ...(topic ? { topic } : {}),
-          issue: cause === 'usage' ? 'usage' : cause === 'permission' ? 'permission'
-            : cause === 'bug_incident' ? 'incident' : 'account_state',
+          ...(action ? { action } : {}),
+          issue,
           path: pagePath ?? '/assistente',
         }, { now });
       } catch {

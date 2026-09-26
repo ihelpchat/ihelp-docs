@@ -9,7 +9,7 @@ import { assistantRouterModel } from './env-compat.mjs';
 const normalize = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 const words = (value) => normalize(value).match(/[a-z0-9]+/g) ?? [];
 const ignored = new Set(['a', 'ao', 'as', 'como', 'criar', 'fazer', 'configurar', 'usar', 'enviar', 'abrir', 'quero', 'para', 'uma', 'com', 'pelo', 'meu', 'que', 'isso', 'guia', 'ihelp', 'no', 'de', 'do', 'da', 'em', 'o', 'e', 'quando', 'esta', 'estou', 'pode', 'preciso', 'qual', 'onde']);
-const stem = (word) => word.replace(/s$/u, '').replace(/(?:ou|ar|er|ir)$/u, '');
+export const stem = (word) => word.replace(/s$/u, '').replace(/(?:ou|ar|er|ir)$/u, '');
 const meaningful = (value) => words(value).filter((word) => word.length >= 3 && !ignored.has(word))
   .map(stem).filter((word) => word.length >= 3);
 const actions = JSON.parse(await readFile(new URL('../architecture/product-actions.json', import.meta.url), 'utf8'));

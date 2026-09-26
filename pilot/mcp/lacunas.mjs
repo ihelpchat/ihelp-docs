@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import actions from '../architecture/product-actions.json' with { type: 'json' };
 import guideIds from '../architecture/guide-ids.json' with { type: 'json' };
 import { publishedGuideCatalog } from './closed-router.mjs';
+import { actionForQuestion, PROCEDURE_ACTIONS } from './gap-classification.mjs';
 import { pruneSessionEvents } from './session-events.mjs';
 
 export const MIN_GAP_SESSIONS = 3;
@@ -30,6 +31,11 @@ function entry(map, key, sessionId) {
   if (!map.has(key)) map.set(key, new Set());
   map.get(key).add(sessionId);
 }
+const pair = (topic, action) => JSON.stringify([topic, action]);
+const guideActions = (guide) => {
+  const action = actionForQuestion(guide.question);
+  return action ? guide.actionIds.map((topic) => pair(topic, action)) : [];
+};
 
 /** Read only: grouped counts and closed-vocabulary proposals, never event identity or text. */
 export async function collectGaps(root, file, { now = Date.now() } = {}) {
@@ -44,35 +50,43 @@ export async function collectGaps(root, file, { now = Date.now() } = {}) {
     if (['incident', 'permission', 'account_state'].includes(event.issue)) {
       entry(incidents, topic ?? 'unknown', event.sessionId);
     } else if (event.issue !== 'usage') {
-      entry(review, topic ?? 'unknown', event.sessionId);
+      entry(review, pair(topic ?? 'unknown', topic ? 'sem diagnóstico — revisão humana' : 'sem tópico — revisão humana'), event.sessionId);
     } else if (!topic) {
-      entry(review, 'unknown', event.sessionId);
+      entry(review, pair('unknown', 'sem tópico — revisão humana'), event.sessionId);
+    } else if (!PROCEDURE_ACTIONS.includes(event.action)) {
+      entry(review, pair(topic, 'sem ação — revisão humana'), event.sessionId);
     } else {
-      entry(documentable, topic, event.sessionId);
+      entry(documentable, pair(topic, event.action), event.sessionId);
     }
   }
   const catalog = await publishedGuideCatalog(root);
-  const proposals = [...documentable].filter(([, sessions]) => sessions.size >= MIN_GAP_SESSIONS).map(([topic, sessions]) => {
-    const guideId = catalog.find(({ actionIds }) => actionIds.includes(topic))?.guideId;
-    const target = guideId ?? canonicalGuides[topic];
-    if (!knownGuides.has(target)) return null;
+  const proposals = [...documentable].filter(([, sessions]) => sessions.size >= MIN_GAP_SESSIONS).map(([key, sessions]) => {
+    const [topic, action] = JSON.parse(key);
+    const matches = catalog.filter((guide) => guideActions(guide).includes(key));
+    if (matches.length > 1) {
+      for (const sessionId of sessions) entry(review, pair(topic, 'mais de um guia — revisão humana'), sessionId);
+      return null;
+    }
+    const guideId = matches[0]?.guideId;
+    const target = guideId ?? (catalog.some((guide) => guide.guideId === canonicalGuides[topic]) ? undefined : canonicalGuides[topic]);
+    const registered = target && knownGuides.has(target);
     const { label } = actions[topic];
     return {
-      topic, sessions: sessions.size, proposal: guideId ? 'atualizar' : 'criar',
+      topic, action, sessions: sessions.size, proposal: guideId ? 'atualizar' : 'criar',
       ...(guideId ? { guideId } : {}),
-      criar_guia: { guideId: target, topic: label, module: topic,
-        description: guideId ? `Revisar o guia publicado sobre ${label}.` : `Criar um guia público sobre ${label}.` },
+      ...(registered ? { criar_guia: { guideId: target, topic: `${action} — ${label}`, module: topic,
+        description: guideId ? `Revisar o guia publicado sobre ${action} em ${label}.` : `Criar um guia público sobre ${action} em ${label}.` } }
+        : { prerequisite: 'Registrar um guideId canônico antes de chamar criar_guia.' }),
     };
-  }).filter(Boolean).toSorted((a, b) => a.topic.localeCompare(b.topic));
+  }).filter(Boolean).toSorted((a, b) => pair(a.topic, a.action).localeCompare(pair(b.topic, b.action)));
   const counts = (map, reason) => [...map].filter(([, sessions]) => sessions.size >= MIN_GAP_SESSIONS)
     .map(([topic, sessions]) => ({ topic, sessions: sessions.size, reason }))
     .toSorted((a, b) => a.topic.localeCompare(b.topic));
   return {
     documentable: proposals,
     incidents: counts(incidents, 'incidente — não documentar'),
-    review: [
-      ...counts(new Map([...review].filter(([topic]) => topic === 'unknown')), 'sem tópico — revisão humana'),
-      ...counts(new Map([...review].filter(([topic]) => topic !== 'unknown')), 'sem diagnóstico — revisão humana'),
-    ],
+    review: [...review].filter(([, sessions]) => sessions.size >= MIN_GAP_SESSIONS)
+      .map(([key, sessions]) => { const [topic, reason] = JSON.parse(key); return { topic, sessions: sessions.size, reason }; })
+      .toSorted((a, b) => a.topic.localeCompare(b.topic)),
   };
 }

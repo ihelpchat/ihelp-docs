@@ -4,6 +4,7 @@ import guideIds from '../architecture/guide-ids.json' with { type: 'json' };
 import productActions from '../architecture/product-actions.json' with { type: 'json' };
 import { isPublishedPath } from './published-paths.mjs';
 import { z } from 'zod/v4';
+import { PROCEDURE_ACTIONS } from './gap-classification.mjs';
 
 const DAY_MS = 24 * 60 * 60_000;
 const ID = /^[a-z0-9][a-z0-9-]{2,63}$/iu;
@@ -12,7 +13,7 @@ const ORIGINS = new Set(['faq', 'app']);
 const GUIDE_IDS = new Set(guideIds);
 const RESULTS = new Set(['complete', 'partial', 'not_found', 'in_progress', 'escalated', 'abandoned']);
 const TOPICS = new Set([...Object.keys(productActions), ...Object.values(productActions).map(({ route }) => route)]);
-const ISSUES = new Set(['usage', 'incident', 'permission', 'account_state']);
+const ISSUES = new Set(['usage', 'incident', 'permission', 'account_state', 'unknown']);
 export const sessionEventSchema = z.object({
   sessionId: z.string().regex(ID),
   origin: z.enum(['faq', 'app']),
@@ -21,6 +22,7 @@ export const sessionEventSchema = z.object({
   durationMs: z.number().int().min(0).max(300_000),
   result: z.enum([...RESULTS]),
   topic: z.enum([...TOPICS]).optional(),
+  action: z.enum(PROCEDURE_ACTIONS).optional(),
   issue: z.enum([...ISSUES]).optional(),
   path: z.string().regex(PATH),
   createdAt: z.string().optional(),
@@ -40,7 +42,10 @@ function serialize(file, operation) {
 
 export function normalizeSessionEvent(input, { now = Date.now() } = {}) {
   const safeInput = input && typeof input === 'object' && !Array.isArray(input)
-    && input.topic !== undefined && !TOPICS.has(input.topic) ? { ...input, topic: undefined } : input;
+    ? { ...input,
+      ...(input.topic !== undefined && !TOPICS.has(input.topic) ? { topic: undefined } : {}),
+      ...(input.action !== undefined && !PROCEDURE_ACTIONS.includes(input.action) ? { action: undefined } : {}) }
+    : input;
   if (!sessionEventSchema.safeParse(safeInput).success
     || !input || typeof input !== 'object' || Array.isArray(input)
     || Object.keys(input).some((key) => !FIELDS.has(key))
@@ -61,6 +66,7 @@ export function normalizeSessionEvent(input, { now = Date.now() } = {}) {
     durationMs: input.durationMs,
     result: input.result,
     ...(TOPICS.has(input.topic) ? { topic: input.topic } : {}),
+    ...(PROCEDURE_ACTIONS.includes(input.action) ? { action: input.action } : {}),
     ...(input.issue === undefined ? {} : { issue: input.issue }),
     path: isPublishedPath(input.path) ? input.path : null,
     createdAt,
