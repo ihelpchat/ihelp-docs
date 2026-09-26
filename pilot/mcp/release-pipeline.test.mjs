@@ -48,7 +48,7 @@ await writeFile(mock, `globalThis.fetch = async (input, options = {}) => {
       : Response.json({ codeSha: '${sha}', contentSha256: '${contentSha}' });
     return reply(response, mode.endsWith('-bounce') ? url.href : 'https://other.example.test/release.json');
   };
-  if (url.origin === 'https://docs.example.test') {
+  if (url.origin === 'https://docs.example.test' || url.origin === 'https://faq.ihelpchat.com') {
     if (url.pathname !== process.env.MOCK_SITE_PATH) throw new Error('wrong path: ' + url.pathname);
     const followed = redirect('redirect-site') || redirect('redirect-site-bounce');
     if (followed) return followed;
@@ -93,6 +93,9 @@ for (const siteUrl of ['https://docs.example.test', 'https://docs.example.test/'
 }
 assert.notEqual(runSite('https://docs.example.test/ihelp-docs', '/ihelp-docs/release.json', 'wrong-code').status, 0, 'SHA do código divergente deve falhar');
 assert.notEqual(runSite('https://docs.example.test/ihelp-docs', '/ihelp-docs/release.json', 'wrong-content').status, 0, 'SHA do conteúdo divergente deve falhar');
+const faqMismatch = runSite('https://faq.ihelpchat.com/ihelp-docs/', '/ihelp-docs/release.json', 'wrong-code');
+assert.notEqual(faqMismatch.status, 0, 'FAQ production com SHA divergente deve falhar');
+assert.match(faqMismatch.stderr, /Staging docs não publicou SHA esperado/, 'FAQ production deve informar o motivo da divergência');
 assert.notEqual(runSite('https://docs.example.test/ihelp-docs', '/ihelp-docs/release.json', 'missing-release').status, 0, 'release.json ausente deve falhar');
 const redirectStatuses = [
   runService({ MOCK_MODE: 'redirect-health' }).status,
