@@ -49,6 +49,15 @@ try {
       assert.ok(source.matches.slice(0, 3).some(({ path }) => path === causal), `${topic} ${role}: causal fora do top 3`);
     }
   }
+  const command = new URL('../scripts/grounding-golden.mjs', import.meta.url).pathname;
+  const passing = execFileSync(process.execPath, [command], { encoding: 'utf8', env: process.env });
+  assert.match(passing, /Configurar horário de atendimento \| backend \| [123] \| .*ConfigurationsDepartmentsController\.cs/u);
+  let failed;
+  try {
+    execFileSync(process.execPath, [command], { encoding: 'utf8', env: { ...process.env, BACKEND_LOCAL_CHECKOUT: '' } });
+  } catch (error) { failed = error; }
+  assert.ok(failed?.status, 'golden deve sair com código diferente de zero quando falta um causal');
+  assert.match(failed.stdout, /ConfigurationsDepartmentsController\.cs/u);
 } finally {
   for (const [key, value] of [['PRODUCT_LOCAL_CHECKOUT', original[0]], ['BACKEND_LOCAL_CHECKOUT', original[1]]]) {
     if (value === undefined) delete process.env[key]; else process.env[key] = value;
