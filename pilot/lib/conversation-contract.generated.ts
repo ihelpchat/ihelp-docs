@@ -25,6 +25,7 @@ export type GuideV1 = {
 export type AssistantRequestV1 = {
   schemaVersion?: 1;
   question: string;
+  sessionId?: string;
   history?: Array<{
   role: "user" | "assistant";
   content: string;
