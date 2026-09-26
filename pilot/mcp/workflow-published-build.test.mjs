@@ -9,7 +9,7 @@ const workflow = readFileSync(new URL('../../.github/workflows/deploy.yml', impo
 const temp = mkdtempSync(join(tmpdir(), 'published-build-'));
 try {
   const safe = join(temp, 'safe.yml');
-  writeFileSync(safe, workflow.replace(/^\s+NEXT_PUBLIC_ASSISTANT_URL:.*\n/m, ''));
+  writeFileSync(safe, workflow.replace(/^\s+NEXT_PUBLIC_ASSISTANT_URL:.*\n/gm, ''));
   assert.equal(spawnSync(process.execPath, [checker, safe], { encoding: 'utf8' }).status, 0, 'build publicado sem URL local passa');
   const unsafe = join(temp, 'unsafe.yml');
   writeFileSync(unsafe, readFileSync(safe, 'utf8').replace(
