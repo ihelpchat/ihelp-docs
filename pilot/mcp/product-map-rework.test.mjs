@@ -60,6 +60,10 @@ try {
   assert.equal(run().status, 0, 'coherent guide and marker must pass');
   await writeFile(frontFile, front.replace('channel-connect', 'channel-gone'));
   assert.notEqual(run().status, 0, 'missing published marker must fail the script');
+  const release = spawnSync(process.execPath, [script, frontRoot, backRoot, output, '--approved', approvedFile,
+    '--guides-file', guideFile, '--actions-file', actionsFile, '--allow-pending'], { encoding: 'utf8' });
+  assert.equal(release.status, 0, 'release job must pass map pending to impact calculation');
+  assert.match(JSON.parse(await readFile(output, 'utf8')).pending.join('\n'), /reconnect: marcador ausente channel-connect/u);
 } finally {
   await rm(root, { recursive: true, force: true });
 }
