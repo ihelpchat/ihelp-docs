@@ -47,8 +47,9 @@ const changed = await createGuide(root, input, options);
 await assert.rejects(createGuide(root, { planId: changed.planId, answers: ['Vendas'], requestedBy: actor }, { ...options, getContext: async () => context('b'.repeat(40)) }), /fontes mudaram.*refaça o plano/i);
 assert.equal(submissions, 1, 'fonte alterada não envia draft');
 
-const update = await createGuide(root, input, options);
-const updateResult = await createGuide(root, { planId: update.planId, answers: ['Vendas'], requestedBy: actor }, { ...options, existing: async () => ({ path: article.path, guide: { ...article.guide, version: 3 } }) });
+const updateOptions = { ...options, existing: async () => ({ path: article.path, guide: { ...article.guide, version: 3 } }) };
+const update = await createGuide(root, input, updateOptions);
+const updateResult = await createGuide(root, { planId: update.planId, answers: ['Vendas'], requestedBy: actor }, updateOptions);
 assert.equal(updateResult.article.guide.guideId, 'usuario-acesso');
 assert.equal(updateResult.article.guide.version, 4, 'atualiza o guia existente');
 assert.equal(updateResult.article.path, article.path);
