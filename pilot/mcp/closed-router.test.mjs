@@ -46,6 +46,8 @@ try {
   assert.deepEqual(await route('Criar campanhas'), { kind: 'guide', guideId: 'campanhas' }, 'plural');
   assert.equal(calls.length, 1, 'uma chamada para classificar');
   assert.deepEqual(await route('NÃO é campanha, quero departamentos'), { kind: 'none' }, 'Cida: negação explícita veta campanha');
+  assert.deepEqual(await route('NÃO é campanha, quero recado fora do horário'), { kind: 'none' },
+    'Cida: negação veta campanha mesmo sem título alternativo no catálogo');
   assert.deepEqual(await route('Quero departamentos', { history: [{ role: 'assistant', content: 'Fonte usada: /docs/campanhas' }] }),
     { kind: 'none' }, 'mensagem atual vence histórico divergente');
   const honest = { responses: { create: async () => ({ status: 'completed', output_text: '{"choice":"permissoes-departamentos"}', usage: { input_tokens: 1, output_tokens: 1 } }) } };
