@@ -8,11 +8,11 @@ export function renderApiReference(endpoint, examples, page) {
   const factRoute = publicRoute(endpoint.route);
   const referenceRoute = page?.frontmatter?.endpoint;
   const shape = (route) => route.toLowerCase().replace(/\{[^}]+\}/gu, '{}');
-  const sameShape = referenceRoute && [factRoute, endpoint.optionalAlias && publicRoute(endpoint.optionalAlias)]
+  const aliases = endpoint.optionalAliases ?? (endpoint.optionalAlias ? [endpoint.optionalAlias] : []);
+  const sameShape = referenceRoute && [factRoute, ...aliases.map(publicRoute)]
     .filter(Boolean).some((route) => shape(route) === shape(referenceRoute));
   const displayRoute = sameShape ? referenceRoute : factRoute;
-  const sampleRoute = endpoint.optionalAlias && referenceRoute && shape(publicRoute(endpoint.optionalAlias)) === shape(referenceRoute)
-    ? endpoint.optionalAlias : endpoint.route;
+  const sampleRoute = aliases.find((route) => referenceRoute && shape(publicRoute(route)) === shape(referenceRoute)) ?? endpoint.route;
   const sample = sampleRoute.replace(/\{([^}]+)\}/gu, (_, name) =>
     valueFor(endpoint.parameters?.find((item) => item.name.toLowerCase() === name.toLowerCase()) ?? { type: 'string' }));
   const factParts = factRoute.split('/');
@@ -45,7 +45,7 @@ export function renderApiReference(endpoint, examples, page) {
       const type = /^(?:int|long|double|decimal|float|short)$/iu.test(item.type) ? 'number'
         : /^bool(?:ean)?$/iu.test(item.type) ? 'boolean' : 'string';
       const required = item.required ?? (item.in === 'route' || (item.in === 'body' && !item.type.endsWith('?')));
-      return `<Param name="${safe(item.name)}" type="${type}"${required ? ' required' : ''}>${safe(item.in)} (${safe(item.type)})</Param>`;
+      return `<Param name="${safe(item.name)}" type="${type}"${required ? ' required' : ''}>${safe(item.in)} (${safe(item.type)})${required ? '' : ', opcional'}</Param>`;
     }).join('\n')}\n</Params>`);
   }
 

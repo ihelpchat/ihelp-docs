@@ -30,7 +30,7 @@ function proseIssue(article, endpoint) {
   const headerNames = new Set(['Authorization', 'Content-Type']);
   const names = new Set([...parameterNames, ...fieldNames, ...headerNames]);
   const inlineNames = new Set([...parameterNames, ...fieldNames]);
-  for (const route of [endpoint.route, endpoint.optionalAlias]) {
+  for (const route of [endpoint.route, ...(endpoint.optionalAliases ?? (endpoint.optionalAlias ? [endpoint.optionalAlias] : []))]) {
     for (const segment of (route ?? '').split('/')) {
       if (segment) names.add(segment.replace(/^\{([^}]+)\}$/u, '$1'));
     }
@@ -249,7 +249,7 @@ function requestText(request, existing, productContext) {
 }
 
 function pageMatchesEndpoint(page, endpoint) {
-  return page?.frontmatter?.method && page?.frontmatter?.endpoint && endpoint.verb === page.frontmatter.method && [endpoint.route, endpoint.optionalAlias].filter(Boolean)
+  return page?.frontmatter?.method && page?.frontmatter?.endpoint && endpoint.verb === page.frontmatter.method && [endpoint.route, ...(endpoint.optionalAliases ?? (endpoint.optionalAlias ? [endpoint.optionalAlias] : []))]
     .some((route) => route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')
       === page.frontmatter.endpoint.toLowerCase().replace(/\{[^}]+\}/gu, '{}'));
 }

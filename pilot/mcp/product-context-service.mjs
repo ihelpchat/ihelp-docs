@@ -165,12 +165,18 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
       }
     }
     const requested = provided.explicitEndpoints ?? [];
-    const routeKey = (route) => String(route).replace(/\{[A-Za-z][A-Za-z0-9_]*(?::[^{}]+)?\??\}/gu, '{}').replace(/\/+$/u, '').toLowerCase();
-    const cited = (item, endpoint) => endpoint.verb === item.verb &&
-      (routeKey(endpoint.route) === routeKey(item.route) ||
-        (!/^\/api\/v\d+\//iu.test(endpoint.route) && routeKey(endpoint.route) === routeKey(item.route.replace(/^\/api\/v\d+/iu, ''))));
+    const routesOf = (item) => [item.route, ...(item.optionalAliases ?? (item.optionalAlias ? [item.optionalAlias] : []))];
+    const routeMatches = (fact, requested) => {
+      const left = fact.toLowerCase().split('/').filter(Boolean);
+      const right = requested.toLowerCase().split('/').filter(Boolean);
+      return left.length === right.length && left.every((segment, index) =>
+        /^\{[^}]+\}$/u.test(segment) ? Boolean(right[index]) : segment === right[index]);
+    };
+    const cited = (item, endpoint) => endpoint.verb === item.verb && routesOf(item).some((route) =>
+      routeMatches(route, endpoint.route) ||
+      (!/^\/api\/v\d+\//iu.test(endpoint.route) && routeMatches(route.replace(/^\/api\/v\d+/iu, ''), endpoint.route)));
     const documentedFor = (item) => /^\/api\/v2\//iu.test(item.route) &&
-      [item.route, item.optionalAlias].filter(Boolean).some((route) =>
+      routesOf(item).some((route) =>
         documented.has(`${item.verb} ${route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')}`));
     const publicControllers = new Set(endpoints.filter(documentedFor)
       .map((item) => item.file));
@@ -196,7 +202,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     });
     const matchingExamples = apiExamples.filter((example) => endpoints.some((item) => item.documented
       && item.verb === example.frontmatter.method
-      && [item.route, item.optionalAlias].filter(Boolean).some((route) =>
+      && routesOf(item).some((route) =>
         route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')
           === example.frontmatter.endpoint.toLowerCase().replace(/\{[^}]+\}/gu, '{}'))));
     apiExamples = (matchingExamples.length ? matchingExamples : apiExamples).slice(0, 8);

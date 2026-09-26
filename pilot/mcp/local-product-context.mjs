@@ -279,7 +279,9 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
         if (!explicitEndpoints.length || await hasSymlink(join(root, path), root)) continue;
         const content = await deadline.wait(reader(join(root, path), { signal: deadline.signal }));
         const shallow = readCsharpEndpoints(content, path, { dtoSources: [] });
-        const matches = shallow.some(({ controllerRoute }) => controllerRoute && explicitEndpoints.some(({ route }) => {
+        const matches = shallow.some(({ controllerRoute, route: actionRoute }) => explicitEndpoints.some(({ route }) => {
+          if (actionRoute?.toLowerCase() === route.toLowerCase()) return true;
+          if (!controllerRoute) return false;
           const prefix = controllerRoute.toLowerCase();
           const requested = route.toLowerCase();
           const shortPrefix = prefix.replace(/^\/api\/v\d+/u, '');
