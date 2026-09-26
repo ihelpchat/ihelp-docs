@@ -30,6 +30,7 @@ let measuredType = 0;
 let measuredTargets = 0;
 let measuredContrast = 0;
 let measuredStates = 0;
+let measuredColorRules = 0;
 const rules = [];
 css.walkRules((rule) => {
   if (!/(?:\.ih-ai-|\.ih-assistant-)/.test(rule.selector)) return;
@@ -52,39 +53,63 @@ css.walkRules((rule) => {
   }
 });
 
-for (const rule of rules) {
-  const foreground = rule.declarations.color;
-  if (!foreground || foreground === 'inherit' || foreground === 'transparent' || /\bsvg\b|avatar|icon|dot/.test(rule.selector)) continue;
-  const front = rgb(foreground);
-  if (!front) { failures.push(`${rule.line}: cor não resolvida em ${rule.selector}: ${foreground}`); continue; }
-  const ownBackground = rule.declarations.background ?? rule.declarations['background-color'];
-  const parentBackground = rule.selector.includes('.ih-ai-code') ? '#0b1220'
-    : rule.selector.includes('.ih-ai-user') ? '#0f172a'
-    : rule.selector.includes('.ih-ai-error') ? '#fef2f2'
-    : rule.selector.includes('.ih-ai-support-cta') || rule.selector.includes('.ih-ai-media-guide') ? '#fef7f5'
-    : '#ffffff';
-  const back = rgb(!ownBackground || ownBackground === 'transparent' ? parentBackground : ownBackground);
-  if (!back) { failures.push(`${rule.line}: fundo não resolvido em ${rule.selector}: ${ownBackground}`); continue; }
-  measuredContrast++;
-  if (contrast(front, back) < 4.5) failures.push(`${rule.line}: ${rule.selector} contraste ${contrast(front, back).toFixed(2)}:1`);
+// Remove todos os pseudos do último composto, inclusive funções aninhadas como :hover:not(:disabled).
+const withoutLastPseudos = (selector) => {
+  let start = 0;
+  let brackets = 0;
+  for (let i = 0; i < selector.length; i++) {
+    if (selector[i] === '[') brackets++;
+    else if (selector[i] === ']') brackets--;
+    else if (!brackets && /[\s>+~]/.test(selector[i])) start = i + 1;
+  }
+  const prefix = selector.slice(0, start);
+  const last = selector.slice(start);
+  let base = '';
+  const states = [];
+  for (let i = 0; i < last.length;) {
+    if (last[i] !== ':') { base += last[i++]; continue; }
+    const begin = i++;
+    if (last[i] === ':') i++;
+    while (i < last.length && /[\w-]/.test(last[i])) i++;
+    if (last[i] === '(') {
+      let depth = 0;
+      do {
+        if (last[i] === '(') depth++;
+        else if (last[i] === ')') depth--;
+        i++;
+      } while (i < last.length && depth > 0);
+      if (depth) failures.push(`pseudo sem fechamento: ${selector}`);
+    }
+    states.push(last.slice(begin, i));
+  }
+  return { base: prefix + base, states };
+};
+const normalized = (selector) => selector.replace(/\s+/g, ' ').trim();
+const candidates = rules.filter(({ declarations }) => declarations.color || declarations.background || declarations['background-color']);
+for (const rule of candidates) {
+  measuredColorRules++;
+  for (const selector of postcss.list.comma(rule.selector)) {
+    const { base: baseSelector, states } = withoutLastPseudos(selector);
+    const base = states.length ? rules.find((item) => postcss.list.comma(item.selector).some((part) => normalized(part) === normalized(baseSelector))) : null;
+    if (states.length && !base) { failures.push(`${rule.line}: estado sem regra base: ${selector}`); continue; }
+    const foreground = rule.declarations.color === 'inherit' ? base?.declarations.color : rule.declarations.color ?? base?.declarations.color;
+    if (!foreground || foreground === 'transparent' || /\bsvg\b|avatar|icon|dot/.test(selector)) continue;
+    const parentBackground = selector.includes('.ih-ai-code') ? '#0b1220'
+      : selector.includes('.ih-ai-user') ? '#0f172a'
+      : selector.includes('.ih-ai-error') ? '#fef2f2'
+      : selector.includes('.ih-ai-support-cta') || selector.includes('.ih-ai-media-guide') ? '#fef7f5'
+      : '#ffffff';
+    const background = rule.declarations.background ?? rule.declarations['background-color']
+      ?? base?.declarations.background ?? base?.declarations['background-color'] ?? parentBackground;
+    const front = rgb(foreground);
+    const back = rgb(background === 'transparent' ? parentBackground : background);
+    if (!front || !back) { failures.push(`${rule.line}: cores não resolvidas em ${selector}`); continue; }
+    measuredContrast++;
+    if (states.length) measuredStates++;
+    if (contrast(front, back) < 4.5) failures.push(`${rule.line}: ${selector} contraste ${contrast(front, back).toFixed(2)}:1`);
+  }
 }
-// Reavaliar hover, disabled e pressed: cor ou fundo pode vir da regra base.
-for (const rule of rules.filter((item) => /:hover|:disabled|\[aria-pressed=/.test(item.selector))) {
-  if (/\bsvg\b/.test(rule.selector)) continue;
-  const baseSelector = rule.selector.replace(/:hover(?::not\(:disabled\))?|:disabled|\[aria-pressed='true'\]|\[data-rating='(?:up|down)'\]/g, '');
-  const base = rules.find((item) => item.selector.replace(/\s+/g, ' ').trim() === baseSelector.replace(/\s+/g, ' ').trim());
-  const color = rule.declarations.color === 'inherit' ? undefined : rule.declarations.color ?? base?.declarations.color;
-  if (!color) continue;
-  const foreground = rgb(color);
-  const parent = rule.selector.includes('.ih-ai-error') ? '#fef2f2'
-    : rule.selector.includes('.ih-ai-code') ? '#0b1220'
-    : rule.selector.includes('.ih-ai-support-cta') ? '#fef7f5' : '#ffffff';
-  const background = rule.declarations.background ?? rule.declarations['background-color'] ?? base?.declarations.background ?? base?.declarations['background-color'] ?? parent;
-  const back = rgb(background === 'transparent' ? parent : background);
-  if (!foreground || !back) { failures.push(`${rule.line}: estado sem cores resolvidas em ${rule.selector}`); continue; }
-  measuredStates++;
-  if (contrast(foreground, back) < 4.5) failures.push(`${rule.line}: ${rule.selector} estado com contraste ${contrast(foreground, back).toFixed(2)}:1`);
-}
+assert.equal(measuredColorRules, candidates.length, 'todas as regras com cor ou fundo foram medidas');
 assert.ok(measuredRules > 100 && measuredType > 50 && measuredTargets > 10 && measuredContrast > 50,
   `varredura incompleta: ${measuredRules} regras, ${measuredType} fontes, ${measuredTargets} alvos, ${measuredContrast} contrastes`);
 assert.ok(measuredStates >= 8, `Estados medidos: ${measuredStates}`);

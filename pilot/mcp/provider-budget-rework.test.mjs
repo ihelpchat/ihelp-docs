@@ -13,11 +13,27 @@ const payload = { model: 'fixture', input: 'fixture', max_output_tokens: 10 };
 const completed = { status: 'completed', output_text: '{}', usage: { input_tokens: 1, output_tokens: 1 } };
 
 try {
-  for (const [status, output_text] of [
-    ['failed', ''], ['failed', '{}'], ['cancelled', '{}'], ['unknown', '{}'], ['', '{}'], [undefined, '{}'], ['completed', ''],
+  for (const [status, output_text, throws, expectedRequests] of [
+    ['failed', '', false, 1], ['failed', '{}', false, 1], ['cancelled', '{}', false, 1],
+    ['unknown', '{}', false, 1], ['', '{}', false, 1], [undefined, '{}', false, 1],
+    ['completed', '', false, 1], ['completed', '   ', false, 1],
+    ['incomplete', '{}', false, 2], ['network error', '', true, 1],
   ]) {
-    const result = await createBudgetedResponse({ responses: { create: async () => ({ ...completed, status, output_text }) } }, payload, budget(`status-${String(status)}-${output_text.length}.json`));
+    let requests = 0;
+    const client = { responses: { create: async () => {
+      requests++;
+      if (throws) throw new Error('fixture network error');
+      return { ...completed, status, output_text };
+    } } };
+    const run = () => createBudgetedResponse(client, payload, budget(`status-${String(status)}-${output_text.length}.json`));
+    if (throws) {
+      await assert.rejects(run, /fixture network error/);
+      assert.equal(requests, expectedRequests, `${status}: requests pagos`);
+      continue;
+    }
+    const result = await run();
     assert.equal(result.kind, 'provider_failed', `status ${String(status)} e texto ${JSON.stringify(output_text)} falham fechado`);
+    assert.equal(requests, expectedRequests, `${String(status)} e texto ${JSON.stringify(output_text)}: requests pagos`);
   }
   assert.equal((await createBudgetedResponse({ responses: { create: async () => completed } }, payload, budget('completed.json'))).kind, 'ok');
 
