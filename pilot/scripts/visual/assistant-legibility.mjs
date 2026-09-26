@@ -122,6 +122,9 @@ try {
       const page = await browser.newPage({ viewport: dimensions });
       await page.addInitScript((value) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages: value, scope: 'Tudo', sessionId: 'qa-session' })), messages);
       await page.goto(url, { waitUntil: 'networkidle' });
+      if (process.env.ASSISTANT_LEGIBILITY_PROBE_CSS) {
+        await page.addStyleTag({ content: process.env.ASSISTANT_LEGIBILITY_PROBE_CSS });
+      }
       const root = page.locator('.ih-ai-screen');
       await root.waitFor();
       await page.locator('.ih-ai-thread').waitFor();
