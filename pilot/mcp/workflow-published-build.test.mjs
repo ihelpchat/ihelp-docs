@@ -26,6 +26,35 @@ try {
   assert.equal(outputConfig.version, 3);
   assert.equal(outputConfig.routes.filter((route) => route.status).length, originalConfig.redirects.length, 'todos os redirects no prebuilt');
   assert.equal(outputConfig.routes.filter((route) => route.continue).length, originalConfig.headers.length, 'todos os headers no prebuilt');
+  const example = (value) => value.replaceAll(':path*', 'a/b').replaceAll(':slug', 'exemplo');
+  const routed = (route, path) => {
+    const match = new RegExp(route.src).exec(path);
+    return match && match.index === 0 ? match : null;
+  };
+  const destinationFor = (route, match) => route.headers.Location.replace(/\$(\d+)/gu, (_, index) => match[Number(index)] ?? '');
+  const miss = '/fora-das-regras/exemplo/';
+  for (const redirect of originalConfig.redirects) {
+    const path = example(redirect.source);
+    const expected = example(redirect.destination);
+    const matches = outputConfig.routes.filter((route) => route.status && routed(route, path));
+    assert.equal(matches.length, 1, `redirect para ${path}`);
+    assert.equal(matches[0].status, redirect.permanent ? 308 : 307, `status para ${path}`);
+    assert.equal(destinationFor(matches[0], routed(matches[0], path)), expected, `destino para ${path}`);
+    assert.ok(!routed(matches[0], miss), `redirect ${redirect.source} não pode casar com ${miss}`);
+  }
+  for (const header of originalConfig.headers) {
+    const path = example(header.source);
+    const matches = outputConfig.routes.filter((route) => route.headers && !route.status && routed(route, path));
+    assert.equal(matches.length, 1, `headers para ${path}`);
+    for (const { key, value } of header.headers) assert.equal(matches[0].headers[key], value, `${key} para ${path}`);
+    assert.ok(!routed(matches[0], miss), `header ${header.source} não pode casar com ${miss}`);
+  }
+  const redirectPath = '/ihelp-docs/primeiros-passos/acessando-a-plataforma/';
+  const redirectRoute = outputConfig.routes.find((route) => route.status === 308 && routed(route, redirectPath));
+  assert.ok(redirectRoute, 'redirect de primeiros passos deve casar com URL concreta');
+  assert.equal(destinationFor(redirectRoute, routed(redirectRoute, redirectPath)), '/ihelp-docs/docs/primeiros-passos/acessando-a-plataforma/');
+  const headerPath = '/ihelp-docs/acesso-mcp/qualquer/';
+  assert.ok(outputConfig.routes.some((route) => !route.status && routed(route, headerPath) && route.headers?.['X-Robots-Tag']?.includes('noindex')), 'filho de acesso-mcp deve receber noindex');
   assert.ok(outputConfig.routes.some((route) => route.src === '^/ihelp-docs/(.*)/$' && route.dest === '/ihelp-docs/$1/index.html'), 'Next.js trailingSlash preservado');
   const unsafe = join(temp, 'unsafe.yml');
   writeFileSync(unsafe, readFileSync(safe, 'utf8').replace(
