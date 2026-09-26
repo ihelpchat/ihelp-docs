@@ -4,6 +4,11 @@ import { conversationalIssues, parseAssistantSuggestions } from './conversationa
 import { parseDocument, stringify } from 'yaml';
 import { frontmatterFields } from './article-fields.mjs';
 import { sensitiveKinds } from './sensitive-data.mjs';
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import remarkMdx from 'remark-mdx';
+import GithubSlugger from 'github-slugger';
+import approvedMap from '../product-map/approved.json' with { type: 'json' };
 
 const GENERIC_DESCRIPTION = /^(?:Entenda .+ e veja como usar esse recurso no iHelp\.|Referência técnica da API do iHelp para .+\.)$/i;
 const LEGACY_TUTORIAL = /\n+(?:(?:\*\*\*|---)\n+\n+)?## Tutorial Guiado\n+\n+Prefere seguir o passo a passo interativo\?[^\n]*(?:\n|$)/gi;
@@ -237,7 +242,7 @@ export async function auditContent(root) {
 }
 
 function contentRoutes(paths) {
-  const routes = new Set(['/']);
+  const routes = new Set(['/', ...approvedMap.manifest.routes.map(({ path }) => path)]);
   for (const path of paths) {
     routes.add(`/${path}`);
     if (path.endsWith('/index')) routes.add(`/${path.slice(0, -'/index'.length)}`);
@@ -247,10 +252,10 @@ function contentRoutes(paths) {
 
 // Usado pelo audit do conteúdo publicado e pelo gate antes de qualquer escrita.
 export async function internalLinkIssues(root, path, raw, routes) {
-  const targets = [...raw.matchAll(/(?:!?)\[[^\]]*\]\(([^)]+)\)|<(?:VideoEmbed|TutorialCard)[^>]+(?:url|embedUrl)="([^"]+)"/g)]
-    .map((match) => (match[1] ?? match[2]).trim().split(/\s+["']/)[0])
-    .filter((target) => !/^(?:https?:|mailto:|tel:)/.test(target));
-  if (!targets.length) return [];
+  let tree;
+  try { tree = parseMdx(raw); } catch { return ['MDX inválido']; }
+  const { targets, issues } = mdxTargets(tree);
+  if (!targets.length) return issues;
   if (!routes) {
     const contentRoot = join(root, 'content/docs');
     const localFiles = await walk(contentRoot).catch((error) => {
@@ -266,9 +271,8 @@ export async function internalLinkIssues(root, path, raw, routes) {
     routes.add(`/${path}`);
     if (path.endsWith('/index')) routes.add(`/${path.slice(0, -'/index'.length)}`);
   }
-  const issues = [];
   for (const target of targets) {
-    const rawPath = target.split(/[?#]/)[0].replace(/\.mdx?$/, '') || path;
+    const rawPath = target.split(/[?#]/)[0].replace(/\.mdx?$/, '') || `/${path}`;
     const pathname = (rawPath.startsWith('/') ? rawPath : normalize(join('/', dirname(path), rawPath))).replace(/\/$/, '') || '/';
     if (pathname.startsWith('/img/') || pathname.startsWith('/videos/')) {
       try {
@@ -276,11 +280,62 @@ export async function internalLinkIssues(root, path, raw, routes) {
       } catch {
         issues.push(`asset inexistente: ${pathname}`);
       }
-    } else if (/^\/(?:docs|api|blog|tutoriais)(?:\/|$)/.test(pathname) && !routes.has(pathname)) {
+    } else if (!routes.has(pathname)) {
       issues.push(`link interno inexistente: ${pathname}`);
+    } else if (target.includes('#') && target.split('#')[1] && /^\/(?:docs|api|blog|tutoriais)(?:\/|$)/u.test(pathname)) {
+      let targetRaw = raw;
+      if (pathname !== `/${path}`) {
+        targetRaw = '';
+        for (const suffix of [`${pathname.slice(1)}.mdx`, `${pathname.slice(1)}/index.mdx`]) {
+          targetRaw = await readFile(join(root, 'content/docs', suffix), 'utf8').catch(async () =>
+            readFile(new URL(`../content/docs/${suffix}`, import.meta.url), 'utf8').catch(() => ''));
+          if (targetRaw) break;
+        }
+      }
+      const slugger = new GithubSlugger();
+      const anchors = new Set();
+      visit(pathname === `/${path}` ? tree : parseMdx(targetRaw), (node) => {
+        if (node.type === 'heading') anchors.add(slugger.slug(plainText(node)));
+      });
+      if (!anchors.has(decodeURIComponent(target.split('#')[1]))) issues.push(`âncora inexistente: ${target}`);
     }
   }
   return issues;
+}
+
+const mdxParser = unified().use(remarkParse).use(remarkMdx);
+export const parseMdx = (raw) => mdxParser.parse(parseArticle(raw, '').body);
+export function visit(node, callback) {
+  callback(node);
+  for (const child of node.children ?? []) visit(child, callback);
+}
+export function plainText(node) {
+  return node.value ?? (node.children ?? []).map(plainText).join('');
+}
+export function mdxTargets(tree) {
+  const targets = [];
+  const issues = [];
+  visit(tree, (node) => {
+    if (node.type === 'link' || node.type === 'image' || node.type === 'definition') targets.push(node.url);
+    if (node.type !== 'mdxJsxFlowElement' && node.type !== 'mdxJsxTextElement') return;
+    for (const attr of node.attributes ?? []) {
+      if (attr.type === 'mdxJsxExpressionAttribute') { issues.push('atributo JSX dinâmico não permitido'); continue; }
+      if (attr.value && typeof attr.value === 'object') {
+        const expression = attr.value.value?.trim();
+        const literal = expression?.match(/^(['"`])([^'"`$]*)\1$/u);
+        if (literal) {
+          if (/^(?:\/|\.\/|\.\.\/|#)/u.test(literal[2])) targets.push(literal[2]);
+          continue;
+        }
+        // Props de tabelas de API contêm dados, não navegação. Qualquer outro valor dinâmico pode ocultar uma rota.
+        if (!/^(?:headers|labels|required|json|params|files|data)$/u.test(attr.name)) issues.push(`atributo JSX dinâmico não permitido: ${attr.name}`);
+        continue;
+      }
+      if (typeof attr.value !== 'string') continue;
+      if (/^(?:\/|\.\/|\.\.\/|#)/u.test(attr.value)) targets.push(attr.value);
+    }
+  });
+  return { targets: targets.filter((target) => !/^(?:https?:|mailto:|tel:)/u.test(target)), issues };
 }
 
 export async function readArticle(root, contentPath) {

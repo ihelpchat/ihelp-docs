@@ -52,9 +52,11 @@ try {
     { ...article, body: `${body}\n\nToque no botão **Algo inventado**.` },
     { ...article, body: `${body}\n\nPressione o ícone "Fantasma".` },
     { ...article, body: `${body}\n\nNa tela **Inexistente**, confira.` },
+    { ...article, body: `${body}\n\nNo botão **Inventado**, confira.` },
     { ...article, body: `${body}\n\n<a href="/docs/nao-existe">Abra a página</a>.` },
     { ...article, body: `${body}\n\n<Card href="/docs/nao-existe">Abra a página</Card>.` },
     { ...article, body: `${body}\n\n<Link href={variavel}>Abra a página</Link>.` },
+    { ...article, body: `${body}\n\n<Card href={'/docs/nao-existe'}>Abra a página</Card>.` },
     { ...article, body: `${body}\n\n[Abra a página](../nao-existe).` },
   ];
   for (const unsafe of rejected) {
@@ -63,9 +65,11 @@ try {
     assert.equal(calls.length, before, 'pacote inválido não pode consultar nem escrever no GitHub');
   }
 
-  const validLabel = { ...article, body: `${body}\n\nClique em “IMPORTAR CONTÁTOS” para continuar. [Veja esta página](/docs/teste/contatos#inicio).` };
+  const validLabel = { ...article, body: `${body}\n\n## Inicio\n\nClique em “IMPORTAR CONTÁTOS” para continuar. [Veja esta página](/docs/teste/contatos#inicio).` };
   const validLabelResult = await submitContentPackage(root, [validLabel], 'pull_request', 'user:tester');
   assert.equal(validLabelResult.status, 'pull_request', 'rótulo aprovado com variação de acento e link existente passa');
+  const validJsx = await submitContentPackage(root, [{ ...article, body: `${body}\n\n<Card href={'/docs/teste/contatos'}>Abra a página</Card>.` }], 'pull_request', 'user:tester');
+  assert.equal(validJsx.status, 'pull_request', 'atributo JSX com string estática e rota existente passa');
 
   const beforeIndividual = calls.length;
   await assert.rejects(submitArticle(root, rejected[2], 'pull_request', 'user:tester'), /gate|link|aprovad/i);
