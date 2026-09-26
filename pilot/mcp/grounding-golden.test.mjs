@@ -27,7 +27,7 @@ const frontFiles = {
   'src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx': 'export function DepartmentConfigExtras() { return <Title>Mensagem automática fora de horário de atendimento</Title>; }',
 };
 for (let index = 0; index < 12; index++) {
-  frontFiles[`src/components/pages/Configuration/components/TabGeneral/Peripheral${index}.tsx`] = 'export function Peripheral() { // Criar usuário; Usuários; equipe; cadastrar usuário\n return null; }';
+  frontFiles[`src/components/pages/Configuration/components/TabGeneral/Peripheral${index}.tsx`] = 'export function Peripheral() { // Cadastrar atendente; Criar usuário; Usuários; equipe; Novo usuário\n return null; }';
 }
 const backFiles = {
   'Comzada.Application/Controllers/V2/BotController.cs': 'public class BotController { public void CreateBot() {} }',
