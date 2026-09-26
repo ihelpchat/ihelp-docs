@@ -23,6 +23,7 @@ guide:
   steps:
     - stepId: inicio
       text: Abra a primeira tela.
+${choice ? '' : '      actionId: abrir-canais\n'}
     - stepId: ${choice ? 'escolha' : 'final'}
       text: ${choice ? 'Escolha uma opção.' : 'Confira o resultado.'}
 ${choice ? `      choices:
@@ -36,6 +37,9 @@ ${choice ? `      choices:
       text: Abra o menu Android.
     - stepId: iphone
       text: Abra o menu iPhone.
+    - stepId: confirmar
+      text: Confirme a conexão.
+      actionId: abrir-canais
 ` : ''}---
 Conteúdo de teste.
 `);
@@ -53,32 +57,39 @@ process.env.DOCS_ROOT = root;
 process.env.OPENAI_API_KEY = 'fixture';
 process.env.OPENAI_BASE_URL = `http://127.0.0.1:${provider.address().port}/v1`;
 process.env.SESSION_EVENTS_FILE = join(root, 'sessions.jsonl');
+process.env.NEXT_PUBLIC_ASSISTANT_URL = 'http://127.0.0.1:0/assistant';
 const { httpServer } = await import('./http.mjs');
 if (!httpServer.listening) await once(httpServer, 'listening');
+process.env.NEXT_PUBLIC_ASSISTANT_URL = `http://127.0.0.1:${httpServer.address().port}/assistant`;
 const source = await import('node:fs/promises').then(({ readFile }) => readFile(new URL('../lib/assistant.ts', import.meta.url), 'utf8'));
 const compiled = ts.transpileModule(source.replace("from '../architecture/catalog-action.mjs'", `from '${new URL('../architecture/catalog-action.mjs', import.meta.url).href}'`), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { normalizeReply, supportMessageFor } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const { buildAssistantRequest, requestAnswer, normalizeReply, supportMessageFor } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 let requests = 0;
-async function post(question, guide) {
-  const response = await fetch(`http://127.0.0.1:${httpServer.address().port}/assistant`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `198.51.${Math.floor(requests / 200)}.${requests % 200 + 1}` },
-    body: JSON.stringify({ question, guide, sessionId: `journey-${++requests}` }),
+const originalFetch = globalThis.fetch;
+globalThis.fetch = (input, init) => originalFetch(input, {
+  ...init, headers: { ...init?.headers, 'X-Forwarded-For': `198.51.${Math.floor(requests / 200)}.${requests % 200 + 1}` },
+});
+async function post(question, priorReply, initialGuide) {
+  const request = buildAssistantRequest(question, priorReply, {
+    sessionId: `journey-${++requests}`, origin: 'faq', ...(initialGuide ? { guide: initialGuide } : {}),
   });
-  if (response.status !== 200) assert.fail(`${question}: HTTP ${response.status} ${await response.text()}`);
-  return response.json();
+  return requestAnswer(request);
 }
 const startState = (guideId, extra = {}) => ({ guideId, stepId: 'inicio', version: 1, mode: 'real', ...extra });
-const optionState = (reply, option) => {
-  const guide = { ...reply.guide };
-  if (reply.suggestions.includes(option) && !['Concluí este passo', 'Preciso de ajuda', 'Deu certo? Sim', 'Deu certo? Não', 'Voltar'].includes(option)) {
-    guide.choiceId = option.toLowerCase();
-  }
-  return guide;
+const assertStep = (reply, guideId) => {
+  const published = guideId === 'reconectar-canal-qr'
+    ? { inicio: { text: 'Abra a primeira tela.' }, escolha: { text: 'Escolha uma opção.', choices: ['Android', 'iPhone'] }, android: { text: 'Abra o menu Android.' }, iphone: { text: 'Abra o menu iPhone.' }, confirmar: { text: 'Confirme a conexão.', actionId: 'abrir-canais' } }
+    : { inicio: { text: 'Abra a primeira tela.', actionId: 'abrir-canais' }, final: { text: 'Confira o resultado.' } };
+  const step = published[reply.guide.stepId];
+  assert.ok(step, `${guideId}: passo publicado`);
+  assert.equal(reply.steps[0].text, step.text);
+  assert.deepEqual(reply.steps[0].action, step.actionId ? { id: 'abrir-canais', label: 'Abrir a tela Canais', route: '/configuracoes/channel' } : undefined);
+  if (step.choices) assert.deepEqual(reply.suggestions, step.choices);
 };
 
 try {
   for (const guideId of guideIds) {
-    const initial = await post('Começar', startState(guideId));
+    const initial = await post('Começar', undefined, startState(guideId));
     assert.equal(initial.guide.stepId, 'inicio');
     assert.notEqual(initial.resolution, 'complete', `${guideId}: início não conclui o guia`);
     const queue = [{ reply: initial, depth: 0 }];
@@ -90,33 +101,35 @@ try {
       const key = `${reply.guide.stepId}:${reply.answer}`;
       if (visited.has(key)) continue;
       visited.add(key);
+      assertStep(reply, guideId);
       const offered = [...reply.suggestions, ...(reply.resolution === 'complete' ? [] : ['Falar com uma pessoa'])];
       for (const option of offered) {
-        const next = await post(option, optionState(reply, option));
+        const next = await post(option, reply);
         if (option !== 'Preciso de ajuda') assert.notDeepEqual(next, reply, `${guideId}/${reply.guide.stepId}: ${option} não avançou`);
         assert.equal(providerCalls, 0, 'guia nunca chama o provider');
         if (option === 'Falar com uma pessoa' || option === 'Deu certo? Não') {
           assert.equal(next.resolution, 'partial');
-          assert.equal(next.escalation.guideId, guideId);
-          assert.equal(next.escalation.stepId, reply.guide.stepId);
+          assert.equal(next.escalation?.guideId, guideId);
+          assert.equal(next.escalation?.stepId, reply.guide.stepId);
           const link = `https://wa.me/551730422307?text=${encodeURIComponent(supportMessageFor(normalizeReply(next)))}`;
           assert.match(decodeURIComponent(new URL(link).searchParams.get('text')), new RegExp(`${guideId}.*${reply.guide.stepId}`, 's'));
         } else if (next.resolution === 'complete') {
           assert.equal(option, 'Deu certo? Sim', `${guideId}: conclusão prematura`);
-          assert.notEqual(reply.guide.stepId, 'inicio', `${guideId}: primeiro passo concluiu`);
+          assert.equal(reply.guide.stepId, guideId === 'reconectar-canal-qr' ? 'confirmar' : 'final', `${guideId}: conclusão só no passo terminal`);
           completed = true;
         } else if (next.guide) queue.push({ reply: next, depth: depth + 1 });
       }
     }
     assert.equal(completed, true, `${guideId}: confirmação final não foi oferecida`);
-    const invalid = await post('Avançar', startState(guideId, { version: 2 }));
+    const invalid = await post('Avançar', undefined, startState(guideId, { version: 2 }));
     assert.ok(invalid.suggestions.includes('Recomeçar'));
-    const restarted = await post('Recomeçar', startState(guideId, { version: 2, stateToken: 'invalid' }));
+    const restarted = await post('Recomeçar', undefined, startState(guideId, { version: 2, stateToken: 'invalid' }));
     assert.equal(restarted.guide.stepId, 'inicio', `${guideId}: reinício precisa dispensar token inválido`);
     assert.ok(restarted.guide.stateToken);
   }
   assert.equal(providerCalls, 0);
 } finally {
+  globalThis.fetch = originalFetch;
   await new Promise((resolve) => httpServer.close(resolve));
   await new Promise((resolve) => provider.close(resolve));
   await rm(root, { recursive: true, force: true });
