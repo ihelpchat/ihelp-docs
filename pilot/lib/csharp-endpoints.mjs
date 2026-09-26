@@ -49,7 +49,8 @@ const attr = (list, name) => list.find((item) => item.name === name);
 function attributes(items) {
   const result = [];
   for (let i = 0; i < items.length;) {
-    const name = items[i++]?.value;
+    const nameToken = items[i++];
+    const name = nameToken?.value;
     if (!name) break;
     const args = [];
     if (items[i]?.value === '(') {
@@ -57,7 +58,7 @@ function attributes(items) {
       while (i < items.length && items[i].value !== ')') args.push(items[i++]);
       i++;
     }
-    result.push({ name: name?.replace(/Attribute$/u, ''), args });
+    result.push({ name: name?.replace(/Attribute$/u, ''), args, at: nameToken.at });
     while (i < items.length && items[i].value !== ',') i++;
     i++;
   }
@@ -85,7 +86,7 @@ function dtoFields(dtoSources, type) {
   }
   return [];
 }
-function signatureParameters(items, route, dtoSources) {
+function signatureParameters(items, route, dtoSources, file, source) {
   const groups = [];
   let group = [], depth = 0;
   for (const token of items) {
@@ -103,9 +104,20 @@ function signatureParameters(items, route, dtoSources) {
       : words.some((item) => item.value === 'FromQuery') ? 'query'
         : words.some((item) => item.value === 'FromRoute') || new RegExp(`\\{${name}\\??\\}`, 'iu').test(route) ? 'route' : 'query';
     const fields = dtoFields(dtoSources, type);
-    return fields.length ? fields.map((field) => ({ ...field, in: location }))
-      : [{ name: camel(name), type, in: location }];
+    return fields.length ? fields.map((field) => ({ ...field, in: location, dtoType: type }))
+      : [{ name: camel(name), type, in: location, source: `${file}:${lineOf(source, words.at(-1).at)}` }];
   });
+}
+
+function responseTypeOf(declaration, attrs) {
+  const fromAttribute = attr(attrs, 'ProducesResponseType')?.args;
+  const typeofIndex = fromAttribute?.findIndex((item) => item.value === 'typeof') ?? -1;
+  if (typeofIndex >= 0) return fromAttribute.slice(typeofIndex + 1).find((item) => item.kind === 'word')?.value;
+  const result = declaration.match(/\b(?:Task|ActionResult|IEnumerable|List|PagedResult)<[\w<>?,\s]+>/u)?.[0];
+  if (!result) return null;
+  let type = result.replace(/\s+/gu, '');
+  while (/^(?:Task|ActionResult|IEnumerable|List|PagedResult)</u.test(type)) type = type.slice(type.indexOf('<') + 1, -1);
+  return /^\w+$/u.test(type) ? type : null;
 }
 
 export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
@@ -145,17 +157,22 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       let end = i + 1, nesting = 1;
       while (end < t.length && nesting) { if (t[end].value === '(') nesting++; if (t[end].value === ')') nesting--; end++; }
       const location = `${file}:${lineOf(source, t[i - 1].at)}`;
-      const rawParameters = reference ? signatureParameters(t.slice(i + 1, end - 1), route, dtoSources) : undefined;
+      const routeSource = `${file}:${lineOf(source, attr(controller.attrs, 'Route')?.at ?? http.at)}`;
+      const verbSource = `${file}:${lineOf(source, http.at)}`;
+      const authorizationAttribute = attr(pending, 'AllowAnonymous') ?? attr(controller.attrs, 'AllowAnonymous')
+        ?? attr(pending, 'Authorize') ?? attr(controller.attrs, 'Authorize');
+      const authorizationSource = authorizationAttribute ? `${file}:${lineOf(source, authorizationAttribute.at)}` : null;
+      const rawParameters = reference ? signatureParameters(t.slice(i + 1, end - 1), route, dtoSources, file, source) : undefined;
       const actionBody = source.slice(t[end]?.at ?? source.length, source.indexOf('[Http', t[end]?.at ?? source.length) < 0 ? source.length : source.indexOf('[Http', t[end].at));
       const assigned = new Set([...actionBody.matchAll(/\b(\w+)\.(\w+)\s*=(?!=)/gu)].map((match) => match[2].toLowerCase()));
       const parameters = rawParameters?.filter((item) => item.in !== 'query' || !assigned.has(item.name.toLowerCase()))
-        .map((item) => ({ ...item, source: item.source ?? location }));
+        .map(({ dtoType: _dtoType, ...item }) => ({ ...item, source: item.source ?? location }));
       const declaration = source.slice(Math.max(0, source.lastIndexOf('public ', t[i - 1].at)), t[i - 1].at);
-      const resultType = declaration.match(/(?:ActionResult|Task)<(?:IEnumerable<)?(\w+)>/u)?.[1]
-        ?? pending.flatMap((item) => item.args.map((arg) => arg.value)).find((value) => dtoSources.some(({ source: dto }) => new RegExp(`\\bclass\\s+${value}\\b`, 'u').test(dto)));
+      const resultType = responseTypeOf(declaration, pending);
       const responseFields = resultType ? dtoFields(dtoSources, resultType) : [];
       endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
-        ...(reference ? { parameters, responseFields, source: location, authorization: policy } : {}) });
+        ...(reference ? { parameters, responseFields, responseType: resultType, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
+          routeSource, actionRouteSource: verbSource, verbSource, authorizationSource, authorization: policy } : {}) });
       pending = [];
     }
     if (value === '{') depth++;

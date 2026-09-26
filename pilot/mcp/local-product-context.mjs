@@ -278,7 +278,7 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
         if (await hasSymlink(join(root, path), root)) continue;
         const content = await deadline.wait(reader(join(root, path), { signal: deadline.signal }));
         const shallow = readCsharpEndpoints(content, path, { dtoSources: [] });
-        const types = new Set(shallow.flatMap((endpoint) => endpoint.parameters.map(({ type }) => type)));
+        const types = new Set(shallow.flatMap((endpoint) => endpoint.dtoTypes ?? []));
         const dtoSources = [];
         for (const dtoPath of paths.filter((candidate) => types.has(candidate.split('/').at(-1).replace(/\.cs$/u, ''))).slice(0, 16)) {
           if (await hasSymlink(join(root, dtoPath), root)) continue;
