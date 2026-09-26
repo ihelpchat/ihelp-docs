@@ -5803,3 +5803,25 @@ button {
     width: 100%;
   }
 }
+
+/* FAQ público: leitura e alvos de toque em toda a página, inclusive navegação. */
+.ih-header .ih-brand, .ih-header .ih-nav-link, .ih-header .ih-header-search,
+.ih-header .ih-header-cta, .ih-header .ih-menu-button, .ih-sidebar .ih-side-all,
+.ih-sidebar .ih-side-group-toggle, .ih-sidebar .ih-side-link,
+.ih-sidebar .ih-side-promo a, .ih-toc .ih-toc-link, .ih-toc .ih-toc-ask,
+.ih-breadcrumb a, .ih-prose h2 a { min-height: 44px; }
+.ih-header .ih-nav-link, .ih-header .ih-header-search span,
+.ih-header .ih-header-search kbd, .ih-header .ih-header-cta,
+.ih-sidebar .ih-side-kicker, .ih-sidebar .ih-side-all,
+.ih-sidebar .ih-side-group-title, .ih-sidebar .ih-side-count,
+.ih-sidebar .ih-side-label, .ih-sidebar .ih-side-promo strong,
+.ih-sidebar .ih-side-promo p, .ih-sidebar .ih-side-promo a,
+.ih-breadcrumb, .ih-meta, .ih-meta-pill, .ih-toc .ih-toc-kicker,
+.ih-toc .ih-toc-link, .ih-toc .ih-toc-ask,
+.ih-feedback > p, .ih-feedback .ih-button,
+.ih-related .ih-eyebrow, .ih-related-grid span, .ih-related-grid strong,
+.ih-prose .ih-product-action small { font-size: 16px; }
+.ih-prose { font-size: 16px; }
+.ih-feedback .ih-button { min-height: 44px; }
+.ih-breadcrumb a, .ih-prose h2 a { display: inline-flex; align-items: center; }
+.ih-ai-drawer .ih-tech-mark span, .ih-ai-drawer .ih-tech-mark strong { font-size: 16px; }
