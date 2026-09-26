@@ -55,6 +55,14 @@ assert.equal(updateResult.article.guide.guideId, 'usuario-acesso');
 assert.equal(updateResult.article.guide.version, 4, 'atualiza o guia existente');
 assert.equal(updateResult.article.path, article.path);
 
+const privacyOptions = { ...options, generate: async (_root, request) => {
+  assert.doesNotMatch(request.details, /pessoa@example\.com/);
+  return { status: 'ready', articles: [article] };
+} };
+const privacy = await createGuide(root, input, privacyOptions);
+await createGuide(root, { planId: privacy.planId, answers: ['Envie para pessoa@example.com'], requestedBy: actor }, privacyOptions);
+assert.doesNotMatch(await readFile(join(root, '.guide-plans', `${privacy.planId}.json`), 'utf8'), /pessoa@example\.com/);
+
 const realDraftRoot = await mkdtemp(join(tmpdir(), 'm536-draft-'));
 const draftOptions = { ...options, submit: undefined };
 const draftPlan = await createGuide(realDraftRoot, input, draftOptions);
