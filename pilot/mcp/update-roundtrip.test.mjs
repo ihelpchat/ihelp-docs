@@ -71,8 +71,13 @@ try {
     if (path.includes('reconectar-canal-qr') || path.includes('usuario-acesso') || path.startsWith('blog/')) {
       original.body = original.body.replaceAll('**', '').replace(/[“”]/gu, '');
     }
+    if (path.startsWith('blog/')) original.body = original.body.replace('## Encerramento automático pela aba "Meus"', '## Encerramento automático pela aba Meus');
     const originalMdx = await readFile(join(root, 'content/docs', `${path}.mdx`), 'utf8');
     const originalYaml = parseDocument(originalMdx.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '').toJS();
+    if (path.startsWith('blog/')) {
+      original.description = original.description.replace(/[“”]/gu, '');
+      originalYaml.description = original.description;
+    }
     if (path.includes('reconectar-canal-qr')) {
       original.assistantIntent = 'reconnect_qr';
       original.assistantSuggestions = [...original.assistantSuggestions];

@@ -18,30 +18,37 @@ mapLabels.add(normalizeLabel('Falar com uma pessoa'));
 const routes = new Set(approvedMap.manifest.routes.map(({ path }) => path));
 // Radicais de ações e substantivos que identificam uma frase sobre a interface.
 const UI_CUES = /\b(?:toc\w*|toq\w*|cliq\w*|cliqu\w*|apert\w*|pression\w*|selecion\w*|escolh\w*|desmarc\w*|marc\w*|acess\w*|desativ\w*|ativ\w*|preench\w*|digit\w*|entr\w*|arrast\w*|desliz\w*|abr\w*|v[aá]\s+(?:at[eé]|em|para)|bot[aã]o|aba|menu|opç[aã]o|campo|tela|[ií]cone|link|chave|caixa)\b/iu;
+const PHRASING = new Set(['text', 'strong', 'emphasis', 'delete', 'inlineCode', 'break', 'link', 'linkReference', 'image', 'imageReference', 'footnoteReference', 'mdxJsxTextElement', 'mdxTextExpression', 'html']);
 
-function checkInterfaceLabels(body, path) {
-  const tree = parseMdx(body);
-  visit(tree, (node) => {
-    if (node.type !== 'paragraph') return;
-    let text = '';
-    const labels = [];
-    for (const child of node.children ?? []) {
-      visit(child, (descendant) => {
+function checkLabelBlock(node, path) {
+  let text = '';
+  const labels = [];
+  for (const child of node.children ?? []) {
+    visit(child, (descendant) => {
       const start = text.length;
       if (descendant.type === 'strong' || (descendant.type === 'inlineCode' && !path.startsWith('api/')))
         labels.push({ value: plainText(descendant), start });
       if (descendant.type === 'text') for (const match of descendant.value.matchAll(/["“”]([^"“”]+)["“”]/gu))
         labels.push({ value: match[1], start: start + match.index });
       if (descendant.type === 'text' || descendant.type === 'inlineCode') text += descendant.value;
-      });
-    }
-    for (const label of labels) {
-      const before = text.slice(0, label.start);
-      const sentenceStart = Math.max(before.lastIndexOf('.'), before.lastIndexOf('!'), before.lastIndexOf('?')) + 1;
-      const after = text.slice(label.start);
-      const end = after.search(/[.!?](?:\s|$)/u);
-      const sentence = text.slice(sentenceStart, end < 0 ? undefined : label.start + end + 1);
-      if (UI_CUES.test(sentence) && !mapLabels.has(normalizeLabel(label.value))) reject(`rótulo fora do mapa: ${label.value}`);
+    });
+  }
+  for (const label of labels) {
+    const before = text.slice(0, label.start);
+    const sentenceStart = Math.max(before.lastIndexOf('.'), before.lastIndexOf('!'), before.lastIndexOf('?')) + 1;
+    const after = text.slice(label.start);
+    const end = after.search(/[.!?](?:\s|$)/u);
+    const sentence = text.slice(sentenceStart, end < 0 ? undefined : label.start + end + 1);
+    if (UI_CUES.test(sentence) && !mapLabels.has(normalizeLabel(label.value))) reject(`rótulo fora do mapa: ${label.value}`);
+  }
+}
+
+function checkInterfaceLabels(body, path) {
+  visit(parseMdx(body), (node) => {
+    if (!PHRASING.has(node.type) && node.children?.some((child) => PHRASING.has(child.type))) checkLabelBlock(node, path);
+    if (node.type !== 'mdxJsxFlowElement' && node.type !== 'mdxJsxTextElement') return;
+    for (const attr of node.attributes ?? []) {
+      if (typeof attr.value === 'string') checkLabelBlock({ children: [{ type: 'text', value: attr.value }] }, path);
     }
   });
 }
@@ -83,7 +90,7 @@ export async function assertPublicSubmit(root, items, deletes = [], { ignoreBase
     }
     const unchangedBaseline = !ignoreBaseline && publishedBaseline[article.path] === createHash('sha256').update(rendered).digest('hex');
     if (!unchangedBaseline) {
-      for (const text of [article.body, ...(article.guide?.steps ?? []).map(({ text }) => text)]) checkInterfaceLabels(text, article.path);
+      for (const text of [article.title, article.description, article.body, ...(article.guide?.steps ?? []).map(({ text }) => text)]) checkInterfaceLabels(text, article.path);
     }
     const brokenLinks = await internalLinkIssues(root, article.path, article.body);
     if (brokenLinks.length) reject(brokenLinks[0]);
