@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import {
   assistantEnabled,
   AssistantError,
+  buildAssistantRequest,
   requestAnswer,
   type AssistantHistoryItem,
   type AssistantReply,
@@ -108,7 +109,9 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
     const controller = new AbortController();
     abort.current = controller;
     try {
-      const reply = await requestAnswer({ question, history, scope: state.current.scope, page, sessionId: sessionId.current, origin: 'faq' }, controller.signal, () => setRetrying(true));
+      const priorReply = [...base].reverse().find((message) => message.role === 'ai')?.reply;
+      const request = buildAssistantRequest(question, priorReply, { history, scope: state.current.scope, page, sessionId: sessionId.current, origin: 'faq' });
+      const reply = await requestAnswer(request, controller.signal, () => setRetrying(true));
       setMessages((list) => [...list, { id: id('a'), role: 'ai', reply, question }]);
     } catch (error) {
       if (controller.signal.aborted) return;

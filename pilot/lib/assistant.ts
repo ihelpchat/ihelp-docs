@@ -29,6 +29,7 @@ export type AssistantProductAction = { id: string; label: string; route: string;
 export type AssistantImage = { src: string; alt: string };
 export type AssistantStep = { text: string; action?: AssistantProductAction; image?: AssistantImage };
 export type AssistantResolution = 'complete' | 'partial' | 'not_found' | 'in_progress';
+export type AssistantGuideState = NonNullable<AssistantRequestV1['guide']>;
 export type AssistantEscalation = {
   intent: 'create_robot' | 'manage_users' | 'connect_channel' | 'billing' | 'campaigns' | 'templates' | 'departments' | 'files' | 'crm' | 'get_help';
   diagnosis: 'usage' | 'configuration' | 'permission' | 'plan' | 'channel_qr' | 'meta_coexistence' | 'bug_incident' | 'sensitive_action';
@@ -47,6 +48,7 @@ export type AssistantReply = {
   suggestions: string[];
   resolution: AssistantResolution;
   found: boolean;
+  guide?: AssistantGuideState;
   escalation?: AssistantEscalation;
 };
 
@@ -207,6 +209,27 @@ function safeEscalation(value: unknown): AssistantEscalation | undefined {
   };
 }
 
+function safeGuide(value: unknown): AssistantGuideState | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const validId = (item: unknown) => typeof item === 'string' && /^[a-z0-9][a-z0-9-]{2,63}$/.test(item);
+  if (!validId(raw.guideId) || !validId(raw.stepId) || !Number.isSafeInteger(raw.version) || Number(raw.version) < 1 || !['real', 'treino'].includes(raw.mode as string)) return undefined;
+  return {
+    guideId: raw.guideId as AssistantGuideState['guideId'], stepId: raw.stepId as string,
+    version: raw.version as number, mode: raw.mode as AssistantGuideState['mode'],
+    ...(validId(raw.pendingChoiceId) ? { pendingChoiceId: raw.pendingChoiceId as string } : {}),
+    ...(typeof raw.stateToken === 'string' && raw.stateToken.length <= 128 ? { stateToken: raw.stateToken } : {}),
+  };
+}
+
+/** Mesmo montador usado pelo contexto da UI e pelas jornadas HTTP. */
+export function buildAssistantRequest(question: string, priorReply: AssistantReply | undefined, options: Omit<AssistantRequest, 'question'>): AssistantRequest {
+  const guide = options.guide ?? (priorReply?.resolution === 'in_progress' ? priorReply.guide : undefined);
+  const choice = guide?.pendingChoiceId && priorReply?.suggestions.includes(question)
+    ? question.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim().replace(/\s+/g, '-') : undefined;
+  return { ...options, question, ...(guide ? { guide: { ...guide, ...(choice ? { choiceId: choice } : {}) } } : {}) };
+}
+
 /** Aceita o formato completo e o antigo ({ answer, sources: { title, path }[] }). */
 export function normalizeReply(data: unknown): AssistantReply {
   const raw = (data ?? {}) as Record<string, unknown>;
@@ -218,6 +241,7 @@ export function normalizeReply(data: unknown): AssistantReply {
     ? raw.resolution
     : raw.found === false ? 'not_found' : 'complete';
   const escalation = safeEscalation(raw.escalation);
+  const guide = safeGuide(raw.guide);
   return {
     answer,
     sections: Array.isArray(raw.sections)
@@ -239,6 +263,7 @@ export function normalizeReply(data: unknown): AssistantReply {
     suggestions: strings(raw.suggestions, 5),
     resolution,
     found: resolution !== 'not_found' && raw.found !== false,
+    ...(guide ? { guide } : {}),
     ...(escalation ? { escalation } : {}),
   };
 }

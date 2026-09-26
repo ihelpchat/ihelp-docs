@@ -2,6 +2,8 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseDocument } from 'yaml';
 import { parseGuide } from '../architecture/conversation-v1.mjs';
+import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
+import actions from '../architecture/product-actions.json' with { type: 'json' };
 import { diagnoseState, escalationFor, sanitizeWidgetContext } from './real-state.mjs';
 import { guideStateToken, validGuideStateToken } from './opaque-id.mjs';
 
@@ -48,7 +50,7 @@ function reply(source, step, answer, options = {}) {
   };
   return {
     answer,
-    steps: [{ text: step.text }],
+    steps: [{ text: step.text, ...(step.actionId ? { action: resolveCatalogAction({ id: step.actionId, route: actions[step.actionId].route }) } : {}) }],
     sources: [{ title: source.title, path: source.path }],
     suggestions: step.choices?.map((choice) => choice.label)
       ?? (guideLastStep(source.guide, step) ? ['Deu certo? Sim', 'Deu certo? Não', 'Preciso de ajuda'] : ['Concluí este passo', 'Preciso de ajuda']),
@@ -57,9 +59,18 @@ function reply(source, step, answer, options = {}) {
   };
 }
 
+function nextStep(guide, step) {
+  if (step.choices?.length) return null;
+  const parent = guide.steps.find((candidate) => candidate.choices?.some((choice) => choice.nextStepId === step.stepId));
+  if (parent) {
+    const lastBranch = Math.max(...parent.choices.map((choice) => guide.steps.findIndex((candidate) => candidate.stepId === choice.nextStepId)));
+    return guide.steps[lastBranch + 1] ?? null;
+  }
+  return guide.steps[guide.steps.findIndex((candidate) => candidate.stepId === step.stepId) + 1] ?? null;
+}
+
 function guideLastStep(guide, step) {
-  return guide.steps.some((candidate) => candidate.choices?.some((choice) => choice.nextStepId === step.stepId))
-    || !guide.steps[guide.steps.findIndex((candidate) => candidate.stepId === step.stepId) + 1];
+  return !step.choices?.length && !nextStep(guide, step);
 }
 
 export async function answerGuide(root, question, state, options = {}) {
@@ -121,9 +132,7 @@ export async function answerGuide(root, question, state, options = {}) {
     return reply(source, selected, 'Vamos seguir pela opção escolhida.');
   }
   if (state.choiceId) return safe;
-  const index = guide.steps.findIndex((step) => step.stepId === current.stepId);
-  const branched = guide.steps.some((step) => step.choices?.some((choice) => choice.nextStepId === current.stepId));
-  const next = branched ? null : guide.steps[index + 1];
+  const next = nextStep(guide, current);
   if (concluding) {
     if (next) return safe;
     return reply(source, current, 'Você concluiu o guia.', { steps: [], suggestions: [], resolution: 'complete' });
