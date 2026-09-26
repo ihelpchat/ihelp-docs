@@ -44,8 +44,8 @@ permissionAfter.manifest.permissions = permissionAfter.manifest.permissions.map(
 const permissionImpact = calculateGuideImpact({ before: snapshot, after: permissionAfter, guides, actions, sources: compiled.sources });
 assert.ok(!permissionImpact.proposals.some((item) => item.guideId === 'usuario-acesso' && item.dependency === 'permission'));
 assert.ok(permissionImpact.info.some((item) => item.includes('usuario-acesso: permissão não mapeada')));
-assert.ok(permissionImpact.pending.some((item) => item.includes('recado-fora-do-horario') && item.includes('escrever-recado') &&
-  item.includes('DepartmentConfigExtras/index.tsx:353') && item.includes('rótulo da fonte não encontrado no manifest')));
+assert.ok(!permissionImpact.pending.some((item) => item.includes('rótulo da fonte não encontrado no manifest')),
+  'manifest aprovado inclui os rótulos dos três guias');
 
 const dir = await mkdtemp(join(tmpdir(), 'guide-impact-'));
 try {
