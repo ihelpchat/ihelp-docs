@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import OpenAI from 'openai';
+import { parseDocument } from 'yaml';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { resolveGuideId } from '../architecture/conversation-v1.mjs';
 import { parseAssistantSuggestions } from './conversational-contract.mjs';
@@ -28,8 +29,20 @@ function campaignGuideQuestion(question) {
     && /\b(?:criar|enviar|envio|disparar|disparo|fazer|montar|configurar|whatsapp)\b/.test(value);
 }
 
+let cachedRaw;
+let cachedMetadata;
+function frontmatterField(raw, key) {
+  if (raw !== cachedRaw) {
+    const match = raw.match(/^---\n([\s\S]*?)\n---\n?/);
+    const document = match ? parseDocument(match[1]) : null;
+    cachedMetadata = document && !document.errors.length ? document.toJS() ?? {} : {};
+    cachedRaw = raw;
+  }
+  return cachedMetadata[key];
+}
+
 function frontmatterValue(raw, key) {
-  return raw.match(new RegExp(`^${key}:\\s*["']?(.+?)["']?$`, 'm'))?.[1]?.replace(/["']$/, '') ?? '';
+  return String(frontmatterField(raw, key) ?? '');
 }
 
 function readableBody(raw) {
@@ -221,7 +234,8 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       assistantOverview: frontmatterValue(raw, 'assistantOverview'),
       assistantResolution: frontmatterValue(raw, 'assistantResolution') === 'partial' ? 'partial' : undefined,
       assistantInitialSteps: Math.min(3, Math.max(1, Number(frontmatterValue(raw, 'assistantInitialSteps')) || 1)),
-      assistantSuggestions: [...new Set(parseAssistantSuggestions(frontmatterValue(raw, 'assistantSuggestions'))
+      assistantSuggestions: [...new Set((Array.isArray(frontmatterField(raw, 'assistantSuggestions'))
+        ? frontmatterField(raw, 'assistantSuggestions') : parseAssistantSuggestions(frontmatterValue(raw, 'assistantSuggestions')))
         .map(cleanText).filter((item) => item.length > 0 && item.length <= 100))].slice(0, 3),
       media: mediaOf(raw),
       screenshots,

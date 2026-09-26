@@ -3,7 +3,10 @@ import { constants } from 'node:fs';
 import { basename, join, normalize, relative } from 'node:path';
 import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
+import { isExactCatalogAction } from './product-actions.mjs';
 import { conversationalIssues } from './conversational-contract.mjs';
+import { stringify } from 'yaml';
+import { articleFields } from './article-fields.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -28,14 +31,6 @@ function escapeYaml(value) {
   return JSON.stringify(value.replaceAll('\r', '').trim());
 }
 
-function publicArticleText(article) {
-  const fields = [article.path, article.title, article.description, article.source, article.contentType, article.body, article.tangoUrl, article.assistantQuestion, article.assistantOverview, ...(Array.isArray(article.assistantSuggestions) ? article.assistantSuggestions : [])];
-  for (const action of Array.isArray(article.productActions) ? article.productActions : []) {
-    fields.push(action?.id, action?.label, action?.route, action?.target);
-  }
-  return fields.filter((value) => typeof value === 'string').join('\n');
-}
-
 function rejectSensitive(value) {
   if (!containsSensitiveData(value)) return;
   const kinds = sensitiveKinds(value);
@@ -55,6 +50,7 @@ function safeContentPath(root, contentPath) {
 
 export function validateArticle(article) {
   const issues = [];
+  for (const key of Object.keys(article)) if (!articleFields.has(key)) issues.push(`campo desconhecido: ${key}`);
   if (!article.title || article.title.trim().length < 4) issues.push('title precisa ter ao menos 4 caracteres');
   if (!article.description || article.description.trim().length < 40) issues.push('description precisa ter ao menos 40 caracteres');
   if (!SOURCES.has(article.source)) issues.push('source inválido');
@@ -68,8 +64,7 @@ export function validateArticle(article) {
   if (/ihelpchat\.github\.io\/ihelp-docs/i.test(article.body ?? '')) issues.push('links legados não são permitidos');
   if (/^## Tutorial Guiado$/m.test(article.body ?? '')) issues.push('use um Tango público no campo tangoUrl em vez de rodapé genérico');
   if (/^#{2,6}\s+\*\*/m.test(article.body ?? '')) issues.push('headings não devem usar negrito redundante');
-  const publicText = publicArticleText(article);
-  const sensitive = sensitiveKinds(publicText);
+  const sensitive = sensitiveKinds(stringify(article, { lineWidth: 0 }));
   if (sensitive.credential) issues.push('possível credencial detectada');
   if (sensitive.personal) issues.push('possível dado pessoal detectado');
   if (article.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(article.tangoUrl)) {
@@ -92,6 +87,8 @@ export function validateArticle(article) {
 
 export function renderArticle(article) {
   const validation = validateArticle(article);
+  if (validation.issues.includes('possível credencial detectada')) throw new SubmitArticleError('CREDENTIAL', 'Artigo contém possível credencial');
+  if (validation.issues.includes('possível dado pessoal detectado')) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém possível dado pessoal');
   if (!validation.valid) throw new Error(validation.issues.join('; '));
   const tangoId = article.tangoUrl?.split('/').pop()?.split('?')[0].replaceAll('-', '');
   const tangoSlug = article.title.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -101,15 +98,18 @@ export function renderArticle(article) {
   const tutorial = article.tangoUrl
     ? `\n\n<TutorialCard title=${escapeYaml(article.title)} url=${escapeYaml(publicTangoUrl)} description=${escapeYaml(article.description)} />`
     : '';
-  const actions = (article.productActions ?? []).map(resolveCatalogAction).map((action) =>
+  const embeddedAction = /<ProductAction\b[^>]*\/>/g;
+  const existingIds = new Set([...article.body.matchAll(embeddedAction)].map((match) => match[0].match(/\bid="([^"]+)"/)?.[1]));
+  const actions = (article.productActions ?? []).filter((action) => !existingIds.has(action.id)).map(resolveCatalogAction).map((action) =>
     `<ProductAction id=${escapeYaml(action.id)} label=${escapeYaml(action.label)} route=${escapeYaml(action.route)}${action.target ? ` target=${escapeYaml(action.target)}` : ''} />`
   ).join('\n');
   const actionBlock = actions ? `\n\n${actions}` : '';
-  const serializedSuggestions = article.assistantSuggestions?.some((item) => item.includes('|'))
-    ? JSON.stringify(article.assistantSuggestions)
-    : escapeYaml(article.assistantSuggestions?.join(' | ') ?? '');
-  const conversation = article.assistantQuestion ? `assistantQuestion: ${escapeYaml(article.assistantQuestion)}\nassistantOverview: ${escapeYaml(article.assistantOverview)}\nassistantInitialSteps: ${article.assistantInitialSteps}\nassistantSuggestions: ${serializedSuggestions}\n` : '';
-  return `---\ntitle: ${escapeYaml(article.title)}\ndescription: ${escapeYaml(article.description)}\nsource: ${article.source}\ncontentType: ${article.contentType}\n${conversation}---\n\n${article.body.trim()}${actionBlock}${tutorial}\n`;
+  const reserved = new Set(['path', 'body', 'tangoUrl', 'productActions']);
+  const metadata = Object.fromEntries(Object.entries(article).filter(([key, value]) => !reserved.has(key) && value !== undefined));
+  const body = article.body.trim();
+  const rendered = `---\n${stringify(metadata, { lineWidth: 0 })}---\n\n${body}${actionBlock}${tutorial}\n`;
+  rejectSensitive(rendered);
+  return rendered;
 }
 
 async function walk(root) {
@@ -317,7 +317,7 @@ async function createDraft(root, article, rendered) {
 }
 
 async function submitValidatedArticle(root, article, mode, actor, beforePull) {
-  const rendered = renderArticle(article);
+  const [{ rendered }] = safeArticleList([article]);
   safeContentPath(root, article.path);
   if (mode === 'pull_request') return createPullRequest(article, rendered, actor, beforePull);
   if (mode !== 'draft') throw new Error('mode deve ser draft ou pull_request');
@@ -328,10 +328,32 @@ function safeArticleList(articles, deletes = []) {
   if (!Array.isArray(articles) || !Array.isArray(deletes) || articles.length + deletes.length < 1 || articles.length + deletes.length > 8) throw new SubmitArticleError('INVALID_PACKAGE', 'O pacote precisa ter entre 1 e 8 operações');
   const paths = new Set();
   const upserts = articles.map((article) => {
-    rejectSensitive(publicArticleText(article));
     if (paths.has(article.path)) throw new SubmitArticleError('INVALID_PACKAGE', `Path duplicado no pacote: ${article.path}`);
     paths.add(article.path);
     safeContentPath(process.cwd(), article.path);
+    const reserved = new Set(['path', 'body', 'productActions', 'tangoUrl']);
+    for (const [key, value] of Object.entries(article)) {
+      if (reserved.has(key)) continue;
+      if (!articleFields.has(key) || (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean' && !(Array.isArray(value) && value.every((item) => typeof item === 'string')))) {
+        throw new SubmitArticleError('INVALID_PACKAGE', `Metadado inválido: ${key}`);
+      }
+    }
+    const inline = [...article.body.matchAll(/<ProductAction\b([^>]*?)\/>/g)].map((match) => {
+      const attributes = [...match[1].matchAll(/\b(id|label|route|target)="([^"]*)"/g)];
+      if (match[1].replace(/\b(id|label|route|target)="[^"]*"/g, '').trim()) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction contém atributos desconhecidos');
+      const action = Object.fromEntries(attributes.map((entry) => [entry[1], entry[2]]));
+      if (!isExactCatalogAction(action)) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction no body fora do catálogo confiável');
+      return action;
+    });
+    if ((article.body.match(/<ProductAction\b/g) ?? []).length !== inline.length) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction inválido no body');
+    if (new Set(inline.map((action) => action.id)).size !== inline.length) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction duplicado no body');
+    for (const action of article.productActions ?? []) {
+      const embedded = inline.find((candidate) => candidate.id === action.id);
+      if (embedded && JSON.stringify(embedded) !== JSON.stringify(action)) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction do body difere do campo productActions');
+    }
+    if (article.productActions?.length && inline.some((action) => !article.productActions.some((candidate) => candidate.id === action.id))) {
+      throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction do body ausente de productActions');
+    }
     return { article, rendered: renderArticle(article) };
   });
   for (const path of deletes) {
@@ -454,9 +476,18 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
     } else {
       throw new SubmitArticleError('INVALID_MODE', 'mode deve ser draft ou pull_request');
     }
-    await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'success', reference: result.branch });
+    try {
+      await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'success', reference: result.branch });
+    } catch (error) {
+      if (mode === 'pull_request') {
+        const safeUrl = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*$/.test(result.url) ? result.url : '(URL indisponível)';
+        throw new SubmitArticleError('PR_CREATED_AUDIT_FAILED', `pull_request criado em ${safeUrl}; audit final indisponível`, { cause: error });
+      }
+      throw error;
+    }
     return result;
   } catch (error) {
+    if (error instanceof SubmitArticleError && error.code === 'PR_CREATED_AUDIT_FAILED') throw error;
     if (actor) await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'failure' });
     throw publicSubmitError(error);
   }
