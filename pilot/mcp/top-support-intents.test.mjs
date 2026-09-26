@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { answerQuestion, retrieveContext } from './assistant-service.mjs';
+import { freeAnswerClient } from './fixtures/free-answer-client.mjs';
 
 const uiSource = await readFile(new URL('../lib/assistant.ts', import.meta.url), 'utf8');
 const actions = await readFile(new URL('../architecture/product-actions.json', import.meta.url), 'utf8');
@@ -33,9 +34,9 @@ const originalCrm = await readFile(new URL('../content/docs/docs/sobre-o-sistema
 assert.match(originalCrm, /trava de contato/i);
 assert.equal((originalCrm.match(/Clique em Próximo/g) ?? []).length, 2);
 assert.match(originalCrm, /Criar automação/);
-const client = { responses: { create: async () => ({ model: 'fixture', output_text: JSON.stringify({
+const client = freeAnswerClient({ responses: { create: async () => ({ model: 'fixture', output_text: JSON.stringify({
   answer: 'Orientação inicial.', sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: 'complete', found: true,
-}) }) } };
+}) }) } });
 const ask = (question, options = {}) => answerQuestion(root, question, { client, ...options });
 
 for (const [question, slug, intent, action, count, moduleName] of cases) {
