@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { validateCanonicalGuide } from '../lib/canonical-guides.mjs';
+import { approvedGuideSentences, validateCanonicalGuide } from '../lib/canonical-guides.mjs';
 
 const root = new URL('../content/docs/docs/', import.meta.url);
 const cases = [
@@ -49,24 +49,10 @@ for (const sentence of [
   assert.throws(() => validateCanonicalGuide(withConfirmation(sentence), 'reconectar-canal-qr'),
     /frase/u, `homóglifo ou invisível não pode ocultar: ${sentence}`);
 }
-const approvedByGuide = [
-  ['reconectar-canal-qr', qr, [
-    'As mensagens enviadas enquanto o WhatsApp estava desconectado podem não aparecer no iHelp.',
-  ]],
-  ['usuario-acesso', await readFile(join(root.pathname, cases[1][0]), 'utf8'), [
-    'Ao entrar, vê as áreas e os atendimentos esperados.',
-    'Em Visualizar Departamentos, confira se a pessoa deve ver os atendimentos do seu setor.',
-    'Clique em Salvar Alterações. Peça à pessoa para entrar e conferir o menu e os atendimentos visíveis.',
-  ]],
-  ['recado-fora-do-horario', await readFile(join(root.pathname, cases[2][0]), 'utf8'), [
-    'Onde escrevo o recado fora do horário?',
-    'Abra Configurações e depois Departamentos. Escolha o setor que receberá o recado.',
-    'Ative Mensagem automática fora de horário de atendimento e escreva o recado.',
-    'Escreva um recado curto, por exemplo: “Olá!',
-  ]],
-];
-for (const [id, raw, sentences] of approvedByGuide) {
-  for (const sentence of sentences) {
+for (const [file, id] of cases) {
+  const raw = await readFile(join(root.pathname, file), 'utf8');
+  for (const sentence of approvedGuideSentences[id]) {
+    if (!/[.!?]$/u.test(sentence)) continue; // Títulos sem pontuação já são validados no guia original.
     assert.doesNotThrow(() => validateCanonicalGuide(raw.replace('## Como confirmar', `${sentence}\n\n## Como confirmar`), id),
       `${id}: frase aprovada: ${sentence}`);
   }
