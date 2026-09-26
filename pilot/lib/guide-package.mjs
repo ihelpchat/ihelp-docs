@@ -28,9 +28,10 @@ function validatePublicArtifact(artifact, name) {
       }
       const kinds = sensitiveKinds(value);
       if (key !== 'contentSha256' && (kinds.credential || kinds.personal || kinds.internal || kinds.control)) throw new Error(`${name}.${location}: dado privado ou interno`);
-      for (const match of value.matchAll(/\/[A-Za-z0-9][A-Za-z0-9/_.%-]*/gu)) {
-        const route = match[0].replace(/[.,;:!?]+$/u, '');
-        if (route.includes('%') || !publicRoutes.has(route)) throw new Error(`${name}.${location}: rota fora do catálogo: ${route}`);
+      for (const match of value.matchAll(/\/\S*/gu)) {
+        const token = match[0];
+        const route = token.replace(/[.,;:!?)[\]}"'`“”‘’]+$/u, '');
+        if (token.includes('?') || token.includes('#') || !publicRoutes.has(route)) throw new Error(`${name}.${location}: rota fora do catálogo: ${token}`);
       }
     } else if (Array.isArray(value)) {
       value.forEach((item, index) => visit(item, `${location}[${index}]`));
