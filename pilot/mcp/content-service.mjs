@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { basename, join, normalize, relative } from 'node:path';
 import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
-import { isCatalogAction } from './product-actions.mjs';
+import { isExactCatalogAction } from './product-actions.mjs';
 import { conversationalIssues } from './conversational-contract.mjs';
 import { stringify } from 'yaml';
 import { articleFields } from './article-fields.mjs';
@@ -342,7 +342,7 @@ function safeArticleList(articles, deletes = []) {
       const attributes = [...match[1].matchAll(/\b(id|label|route|target)="([^"]*)"/g)];
       if (match[1].replace(/\b(id|label|route|target)="[^"]*"/g, '').trim()) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction contém atributos desconhecidos');
       const action = Object.fromEntries(attributes.map((entry) => [entry[1], entry[2]]));
-      if (!isCatalogAction(action)) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction no body fora do catálogo confiável');
+      if (!isExactCatalogAction(action)) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction no body fora do catálogo confiável');
       return action;
     });
     if ((article.body.match(/<ProductAction\b/g) ?? []).length !== inline.length) throw new SubmitArticleError('INVALID_PACKAGE', 'ProductAction inválido no body');
