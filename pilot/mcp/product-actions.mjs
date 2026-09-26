@@ -13,3 +13,10 @@ export function catalogActions() {
 export function isCatalogAction(action) {
   return resolveCatalogAction(action) !== null;
 }
+
+export function isExactCatalogAction(action) {
+  const canonical = resolveCatalogAction(action);
+  return canonical !== null
+    && Object.keys(action).length === Object.keys(canonical).length
+    && Object.entries(canonical).every(([key, value]) => action[key] === value);
+}

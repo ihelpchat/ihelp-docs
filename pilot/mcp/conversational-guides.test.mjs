@@ -45,7 +45,7 @@ assert.equal(generated.articles.length, 1);
 assert.deepEqual(generated.articles[0].assistantSuggestions, guide.assistantSuggestions);
 const mdx = renderArticle(generated.articles[0]);
 for (const field of ['assistantQuestion', 'assistantOverview', 'assistantInitialSteps', 'assistantSuggestions']) assert.match(mdx, new RegExp(`^${field}:`, 'm'));
-assert.deepEqual(parseArticle(mdx, guide.path).metadata.assistantSuggestions, guide.assistantSuggestions.join(' | '));
+assert.deepEqual(parseArticle(mdx, guide.path).metadata.assistantSuggestions, guide.assistantSuggestions);
 assert.deepEqual(auditArticle(mdx, guide.path), []);
 const contentPath = join(root, 'content/docs', `${guide.path}.mdx`);
 await writeFile(contentPath, mdx);

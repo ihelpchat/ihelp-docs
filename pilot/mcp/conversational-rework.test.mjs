@@ -37,14 +37,14 @@ assert.deepEqual((await (async () => {
   return retrieveContext(root, article.assistantQuestion);
 })()).find(({ path }) => path === `/${article.path}`).assistantSuggestions, suggestions, 'pipe interno não pode dividir sugestão');
 const read = await readArticle(root, article.path);
-assert.deepEqual(JSON.parse(read.assistantSuggestions), suggestions, 'leitura MDX precisa preservar a lista integral');
-assert.equal(parseArticle(mdx, article.path).metadata.assistantSuggestions, JSON.stringify(suggestions));
-const legacy = mdx.replace(/^assistantSuggestions: .*$/m, 'assistantSuggestions: "Como corrigir linhas inválidas? | Como confirmar os contatos importados?"');
+assert.deepEqual(read.assistantSuggestions, suggestions, 'leitura MDX precisa preservar a lista integral');
+assert.deepEqual(parseArticle(mdx, article.path).metadata.assistantSuggestions, suggestions);
+const legacy = mdx.replace(/^assistantSuggestions:\s*\n(?:  - .*\n)+/m, 'assistantSuggestions: "Como corrigir linhas inválidas? | Como confirmar os contatos importados?"\n');
 assert.deepEqual((await (async () => {
   await writeFile(join(root, 'content/docs/docs/teste/legacy.mdx'), legacy);
   return retrieveContext(root, article.assistantQuestion);
 })()).find(({ path }) => path === '/docs/teste/legacy').assistantSuggestions, suggestions.slice(1), 'frontmatter antigo continua legível');
-const invalidMdx = mdx.replace(/^assistantSuggestions: .*$/m, 'assistantSuggestions: "Como corrigir linhas inválidas? | como corrigir linhas inválidas?"');
+const invalidMdx = mdx.replace(/^assistantSuggestions:\s*\n(?:  - .*\n)+/m, 'assistantSuggestions: "Como corrigir linhas inválidas? | como corrigir linhas inválidas?"\n');
 assert.match(auditArticle(invalidMdx, article.path).join(' '), /assistantSuggestions/, 'auditoria precisa rejeitar sugestões duplicadas');
 
 const request = { topic: 'Importar contatos', module: 'Contatos', description: 'Ensinar a importar a primeira planilha de contatos.', productRoute: '/contact' };

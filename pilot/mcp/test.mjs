@@ -79,7 +79,7 @@ try {
   assert.doesNotMatch(normalizedFaq, /Respostas para dúvidas frequentes/);
   const quotedArticle = `---\ntitle: "Benefícios"\ndescription: "Veja uma opção \\"melhorada\\" para organizar o atendimento no iHelp."\nsource: produto\ncontentType: guia\n---\n\nEste conteúdo explica uma opção melhorada para organizar o atendimento sem alterar os fatos do produto. Ele também apresenta as decisões e os cuidados necessários para aplicar a orientação com segurança na rotina da equipe.`;
   const normalizedQuoted = renderNormalizedArticle(parseArticle(quotedArticle, 'docs/teste/beneficios'));
-  assert.match(normalizedQuoted, /description: "Veja uma opção \\"melhorada\\"/);
+  assert.equal(parseArticle(normalizedQuoted, 'docs/teste/beneficios').metadata.description, 'Veja uma opção "melhorada" para organizar o atendimento no iHelp.');
   assert.equal(renderNormalizedArticle(parseArticle(normalizedQuoted, 'docs/teste/beneficios')), normalizedQuoted, 'normalização precisa ser idempotente');
   assert.doesNotMatch(normalizeBody('## Etapa\r\n\r\nTexto com espaço. \r\n', 'Teste', 'Descrição completa para testar finais de linha legados.'), /[ \t\r]+$/m);
 
@@ -216,8 +216,9 @@ try {
   const mockFetchFile = join(await mkdtemp(join(tmpdir(), 'ihelp-docs-fetch-')), 'mock.mjs');
   await writeFile(mockFetchFile, `import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
-globalThis.fetch = async (url) => {
+globalThis.fetch = async (url, init = {}) => {
   if (process.env.MOCK_GITHUB_OUTCOME === '422') return { ok: false, status: 422, text: async () => 'token=secret-from-provider' };
+  if (String(url).includes('/contents/') && (init.method ?? 'GET') === 'GET') return { ok: false, status: 404 };
   if (String(url).endsWith('/pulls')) {
     await chmod(join(process.env.DOCS_ROOT, '.audit/docs-submissions.jsonl'), 0o400);
     return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/789' }) };
