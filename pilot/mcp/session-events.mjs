@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import guideIds from '../architecture/guide-ids.json' with { type: 'json' };
+import productActions from '../architecture/product-actions.json' with { type: 'json' };
 import { isPublishedPath } from './published-paths.mjs';
 import { z } from 'zod/v4';
 
@@ -10,6 +11,8 @@ const PATH = /^\/(?!\/)[a-z0-9/_-]*$/iu;
 const ORIGINS = new Set(['faq', 'app']);
 const GUIDE_IDS = new Set(guideIds);
 const RESULTS = new Set(['complete', 'partial', 'not_found', 'in_progress', 'escalated', 'abandoned']);
+const TOPICS = new Set([...Object.keys(productActions), ...Object.values(productActions).map(({ route }) => route)]);
+const ISSUES = new Set(['usage', 'incident', 'permission', 'account_state']);
 export const sessionEventSchema = z.object({
   sessionId: z.string().regex(ID),
   origin: z.enum(['faq', 'app']),
@@ -17,6 +20,8 @@ export const sessionEventSchema = z.object({
   stepId: z.string().regex(ID).optional(),
   durationMs: z.number().int().min(0).max(300_000),
   result: z.enum([...RESULTS]),
+  topic: z.enum([...TOPICS]).optional(),
+  issue: z.enum([...ISSUES]).optional(),
   path: z.string().regex(PATH),
   createdAt: z.string().optional(),
 }).strict();
@@ -34,7 +39,9 @@ function serialize(file, operation) {
 }
 
 export function normalizeSessionEvent(input, { now = Date.now() } = {}) {
-  if (!sessionEventSchema.safeParse(input).success
+  const safeInput = input && typeof input === 'object' && !Array.isArray(input)
+    && input.topic !== undefined && !TOPICS.has(input.topic) ? { ...input, topic: undefined } : input;
+  if (!sessionEventSchema.safeParse(safeInput).success
     || !input || typeof input !== 'object' || Array.isArray(input)
     || Object.keys(input).some((key) => !FIELDS.has(key))
     || !ID.test(input.sessionId ?? '') || !ORIGINS.has(input.origin)
@@ -53,6 +60,8 @@ export function normalizeSessionEvent(input, { now = Date.now() } = {}) {
     ...(input.stepId === undefined ? {} : { stepId: input.stepId }),
     durationMs: input.durationMs,
     result: input.result,
+    ...(TOPICS.has(input.topic) ? { topic: input.topic } : {}),
+    ...(input.issue === undefined ? {} : { issue: input.issue }),
     path: isPublishedPath(input.path) ? input.path : null,
     createdAt,
   };

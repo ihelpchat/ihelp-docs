@@ -59,6 +59,8 @@ try {
     assert.equal(event.result, reply.resolution, 'evento guarda o mesmo resultado da resposta');
     assert.equal(event.guideId, 'campanhas', 'guia vem da fonte resolvida pelo servidor');
     assert.equal(event.stepId, 'passo-1', 'passo vem da etapa resolvida pelo servidor');
+    assert.equal(event.topic, 'abrir-campanhas', 'tópico é calculado no servidor');
+    assert.equal(event.issue, 'usage', 'diagnóstico saneado é calculado no servidor');
     assert.match(event.sessionId, /^session-[a-f0-9]{16}$/);
     assert.notEqual(event.sessionId, 'fixture-session', 'ID do cliente não é gravado cru');
     assert.equal(event.path, null, 'caminho não publicado não entra no evento');
@@ -75,6 +77,21 @@ try {
     assert.ok(providerInputs.at(-1).includes(guide), 'caminho publicado chega ao prompt');
     const publishedEvent = JSON.parse((await readFile(eventFile, 'utf8')).trim().split('\n').at(-1));
     assert.equal(publishedEvent.path, guide, 'caminho publicado chega ao evento');
+
+    for (const [question, widgetContext, expectedIssue] of [
+      ['Erro ao abrir campanhas', undefined, 'incident'],
+      ['Não tenho permissão em usuários', undefined, 'permission'],
+      ['Meu canal QR está desconectado', { module: 'channels', channels: [{ kind: 'whatsapp', state: 'disconnected' }] }, 'account_state'],
+    ]) {
+      const diagnostic = await fetch(`http://127.0.0.1:${httpServer.address().port}/assistant`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, widgetContext }),
+      });
+      assert.equal(diagnostic.status, 200);
+      const recorded = JSON.parse((await readFile(eventFile, 'utf8')).trim().split('\n').at(-1));
+      assert.equal(recorded.issue, expectedIssue, 'diagnóstico calculado no servidor');
+      assert.ok(recorded.topic, 'tópico fechado calculado no servidor');
+    }
 
     const feedback = await fetch(`http://127.0.0.1:${httpServer.address().port}/feedback`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
