@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { redactSensitiveData } from './sensitive-data.mjs';
 import { join } from 'node:path';
 import { searchLocalProductContext } from './local-product-context.mjs';
+import { envCompatibility, githubReadToken } from './env-compat.mjs';
 const CACHE_MS = 5 * 60_000;
 const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|cs)$/;
 const PINNED_PATHS = new Set([
@@ -80,11 +81,11 @@ function excerptOf(content, terms) {
 export async function searchProductContext(topic, module, provided = {}) {
   const options = {
     fetch: provided.fetch ?? globalThis.fetch,
-    token: provided.token ?? process.env.GITHUB_TOKEN,
+    token: provided.token ?? githubReadToken(),
     repository: provided.repository ?? process.env.PRODUCT_GITHUB_REPOSITORY ?? 'ihelpchat/front-react',
     ref: provided.ref ?? process.env.PRODUCT_GITHUB_REF ?? 'master',
   };
-  if (!options.token) return { available: false, repository: options.repository, ref: options.ref, matches: [], reason: 'GITHUB_TOKEN não configurado' };
+  if (!options.token) return { available: false, repository: options.repository, ref: options.ref, matches: [], reason: 'GITHUB_READ_TOKEN não configurado' };
   const terms = termsOf(topic, module);
   const paths = await treeOf(options);
   const candidates = paths
@@ -109,8 +110,9 @@ export async function searchProductContext(topic, module, provided = {}) {
 }
 
 export async function getIhelpContext(root, topic, module, provided = {}) {
-  const local = provided.repositoryIds !== undefined || (!provided.fetch && !provided.repositories);
-  const token = provided.token ?? process.env.GITHUB_TOKEN;
+  const local = provided.requireLocal === true || provided.repositoryIds !== undefined
+    || (!provided.fetch && !provided.repositories && Boolean(process.env[envCompatibility.localCheckouts.frontend] || process.env[envCompatibility.localCheckouts.backend]));
+  const token = provided.token ?? githubReadToken();
   const fetcher = provided.fetch ?? globalThis.fetch;
   const repositories = provided.repositories ?? [
     { repository: process.env.PRODUCT_GITHUB_REPOSITORY ?? 'ihelpchat/front-react', ref: process.env.PRODUCT_GITHUB_REF ?? 'master', role: 'Interface, rotas, permissões visíveis e textos de botões' },

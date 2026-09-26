@@ -77,6 +77,7 @@ try {
   process.env.OPENAI_BASE_URL = `http://127.0.0.1:${fakeOpenAI.address().port}/v1`;
   process.env.PORT = '0';
   process.env.DOCS_ROOT = root;
+  process.env.DOCS_MCP_API_KEY = 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz';
   const { httpServer } = await import('./http.mjs');
   try {
     if (!httpServer.listening) await once(httpServer, 'listening');

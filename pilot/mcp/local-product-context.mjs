@@ -4,6 +4,7 @@ import { lstat, open, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { isAbsolute, join, relative, sep, dirname, parse } from 'node:path';
 import { redactSensitiveData } from './sensitive-data.mjs';
+import { envCompatibility } from './env-compat.mjs';
 
 const run = promisify(execFile);
 const SOURCE = /\.(?:ts|tsx|js|jsx|cs)$/iu;
@@ -16,8 +17,8 @@ const MAX_FILE_BYTES = 256_000;
 const MAX_TOTAL_BYTES = 64_000_000;
 const TIMEOUT_MS = 2_000;
 const SOURCES = Object.freeze({
-  frontend: { repository: 'ihelpchat/front-react', role: 'frontend', env: 'PRODUCT_LOCAL_CHECKOUT' },
-  backend: { repository: 'ihelpchat/olah-ihelp', role: 'backend', env: 'BACKEND_LOCAL_CHECKOUT' },
+  frontend: { repository: 'ihelpchat/front-react', role: 'frontend', env: envCompatibility.localCheckouts.frontend },
+  backend: { repository: 'ihelpchat/olah-ihelp', role: 'backend', env: envCompatibility.localCheckouts.backend },
 });
 const STOP = new Set(['para', 'pelo', 'pela', 'como', 'criar', 'configurar', 'codigo', 'code', 'de', 'com', 'uma', 'um']);
 const ALIASES = { robo: ['robot'], robos: ['robot'], canal: ['channel'], canais: ['channel'], horario: ['schedule', 'hour'], horarios: ['schedule', 'hour'], departamento: ['department'], departamentos: ['department'], atendimento: ['attendance'], reconectar: ['reconnect', 'connection'], contatos: ['contacts'], campanha: ['campaign'] };

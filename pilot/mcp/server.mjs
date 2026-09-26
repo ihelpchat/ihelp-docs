@@ -7,9 +7,11 @@ import { auditOperation, deleteArticle, getInventory, isSafeRequestedBy, searchC
 import { auditContent, readArticle } from './editorial-standard.mjs';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
+import { authorizeTool, requestIdentity } from './access-control.mjs';
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
-const requestedBySchema = z.string().refine(isSafeRequestedBy, 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais').describe('ID opaco não sensível, como user:bruno; obrigatório para IA e escrita');
+const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article']);
+const requestedBySchema = z.string().optional().describe('Ator opcional; se informado, deve coincidir com o ator da credencial');
 const contentRequestSchema = z.object({
   topic: z.string().min(3).max(120),
   module: z.string().min(2).max(80),
@@ -31,18 +33,35 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     { name: 'ihelp-docs', version: '0.1.0' },
     { instructions: 'Consulte a base antes de criar conteúdo. Envie sempre como draft ou pull request; nunca publique credenciais ou dados pessoais.' },
   );
+  const registerTool = (name, config, callback) => server.registerTool(name, config, async (args, extra) => {
+    const identity = requestIdentity.getStore();
+    if (identity) {
+      try {
+        const actor = authorizeTool(identity, name, args);
+        return callback({ ...args, requestedBy: actor }, extra);
+      } catch (error) {
+        if (error.message === 'requestedBy forged') {
+          await auditOperation(root, { actor: identity.actor, operation: name, result: 'forbidden' });
+          return textResult({ error: error.message, status: 403 }, true);
+        }
+        return textResult({ error: error.message }, true);
+      }
+    }
+    if (actorTools.has(name) && !isSafeRequestedBy(args.requestedBy)) return textResult({ error: 'requestedBy inválido para stdio' }, true);
+    return callback(args, extra);
+  });
 
-  server.registerTool('docs_inventory', {
+  registerTool('docs_inventory', {
     description: 'Mostra cobertura dos módulos reais do iHelp e os gaps prioritários de FAQ/Tango.',
     inputSchema: z.object({}),
   }, async () => textResult(await getInventory(root)));
 
-  server.registerTool('docs_search', {
+  registerTool('docs_search', {
     description: 'Busca conteúdo existente antes de criar ou duplicar um FAQ.',
     inputSchema: z.object({ query: z.string().min(2), limit: z.number().int().min(1).max(20).default(8) }),
   }, async ({ query, limit }) => textResult({ results: await searchContent(root, query, limit) }));
 
-  server.registerTool('docs_get_article', {
+  registerTool('docs_get_article', {
     description: 'Lê um artigo completo existente para que a IA possa reaproveitar e revisar o conteúdo sem duplicá-lo.',
     inputSchema: z.object({ path: z.string().describe('Caminho sem extensão, começando com docs/, api/, blog/ ou tutoriais/') }),
   }, async ({ path }) => {
@@ -53,17 +72,17 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     }
   });
 
-  server.registerTool('docs_audit_content', {
+  registerTool('docs_audit_content', {
     description: 'Audita todos os artigos contra o padrão editorial do iHelp sem alterar arquivos.',
     inputSchema: z.object({}),
   }, async () => textResult(await auditContent(root)));
 
-  server.registerTool('docs_validate_article', {
+  registerTool('docs_validate_article', {
     description: 'Valida metadados, caminho, conteúdo, Tango e vazamento de credenciais sem gravar nada.',
     inputSchema: articleSchema,
   }, async (article) => textResult(validateArticle(article)));
 
-  server.registerTool('docs_product_context', {
+  registerTool('docs_product_context', {
     description: 'Consulta rotas, menus, textos de botões e componentes reais do front-react para fundamentar o conteúdo antes de escrever.',
     inputSchema: z.object({
       topic: z.string().min(3).max(120),
@@ -82,7 +101,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     }
   });
 
-  server.registerTool('docs_plan_content', {
+  registerTool('docs_plan_content', {
     description: 'Conversa com a IA editorial: busca duplicidades, aponta informações ausentes, sugere FAQ/tutorial/guia e faz perguntas antes de criar.',
     inputSchema: contentRequestSchema,
   }, async ({ requestedBy, ...request }) => {
@@ -97,7 +116,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     }
   });
 
-  server.registerTool('docs_generate_package', {
+  registerTool('docs_generate_package', {
     description: 'Gera com IA a estrutura completa sem vídeo: FAQ, tutorial para iniciante, passos guiados, ações no produto e dados de navegação; para e pergunta quando faltam fatos.',
     inputSchema: contentRequestSchema,
   }, async ({ requestedBy, ...request }) => {
@@ -112,7 +131,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     }
   });
 
-  server.registerTool('docs_submit_package', {
+  registerTool('docs_submit_package', {
     description: 'Cria ou atualiza MDX e remove artigos em uma PR; atualiza meta.json de navegação. dry_run apenas valida.',
     inputSchema: z.object({
       articles: z.array(articleSchema).max(8).default([]),
@@ -128,7 +147,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     }
   });
 
-  server.registerTool('docs_delete_article', {
+  registerTool('docs_delete_article', {
     description: 'Remove um artigo por PR com atualização de meta.json, ou cria um draft de revisão.',
     inputSchema: z.object({
       path: z.string().describe('Caminho sem extensão'),
@@ -143,7 +162,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     }
   });
 
-  server.registerTool('docs_update_article', {
+  registerTool('docs_update_article', {
     description: 'Atualiza artigo e meta.json em pull request, sem merge nem deploy.',
     inputSchema: articleSchema.extend({ requestedBy: requestedBySchema }),
   }, async ({ requestedBy, ...article }) => {
@@ -154,7 +173,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     }
   });
 
-  server.registerTool('docs_submit_article', {
+  registerTool('docs_submit_article', {
     description: 'Envia conteúdo validado como draft local ou abre pull request no GitHub. Nunca faz merge ou deploy.',
     inputSchema: articleSchema.extend({
       mode: z.enum(['draft', 'pull_request']).default('draft'),
