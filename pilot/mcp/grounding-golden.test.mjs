@@ -54,4 +54,4 @@ try {
     if (value === undefined) delete process.env[key]; else process.env[key] = value;
   }
 }
-console.log('M5.30 golden: quatro temas, frontend e backend no top 3.');
+console.log('M5.30 golden: cinco temas, frontend e backend no top 3.');
