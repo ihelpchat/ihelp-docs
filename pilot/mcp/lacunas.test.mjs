@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
@@ -8,7 +8,11 @@ import { topicForQuestion } from './closed-router.mjs';
 import { collectGaps } from './lacunas.mjs';
 import { buildServer } from './server.mjs';
 
-const root = new URL('../', import.meta.url).pathname;
+const root = await mkdtemp(join(tmpdir(), 'm540-catalog-'));
+const docs = join(root, 'content/docs');
+await mkdir(docs, { recursive: true });
+await writeFile(join(docs, 'reconectar-canal-qr.mdx'),
+  '---\ntitle: "Como reconectar canal?"\nguide:\n  guideId: reconectar-canal-qr\n---\n');
 const file = join(await mkdtemp(join(tmpdir(), 'm540-gaps-')), 'events.jsonl');
 const now = Date.now();
 const base = { origin: 'faq', durationMs: 20, result: 'partial', path: '/assistente', issue: 'usage' };

@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import actions from '../architecture/product-actions.json' with { type: 'json' };
 import guideIds from '../architecture/guide-ids.json' with { type: 'json' };
-import { publishedGuideCatalog } from './closed-router.mjs';
-import { actionForQuestion, PROCEDURE_ACTIONS } from './gap-classification.mjs';
+import { PROCEDURE_ACTIONS } from './gap-classification.mjs';
+import { publishedCoverage } from './published-coverage.mjs';
 import { pruneSessionEvents } from './session-events.mjs';
 
 export const MIN_GAP_SESSIONS = 3;
@@ -32,10 +32,6 @@ function entry(map, key, sessionId) {
   map.get(key).add(sessionId);
 }
 const pair = (topic, action) => JSON.stringify([topic, action]);
-const guideActions = (guide) => {
-  const action = actionForQuestion(guide.question);
-  return action ? guide.actionIds.map((topic) => pair(topic, action)) : [];
-};
 
 /** Read only: grouped counts and closed-vocabulary proposals, never event identity or text. */
 export async function collectGaps(root, file, { now = Date.now() } = {}) {
@@ -59,22 +55,25 @@ export async function collectGaps(root, file, { now = Date.now() } = {}) {
       entry(documentable, pair(topic, event.action), event.sessionId);
     }
   }
-  const catalog = await publishedGuideCatalog(root);
+  const catalog = await publishedCoverage(root);
   const proposals = [...documentable].filter(([, sessions]) => sessions.size >= MIN_GAP_SESSIONS).map(([key, sessions]) => {
     const [topic, action] = JSON.parse(key);
-    const matches = catalog.filter((guide) => guideActions(guide).includes(key));
+    const matches = catalog.filter((page) => page.keys.includes(key));
     if (matches.length > 1) {
       for (const sessionId of sessions) entry(review, pair(topic, 'mais de um guia — revisão humana'), sessionId);
       return null;
     }
-    const guideId = matches[0]?.guideId;
-    const target = guideId ?? (catalog.some((guide) => guide.guideId === canonicalGuides[topic]) ? undefined : canonicalGuides[topic]);
+    const guideId = matches[0]?.kind === 'guide' ? matches[0].pageId : undefined;
+    const pageId = matches[0]?.kind === 'article' ? matches[0].pageId : undefined;
+    const target = guideId ?? (catalog.some((page) => page.kind === 'guide' && page.pageId === canonicalGuides[topic])
+      ? undefined : canonicalGuides[topic]);
     const registered = target && knownGuides.has(target);
     const { label } = actions[topic];
     return {
-      topic, action, sessions: sessions.size, proposal: guideId ? 'atualizar' : 'criar',
+      topic, action, sessions: sessions.size, proposal: matches.length ? 'atualizar' : 'criar',
       ...(guideId ? { guideId } : {}),
-      ...(registered ? { criar_guia: { guideId: target, topic: `${action} — ${label}`, module: topic,
+      ...(pageId ? { pageId } : {}),
+      ...(pageId ? {} : registered ? { criar_guia: { guideId: target, topic: `${action} — ${label}`, module: topic,
         description: guideId ? `Revisar o guia publicado sobre ${action} em ${label}.` : `Criar um guia público sobre ${action} em ${label}.` } }
         : { prerequisite: 'Registrar um guideId canônico antes de chamar criar_guia.' }),
     };
