@@ -75,9 +75,18 @@ export async function answerGuide(root, question, state, options = {}) {
   const context = sanitizeWidgetContext(options.widgetContext);
   const guide = source?.guide;
   const current = guide?.steps.find((step) => step.stepId === state.stepId);
+  const safeStep = current ?? guide?.steps.find((step) => step.stepId === guide.initialStepId);
+  const safeGuide = source && safeStep
+    ? { guideId: guide.guideId, stepId: safeStep.stepId, version: guide.version, mode: guide.mode }
+    : { guideId: state.guideId, stepId: state.stepId, version: state.version, mode: state.mode };
+  const safe = { answer: source
+    ? 'Não consegui continuar este guia. Você pode recomeçar ou falar com uma pessoa.'
+    : 'Este guia não está publicado. Consulte a Central de Ajuda ou fale com uma pessoa.',
+    steps: [], sources: source ? [] : [{ title: 'Central de Ajuda', path: '/docs' }],
+    suggestions: source ? ['Recomeçar', 'Falar com uma pessoa'] : ['Falar com uma pessoa'],
+    resolution: 'not_found', found: false, guide: safeGuide };
   if (command === 'recomecar') {
-    if (!source) return { answer: 'Este guia não está mais disponível. Fale com uma pessoa.', steps: [],
-      suggestions: ['Falar com uma pessoa'], resolution: 'not_found', found: false };
+    if (!source) return safe;
     const initial = guide.steps.find((step) => step.stepId === guide.initialStepId);
     return reply(source, initial, 'Vamos recomeçar pelo primeiro passo.');
   }
@@ -86,22 +95,16 @@ export async function answerGuide(root, question, state, options = {}) {
     const diagnosis = diagnoseState(subject, context);
     const escalation = escalationFor(subject, diagnosis, context, []);
     escalation.attempts = failure(command) ? ['documented_guide', 'reported_stuck'] : ['documented_guide'];
-    if (source && current) {
-      escalation.guideId = guide.guideId;
-      escalation.stepId = current.stepId;
-    }
+    escalation.guideId = safeGuide.guideId;
+    escalation.stepId = safeGuide.stepId;
     const answer = 'Vou passar seu caso a uma pessoa com o guia e o passo em que você parou.';
     if (!source || !current || state.version !== guide.version || state.mode !== guide.mode) {
-      return { answer, steps: [], suggestions: [], resolution: 'partial', found: false, diagnosis, escalation };
+      return { answer, steps: [], suggestions: [], resolution: 'partial', found: false, guide: safeGuide, diagnosis, escalation };
     }
     return reply(source, current, answer, {
       steps: [], suggestions: [], resolution: 'partial', diagnosis, escalation,
     });
   }
-  const safeStep = current ?? guide?.steps.find((step) => step.stepId === guide.initialStepId);
-  const safe = { answer: 'Não consegui continuar este guia. Você pode recomeçar ou falar com uma pessoa.', steps: [],
-    suggestions: ['Recomeçar', 'Falar com uma pessoa'], resolution: 'not_found', found: false,
-    ...(source && safeStep ? { guide: { guideId: guide.guideId, stepId: safeStep.stepId, version: guide.version, mode: guide.mode } } : {}) };
   if (!source || !current || state.version !== guide.version || state.mode !== guide.mode) return safe;
   const path = guideStatePath(state.stateToken, guide, current.stepId);
   const tokenValid = Boolean(path);

@@ -9,6 +9,7 @@
     "types:check": "next typegen && tsc --noEmit",
     "lint": "eslint",
     "qa:ui": "node scripts/ui-smoke.mjs",
+    "qa:guide": "node scripts/guide-browser-journey.mjs",
     "qa:visual": "node scripts/visual-fidelity.mjs",
     "content:migrate": "node scripts/migrate-content.mjs && node scripts/normalize-content.mjs",
     "content:normalize": "node scripts/normalize-content.mjs",

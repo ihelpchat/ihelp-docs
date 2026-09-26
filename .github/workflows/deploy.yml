@@ -46,6 +46,13 @@ jobs:
         working-directory: pilot
         env:
           NEXT_PUBLIC_BASE_PATH: /ihelp-docs
+          NEXT_PUBLIC_ASSISTANT_URL: http://127.0.0.1:3100/assistant
+      - name: Check guide journey in Chrome
+        run: npm run qa:guide
+        working-directory: pilot
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          NEXT_PUBLIC_BASE_PATH: /ihelp-docs
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

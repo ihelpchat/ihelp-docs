@@ -87,13 +87,13 @@ function MediaGuide({ reply, openMedia, setOpenMedia }: {
 }
 
 function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, { role: 'ai' }>; last: boolean; compact: boolean }) {
-  const { feedback, rate, ask, busy, closeDrawer } = useAssistant();
+  const { feedback, rate, askRequest, requestOptions, busy, closeDrawer } = useAssistant();
   const { copied, copy } = useCopy();
   const [openMedia, setOpenMedia] = useState<string | null>(null);
   const { reply } = message;
   const rating = feedback[message.id];
   const paragraphs = reply.answer.split(/\n{2,}/).map((text) => text.trim()).filter(Boolean);
-  const clickables = clickablesFor(reply, { supportUrl, productActionUrl });
+  const clickables = clickablesFor(reply, { supportUrl, productActionUrl, requestOptions });
   const support = clickables.find((item) => item.slot === 'support');
   const followups = clickables.filter((item) => item.kind === 'request');
 
@@ -196,7 +196,7 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
           <div className="ih-ai-follow">
             <p>Posso continuar com você:</p>
             {followups.map((item) => (
-              <button type="button" key={item.label} onClick={() => ask(item.request.question)}>
+              <button type="button" key={item.label} onClick={() => askRequest(item.request)}>
                 {compact ? null : <ArrowRight aria-hidden="true" />}
                 {item.label}
               </button>

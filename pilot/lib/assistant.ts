@@ -254,7 +254,8 @@ export function clickablesFor(reply: AssistantReply, options: {
   });
   reply.suggestions.forEach((label) => request(label, 'suggestion'));
   if (reply.guide && reply.resolution === 'in_progress') {
-    request('Voltar', 'navigation');
+    // O primeiro byte do token codifica o primeiro passo; caminho com um só byte não tem volta.
+    if (/^[A-Za-z0-9_-]{3,54}\.[A-Za-z0-9_-]{43}$/.test(reply.guide.stateToken ?? '')) request('Voltar', 'navigation');
     request('Recomeçar', 'navigation');
   }
   if (reply.resolution !== 'complete') result.push({ kind: 'link', slot: 'support', label: 'Falar com o atendimento',
