@@ -139,6 +139,11 @@
             "app"
           ]
         },
+        "companyId": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
         "history": {
           "maxItems": 6,
           "type": "array",
@@ -411,7 +416,23 @@
       "required": [
         "question"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "origin": {
+            "not": {
+              "const": "app"
+            }
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "companyId"
+          ]
+        }
+      }
     },
     "AssistantReplyV1": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -972,6 +993,10 @@
         },
         "model": {
           "type": "string"
+        },
+        "eventId": {
+          "type": "string",
+          "pattern": "^event-[a-f0-9]{16}$"
         }
       },
       "required": [
