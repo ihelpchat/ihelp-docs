@@ -37,7 +37,14 @@ for (const [question, id] of guideCases) {
   assert.deepEqual(await routeMessage(question, { catalog, client: provider(id), budget }),
     { kind: 'guide', guideId: id }, question);
 }
-for (const question of ['Como cultivar tomates?', 'Quanto vou pagar quando o teste acabar?']) {
+// Personas 2 e 5 e os temas do top-support-intents sem guia canônico nesta lista.
+for (const question of [
+  'Como cultivar tomates?', 'Quanto vou pagar quando o teste acabar?',
+  'Mandar a promoção para todos os clientes', 'Como consultar cobrança e plano?',
+  'Como comparar API Oficial e QR?', 'Como criar uma campanha?',
+  'Como configurar permissões e departamentos?', 'Como usar templates?',
+  'Como enviar arquivos?', 'Como criar pipeline no CRM?',
+]) {
   for (const id of byId.keys()) {
     assert.notEqual((await routeMessage(question, { catalog, client: provider(id), budget })).kind, 'guide',
       `${question}: não aceitar guia errado ${id}`);
@@ -55,9 +62,13 @@ for (const question of [
   assert.ok(reply.escalation || reply.actions?.some((action) => action.destination === 'support'),
     `${question}: handoff mesmo sem provider`);
 }
-for (const question of ['Não quero falar com ninguém', 'Não preciso de atendimento', 'Quero configurar suporte no robô']) {
+for (const question of ['Não quero falar com ninguém', 'Não preciso de atendimento',
+  'Quero configurar suporte no robô', 'Quero colocar uma pessoa da equipe no departamento dela']) {
   assert.equal(requestsHuman(question), false, question);
 }
+const userGuide = await answerQuestion(root, 'Quero colocar uma pessoa da equipe no departamento dela',
+  { client: provider('usuario-acesso'), budget });
+assert.equal(userGuide.guide?.guideId, 'usuario-acesso', 'cadastro de pessoa não é pedido de handoff');
 
 const locked = [
   'content/docs/docs/principais-motivos-de-suporte/reconectar-canal-qr.mdx',

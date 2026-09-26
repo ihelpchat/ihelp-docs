@@ -9,7 +9,22 @@ import { diagnoseState, escalationFor, sanitizeWidgetContext } from './real-stat
 import { guideStateToken, guideStatePath } from './opaque-id.mjs';
 
 const plain = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
-export const requestsHuman = (value) => /\b(?:falar|conversar) com (?:uma? )?(?:pessoa|atendente|humano|alguem)|\b(?:quero|preciso de) (?:um )?(?:atendente|atendimento|humano|suporte)|\b(?:suporte humano|me liga|chamar o suporte)\b|^(?:suporte|atendimento)$/.test(plain(value));
+export function requestsHuman(value) {
+  const text = plain(value);
+  if (/^(?:atendente|humano|suporte|atendimento|pessoa|suporte humano)$/u.test(text) || /\bme liga\b/u.test(text)) return true;
+  const tokens = text.match(/[a-z]+/gu) ?? [];
+  const contact = new Set(['falar', 'conversar', 'chamar', 'ligar', 'preciso', 'quero', 'passar', 'passa', 'passe', 'colocar', 'coloca', 'coloque']);
+  const people = new Set(['suporte', 'atendimento', 'atendente', 'pessoa', 'humano', 'alguem', 'gente', 'equipe', 'tecnico']);
+  for (let index = 0; index < tokens.length; index++) {
+    if (!contact.has(tokens[index])) continue;
+    if (['nao', 'nem'].includes(tokens[index - 1]) || ['nao', 'nem'].includes(tokens[index - 2])) continue;
+    if (['colocar', 'coloca', 'coloque'].includes(tokens[index])
+      && !(tokens.slice(Math.max(0, index - 2), index).includes('me') && tokens.slice(index + 1, index + 3).includes('com'))) continue;
+    if (tokens.slice(Math.max(0, index - 4), index + 5).some((token) => people.has(token))
+      && !tokens.slice(index + 1, index + 5).some((token) => ['configurar', 'criar', 'automatizar', 'cadastrar', 'adicionar', 'colocar'].includes(token))) return true;
+  }
+  return false;
+}
 const failure = (value) => /(?:deu certo\? nao|nao deu certo|nao funcionou)/.test(value);
 const guideIds = new Set(canonicalGuideIds);
 

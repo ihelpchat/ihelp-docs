@@ -8,12 +8,17 @@ import { assistantRouterModel } from './env-compat.mjs';
 
 const normalize = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 const words = (value) => normalize(value).match(/[a-z0-9]+/g) ?? [];
-const ignored = new Set(['a', 'ao', 'as', 'como', 'criar', 'fazer', 'configurar', 'usar', 'enviar', 'abrir', 'quero', 'para', 'uma', 'com', 'pelo', 'meu', 'que', 'isso', 'guia', 'ihelp', 'no', 'de', 'do', 'da', 'em', 'o', 'e']);
-const meaningful = (value) => words(value).map((word) => word.replace(/s$/u, '')).filter((word) => word.length > 3 && !ignored.has(word));
-const publicTerms = (item) => [item.title, item.question, ...(item.aliases ?? []), ...(item.keywords ?? [])].join(' ');
+const ignored = new Set(['a', 'ao', 'as', 'como', 'criar', 'fazer', 'configurar', 'usar', 'enviar', 'abrir', 'quero', 'para', 'uma', 'com', 'pelo', 'meu', 'que', 'isso', 'guia', 'ihelp', 'no', 'de', 'do', 'da', 'em', 'o', 'e', 'quando', 'esta', 'estou', 'pode', 'preciso', 'qual', 'onde']);
+const stem = (word) => word.replace(/s$/u, '').replace(/(?:ou|ar|er|ir)$/u, '');
+const meaningful = (value) => words(value).filter((word) => word.length >= 3 && !ignored.has(word))
+  .map(stem).filter((word) => word.length >= 3);
 const supportedByQuestion = (question, item) => {
-  const available = new Set(meaningful(publicTerms(item)));
-  return meaningful(question).some((word) => available.has(word));
+  const asked = new Set(meaningful(question));
+  return [item.title, item.question, ...(item.aliases ?? []), ...(item.keywords ?? [])]
+    .some((phrase) => {
+      const terms = meaningful(phrase);
+      return terms.length > 0 && terms.every((word) => asked.has(word));
+    });
 };
 
 /** Only MDX containing a valid, published guide may enter the classifier's choices. */
