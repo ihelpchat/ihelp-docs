@@ -9,10 +9,31 @@ import { assistantRouterModel } from './env-compat.mjs';
 const normalize = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 const words = (value) => normalize(value).match(/[a-z0-9]+/g) ?? [];
 const ignored = new Set(['a', 'ao', 'as', 'como', 'criar', 'fazer', 'configurar', 'usar', 'enviar', 'abrir', 'quero', 'para', 'uma', 'com', 'pelo', 'meu', 'que', 'isso', 'guia', 'ihelp', 'no', 'de', 'do', 'da', 'em', 'o', 'e', 'quando', 'esta', 'estou', 'pode', 'preciso', 'qual', 'onde']);
-const stem = (word) => word.replace(/s$/u, '').replace(/(?:ou|ar|er|ir)$/u, '');
+export const stem = (word) => word.replace(/s$/u, '').replace(/(?:ou|ar|er|ir)$/u, '');
 const meaningful = (value) => words(value).filter((word) => word.length >= 3 && !ignored.has(word))
   .map(stem).filter((word) => word.length >= 3);
 const actions = JSON.parse(await readFile(new URL('../architecture/product-actions.json', import.meta.url), 'utf8'));
+const topicTerms = {
+  'importar-contatos': /\b(?:contatos?|importar|planilha)\b/u,
+  'abrir-robos': /\b(?:robo|robos|chatbot)\b/u,
+  'abrir-usuarios': /\b(?:usuario|usuarios|equipe|secretaria)\b/u,
+  'abrir-canais': /\b(?:canal|canais|qr|conectar|reconectar)\b/u,
+  'abrir-campanhas': /\b(?:campanha|campanhas|disparo)\b/u,
+  'abrir-departamentos': /\b(?:departamento|departamentos|recado fora do horario)\b/u,
+  'abrir-atendimento': /\b(?:atendimento|anexo|anexos|arquivo|arquivos)\b/u,
+  'abrir-crm': /\b(?:crm|pipeline)\b/u,
+};
+
+/** Project a question onto the published action vocabulary; never persist the question. */
+export function topicForQuestion(question) {
+  const normalized = normalize(question);
+  const matches = Object.entries(topicTerms).filter(([topic, pattern]) => {
+    const match = normalized.match(pattern);
+    return Object.hasOwn(actions, topic) && match
+      && !new RegExp(`\\b(?:nao|nem) (?:e |quero |sobre )?(?:uma? )?${match[0]}\\b`, 'u').test(normalized);
+  });
+  return matches.length === 1 ? matches[0][0] : undefined;
+}
 const extraFeatures = JSON.parse(await readFile(new URL('./competing-features.json', import.meta.url), 'utf8'));
 const featureTerms = new Set([
   ...Object.values(actions).flatMap(({ label }) => words(label)
@@ -78,6 +99,7 @@ export async function publishedGuideCatalog(root) {
       let guide;
       try { guide = parseGuide(metadata.guide); } catch { continue; }
       catalog.push({ guideId: guide.guideId, initialStepId: guide.initialStepId, version: guide.version, mode: guide.mode,
+        actionIds: [...new Set(guide.steps.map(({ actionId }) => actionId).filter(Boolean))],
         title: String(metadata.title ?? ''),
         question: String(metadata.assistantQuestion ?? ''), description: String(metadata.description ?? ''),
         aliases: Array.isArray(metadata.assistantAliases) ? metadata.assistantAliases.filter((value) => typeof value === 'string') : [],
