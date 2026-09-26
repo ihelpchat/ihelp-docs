@@ -205,6 +205,15 @@ test('página alinhada aos fatos não cria pendência de parâmetro', async () =
   assert.deepEqual(result.pending, []);
 });
 
+test('pacote rejeita artigo sem Param para parâmetro de rota factual', async () => {
+  const page = { ...examples[0], path: prose.path, components: ['CodeTabs', 'Response'],
+    frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts/details/{IdRef}' } };
+  const result = await generate((value) => value, { ...context, apiExamples: [page] });
+  assert.equal(result.status, 'needs_information');
+  assert.deepEqual(result.articles, []);
+  assert.match(result.questions.join(' '), /parâmetros renderizados sem correspondência com o fato/i);
+});
+
 test('query e body usam nomes e valores tipados dos fatos', () => {
   const fact = { ...endpoint, verb: 'POST', route: '/api/v2/contacts',
     parameters: [{ name: 'page', type: 'int', in: 'query' }, { name: 'name', type: 'string', in: 'body' }] };
