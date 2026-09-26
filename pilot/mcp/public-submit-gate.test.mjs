@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
 import { buildServer } from './server.mjs';
-import { submitArticle, submitContentPackage } from './content-service.mjs';
+import { renderArticle, submitArticle, submitContentPackage } from './content-service.mjs';
+import { readArticle } from './editorial-standard.mjs';
+import { assertPublicSubmit } from './public-submit-gate.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'm537-public-gate-'));
 const body = 'Abra Contatos no menu lateral. Confira a lista antes de continuar. Selecione a opção de importar. Revise o arquivo escolhido e confirme as colunas. Corrija as linhas inválidas antes de concluir. Aguarde o resultado aparecer na tela. Pesquise um contato recém cadastrado para confirmar o sucesso. Se o contato não aparecer, revise o número e repita apenas a linha corrigida. Este procedimento mantém os demais contatos já cadastrados na conta.';
@@ -59,6 +61,10 @@ try {
   const valid = await submitContentPackage(root, [article], 'pull_request', 'user:tester');
   assert.equal(valid.status, 'pull_request', 'pacote público válido passa');
   assert.ok(calls.some(({ path, method }) => path.endsWith('/git/refs') && method === 'POST'));
+
+  const guide = await readArticle(new URL('../', import.meta.url).pathname, 'docs/principais-motivos-de-suporte/reconectar-canal-qr');
+  const manual = await assertPublicSubmit(root, [{ article: guide, rendered: renderArticle(guide) }]);
+  assert.deepEqual(manual, { reviewRequired: true, proofStatus: 'manual_required' }, 'prova manual pendente não aprova guia automaticamente');
 } finally {
   McpServer.prototype.registerTool = originalRegister;
   globalThis.fetch = oldFetch;

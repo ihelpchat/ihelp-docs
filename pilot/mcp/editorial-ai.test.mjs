@@ -8,6 +8,8 @@ const testRoot = await mkdtemp(join(tmpdir(), 'ihelp-docs-ai-'));
 await cp(join(projectRoot, 'architecture'), join(testRoot, 'architecture'), { recursive: true });
 await cp(join(projectRoot, 'content'), join(testRoot, 'content'), { recursive: true });
 await cp(join(projectRoot, 'mcp'), join(testRoot, 'mcp'), { recursive: true });
+await cp(join(projectRoot, 'lib'), join(testRoot, 'lib'), { recursive: true });
+await cp(join(projectRoot, 'product-map'), join(testRoot, 'product-map'), { recursive: true });
 await symlink(join(projectRoot, 'node_modules'), join(testRoot, 'node_modules'), 'dir');
 const catalogPath = join(testRoot, 'architecture/product-actions.json');
 const fixtureCatalog = JSON.parse(await readFile(catalogPath, 'utf8'));

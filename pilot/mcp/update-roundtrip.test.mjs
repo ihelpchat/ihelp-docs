@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
@@ -24,6 +24,10 @@ for (const path of paths) {
   const file = join(root, 'content/docs', `${path}.mdx`);
   await mkdir(join(file, '..'), { recursive: true });
   await writeFile(file, await readFile(join(sourceRoot, 'content/docs', `${path}.mdx`)));
+}
+for (const image of ['f38mHVPtRejfPf5R3kAO.png', 'ku0HJRsBFedSfM5IQbu3.png']) {
+  await mkdir(join(root, 'public/img/help'), { recursive: true });
+  await copyFile(join(sourceRoot, 'public/img/help', image), join(root, 'public/img/help', image));
 }
 const mock = join(root, 'github-mock.mjs');
 await writeFile(mock, `import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -68,7 +72,7 @@ try {
     const originalYaml = parseDocument(originalMdx.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '').toJS();
     if (path.includes('reconectar-canal-qr')) {
       original.assistantIntent = 'reconnect_qr';
-      original.assistantSuggestions = ['Abra CRM | Pipeline: "visão" #1', 'Como falar com uma pessoa?'];
+      original.assistantSuggestions = [...original.assistantSuggestions];
       original.productActions = [{ id: 'abrir-canais', label: 'Abrir a tela Canais', route: '/configuracoes/channel' }];
       originalYaml.assistantIntent = original.assistantIntent;
       originalYaml.assistantSuggestions = original.assistantSuggestions;
@@ -105,10 +109,7 @@ try {
   }
   const guidePath = paths[0];
   const guided = await readArticle(root, guidePath);
-  guided.guide = {
-    schemaVersion: 1, guideId: 'reconectar-canal-qr', version: 1, mode: 'real', initialStepId: 'inicio',
-    steps: [{ stepId: 'inicio', text: 'Abra Canais.', actionId: 'abrir-canais' }],
-  };
+  guided.guide = { ...guided.guide, steps: [...guided.guide.steps] };
   const guidedUpdate = await call('docs_update_article', { ...guided, requestedBy: 'service:roundtrip' });
   assert.equal(guidedUpdate.isError, false, `update com guide: ${guidedUpdate.content[0].text}`);
   const guidedRemote = await readFile(join(root, 'remote/pilot/content/docs', `${guidePath}.mdx`), 'utf8');
