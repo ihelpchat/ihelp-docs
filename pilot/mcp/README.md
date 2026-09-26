@@ -8,6 +8,8 @@ O gate compara essas árvores com `product-map/approved.json`, versionado neste 
 
 O relatório temporário inclui os SHAs, rotas, rótulos, marcadores, permissões e diferenças em relação ao commit anterior de cada produto. Só valores literais que passam pela varredura de dado sensível entram no manifest; expressões dinâmicas viram pendências. Marcador ou rota de ação usada por guia publicado que desaparecer bloqueia o check. O relatório não é publicado como artefato. Para uma transição, atualize e publique a nova versão do guia antes de remover o marcador; para rollback, restaure o marcador no front ou volte a versão do guia por PR revisável.
 
+Para calcular propostas editoriais entre dois snapshots, rode `node scripts/guide-impact.mjs product-map/approved.json novo-report.json impacto.json` em `pilot/`. O índice usa ações dos passos do pacote publicado e referências explícitas `kind`, `key`, `file`, `line` quando disponíveis. O resultado contém apenas propostas `atualizar`, `criar` ou `avisar`; não escreve nos guias. Sem snapshot válido, registra pendência. Rótulos ou permissões sem referência explícita não são atribuídos por aproximação; as fontes arquivo:linha dos guias ainda dependem da etapa editorial M5.21.
+
 ## Dados da Claricia
 
 O `/assistant` remove padrões conhecidos de credenciais, email, CPF e telefone da pergunta e do histórico antes da chamada ao provider. A redaction não detecta nomes nem endereços e não é anonimização total. O `/feedback` guarda voto e caminhos, sem pergunta ou user agent. Caminhos com query ou fragmento são rejeitados.
@@ -15,6 +17,8 @@ O `/assistant` remove padrões conhecidos de credenciais, email, CPF e telefone 
 Eventos de sessão em `SESSION_EVENTS_FILE` (padrão `/tmp/ihelp-docs-session-events.jsonl`) guardam somente `sessionId` opaco, origem (`faq` ou `app`), guia, passo, duração, resultado, caminho local e horário. IDs de sessão e feedback recebidos pelo HTTP são HMAC-SHA256 com `LOG_ID_KEY` e ficam como prefixo do tipo mais 16 hex. Sem `LOG_ID_KEY`, a chave aleatória é gerada ao subir o processo: a correlação nos registros vale só enquanto ele vive; para juntar dias diferentes, Bruno define `LOG_ID_KEY` no Railway. O schema rejeita campos extras e URL com query. `pruneSessionEvents` elimina registros com mais de 30 dias; o serviço chama essa limpeza no primeiro pedido e pelo menos uma vez a cada 24 horas enquanto recebe pedidos. `discardSessionEvents` remove todos os eventos de um `sessionId` opaco solicitado pelo operador. O arquivo padrão em `/tmp` não é persistente entre deploys.
 
 O servidor permite que uma IA consulte a base, valide conteúdo e envie um FAQ/tutorial como draft ou pull request. Ele nunca faz merge ou deploy.
+
+Para gerar conteúdo com grounding de código, configure `PRODUCT_LOCAL_CHECKOUT` e `BACKEND_LOCAL_CHECKOUT` no servidor. O chamador escolhe somente `frontend` ou `backend`; o SHA vem do Git do checkout e não do pedido. A busca lê código fonte rastreado apenas em `src/components`, `src/pages`, `src/features` e `src/routes` no frontend; no backend, apenas em `Controllers`, `Comzada.Application/Controllers` e `ihelp.PublicApi`. Rejeita nomes com `key`, `secret`, `token`, `credential`, `password`, `env` ou `config`, symlinks em qualquer componente do caminho, pastas operacionais e arquivos que contenham qualquer marcador sensível. Limita arquivos, bytes e tempo, e devolve caminho, linha e SHA. Checkout ausente ou alterado mantém plano e pacote em `needs_information`; resposta sem citações verificáveis fica em `needs_evidence`.
 
 ## Ferramentas
 

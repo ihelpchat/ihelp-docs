@@ -5,6 +5,7 @@ import { guideSchema, legacyGuideAliases, schemaVersion } from '../architecture/
 import { frontmatterFields } from '../mcp/article-fields.mjs';
 import { parseArticle } from '../mcp/editorial-standard.mjs';
 import { sensitiveKinds } from '../mcp/sensitive-data.mjs';
+import { parseGuideSources } from './canonical-guides.mjs';
 import productActions from '../architecture/product-actions.json' with { type: 'json' };
 
 const packageVersion = 1;
@@ -59,17 +60,20 @@ async function walk(dir) {
 export async function compileGuidePackage(root) {
   const contentRoot = join(root, 'content/docs');
   const guides = [];
+  const sources = {};
   const ids = new Set();
   for (const file of await walk(contentRoot)) {
     const path = relative(contentRoot, file).replace(/\.mdx$/, '').replace(/\/index$/, '');
     const raw = await readFile(file, 'utf8');
-    const { metadata } = parseArticle(raw, path);
+    const { metadata, body } = parseArticle(raw, path);
     if (metadata.guide === undefined) continue;
     const unknown = Object.keys(metadata).filter((key) => !frontmatterFields.has(key));
     if (unknown.length) throw new Error(`${path}: campo desconhecido: ${unknown.join(', ')}`);
     const guide = guideSchema.parse(metadata.guide);
     if (ids.has(guide.guideId)) throw new Error(`${path}: guideId duplicado: ${guide.guideId}`);
     ids.add(guide.guideId);
+    sources[guide.guideId] = parseGuideSources(body)
+      .filter(({ stepId }) => guide.steps.some((step) => step.stepId === stepId));
     if (typeof metadata.title !== 'string' || typeof metadata.description !== 'string') throw new Error(`${path}: título ou descrição ausente`);
     guides.push({ pathSegments: path.split('/'), title: metadata.title, description: metadata.description,
       ...(metadata.assistantAliases?.length ? { aliases: metadata.assistantAliases } : {}),
@@ -86,7 +90,7 @@ export async function compileGuidePackage(root) {
   };
   validatePublicArtifact(output.catalog, 'catalog');
   validatePublicArtifact(output.app, 'app');
-  return output;
+  return { ...output, sources };
 }
 
 export async function writeGuidePackage(root) {

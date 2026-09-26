@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 const sourcePattern = /\{\/\* fonte: ([a-z0-9-]+) \| (front|back)@([a-f0-9]{12}):([^\s|]+):(\d+) \| alvo: ([^\n]+) \*\/\}/gu;
+export const parseGuideSources = (body) => [...body.matchAll(sourcePattern)]
+  .map(([, stepId, side, sha, file, line, target]) => ({ stepId, side, sha, file, line: Number(line), target: target.trim() }));
 export const approvedGuideSentences = {
   'reconectar-canal-qr': [
     'Volte a Canais e confira se aparece Conectado.',
@@ -81,9 +83,9 @@ export function validateCanonicalGuide(raw, expectedId) {
   const { metadata, body } = parseArticle(raw, `docs/${expectedId}`);
   const guide = guideSchema.parse(metadata.guide);
   if (guide.guideId !== expectedId) throw new Error(`${expectedId}: guideId incorreto`);
-  const sources = [...body.matchAll(sourcePattern)];
+  const sources = parseGuideSources(body);
   const byStep = new Map();
-  for (const [, stepId, , , , , target] of sources) {
+  for (const { stepId, target } of sources) {
     if (byStep.has(stepId)) throw new Error(`${expectedId}: fonte duplicada em ${stepId}`);
     if (!target.trim()) throw new Error(`${expectedId}: alvo vazio em ${stepId}`);
     byStep.set(stepId, target);
