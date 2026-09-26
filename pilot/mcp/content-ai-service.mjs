@@ -177,6 +177,9 @@ function requestText(request, existing, productContext) {
 }
 
 function groundingPending(context) {
+  const missingCitation = context.pending?.filter((item) => item.startsWith('endpoint citado não encontrado')) ?? [];
+  if (missingCitation.length) return { status: 'needs_information', summary: missingCitation.join('; '),
+    questions: missingCitation, articles: [], pending: context.pending };
   if (!context.groundingRequired || (context.code.length && context.code.every(({ available }) => available) && context.matches.length)) return null;
   return {
     status: 'needs_information',
@@ -185,6 +188,12 @@ function groundingPending(context) {
     questions: ['Confirme os checkouts autorizados, seus SHAs e a implementação do tema.'],
     risks: [], suggestedActions: [], articles: [],
   };
+}
+
+export function explicitEndpointsFrom(request) {
+  const text = [request.description, request.details].filter((value) => typeof value === 'string').join('\n');
+  return [...text.matchAll(/\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\/(?:[A-Za-z0-9_{}:?-]+\/)*[A-Za-z0-9_{}:?-]+)/giu)]
+    .map((match) => ({ verb: match[1].toUpperCase(), route: match[2].replace(/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\??\}/gu, '{$1}').replace(/\/+$/u, '') }));
 }
 
 async function related(root, request) {
@@ -205,7 +214,8 @@ async function related(root, request) {
 export async function planContent(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
-  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions,
+    explicitEndpoints: explicitEndpointsFrom(request), requireLocal: true }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
   const pending = groundingPending(productContext);
   if (pending) return pending;
   const response = await modelResponse(options, baseRequest('plano_documentacao', PLAN_SCHEMA, [
@@ -232,7 +242,8 @@ export async function planContent(root, request, options = {}) {
 export async function generateContentPackage(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
-  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions,
+    explicitEndpoints: explicitEndpointsFrom(request), requireLocal: true }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
   const withPending = (result) => productContext.pending?.length ? { ...result, pending: productContext.pending } : result;
   const pending = groundingPending(productContext);
   if (pending) return pending;

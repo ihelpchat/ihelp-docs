@@ -102,7 +102,7 @@ function signatureParameters(items, route, dtoSources, file, source) {
     if (!name || !type) return [];
     const location = words.some((item) => item.value === 'FromBody') ? 'body'
       : words.some((item) => item.value === 'FromQuery') ? 'query'
-        : words.some((item) => item.value === 'FromRoute') || new RegExp(`\\{${name}\\??\\}`, 'iu').test(route) ? 'route' : 'query';
+        : words.some((item) => item.value === 'FromRoute') || new RegExp(`\\{${name}(?::[^{}]+)?\\??\\}`, 'iu').test(route) ? 'route' : 'query';
     const fields = dtoFields(dtoSources, type);
     return fields.length ? fields.map((field) => ({ ...field, in: location, dtoType: type }))
       : [{ name: camel(name), type, in: location, source: `${file}:${lineOf(source, words.at(-1).at)}` }];
@@ -180,8 +180,11 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       const reference = arguments.length > 2;
       const version = stringArg(attr(controller.attrs, 'ApiVersion')) ?? '';
       const route = reference
-        ? `/${[base, action].filter(Boolean).join('/').replace(/\{version:apiVersion\}/gu, version).replace(/\/\{\w+\?\}/gu, '').replace(/\/+$/u, '')}`
+        ? `/${[base, action].filter(Boolean).join('/').replace(/\{version:apiVersion\}/gu, version)
+          .replace(/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\??\}/gu, '{$1}').replace(/\/+$/u, '')}`
         : normalizeRoute([base, action].filter(Boolean).join('/'));
+      const optionalAlias = reference && /(?:^|\/)\{[A-Za-z][A-Za-z0-9_]*(?::[^{}]+)?\?\}$/u.test(action)
+        ? route.replace(/\/\{[A-Za-z][A-Za-z0-9_]*\}$/u, '') : null;
       let end = i + 1, nesting = 1;
       while (end < t.length && nesting) { if (t[end].value === '(') nesting++; if (t[end].value === ')') nesting--; end++; }
       const location = `${file}:${lineOf(source, t[i - 1].at)}`;
@@ -203,7 +206,7 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       const responseFields = fields.length ? fields : null;
       const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : [];
       endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
-        ...(reference ? { parameters, responseFields, responseType: resultType, pending: responsePending, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
+        ...(reference ? { parameters, responseFields, responseType: resultType, pending: responsePending, optionalAlias, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
           routeSource, actionRouteSource: verbSource, verbSource, authorizationSource, authorization: policy } : {}) });
       pending = [];
     }
