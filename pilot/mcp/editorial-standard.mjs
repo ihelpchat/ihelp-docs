@@ -4,6 +4,11 @@ import { conversationalIssues, parseAssistantSuggestions } from './conversationa
 import { parseDocument, stringify } from 'yaml';
 import { frontmatterFields } from './article-fields.mjs';
 import { sensitiveKinds } from './sensitive-data.mjs';
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import remarkMdx from 'remark-mdx';
+import GithubSlugger from 'github-slugger';
+import approvedMap from '../product-map/approved.json' with { type: 'json' };
 
 const GENERIC_DESCRIPTION = /^(?:Entenda .+ e veja como usar esse recurso no iHelp\.|Referência técnica da API do iHelp para .+\.)$/i;
 const LEGACY_TUTORIAL = /\n+(?:(?:\*\*\*|---)\n+\n+)?## Tutorial Guiado\n+\n+Prefere seguir o passo a passo interativo\?[^\n]*(?:\n|$)/gi;
@@ -227,32 +232,151 @@ export async function auditContent(root) {
     records.push({ path, raw, issues: auditArticle(raw, path) });
   }
 
-  const routes = new Set(['/']);
-  for (const { path } of records) {
-    routes.add(`/${path}`);
-    if (path.endsWith('/index')) routes.add(`/${path.slice(0, -'/index'.length)}`);
-  }
+  const routes = contentRoutes(records.map(({ path }) => path));
   for (const record of records) {
-    const targets = [...record.raw.matchAll(/(?:!?)\[[^\]]*\]\(([^)]+)\)|<(?:VideoEmbed|TutorialCard)[^>]+(?:url|embedUrl)="([^"]+)"/g)]
-      .map((match) => (match[1] ?? match[2]).trim().split(/\s+["']/)[0])
-      .filter((target) => !/^(?:https?:|mailto:|tel:|#)/.test(target));
-    for (const target of targets) {
-      const rawPath = target.split(/[?#]/)[0].replace(/\.mdx?$/, '');
-      const pathname = (rawPath.startsWith('/') ? rawPath : normalize(join('/', dirname(record.path), rawPath))).replace(/\/$/, '') || '/';
-      if (pathname.startsWith('/img/') || pathname.startsWith('/videos/')) {
-        try {
-          await readFile(join(root, 'public', decodeURIComponent(pathname.slice(1))));
-        } catch {
-          record.issues.push(`asset inexistente: ${pathname}`);
-        }
-      } else if (/^\/(?:docs|api|blog|tutoriais)(?:\/|$)/.test(pathname) && !routes.has(pathname)) {
-        record.issues.push(`link interno inexistente: ${pathname}`);
-      }
-    }
+    record.issues.push(...await internalLinkIssues(root, record.path, record.raw, routes));
   }
 
   const articles = records.filter((record) => record.issues.length).map(({ path, issues }) => ({ path, issues }));
   return { total: files.length, valid: files.length - articles.length, invalid: articles.length, articles };
+}
+
+export function contentRoutes(paths) {
+  const routes = new Set(['/', ...approvedMap.manifest.routes.map(({ path }) => path)]);
+  for (const path of paths) {
+    routes.add(`/${path}`);
+    if (path.endsWith('/index')) routes.add(`/${path.slice(0, -'/index'.length)}`);
+  }
+  return routes;
+}
+
+export async function publishedContent(root) {
+  const contentRoot = join(root, 'content/docs');
+  const publishedRoot = new URL('../content/docs/', import.meta.url).pathname.replace(/\/$/u, '');
+  const pages = new Map();
+  for (const directory of new Set([publishedRoot, contentRoot])) {
+    for (const file of await walk(directory).catch((error) => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    })) {
+      pages.set(relative(directory, file).replace(/\.mdx$/u, ''), await readFile(file, 'utf8'));
+    }
+  }
+  return pages;
+}
+
+// Usado pelo audit do conteúdo publicado e pelo gate antes de qualquer escrita.
+export async function internalLinkIssues(root, path, raw, routes, content) {
+  let tree;
+  try { tree = parseMdx(raw); } catch { return ['MDX inválido']; }
+  const { targets, issues } = mdxTargets(tree);
+  if (!targets.length) return issues;
+  if (!routes) {
+    const contentRoot = join(root, 'content/docs');
+    const localFiles = await walk(contentRoot).catch((error) => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    });
+    routes = contentRoutes(localFiles.map((file) => relative(contentRoot, file).replace(/\.mdx$/, '')));
+    // Testes de submit usam raízes temporárias com só parte do conteúdo publicado.
+    const publishedRoot = new URL('../content/docs/', import.meta.url).pathname.replace(/\/$/u, '');
+    if (contentRoot !== publishedRoot) {
+      for (const route of contentRoutes((await walk(publishedRoot)).map((file) => relative(publishedRoot, file).replace(/\.mdx$/, '')))) routes.add(route);
+    }
+    routes.add(`/${path}`);
+    if (path.endsWith('/index')) routes.add(`/${path.slice(0, -'/index'.length)}`);
+  }
+  for (const target of targets) {
+    const rawPath = target.split(/[?#]/)[0].replace(/\.mdx?$/, '') || `/${path}`;
+    const pathname = (rawPath.startsWith('/') ? rawPath : normalize(join('/', dirname(path), rawPath))).replace(/\/$/, '') || '/';
+    if (pathname.startsWith('/img/') || pathname.startsWith('/videos/')) {
+      try {
+        await readFile(join(root, 'public', decodeURIComponent(pathname.slice(1))));
+      } catch {
+        issues.push(`asset inexistente: ${pathname}`);
+      }
+    } else if (!routes.has(pathname)) {
+      issues.push(`link interno inexistente: ${pathname}`);
+    } else if (target.includes('#') && target.split('#')[1] && /^\/(?:docs|api|blog|tutoriais)(?:\/|$)/u.test(pathname)) {
+      let targetRaw = raw;
+      if (pathname !== `/${path}`) {
+        targetRaw = '';
+        for (const suffix of [`${pathname.slice(1)}.mdx`, `${pathname.slice(1)}/index.mdx`]) {
+          targetRaw = content?.get(suffix.replace(/\.mdx$/u, '')) ?? await readFile(join(root, 'content/docs', suffix), 'utf8').catch(async () =>
+            readFile(new URL(`../content/docs/${suffix}`, import.meta.url), 'utf8').catch(() => ''));
+          if (targetRaw) break;
+        }
+      }
+      const slugger = new GithubSlugger();
+      const anchors = new Set();
+      visit(pathname === `/${path}` ? tree : parseMdx(targetRaw), (node) => {
+        if (node.type === 'heading') anchors.add(slugger.slug(plainText(node)));
+      });
+      if (!anchors.has(decodeURIComponent(target.split('#')[1]))) issues.push(`âncora inexistente: ${target}`);
+    }
+  }
+  return issues;
+}
+
+const mdxParser = unified().use(remarkParse).use(remarkMdx);
+export const parseMdx = (raw) => mdxParser.parse(parseArticle(raw, '').body);
+export function visit(node, callback) {
+  callback(node);
+  for (const child of node.children ?? []) visit(child, callback);
+}
+export function plainText(node) {
+  return node.value ?? (node.children ?? []).map(plainText).join('');
+}
+const URL_POSITION = /(?:href|src|url|link|to|route|path|action|poster)$/iu;
+const EXTERNAL_SCHEME = /^(?:https:|mailto:|tel:)/iu;
+const ANY_SCHEME = /^[a-z][a-z0-9+.-]*:/iu;
+
+function collectTarget(value, name, targets, issues) {
+  if (!URL_POSITION.test(name ?? '') && (/\s/u.test(value) || !value.includes('/'))) return;
+  if (EXTERNAL_SCHEME.test(value)) return;
+  if (ANY_SCHEME.test(value)) {
+    issues.push(`esquema de URL não permitido: ${value}`);
+    return;
+  }
+  targets.push(value);
+}
+
+function dataExpression(node, targets, issues, name) {
+  if (!node) return false;
+  if (node.type === 'Literal') {
+    if (typeof node.value === 'string') collectTarget(node.value, name, targets, issues);
+    return node.value === null || ['string', 'number', 'boolean'].includes(typeof node.value);
+  }
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0 && node.quasis.length === 1)
+    return dataExpression({ type: 'Literal', value: node.quasis[0].value.cooked }, targets, issues, name);
+  if (node.type === 'UnaryExpression' && ['-', '+'].includes(node.operator)
+    && node.argument?.type === 'Literal' && typeof node.argument.value === 'number') return true;
+  if (node.type === 'ArrayExpression') return node.elements.every((element) => dataExpression(element, targets, issues, name));
+  if (node.type === 'ObjectExpression') return node.properties.every((property) =>
+    property.type === 'Property' && property.kind === 'init' && !property.method && !property.shorthand
+    && !property.computed && (property.key?.type === 'Identifier' || dataExpression(property.key, targets, issues))
+    && dataExpression(property.value, targets, issues, property.key.name ?? property.key.value));
+  return false;
+}
+export function mdxTargets(tree) {
+  const targets = [];
+  const issues = [];
+  visit(tree, (node) => {
+    if (node.type === 'link' || node.type === 'image' || node.type === 'definition') targets.push(node.url);
+    if (node.type !== 'mdxJsxFlowElement' && node.type !== 'mdxJsxTextElement') return;
+    for (const attr of node.attributes ?? []) {
+      if (attr.type === 'mdxJsxExpressionAttribute') { issues.push('atributo JSX dinâmico não permitido'); continue; }
+      if (attr.value && typeof attr.value === 'object') {
+        const program = attr.value.data?.estree;
+        if (program?.body?.length !== 1 || program.body[0]?.type !== 'ExpressionStatement'
+          || !dataExpression(program.body[0].expression, targets, issues, attr.name)) issues.push(`atributo JSX dinâmico não permitido: ${attr.name}`);
+        continue;
+      }
+      if (typeof attr.value !== 'string') continue;
+      collectTarget(attr.value, attr.name, targets, issues);
+    }
+  });
+  return { targets: targets.filter((target) => !EXTERNAL_SCHEME.test(target)), issues };
 }
 
 export async function readArticle(root, contentPath) {

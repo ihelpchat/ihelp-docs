@@ -68,7 +68,8 @@ async function exercise(label, readToken) {
   const reached = new Map();
   for (const [name, { config, callback }] of tools) {
     const start = calls.length;
-    const input = Object.fromEntries(Object.keys(config.inputSchema.shape).filter((key) => key in request).map((key) => [key, request[key]]));
+    const source = name === 'docs_delete_article' ? { ...request, path: 'docs/teste/remocao-isolada' } : request;
+    const input = Object.fromEntries(Object.keys(config.inputSchema.shape).filter((key) => key in source).map((key) => [key, source[key]]));
     await callback(config.inputSchema.parse(input));
     reached.set(name, calls.slice(start));
   }
