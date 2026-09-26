@@ -62,7 +62,8 @@ try {
   });
   assert.equal(fallbackCalls, 0, 'orçamento esgotado não consulta provider');
   assert.ok(fallback.sources.length > 0 && fallback.steps.length > 0, 'guia fixo continua disponível');
-  assert.ok(fallback.suggestions.includes('Falar com uma pessoa'), 'humano continua disponível');
+  assert.deepEqual(fallback.suggestions, [], 'humano não é pergunta nova');
+  assert.deepEqual(fallback.actions, [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }], 'humano continua disponível');
 } finally {
   await rm(dir, { recursive: true, force: true });
 }
