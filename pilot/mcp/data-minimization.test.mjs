@@ -40,7 +40,7 @@ assert.equal(feedback.userAgent, undefined, 'user agent livre não é necessári
 assert.throws(() => normalizeFeedback({ type: 'assistant', value: 'up', path: '/assistente?token=fake' }), /Feedback inválido/);
 
 const event = {
-  sessionId: 'fixture-session-1', origin: 'faq', guideId: 'reconectar-whatsapp',
+  sessionId: 'fixture-session-1', origin: 'faq', guideId: 'reconectar-canal-qr',
   stepId: 'abrir-canais', durationMs: 1234, result: 'complete', path: '/docs/canais',
 };
 const normalized = normalizeSessionEvent(event);
@@ -48,6 +48,7 @@ assert.deepEqual(Object.keys(normalized).sort(), ['createdAt', 'durationMs', 'gu
 for (const invalid of [
   { ...event, question: email },
   { ...event, extra: 'anything' },
+  { ...event, guideId: 'reconectar-whatsapp' },
   { ...event, path: '/docs/canais?token=fake' },
   { ...event, path: '/docs/canais#fragment' },
   { ...event, path: 'https://example.test/docs/canais' },

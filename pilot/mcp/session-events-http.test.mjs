@@ -37,7 +37,7 @@ try {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         question: 'Como criar e enviar uma campanha?', sessionId: 'fixture-session',
-        guideId: 'guia-forjado', stepId: 'passo-forjado',
+        guide: { guideId: 'reconectar-canal-qr', stepId: 'passo-forjado', version: 1, mode: 'real' },
       }),
     });
     assert.equal(response.status, 200);
