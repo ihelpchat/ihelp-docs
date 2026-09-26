@@ -8,9 +8,10 @@ import { Sidebar } from '@/components/site/sidebar';
 import type { NavGroup } from '@/lib/site';
 import { AssistantDrawer, AssistantLauncher } from '@/components/assistant/assistant-drawer';
 import { assistantEnabled } from '@/lib/assistant';
+import { assistantDisplayName } from '@/lib/assistant-name';
 
 const sections = [
-  { label: 'Claricia', href: '/assistente' },
+  { label: assistantDisplayName, href: '/assistente' },
   { label: 'Central de ajuda', href: '/docs' },
   { label: 'Tutoriais', href: '/tutoriais' },
   { label: 'Referência da API', href: '/api' },

@@ -4356,6 +4356,17 @@ button {
   border-radius: 7px;
 }
 
+.ih-ai-screen-human {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  width: fit-content;
+  color: var(--ih-ink);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 /* Conversa */
 .ih-ai-thread {
   display: flex;

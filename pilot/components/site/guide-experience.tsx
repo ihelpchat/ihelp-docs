@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useAssistant } from '@/components/assistant/assistant-context';
-import { supportUrl } from '@/lib/links';
+import { supportLink } from '@/lib/links';
 import { assistantDisplayName } from '@/lib/assistant-name';
 import { withBasePath } from '@/lib/shared';
 
@@ -35,9 +35,10 @@ export function GuideExperience({ guideId, appUrl, steps }: {
   const { openDrawer } = useAssistant();
   const [phone, setPhone] = useState<'android' | 'iphone' | null>(null);
   const selected = steps.find((step) => step.stepId === phone);
-  const help = `${supportUrl}?text=${encodeURIComponent(`Olá! Preciso de ajuda no iHelp. Guia: ${guideId}; passo: ${selected?.stepId ?? steps[0]?.stepId}.`)}`;
+  const stepId = selected?.stepId ?? steps[0]?.stepId;
+  const help = supportLink({ guide: stepId ? { guideId, stepId } : undefined });
   return (
-    <section className="ih-guide-page" aria-label="Acompanhar este guia">
+    <section className="ih-guide-page" aria-label="Acompanhar este guia" data-guide-id={guideId} data-step-id={stepId}>
       <OriginLink href="/docs/guias" className="ih-guide-back">Ver todos os guias</OriginLink>
       <div className="ih-guide-actions">
         <a className="ih-guide-app" href={appUrl} target="_blank" rel="noreferrer noopener">Fazer no app</a>

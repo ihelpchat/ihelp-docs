@@ -165,12 +165,7 @@ try {
     }
     for (const zoom of [1, 2]) {
       const page = await browser.newPage({ viewport: dimensions, deviceScaleFactor: zoom });
-      await page.addInitScript(() => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages: [{
-        id: 'a1', role: 'ai', question: 'Ajuda', reply: {
-          answer: 'Abra Configurações e confira o canal.', sections: [], steps: [], code: null, sources: [],
-          suggestions: ['Achei', 'Não achei', 'Mais uma opção'], resolution: 'complete', found: true, actions: [],
-        },
-      }], scope: 'Tudo', sessionId: 'qa-session' })));
+      await page.addInitScript((messages) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages, scope: 'Tudo', sessionId: 'qa-session' })), states.guia);
       await page.goto(`${site.url}${basePath}/docs/guias/?origem=suporte`, { waitUntil: 'networkidle' });
       if (zoom === 2) await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
       await injectProbe(page);
@@ -187,14 +182,24 @@ try {
       await catalogDrawer.evaluate(async (el) => { await Promise.all(el.getAnimations().map((animation) => animation.finished)); });
       failures.push(...(await catalogDrawer.evaluate(audit)).failures.map((item) => `catálogo/compacto/${viewport}/${zoom}: ${item}`));
       await catalogDrawer.getByRole('button', { name: 'Abrir em tela cheia' }).click();
-      await page.waitForURL('**/assistente/');
+      await page.waitForURL((url) => /\/assistente\/?$/.test(url.pathname));
+      await injectProbe(page);
       await page.locator('.ih-ai-screen .ih-ai-steps li').first().waitFor();
       await assertCurrentName(page);
+      assert.ok(await page.locator('.ih-ai-screen-human').isVisible(), 'catálogo/tela-cheia: humano disponível');
       failures.push(...(await page.locator('body').evaluate(audit)).failures.map((item) => `catálogo/tela-cheia/${viewport}/${zoom}: ${item}`));
       await page.goBack({ waitUntil: 'networkidle' });
       const catalogLink = catalog.locator('a.ih-guide-card').first();
-      await catalogLink.focus();
-      assert.ok(await catalogLink.evaluate((el) => el.matches(':focus-visible')), 'catálogo: foco por teclado');
+      await page.keyboard.press('Tab');
+      let catalogFocused = false;
+      for (let attempt = 0; attempt < 80; attempt++) {
+        if (await catalogLink.evaluate((el) => el === document.activeElement && el.matches(':focus-visible'))) {
+          catalogFocused = true;
+          break;
+        }
+        await page.keyboard.press('Tab');
+      }
+      assert.ok(catalogFocused, 'catálogo: foco por teclado');
       await catalogLink.click();
       await page.waitForURL((url) => guidePaths.some(({ path }) => url.pathname.replace(/\/$/, '').endsWith(path)));
       assert.equal(new URL(page.url()).searchParams.get('origem'), 'suporte', 'origem preservada');
@@ -218,6 +223,7 @@ try {
           await guide.getByRole('button', { name: 'Uso iPhone' }).click();
           assert.ok(await guide.getByText(/No iPhone, abra WhatsApp/).isVisible(), 'escolha corrigível');
         }
+        const selectedStepId = id === 'reconectar-canal-qr' ? 'iphone' : stepId;
         const guideAudit = await guidePage.locator('body').evaluate(audit);
         assert.ok(guideAudit.measured.text > 10, `${path}: página completa não medida`);
         failures.push(...guideAudit.failures.map((item) => `${path}/${viewport}/${zoom}: ${item}`));
@@ -229,18 +235,21 @@ try {
         await drawer.evaluate(async (el) => { await Promise.all(el.getAnimations().map((animation) => animation.finished)); });
         const drawerHuman = drawer.getByRole('link', { name: 'Falar com uma pessoa' }).first();
         assert.ok(await drawerHuman.isVisible(), `${path}: humano no painel`);
-        await assertSupportContext(drawer.locator('.ih-ai-drawer-human'), id, stepId);
+        await assertSupportContext(drawer.locator('.ih-ai-drawer-human'), id, selectedStepId);
         assert.ok(await drawer.locator('.ih-ai-follow button').count() <= 2, `${path}: até duas sugestões`);
         const drawerAudit = await drawer.evaluate(audit);
         assert.ok(drawerAudit.measured.text > 5, `${path}: painel compacto não medido`);
         failures.push(...drawerAudit.failures.map((item) => `${path}/compacto/${viewport}/${zoom}: ${item}`));
         failures.push(...(await guidePage.locator('body').evaluate(audit)).failures.map((item) => `${path}/compacto/${viewport}/${zoom}: ${item}`));
         await drawer.getByRole('button', { name: 'Abrir em tela cheia' }).click();
-        await guidePage.waitForURL('**/assistente/');
+        await guidePage.waitForURL((url) => /\/assistente\/?$/.test(url.pathname));
+        await injectProbe(guidePage);
         const screen = guidePage.locator('.ih-ai-screen');
         await screen.locator('.ih-ai-steps li').first().waitFor();
         await assertCurrentName(guidePage);
-        await assertSupportContext(screen.getByRole('link', { name: 'Enviar para o suporte' }), id, stepId);
+        const fullHuman = screen.getByRole('link', { name: 'Falar com uma pessoa' });
+        assert.ok(await fullHuman.isVisible(), `${path}: humano na tela cheia`);
+        await assertSupportContext(fullHuman, id, selectedStepId);
         failures.push(...(await guidePage.locator('body').evaluate(audit)).failures.map((item) => `${path}/tela-cheia/${viewport}/${zoom}: ${item}`));
         await guidePage.close();
       }

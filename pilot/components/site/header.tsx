@@ -6,10 +6,11 @@ import { Menu, Search, Sparkles, X, Zap } from 'lucide-react';
 import { useSearchContext } from 'fumadocs-ui/contexts/search';
 import { withBasePath } from '@/lib/shared';
 import { supportUrl } from '@/lib/links';
+import { assistantDisplayName } from '@/lib/assistant-name';
 
 // `extra`: itens que somem primeiro quando a tela estreita (mesma regra do desenho).
 const nav = [
-  { label: 'Claricia', href: '/assistente', icon: true },
+  { label: assistantDisplayName, href: '/assistente', icon: true },
   { label: 'Central de ajuda', href: '/docs' },
   { label: 'Tutoriais', href: '/tutoriais', extra: true },
   { label: 'Referência da API', href: '/api' },
@@ -39,7 +40,7 @@ export function SiteHeader({ menuOpen, onMenu }: { menuOpen?: boolean; onMenu?: 
             <Link
               key={item.href}
               href={item.href}
-              aria-label={item.href === '/assistente' ? 'Claricia, assistente de IA do iHelp' : undefined}
+              aria-label={item.href === '/assistente' ? assistantDisplayName : undefined}
               className={`ih-nav-link${item.extra ? ' ih-nav-extra' : ''}`}
               data-active={isActive(pathname, item.href) || undefined}
               aria-current={isActive(pathname, item.href) ? 'page' : undefined}

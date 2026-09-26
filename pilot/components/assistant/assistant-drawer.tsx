@@ -9,7 +9,8 @@ import { AssistantComposer } from '@/components/assistant/assistant-composer';
 import { AssistantThread } from '@/components/assistant/assistant-thread';
 import { TechnologyMark } from '@/components/site/technology-mark';
 import { assistantDisplayName } from '@/lib/assistant-name';
-import { supportUrl } from '@/lib/links';
+import { supportLink, supportGuideFromPage, supportGuideFromReply } from '@/lib/links';
+import { supportMessageFor } from '@/lib/assistant';
 
 const sectionLabel: Record<string, string> = {
   docs: 'Central de ajuda',
@@ -67,6 +68,8 @@ export function AssistantDrawer() {
   const page = usePageRef();
   const panel = useRef<HTMLDivElement>(null);
   const open = drawerOpen && !pathname.startsWith('/assistente');
+  const latestReply = [...messages].reverse().find((message) => message.role === 'ai')?.reply;
+  const guide = supportGuideFromPage() ?? supportGuideFromReply(latestReply);
 
   useEffect(() => {
     if (!open) return;
@@ -99,7 +102,8 @@ export function AssistantDrawer() {
           title="Abrir em tela cheia"
           onClick={() => {
             closeDrawer();
-            router.push('/assistente');
+            const query = guide ? `?guideId=${encodeURIComponent(guide.guideId)}&stepId=${encodeURIComponent(guide.stepId)}` : '';
+            router.push(`/assistente${query}`);
           }}
         >
           <Maximize2 aria-hidden="true" />
@@ -134,7 +138,7 @@ export function AssistantDrawer() {
         )}
       </div>
       <div className="ih-ai-drawer-foot">
-        <a className="ih-ai-drawer-human" href={supportUrl} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a>
+        <a className="ih-ai-drawer-human" href={supportLink({ guide, message: latestReply ? supportMessageFor(latestReply) : undefined })} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a>
         <AssistantComposer compact autoFocus placeholder="Pergunte sobre esta página ou qualquer outra coisa" page={ref} />
         <div className="ih-ai-drawer-meta">
           <p>Gerado por IA a partir da documentação. Confira as fontes.</p>
