@@ -90,6 +90,12 @@ try {
   }
   assert.equal((await post('/feedback', { eventId: 'separate-vote-30', type: 'article', value: 'up', path: '/docs/teste' },
     'feedback-30', '192.0.2.240')).status, 429, '31ª avaliação do mesmo IP recebe 429');
+  for (let n = 0; n < 30; n += 1) {
+    assert.equal((await post('/feedback', { eventId: `invalid-vote-${n}`, type: 'invalid', value: 'up', path: '/docs/teste' },
+      `invalid-feedback-${n}`, '192.0.2.241')).status, 400);
+  }
+  assert.equal((await post('/feedback', { eventId: 'valid-after-rejections', type: 'article', value: 'up', path: '/docs/teste' },
+    'valid-after-rejections', '192.0.2.241')).status, 201, 'feedback rejeitado não consome cota');
 } finally {
   await new Promise((resolve, reject) => httpServer.close((error) => error ? reject(error) : resolve()));
   await new Promise((resolve, reject) => fakeOpenAI.close((error) => error ? reject(error) : resolve()));
@@ -136,18 +142,28 @@ async function verifyIpSource(source, moduleName) {
   if (!server.listening) await once(server, 'listening');
   const endpoint = `http://127.0.0.1:${server.address().port}/assistant`;
   try {
-    for (let n = 0; n < 10; n += 1) {
+    const realIpMode = source === 'x-real-ip' || moduleName === 'railway-default';
+    const count = realIpMode ? 20 : 10;
+    for (let n = 0; n < count; n += 1) {
       const reply = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Real-IP': '198.51.100.72', 'X-Forwarded-For': `203.0.113.${n}, 192.0.2.${n}` },
-        body: JSON.stringify({ question: 'mcp', sessionId: `${moduleName}-session` }),
+        body: JSON.stringify({ question: 'mcp', sessionId: `${moduleName}-session-${Math.floor(n / 10)}` }),
       });
       assert.equal(reply.status, 200);
+    }
+    if (realIpMode) {
+      const otherNetwork = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Real-IP': '198.51.100.73', 'X-Forwarded-For': '203.0.113.240, 192.0.2.240' },
+        body: JSON.stringify({ question: 'mcp', sessionId: `${moduleName}-other-network` }),
+      });
+      assert.equal(otherNetwork.status, 200, `${moduleName} separa redes com o mesmo socket`);
     }
     const limited = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Real-IP': '198.51.100.72', 'X-Forwarded-For': '203.0.113.240, 192.0.2.240' },
-      body: JSON.stringify({ question: 'mcp', sessionId: `${moduleName}-session` }),
+      body: JSON.stringify({ question: 'mcp', sessionId: `${moduleName}-session-0` }),
     });
     assert.equal(limited.status, 429, `${moduleName} usa a fonte de IP configurada`);
   } finally {
