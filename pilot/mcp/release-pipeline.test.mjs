@@ -36,6 +36,14 @@ await writeFile(release, JSON.stringify(metadata));
 const mock = join(fixture, 'mock-fetch.mjs');
 await writeFile(mock, `globalThis.fetch = async (input, options = {}) => {
   const url = new URL(input);
+  if (url.origin === 'https://docs.example.test') {
+    if (url.pathname !== process.env.MOCK_SITE_PATH) throw new Error('wrong path: ' + url.pathname);
+    if (process.env.MOCK_MODE === 'missing-release') return new Response(null, { status: 404 });
+    return Response.json({
+      codeSha: process.env.MOCK_MODE === 'wrong-code' ? '${'c'.repeat(40)}' : '${sha}',
+      contentSha256: process.env.MOCK_MODE === 'wrong-content' ? '${'c'.repeat(64)}' : '${contentSha}',
+    });
+  }
   if (url.origin !== 'https://claricia.example.test') throw new Error('health consultou outra origem');
   if (url.pathname === '/health') return Response.json({ codeSha: '${sha}', contentSha256: process.env.MOCK_MODE === 'wrong-version' ? '${'c'.repeat(64)}' : '${contentSha}' });
   if (url.pathname !== '/assistant' || options.method !== 'OPTIONS') throw new Error('preflight ausente');
@@ -53,6 +61,19 @@ assert.notEqual(runService({ CLARICIA_DOCS_URL: 'https://other.example.test/ihel
 assert.notEqual(runService({ MOCK_MODE: 'bad-cors' }).status, 0, 'CORS aberto a outra origem deve falhar');
 assert.notEqual(runService({ MOCK_MODE: 'wrong-version' }).status, 0, 'versão incompatível deve falhar');
 assert.notEqual(runService({}, ['service', out, 'https://staging.example.test/assistant']).status, 0, 'health separado do artifact deve falhar');
+
+const runSite = (siteUrl, path, mode) => run(['site', out, siteUrl], {
+  NODE_OPTIONS: `--import=${mock}`, MOCK_SITE_PATH: path, MOCK_MODE: mode ?? '',
+});
+for (const siteUrl of ['https://docs.example.test/ihelp-docs', 'https://docs.example.test/ihelp-docs/']) {
+  assert.equal(runSite(siteUrl, '/ihelp-docs/release.json').status, 0, `site com base path deve passar: ${siteUrl}`);
+}
+for (const siteUrl of ['https://docs.example.test', 'https://docs.example.test/']) {
+  assert.equal(runSite(siteUrl, '/release.json').status, 0, `site sem base path deve passar: ${siteUrl}`);
+}
+assert.notEqual(runSite('https://docs.example.test/ihelp-docs', '/ihelp-docs/release.json', 'wrong-code').status, 0, 'SHA do código divergente deve falhar');
+assert.notEqual(runSite('https://docs.example.test/ihelp-docs', '/ihelp-docs/release.json', 'wrong-content').status, 0, 'SHA do conteúdo divergente deve falhar');
+assert.notEqual(runSite('https://docs.example.test/ihelp-docs', '/ihelp-docs/release.json', 'missing-release').status, 0, 'release.json ausente deve falhar');
 
 const workflow = await readFile(new URL('../../.github/workflows/deploy.yml', import.meta.url), 'utf8');
 assert.match(workflow, /CLARICIA_DEPLOY_ENABLED/);
