@@ -37,6 +37,7 @@ function rejectSensitive(value) {
   const kinds = sensitiveKinds(value);
   if (kinds.credential) throw new SubmitArticleError('CREDENTIAL', 'Artigo contém possível credencial');
   if (kinds.personal) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém possível dado pessoal');
+  if (kinds.internal || kinds.control) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém conteúdo interno ou caractere invisível');
 }
 
 function safeContentPath(root, contentPath) {
@@ -69,6 +70,7 @@ export function validateArticle(article) {
   const sensitive = sensitiveKinds(stringify(article, { lineWidth: 0 }));
   if (sensitive.credential) issues.push('possível credencial detectada');
   if (sensitive.personal) issues.push('possível dado pessoal detectado');
+  if (sensitive.internal || sensitive.control) issues.push('conteúdo interno ou caractere invisível detectado');
   if (article.tangoUrl && !/^https:\/\/app\.tango\.us\/app\/(?:embed|workflow)\/[A-Za-z0-9-]+\/?$/.test(article.tangoUrl)) {
     issues.push('tangoUrl precisa ser uma URL oficial de embed ou workflow do Tango');
   }
@@ -91,6 +93,7 @@ export function renderArticle(article) {
   const validation = validateArticle(article);
   if (validation.issues.includes('possível credencial detectada')) throw new SubmitArticleError('CREDENTIAL', 'Artigo contém possível credencial');
   if (validation.issues.includes('possível dado pessoal detectado')) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém possível dado pessoal');
+  if (validation.issues.includes('conteúdo interno ou caractere invisível detectado')) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém conteúdo interno ou caractere invisível');
   if (!validation.valid) throw new Error(validation.issues.join('; '));
   const tangoId = article.tangoUrl?.split('/').pop()?.split('?')[0].replaceAll('-', '');
   const tangoSlug = article.title.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -336,7 +339,7 @@ function safeArticleList(articles, deletes = []) {
     const reserved = new Set(['path', 'body', 'productActions', 'tangoUrl']);
     for (const [key, value] of Object.entries(article)) {
       if (reserved.has(key)) continue;
-      if (!articleFields.has(key) || (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean' && !(Array.isArray(value) && value.every((item) => typeof item === 'string')))) {
+      if (!articleFields.has(key) || (key === 'guide' ? !guideSchema.safeParse(value).success : (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean' && !(Array.isArray(value) && value.every((item) => typeof item === 'string'))))) {
         throw new SubmitArticleError('INVALID_PACKAGE', `Metadado inválido: ${key}`);
       }
     }

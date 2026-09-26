@@ -82,12 +82,19 @@ function redact(value, patterns, marker) {
 }
 
 export function sensitiveKinds(value) {
-  return { personal: matchesAny(value, PERSONAL), credential: matchesAny(value, CREDENTIALS) || credentialPairs(value).length > 0 };
+  const text = String(value ?? '');
+  const folded = text.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase('en-US');
+  return {
+    personal: matchesAny(text, PERSONAL),
+    credential: matchesAny(text, CREDENTIALS) || credentialPairs(text).length > 0,
+    internal: /🟡|🔴|\binterno\b|\bconfidencial\b/u.test(folded),
+    control: /[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text),
+  };
 }
 
 export function containsSensitiveData(value) {
   const kinds = sensitiveKinds(value);
-  return kinds.personal || kinds.credential;
+  return kinds.personal || kinds.credential || kinds.internal || kinds.control;
 }
 
 export function redactSensitiveData(value) {
