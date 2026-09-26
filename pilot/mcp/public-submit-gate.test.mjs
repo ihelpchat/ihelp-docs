@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
 import { buildServer } from './server.mjs';
 import { renderArticle, submitArticle, submitContentPackage } from './content-service.mjs';
-import { readArticle } from './editorial-standard.mjs';
+import { parseArticle, readArticle } from './editorial-standard.mjs';
 import { assertPublicSubmit } from './public-submit-gate.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'm537-public-gate-'));
@@ -58,6 +58,12 @@ try {
     { ...article, body: `${body}\n\n<Link href={variavel}>Abra a página</Link>.` },
     { ...article, body: `${body}\n\n<Card href={'/docs/nao-existe'}>Abra a página</Card>.` },
     { ...article, body: `${body}\n\n[Abra a página](../nao-existe).` },
+    { ...article, body: `${body}\n\n<CodeTabs labels={[<a href={'/docs/nao-existe'}>Rota</a>]} />` },
+    { ...article, body: `${body}\n\n<Card data={[{ href: '/docs/nao-existe' }]} />` },
+    { ...article, body: `${body}\n\n<Card href={\`/docs/\${x}\`} />` },
+    { ...article, body: `${body}\n\nClique em [**Botão imaginário**](/docs/teste/contatos).` },
+    { ...article, body: `${body}\n\nToque no botão [**Algo inventado**](/docs/teste/contatos).` },
+    { ...article, body: `${body}\n\nClique em \`Botão imaginário\` para continuar.` },
   ];
   for (const unsafe of rejected) {
     const before = calls.length;
@@ -70,6 +76,16 @@ try {
   assert.equal(validLabelResult.status, 'pull_request', 'rótulo aprovado com variação de acento e link existente passa');
   const validJsx = await submitContentPackage(root, [{ ...article, body: `${body}\n\n<Card href={'/docs/teste/contatos'}>Abra a página</Card>.` }], 'pull_request', 'user:tester');
   assert.equal(validJsx.status, 'pull_request', 'atributo JSX com string estática e rota existente passa');
+  const validApi = await submitContentPackage(root, [{ ...article, path: 'api/teste/contatos', body: `${body}\n\nUse \`contactId\` para identificar o contato.` }], 'pull_request', 'user:tester');
+  assert.equal(validApi.status, 'pull_request', 'código inline na referência de API não é rótulo');
+
+  const baselinePath = 'api/crm/acoes-em-massa/excluir-cards-em-massa';
+  const published = await readFile(new URL(`../content/docs/${baselinePath}.mdx`, import.meta.url), 'utf8');
+  const parsed = parseArticle(published, baselinePath);
+  const renamed = { path: baselinePath, ...parsed.metadata, title: `${parsed.metadata.title} atualizado`, body: parsed.body };
+  const beforeRenamed = calls.length;
+  await assert.rejects(submitContentPackage(root, [renamed], 'pull_request', 'user:tester'), /gate|rótulo/i);
+  assert.equal(calls.length, beforeRenamed, 'título alterado em página legada exige revalidação antes de writes');
 
   const beforeIndividual = calls.length;
   await assert.rejects(submitArticle(root, rejected[2], 'pull_request', 'user:tester'), /gate|link|aprovad/i);
