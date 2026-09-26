@@ -173,7 +173,36 @@ test('rota opcional preserva a página pública sem o segmento opcional', async 
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   assert.equal(result.articles[0].endpoint, '/contacts');
   assert.match(result.articles[0].body, /\/api\/v2\/contacts\?page=1/);
-  assert.doesNotMatch(result.articles[0].body, /<Param name="letter"/);
+  assert.match(result.articles[0].body, /<Param name="letter" type="string">route \(string\), opcional<\/Param>/);
+  assert.deepEqual(result.pending, ['parâmetro no código ausente da página: letter']);
+});
+
+test('parâmetros vêm dos fatos e divergências da página viram pendências nos dois sentidos', async () => {
+  const fact = { ...endpoint, route: '/api/v2/contacts/{letter}', optionalAlias: '/api/v2/contacts',
+    parameters: [
+      { name: 'letter', type: 'string', in: 'route', required: false },
+      { name: 'page', type: 'int', in: 'query' },
+      { name: 'limit', type: 'int', in: 'query' },
+    ], responseFields: [] };
+  const page = { ...examples[0], path: prose.path, paramNames: ['searchData', 'page', 'limit'],
+    frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts' } };
+  const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+  assert.deepEqual([...result.articles[0].body.matchAll(/<Param name="([^"]+)"/gu)].map((match) => match[1]), ['letter', 'page', 'limit']);
+  assert.match(result.articles[0].body, /<Param name="letter" type="string">route \(string\), opcional<\/Param>/);
+  assert.deepEqual(result.pending, [
+    'parâmetro na página sem fato no código: searchData',
+    'parâmetro no código ausente da página: letter',
+  ]);
+});
+
+test('página alinhada aos fatos não cria pendência de parâmetro', async () => {
+  const fact = { ...endpoint, responseFields: [] };
+  const page = { ...examples[0], path: prose.path, paramNames: ['IdRef'],
+    frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts/details/{IdRef}' } };
+  const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+  assert.deepEqual(result.pending, []);
 });
 
 test('query e body usam nomes e valores tipados dos fatos', () => {
