@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGuide } from './create-guide.mjs';
@@ -40,6 +40,7 @@ assert.equal(submissions, 1);
 assert.deepEqual(await createGuide(root, { planId: first.planId, answers: ['Vendas'], requestedBy: actor }, options), resumed, 'repetição devolve o mesmo draft');
 assert.equal(generations, 1, 'repetição não gera outro pacote');
 assert.equal(submissions, 1, 'repetição não duplica draft');
+await assert.rejects(createGuide(root, { planId: first.planId, answers: ['Vendas'], requestedBy: actor }, { ...options, getContext: async () => context('c'.repeat(40)) }), /fontes mudaram.*refaça o plano/i);
 await assert.rejects(createGuide(root, { planId: first.planId, answers: ['Outro'], requestedBy: actor }, options), /respostas diferentes/i);
 await assert.rejects(createGuide(root, { planId: first.planId, answers: ['Vendas'], requestedBy: 'user:outro-1' }, options), /ator/i);
 
@@ -53,3 +54,11 @@ const updateResult = await createGuide(root, { planId: update.planId, answers: [
 assert.equal(updateResult.article.guide.guideId, 'usuario-acesso');
 assert.equal(updateResult.article.guide.version, 4, 'atualiza o guia existente');
 assert.equal(updateResult.article.path, article.path);
+
+const realDraftRoot = await mkdtemp(join(tmpdir(), 'm536-draft-'));
+const draftOptions = { ...options, submit: undefined };
+const draftPlan = await createGuide(realDraftRoot, input, draftOptions);
+const draft = await createGuide(realDraftRoot, { planId: draftPlan.planId, answers: ['Vendas'], requestedBy: actor }, draftOptions);
+assert.equal(draft.draft.status, 'draft');
+assert.match(await readFile(join(realDraftRoot, draft.draft.articles[0].path), 'utf8'), /guideId: usuario-acesso/);
+assert.deepEqual(await createGuide(realDraftRoot, { planId: draftPlan.planId, answers: ['Vendas'], requestedBy: actor }, draftOptions), draft);
