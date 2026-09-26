@@ -218,3 +218,49 @@ jobs:
           test -n "$RAILWAY_TOKEN" && test -n "$RAILWAY_PROJECT_ID" && test -n "$RAILWAY_DOCS_SERVICE_ID" && test -n "$CLARICIA_DOCS_URL"
           railway up . --path-as-root --ci --project "$RAILWAY_PROJECT_ID" --environment staging --service "$RAILWAY_DOCS_SERVICE_ID" -m "docs $GITHUB_SHA"
           node scripts/release.mjs site out "$CLARICIA_DOCS_URL"
+
+  deploy-production-vercel:
+    name: Deploy production docs to Vercel and check content SHA
+    needs: [release-build, deploy-service]
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'production' && vars.CLARICIA_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: docs-release
+          path: pilot/out
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: pilot/package-lock.json
+      - name: Install routing converter
+        run: npm ci
+        working-directory: pilot
+      - name: Package verified static artifact for Vercel
+        working-directory: pilot
+        run: node scripts/prepare-vercel-release.mjs out deploy-vercel
+      - name: Deploy prebuilt artifact to Vercel
+        id: deployment
+        working-directory: pilot
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_SCOPE: ${{ vars.VERCEL_SCOPE }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_PROJECT_ID" ] || [ -z "$VERCEL_SCOPE" ]; then
+            echo 'pendente: VERCEL_TOKEN/VERCEL_PROJECT_ID/VERCEL_SCOPE não configurado'
+            exit 0
+          fi
+          npx vercel@60.1.3 deploy deploy-vercel --prebuilt --prod --yes --token "$VERCEL_TOKEN" --scope "$VERCEL_SCOPE" --project "$VERCEL_PROJECT_ID"
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+      - name: Verify published content SHA
+        if: steps.deployment.outputs.ready == 'true'
+        working-directory: pilot
+        env:
+          CLARICIA_DOCS_URL: ${{ vars.CLARICIA_DOCS_URL }}
+        run: node scripts/release.mjs site out "$CLARICIA_DOCS_URL"
