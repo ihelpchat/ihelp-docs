@@ -55,6 +55,10 @@ DOCS_MCP_API_KEY=... OPENAI_API_KEY=... ASSISTANT_ALLOWED_ORIGINS=https://docs.e
 
 O endpoint `/mcp` exige `Authorization: Bearer <DOCS_MCP_API_KEY>`. O endpoint público `/assistant` aceita somente perguntas curtas, aplica rate limit, envia apenas trechos recuperados da documentação e chama a OpenAI com `store: false`. A chave permanece exclusivamente no servidor.
 
+### Decisões por padrão: conteúdo interno
+
+Conteúdo público é barrado por marcador, não pela palavra em prosa: bolinhas 🟡 e 🔴, `INTERNO` ou `CONFIDENCIAL` em maiúsculas como palavra, ou `interno:` e `confidencial:` como rótulos. A inspeção normaliza homóglifos e remove caracteres invisíveis antes da comparação; não faz casefold do marcador em maiúsculas. Assim, "canal interno de comunicação" continua publicável. O corpus do MCP é percorrido no teste M5.19 r3; falhas editoriais anteriores constam no baseline exato até serem resolvidas em tarefa própria.
+
 ### Decisões por padrão: IP usado nos limites
 
 `TRUSTED_IP_SOURCE` aceita `x-real-ip`, `xff-hops` ou `socket`. Em `RAILWAY_ENVIRONMENT_NAME=production`, o padrão é `x-real-ip`, conforme o header de cliente documentado pelo Railway. Fora desse ambiente, o padrão mantém `xff-hops`; `TRUST_PROXY_HOPS` (1 por padrão) escolhe o salto contado da direita. `socket` ignora headers de IP. Valor ausente ou inválido na fonte escolhida usa o endereço do socket. Configure `TRUSTED_IP_SOURCE=socket` quando o serviço for acessado diretamente, sem proxy confiável. **`x-real-ip` e `xff-hops` só são seguros atrás de um proxy que sobrescreva o header escolhido**; se o cliente puder fornecê-lo, poderá trocar o IP usado na cota.

@@ -28,12 +28,9 @@ function validatePublicArtifact(artifact, name) {
       }
       const kinds = sensitiveKinds(value);
       if (key !== 'contentSha256' && (kinds.credential || kinds.personal || kinds.internal || kinds.control)) throw new Error(`${name}.${location}: dado privado ou interno`);
-      // O permalink da página é gerado pelo compilador; não é uma rota do app.
-      if (key !== 'path') {
-        for (const match of value.matchAll(/(^|[\s(:=])\/(?!\/)[^\s"'<>()[\]{}]+/gu)) {
-          const route = match[0].slice(match[1].length).replace(/[.,;:!?]+$/u, '');
-          if (route.includes('%') || !publicRoutes.has(route)) throw new Error(`${name}.${location}: rota fora do catálogo: ${route}`);
-        }
+      for (const match of value.matchAll(/\/[A-Za-z0-9][A-Za-z0-9/_.%-]*/gu)) {
+        const route = match[0].replace(/[.,;:!?]+$/u, '');
+        if (route.includes('%') || !publicRoutes.has(route)) throw new Error(`${name}.${location}: rota fora do catálogo: ${route}`);
       }
     } else if (Array.isArray(value)) {
       value.forEach((item, index) => visit(item, `${location}[${index}]`));
@@ -72,7 +69,7 @@ export async function compileGuidePackage(root) {
     if (ids.has(guide.guideId)) throw new Error(`${path}: guideId duplicado: ${guide.guideId}`);
     ids.add(guide.guideId);
     if (typeof metadata.title !== 'string' || typeof metadata.description !== 'string') throw new Error(`${path}: título ou descrição ausente`);
-    guides.push({ path: `/${path}`, title: metadata.title, description: metadata.description, guide });
+    guides.push({ pathSegments: path.split('/'), title: metadata.title, description: metadata.description, guide });
   }
   guides.sort((left, right) => left.guide.guideId < right.guide.guideId ? -1 : left.guide.guideId > right.guide.guideId ? 1 : 0);
   const aliases = { ...legacyGuideAliases };
