@@ -33,6 +33,10 @@ let markerRemoved = false;
 let deniedWrite = false;
 let deletionDisabled = false;
 let externalScript = false;
+let brokenClick = false;
+let brokenSave = false;
+let disabledCreate = false;
+let straySaveWrites = false;
 const app = createServer((req, res) => {
   if (req.url === '/login-redirect') { res.writeHead(302, { Location: `${externalUrl}/production` }); res.end(); return; }
   if (req.url === '/external-script') { res.writeHead(302, { Location: `${externalUrl}/production-script` }); res.end(); return; }
@@ -40,16 +44,21 @@ const app = createServer((req, res) => {
   if (req.url === '/login') {
     res.end('<input type="email"><input type="password"><button onclick="location.href=\'/login-redirect\'">Entrar</button>');
   } else if (req.url?.startsWith('/configuracoes/department')) {
-    res.end(`<!doctype html><main data-tour-id="guide-department-open"><button onclick="this.dataset.done='yes'">Departamentos</button><label>Horário<input aria-label="Horário"></label><label>Mensagem automática fora de horário de atendimento<input aria-label="Mensagem automática fora de horário de atendimento"></label><button>Salvar Alterações</button></main><script>
-      const denied=new URLSearchParams(location.search).has('role'); const field=document.querySelector('[aria-label="Mensagem automática fora de horário de atendimento"]');
-      field.value=localStorage.getItem('proof-recado')||'';
-      document.querySelector('button:last-of-type').onclick=()=>{if(!denied)localStorage.setItem('proof-recado',field.value)};
-    </script>`);
+    if (!req.url.includes('/demo')) {
+      res.end(`<main data-tour-id="guide-department-open"><button onclick="${brokenClick ? '' : "this.dataset.done='yes'"}">Departamentos</button><table><tr><td onclick="location.href='/configuracoes/department/demo'+location.search">Demo</td></tr></table></main>`);
+    } else {
+      res.end(`<!doctype html><main><label>Inicio<input name="horarioAtendimentoInicio"></label><button aria-label="Mensagem automática fora de horário de atendimento" role="switch" onclick="document.querySelector('#chat').hidden=false">Ativar</button><div id="chat" hidden><textarea aria-label="Mensagem"></textarea><button onclick="document.querySelector('#message').textContent=document.querySelector('textarea').value">Enviar</button></div><span id="message"></span><button>Salvar Alterações</button></main><script>
+        const denied=new URLSearchParams(location.search).has('role');const message=document.querySelector('#message');
+        message.textContent=localStorage.getItem('proof-recado')||'';
+        document.querySelector('button:last-of-type').onclick=()=>{if(!denied&&!${brokenSave})localStorage.setItem('proof-recado',message.textContent)};
+      </script>`);
+    }
   } else if (req.url?.startsWith('/configuracoes/channel')) {
-    res.end('<main data-tour-id="guide-qr-open"><button onclick="this.dataset.done=\'yes\'">Canais</button><button onclick="this.dataset.done=\'yes\'">Conectar</button></main>');
+    res.end(`<main data-tour-id="guide-qr-open"><button onclick="${brokenClick ? '' : "this.dataset.done='yes'"}">Canais</button><button onclick="this.dataset.done='yes'">Conectar</button></main>`);
   } else if (req.url?.startsWith('/configuracoes/usuarios')) {
     res.end(`<!doctype html><main><section aria-label="Configurações extras"><button>Salvar Alterações</button></section><section aria-label="Dados do usuário"><label>Nome<input name="nome"></label><label>E-mail<input name="email"></label><input name="senha" type="password"><input name="senhaConfirmacao" type="password"><label>Departamentos<select aria-label="Departamentos"><option value="">Escolha</option><option value="demo">Demo</option></select></label><label>Perfil<select aria-label="Perfil"><option value="">Escolha</option><option value="atendente">Atendente</option></select></label><button>Salvar Alterações</button></section><ul id="items"></ul></main><script>
       const key='proof-users'; const denied=new URLSearchParams(location.search).has('role');
+      document.querySelector('[aria-label="Configurações extras"] button').onclick=()=>{if(denied&&${straySaveWrites})localStorage.setItem('proof-stray','written')};
       function render(){document.querySelector('#items').innerHTML=JSON.parse(localStorage.getItem(key)||'[]').map(name=>'<li data-proof-item="'+name+'">'+name+'<button>Excluir</button></li>').join('')};render();
       document.body.onclick=e=>{let b=e.target.closest('button');if(!b)return;
         if(b.textContent==='Excluir'){if(!${deletionDisabled}&&!denied)localStorage.setItem(key,JSON.stringify(JSON.parse(localStorage.getItem(key)||'[]').filter(x=>x!==b.parentElement.dataset.proofItem)));render();return}
@@ -57,7 +66,7 @@ const app = createServer((req, res) => {
       };
     </script>`);
   } else {
-    res.end(`<!doctype html>${externalScript ? '<script src="/external-script"></script>' : ''}<main data-tour-id="${markerRemoved ? 'removed' : 'guide-user-open'}"><button onclick="this.dataset.done='yes'">Usuários</button><button onclick="location.href='/configuracoes/usuarios'+location.search">Novo usuário</button></main>`);
+    res.end(`<!doctype html>${externalScript ? '<script src="/external-script"></script>' : ''}<main data-tour-id="${markerRemoved ? 'removed' : 'guide-user-open'}"><button onclick="${brokenClick ? '' : "this.dataset.done='yes'"}">Usuários</button><button ${disabledCreate && req.url?.includes('denied') ? 'disabled' : ''} onclick="location.href='/configuracoes/usuarios'+location.search">Novo usuário</button><section><button onclick="if(new URLSearchParams(location.search).has('role')&&${straySaveWrites})localStorage.setItem('proof-stray','written')">Salvar Alterações</button></section></main>`);
   }
 });
 app.listen(0, '127.0.0.1');
@@ -71,6 +80,17 @@ try {
   assert.ok(report.cleanup.some(x => x.guideId === 'usuario-acesso' && x.status === 'removed'));
   assert.ok(report.steps.some(x => x.stepId === 'salvar-usuario' && x.status === 'passed'));
   assert.ok(report.steps.some(x => x.stepId === 'ler-codigo' && x.status === 'manual_required'));
+  brokenClick = true;
+  await assert.rejects(run('broken-click'), /ação web não concluiu/u);
+  brokenClick = false;
+  brokenSave = true;
+  await assert.rejects(run('broken-save'), /gravação não persistiu/u);
+  brokenSave = false;
+  disabledCreate = true;
+  straySaveWrites = true;
+  await assert.rejects(run('disabled-create-stray-save'), /negado|alterou/u);
+  disabledCreate = false;
+  straySaveWrites = false;
   await assert.rejects(runGuideProof({ baseUrl: 'https://app.ihelpchat.com', evidenceDir: join(root, 'production') }), /recusad|permitid/u);
   markerRemoved = true;
   await assert.rejects(run('missing-marker'), /guide-user-open/u);
