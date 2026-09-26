@@ -58,8 +58,9 @@ const app = createServer((req, res) => {
   } else if (req.url?.startsWith('/configuracoes/channel')) {
     res.end(`<main data-tour-id="guide-qr-open"><button onclick="${brokenClick ? '' : "this.dataset.done='yes'"}">Canais</button><button onclick="this.dataset.done='yes'">Conectar</button></main>`);
   } else if (req.url?.startsWith('/configuracoes/usuarios')) {
-    res.end(`<!doctype html><main><section aria-label="Configurações extras"><button>Salvar Alterações</button></section><section aria-label="Dados do usuário"><label>Nome<input name="nome"></label><label>E-mail<input name="email"></label><input name="senha" type="password"><input name="senhaConfirmacao" type="password"><label>Departamentos<select aria-label="Departamentos"><option value="">Escolha</option><option value="demo">Demo</option></select></label><label>Perfil<select aria-label="Perfil"><option value="">Escolha</option><option value="atendente">Atendente</option></select></label><button>Salvar Alterações</button></section><ul id="items"></ul></main><script>
+    res.end(`<!doctype html><main><section aria-label="Configurações extras"><button>Salvar Alterações</button></section><section aria-label="Dados do usuário"><label>Nome<input name="nome"></label><label>E-mail<input name="email"></label><input name="senha" type="password"><input name="senhaConfirmacao" type="password"><label>Departamentos<select aria-label="Departamentos"><option value="">Escolha</option><option value="demo">Demo</option></select></label><label>Perfil<select aria-label="Perfil"><option value="">Escolha</option><option value="atendente">Atendente</option></select></label><button>Salvar Alterações</button></section><ul id="items"></ul><output data-proof-state></output></main><script>
       const key='proof-users'; const denied=new URLSearchParams(location.search).has('role');
+      document.querySelector('[data-proof-state]').textContent=localStorage.getItem('proof-stray')||'';
       document.querySelector('[aria-label="Configurações extras"] button').onclick=()=>{if(denied&&${straySaveWrites})localStorage.setItem('proof-stray','written')};
       function render(){document.querySelector('#items').innerHTML=JSON.parse(localStorage.getItem(key)||'[]').map(name=>'<li data-proof-item="'+name+'">'+name+'<button>Excluir</button></li>').join('')};render();
       document.body.onclick=e=>{let b=e.target.closest('button');if(!b)return;
@@ -100,6 +101,9 @@ try {
   deniedWrite = true;
   await assert.rejects(run('denied-write'), /negado|alterou/u);
   deniedWrite = false;
+  straySaveWrites = true;
+  await assert.rejects(run('stray-save-reachable'), /negado|alterou/u);
+  straySaveWrites = false;
   deletionDisabled = true;
   await assert.rejects(run('no-delete'), /limpeza|remov/u);
   deletionDisabled = false;
