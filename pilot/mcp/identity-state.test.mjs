@@ -5,6 +5,9 @@ import { join } from 'node:path';
 import { authenticate, authorizeTool, loadCredentials } from './access-control.mjs';
 import { auditOperation, submitArticle } from './content-service.mjs';
 import { searchProductContext } from './product-context-service.mjs';
+import { buildServer } from './server.mjs';
+
+buildServer(); // Exercita o mesmo registro de políticas usado pelo HTTP.
 
 const readerKey = 'reader-abcdefghijklmnopqrstuvwxyz-123456';
 const writerKey = 'writer-abcdefghijklmnopqrstuvwxyz-123456';

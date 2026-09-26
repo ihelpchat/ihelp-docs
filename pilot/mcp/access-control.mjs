@@ -4,8 +4,13 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export const requestIdentity = new AsyncLocalStorage();
 const actorCalls = new Map();
 const actorPattern = /^(?:user|service):[a-z0-9][a-z0-9_-]{2,63}$/;
-const writerTools = new Set(['docs_submit_article', 'docs_submit_package', 'docs_update_article', 'docs_delete_article']);
+const toolMutations = new Map();
 const privateTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package']);
+
+export function registerToolPolicy(name, { mutates }) {
+  if (typeof mutates !== 'boolean') throw new Error(`${name} deve declarar mutates`);
+  toolMutations.set(name, mutates);
+}
 
 export function loadCredentials(serialized) {
   if (!serialized) return [];
@@ -37,7 +42,7 @@ export function authenticate(credentials, authorization) {
 export function authorizeTool(identity, name, args, { now = Date.now(), limit = 30 } = {}) {
   if (!identity) throw new Error('unauthorized');
   if (args.requestedBy !== undefined && args.requestedBy !== identity.actor) throw new Error('requestedBy forged');
-  if (identity.role === 'reader' && writerTools.has(name)) throw new Error('forbidden: reader cannot write');
+  if (identity.role === 'reader' && toolMutations.get(name) !== false) throw new Error('forbidden: reader cannot write');
   if (identity.role === 'writer' && privateTools.has(name)) throw new Error('forbidden: writer cannot read private code');
   const recent = (actorCalls.get(identity.actor) ?? []).filter((time) => now - time < 60_000);
   if (recent.length >= limit) throw new Error('rate limit per actor');

@@ -5,6 +5,7 @@ import { readArticle } from './editorial-standard.mjs';
 import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 import { catalogActions, isCatalogAction } from './product-actions.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
+import { createBudgetedResponse } from './provider-budget.mjs';
 
 const CITATION_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -133,6 +134,14 @@ function clientOf(options) {
   return new OpenAI({ apiKey });
 }
 
+async function modelResponse(options, payload) {
+  const client = clientOf(options);
+  if (options.client && !options.budget) return client.responses.create(payload);
+  const result = await createBudgetedResponse(client, payload, options.budget);
+  if (result.kind !== 'ok') throw new Error(result.kind === 'budget_exhausted' ? 'Orçamento da IA esgotado' : 'Resposta da IA indisponível');
+  return result.response;
+}
+
 function baseRequest(name, schema, input, options) {
   return {
     model: options.model ?? process.env.OPENAI_MODEL ?? 'gpt-6-luna',
@@ -199,7 +208,7 @@ export async function planContent(root, request, options = {}) {
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
   const pending = groundingPending(productContext);
   if (pending) return pending;
-  const response = await clientOf(options).responses.create(baseRequest('plano_documentacao', PLAN_SCHEMA, [
+  const response = await modelResponse(options, baseRequest('plano_documentacao', PLAN_SCHEMA, [
     {
       role: 'developer',
       content: [
@@ -230,7 +239,7 @@ export async function generateContentPackage(root, request, options = {}) {
   if (plan.status !== 'ready') {
     return { status: plan.status, summary: plan.summary ?? plan.guidance, questions: plan.questions, articles: [], existing, model: plan.model };
   }
-  const response = await clientOf(options).responses.create(baseRequest('pacote_documentacao', PACKAGE_SCHEMA, [
+  const response = await modelResponse(options, baseRequest('pacote_documentacao', PACKAGE_SCHEMA, [
     {
       role: 'developer',
       content: [
@@ -274,4 +283,69 @@ export async function generateContentPackage(root, request, options = {}) {
     };
   }
   return { ...safePackage, articles, existing, model: response.model };
+}
+
+const GUIDE_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  required: ['status', 'questions', 'article'],
+  properties: {
+    status: { type: 'string', enum: ['ready', 'needs_information'] },
+    questions: { type: 'array', items: { type: 'string' } },
+    article: {
+      type: 'object', additionalProperties: false,
+      required: [...ARTICLE_SCHEMA.required, 'guide'],
+      properties: {
+        ...ARTICLE_SCHEMA.properties,
+        guide: { type: 'object', additionalProperties: false,
+          required: ['schemaVersion', 'guideId', 'version', 'mode', 'initialStepId', 'steps'],
+          properties: {
+            schemaVersion: { type: 'integer' }, guideId: { type: 'string' }, version: { type: 'integer' },
+            mode: { type: 'string', enum: ['real', 'treino'] }, initialStepId: { type: 'string' },
+            steps: { type: 'array', items: { type: 'object', additionalProperties: false,
+              required: ['stepId', 'text', 'actionId', 'choices'], properties: {
+                stepId: { type: 'string' }, text: { type: 'string' },
+                actionId: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                choices: { type: 'array', items: { type: 'object', additionalProperties: false,
+                  required: ['id', 'label', 'nextStepId'], properties: {
+                    id: { type: 'string' }, label: { type: 'string' },
+                    nextStepId: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                  } } },
+              } } },
+          } },
+      },
+    },
+  },
+};
+
+export async function generateCanonicalGuide(root, request, options = {}) {
+  checkRequest(request);
+  const productContext = options.productContext;
+  const pending = groundingPending(productContext);
+  if (pending) return pending;
+  const existing = options.existingGuide;
+  const response = await modelResponse(options, baseRequest('guia_canonico', GUIDE_SCHEMA, [
+    { role: 'developer', content: [
+      'Gere exatamente um artigo contentType=guia no contrato canônico. Use somente fatos citados do código e o plano aprovado.',
+      'Mantenha guideId e path existentes quando houver atualização. Não invente botões, rotas, permissões ou ações.',
+      'Use ações somente do catálogo. Para campo opcional ausente, use null ou lista vazia.',
+      'Cada passo deve ser claro para iniciantes. Sem evidência suficiente, status=needs_information.',
+      'Use somente dados fictícios como Ana Exemplo e Loja Exemplo. Nunca copie nomes de pessoas das respostas no draft.',
+      'Cite cada frase de description, body, assistantOverview, assistantSuggestions e cada step.text no grounding do artigo com texto e citação exatos.',
+    ].join(' ') },
+    { role: 'user', content: redactSensitiveData(`${requestText(request, existing ? [existing] : [], productContext)}\nGuideId: ${request.guideId}\nPlano aprovado: ${JSON.stringify(options.plan)}\nGuia anterior: ${JSON.stringify(existing ?? null)}`) },
+  ], options));
+  const parsed = parseJson(response);
+  if (parsed.status !== 'ready') return { status: 'needs_information', questions: parsed.questions ?? [], articles: [] };
+  const raw = parsed.article;
+  const grounded = { grounding: raw.grounding, sentences: [raw.description, raw.body, raw.assistantOverview,
+    ...raw.assistantSuggestions, ...raw.guide.steps.map((step) => step.text)] };
+  if (!validateGroundedOutput(grounded, productContext, ['sentences'])) return evidencePending();
+  const { grounding: _grounding, ...article } = raw;
+  article.guide.steps = article.guide.steps.map((step) => ({ ...step,
+    ...(step.actionId === null ? { actionId: undefined } : {}),
+    choices: step.choices.map((choice) => ({ ...choice, ...(choice.nextStepId === null ? { nextStepId: undefined } : {}) })),
+  }));
+  if (article.guide.guideId !== request.guideId || article.contentType !== 'guia'
+    || article.productActions.some((action) => !confirmedAction(action, request, productContext))) return evidencePending();
+  return { status: 'ready', articles: [article] };
 }
