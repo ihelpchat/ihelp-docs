@@ -23,6 +23,8 @@ npm run qa:ui
 npm run qa:visual
 ```
 
+Para acrescentar um teste ao `mcp:test`, crie o arquivo `mcp/<nome>.test.mjs`; o runner o descobre automaticamente.
+
 `qa:ui` valida busca, páginas, FAQ, API, vídeo, workflow público do Tango, menus recolhíveis (mouse e teclado), assistente de IA (tela cheia, painel lateral, erro com nova tentativa, estado “não conectado”) com um serviço simulado, menu do celular e responsividade. Com `ASSISTANT_TEST=1`, pergunta também ao serviço de IA real.
 
 `qa:visual` compara o site com o protótipo do Claude Design (projeto “Estrutura de docs ihelp”) em desktop (1440×1000) e mobile (390×844) e exige pelo menos 90% em duas medidas: pontos de controle (posição, tamanho e estilo de ~130 elementos, incluindo assistente, painel lateral e menus) e grade de cor da tela visível. Rode contra um build com `NEXT_PUBLIC_ASSISTANT_URL` definido (qualquer URL serve; o teste não chama a IA), porque o desenho mostra os pontos de entrada da IA. A referência fica em `scripts/fixtures/design-baseline.json` e contém só medidas; o protótipo não é versionado. Para atualizar a referência, baixe o protótipo pelo MCP `claude-design` para uma pasta fora do repositório, sirva essa pasta e rode `DESIGN_URL=http://127.0.0.1:4190/index.html npm run qa:visual:baseline`.
