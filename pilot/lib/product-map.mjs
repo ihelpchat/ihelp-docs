@@ -39,11 +39,29 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
   const labels = [];
   const permissions = [];
   const pending = [];
-  for (const file of await files(join(frontRoot, 'src'), ['.tsx', '.jsx'])) {
+  for (const file of await files(join(frontRoot, 'src'), ['.tsx', '.jsx', '.ts', '.js'])) {
     const source = await readFile(file, 'utf8');
     const path = relative(frontRoot, file);
-    const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.JSX);
+    const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : file.endsWith('.jsx') ? ts.ScriptKind.JSX : file.endsWith('.ts') ? ts.ScriptKind.TS : ts.ScriptKind.JS;
+    const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
     const visit = (node) => {
+      if (ts.isVariableDeclaration(node) && /^(?:pagesData|[A-Za-z0-9_]*[Rr]outes)$/u.test(node.name.getText(ast)) && node.initializer && ts.isArrayLiteralExpression(node.initializer)) {
+          for (const entry of node.initializer.elements) {
+            if (!ts.isObjectLiteralExpression(entry)) continue;
+            const property = (name) => entry.properties.find((item) => ts.isPropertyAssignment(item) && item.name.getText(ast) === name);
+            const routeNode = property('path') ?? property('route');
+            const titleNode = property('title');
+            if (!routeNode) continue;
+            if (!ts.isStringLiteral(routeNode.initializer)) {
+              pending.push(`rota não resolvida: ${path}`);
+              continue;
+            }
+            const route = safe(routeNode.initializer.text, /^\/[A-Za-z0-9_/:.-]{1,120}$/u);
+            const label = titleNode && ts.isStringLiteral(titleNode.initializer) ? safe(titleNode.initializer.text) : null;
+            if (route && label) routes.push({ path: route, label });
+            else pending.push(`rota ou rótulo inseguro: ${path}`);
+          }
+      }
       if (ts.isJsxAttribute(node) && /^(data-tour-id|data-help-id)$/u.test(node.name.text)) {
         const kind = node.name.text === 'data-tour-id' ? 'tour' : 'help';
         if (node.initializer && ts.isStringLiteral(node.initializer)) {
@@ -61,17 +79,6 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
       ts.forEachChild(node, visit);
     };
     visit(ast);
-    if (file.endsWith('pagesData.tsx') || file.endsWith('pagesData.jsx')) {
-      for (const match of source.matchAll(/\bpath:\s*(["'])(\/[A-Za-z0-9_/:.-]+)\1(?:(?!\bpath:)[\s\S]){0,700}?\btitle:\s*(["'])([^"']+)\3/gu)) {
-        const route = safe(match[2], /^\/[A-Za-z0-9_/:.-]{1,120}$/u);
-        const label = safe(match[4]);
-        if (route && label) routes.push({ path: route, label });
-        else pending.push(`rota ou rótulo inseguro: ${path}`);
-      }
-      for (const match of source.matchAll(/\bpath:\s*([^,\n]+)/gu)) {
-        if (!/^["']\/[A-Za-z0-9_/:.-]+["']$/u.test(match[1].trim())) pending.push(`rota não resolvida: ${path}`);
-      }
-    }
   }
   for (const file of await files(backRoot, ['.cs'])) {
     const source = await readFile(file, 'utf8');

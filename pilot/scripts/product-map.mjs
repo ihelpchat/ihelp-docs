@@ -15,7 +15,9 @@ const guides = guideFile ? JSON.parse(await readFile(guideFile, 'utf8')) : (awai
 const current = await buildProductMap({ frontRoot: front, backRoot: back, guides, actions: actionCatalog });
 if (previousFront && previousBack && previousFront !== '-') {
   const previous = await buildProductMap({ frontRoot: previousFront, backRoot: previousBack, guides: [], actions: actionCatalog });
-  current.changes = (await buildProductMap({ frontRoot: front, backRoot: back, guides, actions: actionCatalog, baseline: previous.manifest })).changes;
+  const compared = await buildProductMap({ frontRoot: front, backRoot: back, guides, actions: actionCatalog, baseline: previous.manifest });
+  current.changes = compared.changes;
+  current.pending = compared.pending;
 }
 const sha = (dir) => execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const report = { frontSha: sha(front), backSha: sha(back), ...current };
@@ -24,4 +26,4 @@ console.log(`front ${report.frontSha}; back ${report.backSha}`);
 console.log(`rotas ${report.manifest.routes.length}; rótulos ${report.manifest.labels.length}; marcadores ${report.manifest.markers.length}; permissões ${report.manifest.permissions.length}`);
 for (const change of report.changes) console.log(`mudança: ${change}`);
 for (const pending of report.pending) console.log(`pendência: ${pending}`);
-if (report.pending.some((item) => /: (?:marcador|rota) ausente |: autorização perdida /u.test(item))) process.exitCode = 1;
+if (report.pending.length > 0) process.exitCode = 1;

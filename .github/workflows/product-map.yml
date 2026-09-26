@@ -27,7 +27,7 @@ jobs:
           cache-dependency-path: docs/pilot/package-lock.json
       - name: Install and prove fixture compatibility
         working-directory: docs/pilot
-        run: npm ci && node mcp/product-map.test.mjs
+        run: npm ci && node mcp/run-tests.mjs
       - name: Check read-only token availability
         id: token
         env:
