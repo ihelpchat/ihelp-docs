@@ -238,8 +238,8 @@ function OfflineMessage({ question, compact }: { question: string; compact: bool
 }
 
 export function AssistantBusy({ compact }: { compact: boolean }) {
-  const { counts, scope } = useAssistant();
-  const label = `Consultando ${counts[scope]} documentos${scope === 'Tudo' ? ' da base' : ` em ${scope}`}…`;
+  const { counts, scope, retrying } = useAssistant();
+  const label = retrying ? 'Só um instante, já te respondo…' : `Consultando ${counts[scope]} documentos${scope === 'Tudo' ? ' da base' : ` em ${scope}`}…`;
   return (
     <div className="ih-ai-row ih-ai-busy" role="status">
       {compact ? null : <Avatar />}
@@ -270,8 +270,11 @@ export function AssistantThread({ compact = false }: { compact?: boolean }) {
         return (
           <div key={message.id} className="ih-ai-error" role="alert">
             {compact ? null : <AlertCircle aria-hidden="true" />}
-            <span>{compact ? 'Não consegui responder agora.' : 'Não consegui responder agora. Tente de novo em alguns segundos.'}</span>
-            <button type="button" onClick={() => retry(message.id)}>Tentar de novo</button>
+            <span>{message.status === 429 ? message.message : compact ? 'Não consegui responder agora.' : 'Não consegui responder agora. Tente de novo em alguns segundos.'}</span>
+            <div className="ih-ai-error-actions">
+              <button type="button" onClick={() => retry(message.id)}>Tentar de novo</button>
+              {message.status === 429 ? <a href={supportUrl} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a> : null}
+            </div>
           </div>
         );
       })}
