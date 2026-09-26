@@ -15,6 +15,8 @@ fixtureCatalog['abrir-relatorios'] = { label: 'Abrir Relatórios', route: '/rela
 await writeFile(catalogPath, JSON.stringify(fixtureCatalog));
 const { generateContentPackage, planContent, normalizeCatalogLabel } = await import(new URL(`file://${join(testRoot, 'mcp/content-ai-service.mjs')}`));
 const { renderArticle } = await import(new URL(`file://${join(testRoot, 'mcp/content-service.mjs')}`));
+const citation = { repository: 'ihelpchat/front-react', path: 'src/Contacts/index.tsx', lineStart: 1, lineEnd: 1, sha: 'a'.repeat(40) };
+const grounding = (...texts) => texts.flatMap((text) => text.split(/(?<=[.!?])\s+|\n/u).map((part) => ({ text: part.trim(), citations: [citation] })));
 assert.deepEqual(normalizeCatalogLabel({ id: 'abrir-relatorios', label: 'Label inventado', route: '/relatorio', target: null }), { id: 'abrir-relatorios', label: 'Abrir Relatórios', route: '/relatorio', target: null });
 const divergentRoute = { id: 'importar-contatos', label: 'Label inventado', route: '/relatorio', target: 'contacts-more-options' };
 assert.deepEqual(normalizeCatalogLabel(divergentRoute), divergentRoute, 'route divergente não pode receber ação confiável');
@@ -34,11 +36,13 @@ const aiClient = {
             { id: 'importar-contatos', label: 'Ir para importar contatos', route: '/contact', target: 'contacts-more-options' },
             { id: 'abrir-relatorios', label: 'Label inventado', route: '/relatorio', target: null },
           ],
+          grounding: grounding('Crie uma FAQ curta e um tutorial para iniciantes.', 'Confirmar a extensão aceita pela importação.'),
         }) };
       }
       return { model: 'gpt-test', output_text: JSON.stringify({
         status: 'ready',
         summary: 'Pacote pronto para revisão.',
+        grounding: grounding('Pacote pronto para revisão.'),
         questions: [],
         articles: [
           {
@@ -53,6 +57,7 @@ const aiClient = {
             assistantSuggestions: ['Como corrigir linhas inválidas?'],
             body: 'Abra o menu Contatos e confira se a planilha contém nome e telefone. No canto superior direito, abra Mais opções e selecione Importar contatos. Escolha o arquivo, confira o mapeamento das colunas e avance para validar os dados. Corrija linhas inválidas antes de concluir. Ao finalizar, confirme se os contatos aparecem na lista. Se algum item não entrar, confira o código do país e tente novamente com apenas as linhas corrigidas. Esse processo mantém os contatos válidos e mostra o andamento da importação na própria tela.',
             productActions: [{ id: 'importar-contatos', label: 'Ir para importar contatos', route: '/contact', target: 'contacts-more-options' }],
+            grounding: grounding('Aprenda a preparar e importar contatos na sua conta do iHelp.', 'Abra Contatos, escolha Importar contatos em Mais opções e confira a planilha antes de concluir.', 'Como corrigir linhas inválidas?', 'Abra o menu Contatos e confira se a planilha contém nome e telefone. No canto superior direito, abra Mais opções e selecione Importar contatos. Escolha o arquivo, confira o mapeamento das colunas e avance para validar os dados. Corrija linhas inválidas antes de concluir. Ao finalizar, confirme se os contatos aparecem na lista. Se algum item não entrar, confira o código do país e tente novamente com apenas as linhas corrigidas. Esse processo mantém os contatos válidos e mostra o andamento da importação na própria tela.'),
           },
           {
             path: 'tutoriais/contatos/importar-contatos',
@@ -66,6 +71,7 @@ const aiClient = {
             assistantSuggestions: ['Como corrigir linhas inválidas?'],
             body: 'Antes de começar, deixe a planilha pronta com nome e telefone. Abra Contatos pelo menu lateral. No canto superior direito, abra Mais opções e escolha Importar contatos. Selecione o arquivo e confira as colunas reconhecidas. Ajuste o mapeamento quando necessário e avance para a validação. Revise as linhas sinalizadas e corrija os dados antes de confirmar. Inicie a importação e acompanhe o progresso na tela. Quando terminar, pesquise um contato da planilha para confirmar que o cadastro foi criado corretamente. Caso algum contato não apareça, revise o telefone e o código do país.',
             productActions: [{ id: 'importar-contatos', label: 'Começar no iHelp', route: '/contact', target: 'contacts-more-options' }],
+            grounding: grounding('Siga cada etapa para importar sua primeira lista de contatos no iHelp.', 'Abra Contatos, escolha Importar contatos em Mais opções e confira a planilha antes de concluir.', 'Como corrigir linhas inválidas?', 'Antes de começar, deixe a planilha pronta com nome e telefone. Abra Contatos pelo menu lateral. No canto superior direito, abra Mais opções e escolha Importar contatos. Selecione o arquivo e confira as colunas reconhecidas. Ajuste o mapeamento quando necessário e avance para a validação. Revise as linhas sinalizadas e corrija os dados antes de confirmar. Inicie a importação e acompanhe o progresso na tela. Quando terminar, pesquise um contato da planilha para confirmar que o cadastro foi criado corretamente. Caso algum contato não apareça, revise o telefone e o código do país.'),
           },
         ],
       }) };
