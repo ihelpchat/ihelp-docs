@@ -68,7 +68,8 @@ const NONE = { kind: 'none' };
 
 export async function routeMessage(question, { catalog, client, budget, history = [], timeout } = {}) {
   const safeQuestion = redactSensitiveData(question);
-  if (!catalog?.length || !client) return NONE;
+  if (!catalog?.length) return NONE;
+  if (!client) return { kind: 'provider_failed' };
   const identifiers = new Set(catalog.map(({ guideId }) => guideId));
   const payload = {
     model: assistantRouterModel(), store: false,
@@ -100,7 +101,7 @@ export async function routeMessage(question, { catalog, client, budget, history 
       controller.abort();
       return lexicalFallback(safeQuestion, catalog);
     }
-    if (result.kind !== 'ok') return NONE;
+    if (result.kind !== 'ok') return { kind: 'provider_failed' };
     let parsed;
     try { parsed = JSON.parse(result.response.output_text); } catch { return NONE; }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
@@ -114,6 +115,6 @@ export async function routeMessage(question, { catalog, client, budget, history 
     }
     return choices.includes(parsed.choice) ? { kind: parsed.choice } : NONE;
   } catch {
-    return NONE;
+    return { kind: 'provider_failed' };
   } finally { clearTimeout(timer); }
 }

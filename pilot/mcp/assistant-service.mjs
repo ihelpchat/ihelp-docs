@@ -16,6 +16,7 @@ const STOP_WORDS = new Set([
   'me', 'meu', 'na', 'nas', 'no', 'nos', 'o', 'os', 'para', 'por', 'que', 'se', 'um', 'uma',
 ]);
 const MAX_GUIDE_STEPS = 20;
+const GENERIC_TITLE_WORDS = new Set(['criar', 'fazer', 'configurar', 'usar', 'enviar', 'abrir', 'nova', 'novo', 'passo', 'guia']);
 const sourceIntents = new Map(Object.entries({
   '/docs/sobre-o-sistema/robo-de-atendimento': 'create_robot',
   '/docs/sobre-o-sistema/configuracoes/gerenciamento-de-usuarios': 'manage_users',
@@ -228,7 +229,9 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
     const guideMatch = guideQuestion && (normalizedQuestion === guideQuestion || guideRequest === guideQuestion);
     const guideTerms = guideQuestion.split(/[^a-z0-9]+/).filter((term) => term.length > 3 && !STOP_WORDS.has(term));
     const guideOverlap = guideTerms.filter((term) => terms.some((word) => term === word || term.replace(/s$/, '') === word.replace(/s$/, ''))).length;
-    const titleMatch = terms.some((term) => titleText.split(/[^a-z0-9]+/).some((word) => word === term || word.replace(/s$/, '') === term.replace(/s$/, '')));
+    const titleTerms = titleText.split(/[^a-z0-9]+/).filter((word) => word.length > 2 && !STOP_WORDS.has(word) && !GENERIC_TITLE_WORDS.has(word));
+    const matchedTitleTerms = titleTerms.filter((word) => terms.some((term) => word === term || word.replace(/s$/, '') === term.replace(/s$/, ''))).length;
+    const titleMatch = matchedTitleTerms > 0;
     const phrases = searchQuestion.split(/[^a-z0-9]+/);
     const phraseMatch = phrases.some((_, index) => index + 3 < phrases.length
       && bodyText.includes(phrases.slice(index, index + 4).join(' ')));
@@ -241,6 +244,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       + (onPage ? 100 : 0)
       + (guideMatch ? 200 : 0)
       + (guideOverlap >= 2 ? guideOverlap * 20 : 0)
+      + (titleTerms.length ? Math.round(12 * matchedTitleTerms / titleTerms.length) : 0)
       + (frontmatterValue(raw, 'contentType') === 'guia' && titleMatch ? 20 : 0)
       + (frontmatterValue(raw, 'assistantOverview') && titleMatch ? 15 : 0)
       + (phraseMatch ? 30 : 0);
@@ -528,7 +532,14 @@ export async function answerQuestion(root, question, options = {}) {
     actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
     resolution: 'partial', found: false,
   };
+  if (/\b(?:mcp|model context protocol)\b/i.test(question)) {
+    return {
+      answer: 'O MCP do iHelp está sendo preparado e será disponibilizado em breve. Quando ele estiver liberado, a Central de Ajuda mostrará o que você poderá fazer e como começar.',
+      sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: 'complete', found: false,
+    };
+  }
   const published = await publishedGuideCatalog(root);
+  let routerFailed = false;
   if (published.length) {
     const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
     const client = options.client ?? (apiKey ? new OpenAI({ apiKey, maxRetries: 0,
@@ -550,6 +561,7 @@ export async function answerQuestion(root, question, options = {}) {
       answer: 'Qual tarefa você quer fazer no iHelp?', sections: [], steps: [], code: null,
       sources: [], suggestions: ['Falar com uma pessoa'], resolution: 'not_found', found: false,
     };
+    routerFailed = route.kind === 'provider_failed';
   }
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   const scope = Object.hasOwn(ASSISTANT_SCOPES, options.scope ?? '') ? options.scope : 'Tudo';
@@ -558,12 +570,6 @@ export async function answerQuestion(root, question, options = {}) {
     path: pagePath,
     title: redactSensitiveData(String(options.page.title ?? '')),
   } : undefined;
-  if (/\b(?:mcp|model context protocol)\b/i.test(question)) {
-    return {
-      answer: 'O MCP do iHelp está sendo preparado e será disponibilizado em breve. Quando ele estiver liberado, a Central de Ajuda mostrará o que você poderá fazer e como começar.',
-      sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: 'complete', found: false,
-    };
-  }
   const history = sanitizeHistory(options.history);
   const widgetContext = sanitizeWidgetContext(options.widgetContext);
   let originalQuestion = history.find((item) => item.role === 'user' && !guidedContinuation(item.content, history))?.content ?? question;
@@ -578,9 +584,10 @@ export async function answerQuestion(root, question, options = {}) {
     && !continuation
     && !detailedProcedure;
   const preferredPaths = sourcePathsFromHistory(history);
-  let sources = await retrieveContext(root, question, 6, {
+  let sources = await retrieveContext(root, question, 8, {
     scope, page, preferredPaths, requiredPath: generalContinuation || choice || recovery ? preferredPaths.at(-1) : undefined,
   });
+  const priorSource = sources.find((source) => source.path === preferredPaths.at(-1));
   const priorGuide = sources.find((source) => source.path === preferredPaths.at(-1) && source.documentedSteps.length);
   const optionalBranch = priorGuide?.optionalBranch;
   const activeText = activeAssistantText(history, question);
@@ -629,6 +636,7 @@ export async function answerQuestion(root, question, options = {}) {
     actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
     resolution: 'partial', found: true,
   });
+  if (routerFailed) return fixedFallback(true);
   const client = options.client ?? (apiKey ? new OpenAI({ apiKey, maxRetries: 0, ...(options.baseURL ? { baseURL: options.baseURL } : {}) }) : null);
   const context = sources.map((source, index) => [
     `FONTE ${index + 1}: ${source.title}`,
@@ -693,10 +701,12 @@ export async function answerQuestion(root, question, options = {}) {
   const selected = (historyGuide ? [historyGuide] : exactQuestionGuide ? [exactQuestionGuide]
     : chosen.length ? chosen : exactGuide ? [exactGuide] : parsed.found ? sources.slice(0, 3) : [])
     .filter((source, index, list) => list.indexOf(source) === index);
+  const selectedGuide = historyGuide || exactQuestionGuide || (chosen.length ? undefined : exactGuide);
   const used = procedure && selected.some((source) => source.documentedSteps.length)
     ? selected.filter((source) => source.documentedSteps.length || source.productActions.length)
     : selected;
-  const selectedIntent = intentFromSource(used[0]);
+  // A intenção de diagnóstico vem da fonte citada pelo modelo ou da fonte explícita da conversa.
+  const selectedIntent = intentFromSource((continuation ? priorSource : undefined) ?? chosen[0] ?? exactQuestionGuide);
   const diagnosis = diagnosisFor(originalQuestion, widgetContext, selectedIntent);
   const availableActions = new Map(used.flatMap((source) => source.productActions.map((action) => [action.id, action])));
   const availableImages = new Map(used.flatMap((source) => source.screenshots.map((image) => [image.src, image])));
@@ -815,8 +825,8 @@ export async function answerQuestion(root, question, options = {}) {
     code: historyGuide ? null : parsed.code,
     sources: used.map(({ title, path, description, media }) => ({ title, path, kind: kindOf(path), excerpt: description, ...(media ? { media } : {}) })),
     suggestions: escalate ? [] : needsHelp ? ['Preciso de ajuda'] : suggestions,
-    resolution: escalate ? 'partial' : (historyGuide || exactGuide)?.assistantResolution ?? (historyGuide ? 'complete' : parsed.resolution),
-    found: historyGuide || exactGuide ? true : parsed.found,
+    resolution: escalate ? 'partial' : selectedGuide?.assistantResolution ?? (historyGuide ? 'complete' : parsed.resolution),
+    found: selectedGuide ? true : parsed.found,
     diagnosis,
     ...(escalate ? { escalation: handoffFor(diagnosis, widgetContext, history, selectedIntent) } : {}),
     model: response.model,
