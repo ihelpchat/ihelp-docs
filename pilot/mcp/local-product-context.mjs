@@ -31,6 +31,12 @@ const SOURCES = Object.freeze({
   backend: { repository: 'ihelpchat/olah-ihelp', role: 'backend', env: envCompatibility.localCheckouts.backend,
     folders: ['Controllers', 'Comzada.Application/Controllers', 'ihelp.PublicApi'] },
 });
+const API_DTO_FOLDERS = Object.freeze(['Comzada.Domain/EntitiesV2', 'Comzada.Domain/Entities_v2']);
+export function productSparseFolders(role) {
+  const folders = SOURCES[role]?.folders;
+  if (!folders) throw new Error('Repositório do produto inválido');
+  return [...new Set([...folders, ...(role === 'backend' ? API_DTO_FOLDERS : [])])];
+}
 const STOP = new Set(['para', 'pelo', 'pela', 'como', 'criar', 'configurar', 'codigo', 'code', 'de', 'com', 'uma', 'um']);
 const ALIASES = { robo: ['robot'], robos: ['robot'], canal: ['channel'], canais: ['channel'], horario: ['schedule', 'hour'], horarios: ['schedule', 'hour'], departamento: ['department'], departamentos: ['department'], atendimento: ['attendance'], reconectar: ['reconnect', 'connection'], contatos: ['contacts'], campanha: ['campaign'] };
 
@@ -66,7 +72,8 @@ function lineKinds(path, content) {
 
 export function isAllowedSourcePath(path, role = 'frontend', includeApiDto = false) {
   const folders = SOURCES[role]?.folders ?? [];
-  const dto = includeApiDto && role === 'backend' && /^Comzada\.Domain\/Entities(?:V2|_v2)\/[\w/]+\.cs$/u.test(path);
+  const dto = includeApiDto && role === 'backend' && API_DTO_FOLDERS.some((folder) =>
+    path.startsWith(`${folder}/`) && /^[\w/]+\.cs$/u.test(path.slice(folder.length + 1)));
   const publicConfigurationController = role === 'backend' && /^Comzada\.Application\/Controllers\/V2\/Configurations(?:Users|Departments)Controller\.cs$/u.test(path);
   return (dto || folders.some((folder) => path.startsWith(`${folder}/`)))
     && SOURCE.test(path) && !BLOCKED.test(path) && (publicConfigurationController || !BLOCKED_FILE.test(path))

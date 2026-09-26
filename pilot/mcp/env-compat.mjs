@@ -9,6 +9,7 @@ export const envCompatibility = Object.freeze({
   assistantRouterEffort: Object.freeze({ current: 'ASSISTANT_ROUTER_EFFORT', default: 'none' }),
   conversationsRetentionDays: Object.freeze({ current: 'CONVERSATIONS_RETENTION_DAYS' }),
   localCheckouts: Object.freeze({ frontend: 'PRODUCT_LOCAL_CHECKOUT', backend: 'BACKEND_LOCAL_CHECKOUT' }),
+  productCheckoutRefreshHours: 'PRODUCT_CHECKOUT_REFRESH_HOURS',
 });
 
 const warned = new Set();
@@ -43,6 +44,17 @@ export function githubReadToken(env = process.env) {
 
 export function githubWriteToken(env = process.env) {
   return env[envCompatibility.githubReadToken.old];
+}
+
+export function productCheckoutRefreshHours(env = process.env) {
+  const name = envCompatibility.productCheckoutRefreshHours;
+  const value = env[name];
+  if (value === undefined) return 36;
+  const hours = Number(value);
+  if (!/^[1-9]\d*$/u.test(value) || !Number.isSafeInteger(hours) || hours > 24 * 30) {
+    throw new Error(`${name} inválido`);
+  }
+  return hours;
 }
 
 export function assistantRouterModel(env = process.env) {
