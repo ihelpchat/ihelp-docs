@@ -59,6 +59,8 @@ try {
     const result = await searchLocalProductContext(topic, module, { repositoryIds: ['frontend'] });
     assert.equal(result.code[0].available, true, result.code[0].reason);
     assert.ok(result.matches.slice(0, 3).some(({ path }) => path === causal), `${topic}: arquivo causal deve aparecer entre os primeiros resultados`);
+    assert.ok(result.matches.every(({ excerpt }) => !containsSensitiveData(excerpt, { detectOpaque: true })),
+      `${topic}: trecho devolvido deve passar na varredura sensível`);
   }
   const result = await searchLocalProductContext('Configurar horário de atendimento', 'Departamentos', { repositoryIds: ['frontend'] });
   assert.ok(result.matches.some(({ path, excerpt }) => path === department && excerpt.includes(identifier)), 'identificador camelCase deve chegar ao match');
