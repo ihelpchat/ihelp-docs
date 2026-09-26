@@ -4,6 +4,8 @@
 
 O workflow `product-map.yml` roda a fixture sem rede em todo PR para `integration/claricia-v2`. Se `PRODUCT_READ_TOKEN` estiver configurado como token com acesso **somente de leitura** a `ihelpchat/front-react` e `ihelpchat/olah-ihelp`, lê `master` e `release/validation`, respectivamente. O token é usado no checkout com `persist-credentials: false`; nada é escrito nesses repositórios. Sem o segredo, o check informa a pendência e só valida a fixture.
 
+O gate compara essas árvores com `product-map/approved.json`, versionado neste repo com os SHAs de origem. O primeiro approved foi gerado das árvores reais; uma mudança irrelevante aparece em `changes` sem bloquear. Alvos não verificáveis ficam em `informational`; um guia que depende de um marcador ou rota ausente, ou de uma autorização perdida, bloqueia o check. Para aceitar um novo estado do produto numa PR de docs, rode `npm run product-map:approve -- FRONT BACK REPORT`, confira a diferença impressa e versione o novo approved. O comando de aprovação atualiza o baseline mesmo com pendências, portanto a revisão dessa mudança decide a transição ou rollback dos guias afetados.
+
 O relatório temporário inclui os SHAs, rotas, rótulos, marcadores, permissões e diferenças em relação ao commit anterior de cada produto. Só valores literais que passam pela varredura de dado sensível entram no manifest; expressões dinâmicas viram pendências. Marcador ou rota de ação usada por guia publicado que desaparecer bloqueia o check. O relatório não é publicado como artefato. Para uma transição, atualize e publique a nova versão do guia antes de remover o marcador; para rollback, restaure o marcador no front ou volte a versão do guia por PR revisável.
 
 ## Dados da Claricia

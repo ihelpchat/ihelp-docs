@@ -42,7 +42,9 @@ try {
     execFileSync('git', ['init', '-q', dir]);
     execFileSync('git', ['-C', dir, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'fixture']);
   }
-  const run = () => spawnSync(process.execPath, [script, front, back, previousFront, previousBack, output, '--guides-file', guideFile, '--actions-file', actionsFile], { encoding: 'utf8' });
+  const approvedFile = join(root, 'approved.json');
+  await writeFile(approvedFile, JSON.stringify({ frontSha: 'fixture-front', backSha: 'fixture-back', manifest: baseline }));
+  const run = () => spawnSync(process.execPath, [script, front, back, output, '--approved', approvedFile, '--guides-file', guideFile, '--actions-file', actionsFile], { encoding: 'utf8' });
   assert.notEqual(run().status, 0, 'baseline authorization loss must fail CLI');
   const report = JSON.parse(await readFile(output, 'utf8'));
   assert.match(report.pending.join('\n'), /reconnect: autorização perdida .*Read/u);

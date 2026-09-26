@@ -56,6 +56,7 @@ function attributes(items) {
   return result;
 }
 const stringArg = (item) => item?.args.find((token) => token.kind === 'string')?.value;
+const normalizeRoute = (route) => route.replace(/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\??\}/gu, ':$1');
 function policyOf(attrs) {
   const auth = attr(attrs, 'Authorize');
   if (!auth) return null;
@@ -91,7 +92,7 @@ export function readCsharpEndpoints(source, file) {
       const method = t[i - 1].value;
       const anonymous = Boolean(attr(pending, 'AllowAnonymous') || attr(controller.attrs, 'AllowAnonymous'));
       const policy = anonymous ? 'anonymous' : policyOf(pending) ?? policyOf(controller.attrs) ?? 'anonymous';
-      const route = [stringArg(attr(controller.attrs, 'Route')) ?? '', stringArg(http) ?? ''].filter(Boolean).join('/');
+      const route = normalizeRoute([stringArg(attr(controller.attrs, 'Route')) ?? '', stringArg(http) ?? ''].filter(Boolean).join('/'));
       endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy });
       pending = [];
     }

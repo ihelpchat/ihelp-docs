@@ -40,7 +40,7 @@ jobs:
           repository: ihelpchat/front-react
           ref: master
           path: front
-          fetch-depth: 2
+          fetch-depth: 1
           token: ${{ secrets.PRODUCT_READ_TOKEN }}
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -49,13 +49,10 @@ jobs:
           repository: ihelpchat/olah-ihelp
           ref: release/validation
           path: back
-          fetch-depth: 2
+          fetch-depth: 1
           token: ${{ secrets.PRODUCT_READ_TOKEN }}
           persist-credentials: false
       - name: Compare real product with published guides
         if: steps.token.outputs.ready == 'true'
         run: |
-          mkdir -p "$RUNNER_TEMP/previous-front" "$RUNNER_TEMP/previous-back"
-          git -C front archive HEAD^ | tar -x -C "$RUNNER_TEMP/previous-front"
-          git -C back archive HEAD^ | tar -x -C "$RUNNER_TEMP/previous-back"
-          node docs/pilot/scripts/product-map.mjs front back "$RUNNER_TEMP/previous-front" "$RUNNER_TEMP/previous-back" "$RUNNER_TEMP/product-map.json"
+          node docs/pilot/scripts/product-map.mjs front back "$RUNNER_TEMP/product-map.json" --approved docs/pilot/product-map/approved.json

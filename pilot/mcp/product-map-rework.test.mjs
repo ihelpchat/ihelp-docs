@@ -28,7 +28,8 @@ try {
   await writeFile(frontFile, 'export const Channel = () => <button data-tour-id={target}>Conectar</button>;');
   const dynamic = await scan();
   assert.ok(!dynamic.manifest.markers.some(({ id }) => id === 'channel-connect'));
-  assert.match(dynamic.pending.join('\n'), /marcador dinâmico/u);
+  assert.match(dynamic.informational.join('\n'), /marcador dinâmico/u);
+  assert.match(dynamic.pending.join('\n'), /reconnect: marcador ausente channel-connect/u);
   await writeFile(frontFile, front);
 
   await writeFile(backFile, '[Route("api/[controller]")]\n[Authorize(Policy = "Channels.Read")]\npublic class ChannelController {\n  [HttpGet("read")] public void Read() {}\n  [HttpPost("export")][Authorize(Policy = "Channels.Export")] public void Export() {}\n}');
@@ -53,7 +54,9 @@ try {
   execFileSync('git', ['init', '-q', frontRoot]);
   execFileSync('git', ['init', '-q', backRoot]);
   for (const dir of [frontRoot, backRoot]) execFileSync('git', ['-C', dir, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'fixture']);
-  const run = () => spawnSync(process.execPath, [script, frontRoot, backRoot, '-', '-', output, '--guides-file', guideFile, '--actions-file', actionsFile], { encoding: 'utf8' });
+  const approvedFile = join(root, 'approved.json');
+  await writeFile(approvedFile, JSON.stringify({ frontSha: 'fixture-front', backSha: 'fixture-back', manifest: clean.manifest }));
+  const run = () => spawnSync(process.execPath, [script, frontRoot, backRoot, output, '--approved', approvedFile, '--guides-file', guideFile, '--actions-file', actionsFile], { encoding: 'utf8' });
   assert.equal(run().status, 0, 'coherent guide and marker must pass');
   await writeFile(frontFile, front.replace('channel-connect', 'channel-gone'));
   assert.notEqual(run().status, 0, 'missing published marker must fail the script');

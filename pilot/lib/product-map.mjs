@@ -39,6 +39,7 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
   const labels = [];
   const permissions = [];
   const pending = [];
+  const informational = [];
   for (const file of await files(join(frontRoot, 'src'), ['.tsx', '.jsx', '.ts', '.js'])) {
     const source = await readFile(file, 'utf8');
     const path = relative(frontRoot, file);
@@ -53,13 +54,13 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
             const titleNode = property('title');
             if (!routeNode) continue;
             if (!ts.isStringLiteral(routeNode.initializer)) {
-              pending.push(`rota não resolvida: ${path}`);
+              informational.push(`rota não resolvida: ${path}`);
               continue;
             }
             const route = safe(routeNode.initializer.text, /^\/[A-Za-z0-9_/:.-]{1,120}$/u);
             const label = titleNode && ts.isStringLiteral(titleNode.initializer) ? safe(titleNode.initializer.text) : null;
             if (route && label) routes.push({ path: route, label });
-            else pending.push(`rota ou rótulo inseguro: ${path}`);
+            else informational.push(`rota ou rótulo não verificável: ${path}`);
           }
       }
       if (ts.isJsxAttribute(node) && /^(data-tour-id|data-help-id)$/u.test(node.name.text)) {
@@ -67,8 +68,8 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
         if (node.initializer && ts.isStringLiteral(node.initializer)) {
           const id = safe(node.initializer.text, /^[A-Za-z0-9_-]{1,80}$/u);
           if (id) markers.push({ kind, id });
-          else pending.push(`expressão ou marcador inseguro: ${path}`);
-        } else pending.push(`marcador dinâmico: ${path}`);
+          else informational.push(`expressão ou marcador não verificável: ${path}`);
+        } else informational.push(`marcador dinâmico: ${path}`);
       }
       if (ts.isJsxElement(node) && /^(button|Button)$/u.test(node.openingElement.tagName.getText(ast))) {
         for (const child of node.children) if (ts.isJsxText(child)) {
@@ -85,7 +86,7 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
     for (const endpoint of readCsharpEndpoints(source, relative(backRoot, file))) {
       const fields = [endpoint.controller, endpoint.method, endpoint.verb, endpoint.route, endpoint.policy];
       if (fields.every((value) => safe(value, /^[A-Za-z0-9_.:\/[\]-]{1,120}$/u))) permissions.push(endpoint);
-      else pending.push(`permissão não resolvida: ${relative(backRoot, file)}`);
+      else informational.push(`permissão não resolvida: ${relative(backRoot, file)}`);
     }
   }
   const manifest = {
@@ -117,5 +118,5 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
     ...differences(baseline?.labels, manifest.labels, 'label', (item) => item.label),
     ...differences(baseline?.permissions, manifest.permissions, 'permission', (item) => `${item.controller}.${item.method}:${item.verb}:${item.route}`),
   ];
-  return { manifest, changes: ordered(changes), pending: ordered(pending) };
+  return { manifest, changes: ordered(changes), pending: ordered(pending), informational: ordered(informational) };
 }

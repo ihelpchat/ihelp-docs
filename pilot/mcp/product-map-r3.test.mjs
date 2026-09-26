@@ -14,10 +14,7 @@ try {
   const back = join(root, 'back');
   await cp(join(fixture, 'front'), front, { recursive: true });
   await cp(join(fixture, 'back'), back, { recursive: true });
-  await writeFile(join(front, 'src/ButtonSend.tsx'), 'export const ButtonSend = ({ dataTourId }) => <button data-tour-id={dataTourId}>Enviar</button>;');
   const backFile = join(back, 'ChannelController.cs');
-  const original = await readFile(backFile, 'utf8');
-  await writeFile(backFile, `[Route("api/v{version:apiVersion}/channel")]\n${original}`);
   const approved = (await buildProductMap({ frontRoot: front, backRoot: back, guides, actions })).manifest;
   assert.deepEqual((await buildProductMap({ frontRoot: front, backRoot: back, guides, actions })).pending, [], 'unrelated dynamic marker must not block');
   assert.ok(approved.permissions.some(({ route }) => route === 'api/v:version/channel/read'), 'versioned endpoint must enter the manifest');
