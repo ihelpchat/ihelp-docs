@@ -13,6 +13,11 @@ const manifestField = { route: 'routes', marker: 'markers', label: 'labels', per
 const validSha = (value) => typeof value === 'string' && /^[a-f0-9]{40}$/u.test(value);
 const validSnapshot = (value) => value && validSha(value.frontSha) && validSha(value.backSha) &&
   Object.values(manifestField).every((field) => Array.isArray(value.manifest?.[field]));
+const normalizedLabel = (value) => value.normalize('NFD').replace(/\p{M}/gu, '')
+  .toLocaleLowerCase('pt-BR').replace(/\s+/gu, ' ').trim();
+const labelKey = ({ file, label }) => `${file}:${normalizedLabel(label)}`;
+const provedPermission = (source, endpoint) => source.side === 'back' && source.line > 0 &&
+  source.file.split('/').at(-1) === `${endpoint.controller}.cs` && source.target === endpoint.method;
 
 export function buildGuideReferenceIndex(guides, actions, sources = {}, manifest = {}) {
   return guides.map(({ guide }) => {
@@ -23,17 +28,14 @@ export function buildGuideReferenceIndex(guides, actions, sources = {}, manifest
       if (action?.route) references.push({ kind: 'route', key: action.route });
       if (action?.target) references.push({ kind: 'marker', key: `tour:${action.target}` });
       for (const source of guideSources.filter((item) => item.stepId === step.stepId && item.side === 'front')) {
-        if (manifest.labels?.some(({ label, file }) => label === source.target && file === source.file)) {
-          references.push({ kind: 'label', key: `${source.file}:${source.target}`, file: source.file, line: source.line });
-        }
+        references.push({ kind: 'label', key: `${source.file}:${source.target}`, file: source.file, line: source.line });
         for (const marker of manifest.markers ?? []) {
           if (marker.id === source.target) references.push({ kind: 'marker', key: keyOf.marker(marker) });
         }
       }
     }
-    const routes = new Set(references.filter(({ kind }) => kind === 'route').map(({ key }) => key.split('/').at(-1)?.toLowerCase()));
     for (const endpoint of manifest.permissions ?? []) {
-      if ([...routes].some((area) => area && endpoint.controller.toLowerCase().includes(area))) {
+      if (guideSources.some((source) => provedPermission(source, endpoint))) {
         references.push({ kind: 'permission', key: keyOf.permission(endpoint) });
       }
     }
@@ -45,20 +47,32 @@ export function calculateGuideImpact({ before, after, guides, actions, sources }
   const index = buildGuideReferenceIndex(guides, actions, sources, before?.manifest);
   const shas = { before: before ? { frontSha: before.frontSha, backSha: before.backSha } : null,
     after: after ? { frontSha: after.frontSha, backSha: after.backSha } : null };
+  const info = index.filter(({ references }) => !references.some(({ kind }) => kind === 'permission'))
+    .map(({ guideId }) => `${guideId}: permissão não mapeada`);
   if (!validSnapshot(before) || !validSnapshot(after)) {
-    return { shas, index, proposals: [], pending: ['snapshot anterior ou atual ausente ou inválido'] };
+    return { shas, index, proposals: [], pending: ['snapshot anterior ou atual ausente ou inválido'], info };
   }
   const proposals = [];
   const pending = [];
+  for (const { guideId } of index) for (const source of sources?.[guideId] ?? []) {
+    if (source.side !== 'front') continue;
+    for (const [version, snapshot] of [['anterior', before], ['atual', after]]) {
+      if (!snapshot.manifest.labels.some((label) => labelKey(label) === labelKey({ file: source.file, label: source.target }))) {
+        pending.push(`${guideId} ${source.stepId} ${source.file}:${source.line}: rótulo da fonte não encontrado no manifest ${version}`);
+      }
+    }
+  }
   const coveredRoutes = new Set(index.flatMap(({ references }) => references.filter(({ kind }) => kind === 'route').map(({ key }) => key)));
   for (const kind of Object.keys(manifestField).sort(compare)) {
     const field = manifestField[kind];
-    const oldItems = new Map(before.manifest[field].map((item) => [keyOf[kind](item), item]));
-    const newItems = new Map(after.manifest[field].map((item) => [keyOf[kind](item), item]));
+    const itemKey = kind === 'label' ? labelKey : keyOf[kind];
+    const oldItems = new Map(before.manifest[field].map((item) => [itemKey(item), item]));
+    const newItems = new Map(after.manifest[field].map((item) => [itemKey(item), item]));
     for (const { guideId, references } of index) {
       for (const ref of references.filter((item) => item.kind === kind)) {
-        const old = oldItems.get(ref.key);
-        const current = newItems.get(ref.key);
+        const lookup = kind === 'label' ? labelKey({ file: ref.file, label: ref.key.slice(ref.file.length + 1) }) : ref.key;
+        const old = oldItems.get(lookup);
+        const current = newItems.get(lookup);
         if (!old) {
           pending.push(`${guideId}: ${kind} ${ref.key} ausente no snapshot anterior`);
           continue;
@@ -72,5 +86,5 @@ export function calculateGuideImpact({ before, after, guides, actions, sources }
       if (!oldItems.has(key) && !coveredRoutes.has(key)) proposals.push({ kind: 'criar', key, dependency: 'route', reason: 'sem guia' });
     }
   }
-  return { shas, index, proposals: unique(proposals), pending: [...new Set(pending)].sort(compare) };
+  return { shas, index, proposals: unique(proposals), pending: [...new Set(pending)].sort(compare), info };
 }
