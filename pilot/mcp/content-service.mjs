@@ -7,6 +7,7 @@ import { isExactCatalogAction } from './product-actions.mjs';
 import { conversationalIssues } from './conversational-contract.mjs';
 import { stringify } from 'yaml';
 import { articleFields } from './article-fields.mjs';
+import { githubWriteToken } from './env-compat.mjs';
 import { guideSchema } from '../architecture/conversation-v1.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
@@ -16,6 +17,7 @@ const SAFE_ACTOR = /^(?:user|service):[a-z0-9][a-z0-9_-]{2,63}$/;
 const SAFE_ACTION_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
 const SAFE_PRODUCT_ROUTE = /^\/(?!\/)[a-z0-9/_-]*$/;
 export const isSafeRequestedBy = (value) => typeof value === 'string' && SAFE_ACTOR.test(value);
+const stateRoot = (root) => process.env.MCP_STATE_DIR ?? root;
 export class SubmitArticleError extends Error {
   constructor(code, message, options) {
     super(message, options);
@@ -172,7 +174,7 @@ export async function getInventory(root) {
 }
 
 async function githubRequest(path, init = {}, allowNotFound = false) {
-  const token = process.env.GITHUB_TOKEN;
+  const token = githubWriteToken();
   if (!token) throw new SubmitArticleError('GITHUB_NOT_CONFIGURED', 'GITHUB_TOKEN não configurado');
   const response = await fetch(`https://api.github.com${path}`, {
     ...init,
@@ -224,7 +226,7 @@ async function createPullRequest(article, rendered, actor, beforePull) {
 }
 
 async function appendAudit(root, actor, mode, target, result, reference) {
-  const directory = join(root, '.audit');
+  const directory = join(stateRoot(root), '.audit');
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const directoryStat = await lstat(directory);
   if (!directoryStat.isDirectory() || (directoryStat.mode & 0o077) !== 0) throw new Error('diretório de audit inseguro');
@@ -243,7 +245,7 @@ async function appendAudit(root, actor, mode, target, result, reference) {
 
 export async function auditOperation(root, { actor, operation, mode = null, target = null, result, reference }) {
   if (!isSafeRequestedBy(actor)) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
-  const directory = join(root, '.audit');
+  const directory = join(stateRoot(root), '.audit');
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const directoryStat = await lstat(directory);
   if (!directoryStat.isDirectory() || (directoryStat.mode & 0o077) !== 0) throw new Error('diretório de audit inseguro');
@@ -294,7 +296,7 @@ async function submitArticleAudited(root, article, mode, requestedBy) {
 }
 
 async function createDraft(root, article, rendered) {
-  const draftRoot = join(root, '.drafts');
+  const draftRoot = join(stateRoot(root), '.drafts');
   const parts = article.path.split('/');
   let directory = draftRoot;
   for (const part of ['', ...parts.slice(0, -1)]) {
@@ -318,7 +320,7 @@ async function createDraft(root, article, rendered) {
   } finally {
     await file.close();
   }
-  return { status: 'draft', path: relative(root, target) };
+  return { status: 'draft', path: relative(stateRoot(root), target) };
 }
 
 async function submitValidatedArticle(root, article, mode, actor, beforePull) {
