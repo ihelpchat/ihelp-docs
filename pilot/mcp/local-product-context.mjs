@@ -66,6 +66,18 @@ async function candidatePaths(root, paths, terms, topic) {
   const accented = String(topic).split(/[^\p{L}\p{N}]+/u).find((word) => normalize(word) === first);
   const needles = [...new Set([first, accented, ...(ALIASES[first] ?? [])].filter(Boolean))];
   const candidates = [];
+  async function withoutRg() {
+    const found = [];
+    for (const path of paths) {
+      const full = join(root, path);
+      if (await hasSymlink(full, root)) continue;
+      const handle = await open(full, constants.O_RDONLY | constants.O_NOFOLLOW);
+      let content;
+      try { content = await handle.readFile('utf8'); } finally { await handle.close(); }
+      if (needles.some((needle) => content.toLowerCase().includes(needle.toLowerCase()))) found.push(path);
+    }
+    return found;
+  }
   for (let index = 0; index < paths.length; index += 100) {
     const safe = paths.slice(index, index + 100);
     if (!safe.length) continue;
@@ -75,6 +87,7 @@ async function candidatePaths(root, paths, terms, topic) {
       });
       candidates.push(...stdout.toString().split('\0').filter(Boolean));
     } catch (error) {
+      if (error.code === 'ENOENT') return withoutRg();
       if (error.code !== 1) throw error;
     }
   }
