@@ -82,12 +82,25 @@ function redact(value, patterns, marker) {
 }
 
 export function sensitiveKinds(value) {
-  return { personal: matchesAny(value, PERSONAL), credential: matchesAny(value, CREDENTIALS) || credentialPairs(value).length > 0 };
+  const text = String(value ?? '');
+  const visible = text.normalize('NFKC').replace(/[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, '');
+  const mapped = visible.replace(/[ІІАВЕКМНОРСТХΥΑΒΕΗΙΚΜΝΟΡΤΧ]/gu, (letter) => ({
+    І: 'I', А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P', С: 'C', Т: 'T', Х: 'X',
+    Υ: 'Y', Α: 'A', Β: 'B', Ε: 'E', Η: 'H', Ι: 'I', Κ: 'K', Μ: 'M', Ν: 'N', Ο: 'O', Ρ: 'P', Τ: 'T', Χ: 'X',
+  })[letter]);
+  const mixedAlphabet = (text.normalize('NFKC').match(/[\p{L}\p{M}]+/gu) ?? []).some((word) =>
+    /\p{Script=Latin}/u.test(word) && /[\p{Script=Cyrillic}\p{Script=Greek}]/u.test(word));
+  return {
+    personal: matchesAny(text, PERSONAL),
+    credential: matchesAny(text, CREDENTIALS) || credentialPairs(text).length > 0,
+    internal: /🟡|🔴|\b(?:INTERNO|CONFIDENCIAL)\b|\b(?:interno|confidencial)\s*:/u.test(mapped),
+    control: mixedAlphabet || /[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text),
+  };
 }
 
 export function containsSensitiveData(value) {
   const kinds = sensitiveKinds(value);
-  return kinds.personal || kinds.credential;
+  return kinds.personal || kinds.credential || kinds.internal || kinds.control;
 }
 
 export function redactSensitiveData(value) {

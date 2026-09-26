@@ -3,7 +3,7 @@
   "version": "0.0.32",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "node scripts/generate-guide-package.mjs --check && next build",
     "dev": "next dev",
     "start": "serve out",
     "types:check": "next typegen && tsc --noEmit",
@@ -13,7 +13,7 @@
     "content:migrate": "node scripts/migrate-content.mjs && node scripts/normalize-content.mjs",
     "content:normalize": "node scripts/normalize-content.mjs",
     "content:audit": "node scripts/audit-content.mjs",
-    "content:validate": "node scripts/validate-coverage.mjs",
+    "content:validate": "node scripts/validate-coverage.mjs && node scripts/generate-guide-package.mjs --check",
     "mcp:start": "node mcp/server.mjs",
     "mcp:http": "node mcp/http.mjs",
     "mcp:test": "node scripts/run-tests-runner.check.mjs && node scripts/workflow-concurrency.check.mjs && node mcp/run-tests.mjs",
