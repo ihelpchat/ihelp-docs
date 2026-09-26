@@ -4,6 +4,7 @@
     { "topic": "Criar robô", "module": "Robôs", "frontend": "src/components/pages/Robots/index.tsx", "backend": "Comzada.Application/Controllers/V2/BotController.cs" },
     { "topic": "Reconectar QR", "module": "Canais", "frontend": "src/components/pages/Configuration/pages/ChannelById/components/ChannelDetails/index.tsx", "backend": "Comzada.Application/Controllers/V2/ChannelController.cs" },
     { "topic": "Criar usuário", "module": "Usuários", "frontend": "src/components/pages/Configuration/components/TabUser/index.tsx", "backend": "Comzada.Application/Controllers/V2/ConfigurationsUsersController.cs" },
+    { "topic": "Cadastrar atendente", "module": "Equipe", "frontend": "src/components/pages/Configuration/components/TabUser/index.tsx", "backend": "Comzada.Application/Controllers/V2/ConfigurationsUsersController.cs" },
     { "topic": "Configurar horário de atendimento", "module": "Departamentos", "frontend": "src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx", "backend": "Comzada.Application/Controllers/V2/ConfigurationsDepartmentsController.cs" }
   ]
 }
