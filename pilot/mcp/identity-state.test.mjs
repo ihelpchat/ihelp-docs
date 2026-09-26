@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { authenticate, authorizeTool, loadCredentials } from './access-control.mjs';
 import { auditOperation, submitArticle } from './content-service.mjs';
+import { searchProductContext } from './product-context-service.mjs';
 
 const readerKey = 'reader-abcdefghijklmnopqrstuvwxyz-123456';
 const writerKey = 'writer-abcdefghijklmnopqrstuvwxyz-123456';
@@ -22,6 +23,19 @@ assert.throws(() => authorizeTool(reader, 'docs_submit_article', {}), /forbidden
 assert.throws(() => authorizeTool(writer, 'docs_product_context', {}), /forbidden/i, 'writer cannot read private product code');
 assert.throws(() => authorizeTool(writer, 'docs_submit_article', { requestedBy: 'user:reader' }), /requestedBy/i, 'body cannot forge actor');
 assert.equal(authorizeTool(writer, 'docs_submit_article', {}), 'user:writer');
+const priorWriteToken = process.env.GITHUB_TOKEN;
+const priorReadToken = process.env.GITHUB_READ_TOKEN;
+try {
+  process.env.GITHUB_TOKEN = 'write-only-fixture';
+  delete process.env.GITHUB_READ_TOKEN;
+  const result = await searchProductContext('atendimento', 'atendimento', { fetch: () => { throw new Error('writer token used for private read'); } });
+  assert.equal(result.available, false, 'write token cannot be reused for private code');
+} finally {
+  if (priorWriteToken === undefined) delete process.env.GITHUB_TOKEN;
+  else process.env.GITHUB_TOKEN = priorWriteToken;
+  if (priorReadToken === undefined) delete process.env.GITHUB_READ_TOKEN;
+  else process.env.GITHUB_READ_TOKEN = priorReadToken;
+}
 const quotaWindow = Date.now() + 61_000;
 for (let index = 0; index < 30; index += 1) authorizeTool(writer, 'docs_submit_article', {}, { now: quotaWindow, limit: 30 });
 assert.throws(() => authorizeTool(writer, 'docs_submit_article', {}, { now: quotaWindow, limit: 30 }), /rate limit/i, 'per actor quota is independent of IP');
