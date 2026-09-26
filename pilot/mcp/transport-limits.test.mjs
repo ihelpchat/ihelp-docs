@@ -27,6 +27,7 @@ process.env.OPENAI_API_KEY = 'fixture-only';
 process.env.OPENAI_BASE_URL = `http://127.0.0.1:${fakeOpenAI.address().port}/v1`;
 process.env.FEEDBACK_FILE = join(scratch, 'feedback.jsonl');
 process.env.ASSISTANT_IP_LIMIT = '20';
+process.env.ASSISTANT_ALLOWED_ORIGINS = 'https://faq.example.test';
 const { httpServer } = await import('./http.mjs');
 if (!httpServer.listening) await once(httpServer, 'listening');
 const url = `http://127.0.0.1:${httpServer.address().port}`;
@@ -57,7 +58,19 @@ try {
   const limited = await post('/assistant', { question: 'mcp' }, 'rotated-again');
   assert.equal(limited.status, 429, 'trocar sessão não remove proteção do IP');
   assert.match(limited.headers.get('retry-after') ?? '', /^[1-9]\d*$/, '429 informa espera em segundos');
+  assert.ok(Number(limited.headers.get('retry-after')) >= 50, '429 informa o tempo restante da janela, não 1 segundo fixo');
   assert.match((await limited.json()).error, /instante|aguard|tente/i);
+
+  const crossOrigin = await fetch(`${url}/assistant`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: 'https://faq.example.test', 'X-Forwarded-For': '192.0.2.40' },
+    body: JSON.stringify({ question: 'mcp', sessionId: 'test-cross-origin' }),
+  });
+  assert.equal(crossOrigin.status, 429);
+  assert.equal(crossOrigin.headers.get('access-control-allow-origin'), 'https://faq.example.test');
+  assert.match(crossOrigin.headers.get('access-control-expose-headers') ?? '', /(?:^|,\s*)Retry-After(?:\s*,|$)/i,
+    'resposta HTTP entre origens expõe Retry-After ao navegador');
+  assert.ok(Number(crossOrigin.headers.get('retry-after')) >= 50);
 
   for (let n = 0; n < 10; n += 1) {
     assert.equal((await post('/assistant', { question: 'mcp' }, 'same-session', '198.51.100.88')).status, 200);
@@ -70,6 +83,13 @@ try {
   }
   assert.equal((await post('/assistant', { question: 'mcp' }, 'spoofed-session', '203.0.113.250, 198.51.100.99')).status, 429,
     'XFF forjado à esquerda não troca o balde da sessão');
+
+  for (let n = 0; n < 30; n += 1) {
+    assert.equal((await post('/feedback', { eventId: `separate-vote-${n}`, type: 'article', value: 'up', path: '/docs/teste' },
+      `feedback-${n}`, '192.0.2.240')).status, 201);
+  }
+  assert.equal((await post('/feedback', { eventId: 'separate-vote-30', type: 'article', value: 'up', path: '/docs/teste' },
+    'feedback-30', '192.0.2.240')).status, 429, '31ª avaliação do mesmo IP recebe 429');
 } finally {
   await new Promise((resolve, reject) => httpServer.close((error) => error ? reject(error) : resolve()));
   await new Promise((resolve, reject) => fakeOpenAI.close((error) => error ? reject(error) : resolve()));
@@ -89,7 +109,7 @@ try {
     assert.equal(reply.status, 200);
   }
   const limited = await fetch(twoHopUrl, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '203.0.113.250, 198.51.100.90, 192.0.2.41' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '203.0.113.250, 198.51.100.90, 192.0.2.99' },
     body: JSON.stringify({ question: 'mcp', sessionId: 'two-hop-session' }),
   });
   assert.equal(limited.status, 429, 'TRUST_PROXY_HOPS=2 escolhe o segundo valor à direita');
@@ -108,6 +128,38 @@ try {
 } finally {
   await new Promise((resolve, reject) => twoHopServer.close((error) => error ? reject(error) : resolve()));
 }
+
+async function verifyIpSource(source, moduleName) {
+  if (source) process.env.TRUSTED_IP_SOURCE = source;
+  else delete process.env.TRUSTED_IP_SOURCE;
+  const { httpServer: server } = await import(`./http.mjs?${moduleName}`);
+  if (!server.listening) await once(server, 'listening');
+  const endpoint = `http://127.0.0.1:${server.address().port}/assistant`;
+  try {
+    for (let n = 0; n < 10; n += 1) {
+      const reply = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Real-IP': '198.51.100.72', 'X-Forwarded-For': `203.0.113.${n}, 192.0.2.${n}` },
+        body: JSON.stringify({ question: 'mcp', sessionId: `${moduleName}-session` }),
+      });
+      assert.equal(reply.status, 200);
+    }
+    const limited = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Real-IP': '198.51.100.72', 'X-Forwarded-For': '203.0.113.240, 192.0.2.240' },
+      body: JSON.stringify({ question: 'mcp', sessionId: `${moduleName}-session` }),
+    });
+    assert.equal(limited.status, 429, `${moduleName} usa a fonte de IP configurada`);
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+}
+await verifyIpSource('x-real-ip', 'real-ip');
+await verifyIpSource('socket', 'socket-ip');
+process.env.RAILWAY_ENVIRONMENT_NAME = 'production';
+await verifyIpSource(undefined, 'railway-default');
+delete process.env.RAILWAY_ENVIRONMENT_NAME;
+delete process.env.TRUSTED_IP_SOURCE;
 
 const source = await readFile(new URL('../lib/assistant.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
