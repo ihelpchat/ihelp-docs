@@ -7,6 +7,29 @@ import productActions from '../architecture/product-actions.json' with { type: '
 const root = new URL('../public/guides/', import.meta.url);
 const scriptsRoot = new URL('./guide-proof/roteiros/', import.meta.url);
 
+export function proofOutcome(report, { guides, appSha }) {
+  const pending = [];
+  if (report?.mode !== 'staging') pending.push('prova no navegador exige staging');
+  if (!appSha || report?.appSha !== appSha) pending.push(`SHA da prova divergente de ${appSha}`);
+  if (report?.authorized !== 'passed') pending.push('perfil authorized não concluído');
+  if (report?.denied !== 'passed') pending.push('perfil denied não concluído');
+  const steps = Array.isArray(report?.steps) ? report.steps : [];
+  for (const entry of guides ?? []) {
+    const guide = entry.guide ?? entry;
+    for (const { stepId } of guide.steps) {
+      const matched = steps.filter(step => step.guideId === guide.guideId && step.stepId === stepId && step.role === 'authorized');
+      if (matched.some(step => step.status === 'manual_required')) pending.push(`${guide.guideId}/${stepId}: manual_required`);
+      else if (!matched.some(step => step.status === 'passed')) pending.push(`${guide.guideId}/${stepId}: authorized ausente ou não passou`);
+    }
+    const denied = steps.filter(step => step.guideId === guide.guideId && step.role === 'denied');
+    if (!denied.some(step => step.status === 'blocked')) pending.push(`${guide.guideId}: bloqueio do perfil denied ausente`);
+    for (const step of denied) {
+      if (step.status !== 'blocked') pending.push(`${guide.guideId}/${step.stepId}: perfil denied ${step.status}`);
+    }
+  }
+  return { ok: pending.length === 0, pending };
+}
+
 export async function publishedGuides(packageRoot = root) {
   const dir = packageRoot instanceof URL ? packageRoot : new URL(`file://${packageRoot}/`);
   const { current } = JSON.parse(await readFile(new URL('manifest.json', dir), 'utf8'));
@@ -120,7 +143,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
             const step = guide.steps[index];
             const plan = plans[index];
             if (!plan.control) {
-              if (role === 'authorized') report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'manual_required' });
+              if (role === 'authorized') report.steps.push({ guideId: guide.guideId, stepId: step.stepId, role, status: 'manual_required' });
               continue;
             }
             // Only a published catalog route may change the current URL.
@@ -144,7 +167,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
             const control = instruction.type === 'fields' ? null : locator(page, instruction);
             if (role === 'denied' && control && !(await control.isEnabled())) {
               deniedBlocked = true;
-              report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'blocked' });
+              report.steps.push({ guideId: guide.guideId, stepId: step.stepId, role, status: 'blocked' });
               continue;
             }
             if (control) {
@@ -181,7 +204,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
               const fieldStep = instruction.verifyField;
               const fieldIndex = guide.steps.findIndex(item => item.stepId === fieldStep);
               if (!filled.has(fieldStep) || fieldIndex < 0) {
-                if (role === 'authorized') report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'manual_required' });
+                if (role === 'authorized') report.steps.push({ guideId: guide.guideId, stepId: step.stepId, role, status: 'manual_required' });
                 continue;
               }
               const source = plans[fieldIndex].control;
@@ -249,7 +272,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
             }
             if (blocked.length) throw new Error(`${guide.guideId}: pedido fora do host autorizado`);
             if (role === 'authorized') {
-              report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'passed' });
+              report.steps.push({ guideId: guide.guideId, stepId: step.stepId, role, status: 'passed' });
               await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
               await chmod(evidenceDir, 0o700);
               const name = `${guide.guideId}-${step.stepId}.png`;
@@ -296,6 +319,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
     if (report.cleanupPending.some(item => item.item)) throw new Error('limpeza pendente: item criado não removido pela interface');
     return report;
   } finally {
+    report.outcome = proofOutcome(report, { guides: published, appSha });
     await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
     await writeFile(join(evidenceDir, 'report.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
     await browser.close();

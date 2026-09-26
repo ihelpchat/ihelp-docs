@@ -4,14 +4,12 @@ import { calculateGuideImpact } from '../lib/guide-impact.mjs';
 import actions from '../architecture/product-actions.json' with { type: 'json' };
 import { readArticle } from './editorial-standard.mjs';
 import { submitContentPackage } from './content-service.mjs';
+import { proofOutcome } from '../scripts/guide-proof.mjs';
 
 export const MAX_DEPLOY_PULLS = 5;
 let queue = Promise.resolve();
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16);
 const shaText = ({ frontSha, backSha }) => `front ${frontSha}; back ${backSha}`;
-const proofPending = (proof, after) => proof?.mode === 'staging' && proof.appSha === after.frontSha
-  && proof.authorized === 'passed' && proof.denied === 'passed' && !proof.steps?.some(({ status }) => status === 'blocked')
-  ? null : `prova no navegador pendente para ${after.frontSha}`;
 
 async function execute(root, { before, after, prova, requestedBy = 'service:deploy' }, deps) {
   const pending = [];
@@ -34,7 +32,9 @@ async function execute(root, { before, after, prova, requestedBy = 'service:depl
     grouped.get(change.guideId).push(change);
   }
   if (!grouped.size) return { status: pending.length ? 'pendente' : 'sem impacto', proposals, pending, shas: impact.shas };
-  const proofReason = proofPending(prova, after);
+  const affectedGuides = [...grouped.keys()].map(guideId => catalog.catalog.guides.find(({ guide: item }) => item.guideId === guideId)).filter(Boolean);
+  const outcome = proofOutcome(prova, { guides: affectedGuides, appSha: after.frontSha });
+  const proofReason = outcome.ok ? null : `prova no navegador pendente para ${after.frontSha}: ${outcome.pending.join('; ')}`;
   if (proofReason) pending.push(proofReason);
   for (const [index, [guideId, changes]] of [...grouped].entries()) {
     if (index >= MAX_DEPLOY_PULLS) { pending.push(`${guideId}: excedeu o teto de ${MAX_DEPLOY_PULLS} PRs por evento`); continue; }
