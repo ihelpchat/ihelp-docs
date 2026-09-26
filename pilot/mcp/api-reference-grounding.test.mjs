@@ -59,6 +59,14 @@ test('parâmetro inexistente é rejeitado com motivo', () => {
   assert.match(issues.join(' '), /parâmetro inexistente: fake/i);
 });
 
+test('resposta sem campos verificáveis não aceita JSON mesmo com nome de parâmetro conhecido', () => {
+  const issues = [];
+  const changed = { ...article, body: `${article.body}\n\n## Resposta\n\`\`\`json\n{"page":1}\n\`\`\`` };
+  assert.equal(endpoints[0].responseFields, null);
+  assert.equal(validateGroundedOutput(changed, context, [], issues), false);
+  assert.match(issues.join(' '), /campos de resposta não verificáveis/i);
+});
+
 test('alias id da página de tags preserva a posição do parâmetro de rota', () => {
   const tagsArticle = { ...article, endpoint: '/contactTags/getContactsTagByContactId/{id}',
     body: '<Params><Param name="id" type="number">Contato</Param></Params>' };
