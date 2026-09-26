@@ -24,6 +24,11 @@ const qr = await readFile(join(root.pathname, cases[0][0]), 'utf8');
 const approved = 'As mensagens enviadas enquanto o WhatsApp estava desconectado podem não aparecer no iHelp. Se for importante, confira no celular.';
 const withConfirmation = (sentence) => qr.replace('## Como confirmar', `${sentence}\n\n## Como confirmar`);
 for (const sentence of [
+  'As mensagens enviadas sem internet voltam ao iHelp.',
+  'As mensagens chegam depois, quando o celular desligou.',
+  'Nada se perde quando o celular desligou.',
+  'A conversa volta sozinha.',
+  'Voltam depois.',
   'As mensagens do período desconectado voltam ao reconectar.',
   'As mensagens que chegaram enquanto estava desconectado chegam depois.',
   'Você não perde nenhuma mensagem durante a desconexão.',
@@ -36,6 +41,35 @@ for (const sentence of [
     (error) => error.message.includes(sentence),
     `frase fora da lista deve aparecer no erro: ${sentence}`,
   );
+}
+for (const sentence of [
+  'As mensаgens enviadas sem internet voltam ao iHelp.', // a cirílico
+  'As mensagens\u200b chegam depois, quando o celular desligou.',
+]) {
+  assert.throws(() => validateCanonicalGuide(withConfirmation(sentence), 'reconectar-canal-qr'),
+    /frase/u, `homóglifo ou invisível não pode ocultar: ${sentence}`);
+}
+const approvedByGuide = [
+  ['reconectar-canal-qr', qr, [
+    'As mensagens enviadas enquanto o WhatsApp estava desconectado podem não aparecer no iHelp.',
+  ]],
+  ['usuario-acesso', await readFile(join(root.pathname, cases[1][0]), 'utf8'), [
+    'Ao entrar, vê as áreas e os atendimentos esperados.',
+    'Em Visualizar Departamentos, confira se a pessoa deve ver os atendimentos do seu setor.',
+    'Clique em Salvar Alterações. Peça à pessoa para entrar e conferir o menu e os atendimentos visíveis.',
+  ]],
+  ['recado-fora-do-horario', await readFile(join(root.pathname, cases[2][0]), 'utf8'), [
+    'Onde escrevo o recado fora do horário?',
+    'Abra Configurações e depois Departamentos. Escolha o setor que receberá o recado.',
+    'Ative Mensagem automática fora de horário de atendimento e escreva o recado.',
+    'Escreva um recado curto, por exemplo: “Olá!',
+  ]],
+];
+for (const [id, raw, sentences] of approvedByGuide) {
+  for (const sentence of sentences) {
+    assert.doesNotThrow(() => validateCanonicalGuide(raw.replace('## Como confirmar', `${sentence}\n\n## Como confirmar`), id),
+      `${id}: frase aprovada: ${sentence}`);
+  }
 }
 assert.doesNotThrow(() => validateCanonicalGuide(withConfirmation(approved), 'reconectar-canal-qr'));
 assert.throws(
