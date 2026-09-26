@@ -57,6 +57,36 @@ public Task<ActionResult<ContactResponse>> Get(int id) { return null; } }`;
   ] });
   assert.deepEqual(result[0].responseFields.map(({ name, type }) => [name, type]), [['nome', 'string']]);
 });
+test('leitor distingue resposta desconhecida de DTO vazio e resolve Ok tipado', () => {
+  const source = `[Route("api/v{version:apiVersion}/contacts")][ApiVersion("2")]
+public class ContactsController {
+  [HttpGet("known")]
+  public Task<IActionResult> Known() { ContactResponse values = new ContactResponse(); return Ok(values); }
+  [HttpGet("inline")]
+  public Task<IActionResult> Inline() { return Ok(new ContactResponse { Name = "x" }); }
+  [HttpGet("unknown")]
+  public Task<IActionResult> Unknown() { return Ok(values); }
+}`;
+  const result = readCsharpEndpoints(source, 'Controllers/ContactsController.cs', { dtoSources: [
+    { file: 'Comzada.Domain/EntitiesV2/Contato/ContactResponse.cs', source: 'public class ContactResponse { public string Name { get; set; } }' },
+  ] });
+  assert.deepEqual(result[0].responseFields.map(({ name }) => name), ['name']);
+  assert.deepEqual(result[1].responseFields.map(({ name }) => name), ['name']);
+  assert.equal(result[2].responseFields, null);
+  assert.match(result[2].pending.join(' '), /campos de resposta não verificáveis:.*unknown/i);
+});
+
+test('AllowAnonymous prevalece sobre Authorize e chega como fato ao contexto', () => {
+  const source = `[Authorize][Route("api/v{version:apiVersion}/contacts")][ApiVersion("2")]
+public class ContactsController {
+  [AllowAnonymous][HttpGet("public")]
+  public Task<IActionResult> Public() { return Ok(); }
+}`;
+  const [endpoint] = readCsharpEndpoints(source, 'Controllers/ContactsController.cs', { dtoSources: [] });
+  assert.equal(endpoint.authorization, 'anonymous');
+  assert.equal(endpoint.policy, 'anonymous');
+  assert.equal(endpoint.authorizationSource, 'Controllers/ContactsController.cs:3');
+});
 test('contexto local indexa fatos e mantém controller sem página privado', async () => {
   const root = await mkdtemp(join(await realpath(tmpdir()), 'api-facts-test-'));
   const backend = join(root, 'back');
@@ -98,8 +128,8 @@ test('coleta DTO de saída no checkout e impede controller privado no prompt fin
   try {
     await mkdir(join(backend, 'Comzada.Application/Controllers/V2'), { recursive: true });
     await mkdir(join(backend, 'Comzada.Domain/EntitiesV2/Contato'), { recursive: true });
-    await writeFile(join(backend, 'Comzada.Application/Controllers/V2/ContactsController.cs'), `[Authorize]\n[ApiVersion("2")]\n[Route("api/v{version:apiVersion}/contacts")]\npublic class ContactsController {\n  [HttpGet("{id}")]\n  public Task<ActionResult<ContactResponse>> Get([FromRoute] int id) { return null; }\n}`);
-    await writeFile(join(backend, 'Comzada.Application/Controllers/V2/InternalController.cs'), `[Route("api/v{version:apiVersion}/internal")]\n[ApiVersion("2")]\npublic class InternalController {\n  [HttpGet("private/{id}")]\n  public Task<IActionResult> Get([FromRoute] int id) { return null; }\n}`);
+    await writeFile(join(backend, 'Comzada.Application/Controllers/V2/ContactsController.cs'), `[Authorize]\n[ApiVersion("2")]\n[Route("api/v{version:apiVersion}/contacts")]\npublic class ContactsController {\n  [AllowAnonymous][HttpGet("{id}")]\n  public Task<ActionResult<ContactResponse>> Get([FromRoute] int id) { return null; }\n}`);
+    await writeFile(join(backend, 'Comzada.Application/Controllers/V2/InternalController.cs'), `[Route("api/v{version:apiVersion}/internal")]\n[ApiVersion("2")]\npublic class InternalController {\n  // contacts are visible only in the private service\n  [HttpGet("private/{id}")]\n  public Task<IActionResult> Get([FromRoute] int id) { return null; }\n}`);
     await writeFile(join(backend, 'Comzada.Domain/EntitiesV2/Contato/ContactResponse.cs'), 'public class ContactResponse {\n  public string Name { get; set; }\n}');
     execFileSync('git', ['init', '-q', backend]);
     execFileSync('git', ['-C', backend, 'add', '.']);
@@ -110,16 +140,17 @@ test('coleta DTO de saída no checkout e impede controller privado no prompt fin
     await mkdir(join(root, 'content/docs/api/contatos'), { recursive: true });
     await writeFile(join(root, 'content/docs/api/contatos/buscar.mdx'), '---\nsource: api\ncontentType: referencia\nmethod: GET\nendpoint: /contacts/{id}\n---\n');
     process.env.BACKEND_LOCAL_CHECKOUT = backend;
-    const context = await getIhelpContext(root, 'API contacts internal', 'api', { requireLocal: true, repositoryIds: ['backend'], cache: false });
+    const context = await getIhelpContext(root, 'API contacts', 'api', { requireLocal: true, repositoryIds: ['backend'], cache: false });
     assert.deepEqual(context.endpoints.find((item) => item.controller === 'ContactsController')?.responseFields.map(({ name, type }) => [name, type]), [['name', 'string']]);
     const captured = [];
-    await planContent(root, { topic: 'API contacts internal', module: 'api', description: 'Documentar contatos' }, {
+    await planContent(root, { topic: 'API contacts', module: 'api', description: 'Documentar contatos' }, {
       productContext: context, client: { responses: { create: async (payload) => {
         captured.push(payload.input[1].content);
         return { output_text: JSON.stringify({ status: 'needs_information', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [] }), model: 'fake' };
       } } },
     });
     assert.equal(captured.length, 1);
+    assert.match(captured[0], /"authorization":"anonymous"/);
     assert.doesNotMatch(captured[0], /private\/\{id\}|InternalController/);
     assert.equal(context.endpoints.some(({ public: visible }) => visible === false), false);
     assert.equal(context.matches.some(({ path }) => path.includes('InternalController')), false);
