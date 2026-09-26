@@ -84,8 +84,20 @@ assert.ok(vercelSteps.some((step) => step.uses?.startsWith('actions/download-art
 assert.ok(vercelSteps.some((step) => /prepare-vercel-release\.mjs/.test(step.run ?? '')), 'Vercel deve empacotar artifact prebuilt');
 const vercelDeploy = vercelSteps.find((step) => /vercel@[^ ]+ deploy/.test(step.run ?? ''));
 assert.ok(vercelDeploy, 'Vercel deploy com versão fixa obrigatório');
-assert.match(vercelDeploy.run, /--prebuilt/, 'Vercel deve publicar sem rebuild');
-assert.match(vercelDeploy.run, /--prod --yes/, 'Vercel deve publicar production');
+const vercelCommand = vercelDeploy.run.match(/^\s*npx vercel@[^\s]+ deploy\s+[^\n]+$/m)?.[0] ?? '';
+assert.ok(vercelCommand, 'comando vercel deploy obrigatório');
+for (const [flag, value, pattern] of [
+  ['--prebuilt', '', /(?:^|\s)--prebuilt(?=\s|$)/],
+  ['--prod', '', /(?:^|\s)--prod(?=\s|$)/],
+  ['--project', 'VERCEL_PROJECT_ID', /(?:^|\s)--project\s+"\$VERCEL_PROJECT_ID"(?=\s|$)/],
+  ['--scope', 'VERCEL_SCOPE', /(?:^|\s)--scope\s+"\$VERCEL_SCOPE"(?=\s|$)/],
+  ['--token', 'VERCEL_TOKEN', /(?:^|\s)--token\s+"\$VERCEL_TOKEN"(?=\s|$)/],
+]) {
+  const expected = value ? `${flag} "$${value}"` : flag;
+  assert.match(vercelCommand, pattern, `vercel deploy deve usar ${expected}`);
+  if (value) assert.ok(vercelDeploy.env?.[value], `vercel deploy deve declarar ${value} no env do mesmo passo`);
+}
+assert.match(vercelCommand, /--prod --yes/, 'Vercel deve publicar production');
 assert.equal(vercelDeploy.env?.VERCEL_TOKEN, '${{ secrets.VERCEL_TOKEN }}', 'VERCEL_TOKEN só no passo de deploy');
 assert.equal(vercelDeploy.env?.VERCEL_PROJECT_ID, '${{ vars.VERCEL_PROJECT_ID }}', 'VERCEL_PROJECT_ID vem de vars');
 assert.equal(vercelDeploy.env?.VERCEL_SCOPE, '${{ vars.VERCEL_SCOPE }}', 'VERCEL_SCOPE vem de vars');
