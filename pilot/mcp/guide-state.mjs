@@ -9,7 +9,23 @@ import { diagnoseState, escalationFor, sanitizeWidgetContext } from './real-stat
 import { guideStateToken, guideStatePath } from './opaque-id.mjs';
 
 const plain = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
-const human = (value) => /(?:falar com (?:uma )?pessoa|falar com (?:um )?humano|atendimento|suporte)/.test(value);
+export function requestsHuman(value) {
+  const text = plain(value);
+  if (/^(?:atendente|humano|suporte|atendimento|pessoa|suporte humano)$/u.test(text) || /\bme liga\b/u.test(text)) return true;
+  const tokens = text.match(/[a-z]+/gu) ?? [];
+  const contact = new Set(['falar', 'conversar', 'chamar', 'ligar', 'preciso', 'quero', 'passar', 'passa', 'passe', 'colocar', 'coloca', 'coloque']);
+  const people = new Set(['suporte', 'atendimento', 'atendente', 'pessoa', 'humano', 'alguem', 'gente', 'equipe', 'tecnico']);
+  for (let index = 0; index < tokens.length; index++) {
+    if (!contact.has(tokens[index])) continue;
+    if (['nao', 'nem'].includes(tokens[index - 1]) || ['nao', 'nem'].includes(tokens[index - 2])) continue;
+    if (['quero', 'preciso'].includes(tokens[index])
+      && ['configurar', 'criar', 'automatizar', 'cadastrar', 'adicionar', 'colocar'].includes(tokens[index + 1])) continue;
+    if (['colocar', 'coloca', 'coloque'].includes(tokens[index])
+      && !(tokens.slice(Math.max(0, index - 2), index).includes('me') && tokens.slice(index + 1, index + 3).includes('com'))) continue;
+    if (tokens.slice(Math.max(0, index - 4), index + 5).some((token) => people.has(token))) return true;
+  }
+  return false;
+}
 const failure = (value) => /(?:deu certo\? nao|nao deu certo|nao funcionou)/.test(value);
 const guideIds = new Set(canonicalGuideIds);
 
@@ -99,7 +115,7 @@ export async function answerGuide(root, question, state, options = {}) {
     const initial = guide.steps.find((step) => step.stepId === guide.initialStepId);
     return reply(source, initial, 'Vamos recomeçar pelo primeiro passo.');
   }
-  if (human(command) || failure(command)) {
+  if (requestsHuman(command) || failure(command)) {
     const escalation = handoff();
     escalation.attempts = failure(command) ? [...escalation.attempts, 'reported_stuck'] : escalation.attempts;
     const answer = source

@@ -4,6 +4,33 @@ description: "Veja o código na tela e reconecte o WhatsApp do celular ao iHelp.
 source: produto
 contentType: guia
 assistantQuestion: "Como reconectar canal pelo QR?"
+assistantAliases:
+  - zap
+  - whats
+  - wpp
+  - whatsapp caiu
+  - whatsapp parou
+  - desconectar
+  - não chega mensagem
+  - quadrado com pontinhos
+  - qr
+  - código no celular
+assistantRouting:
+  anchors: [whatsapp, zap, whats, wpp, qr, qr code, código na tela, quadradinho, quadrado com pontinhos, celular da loja]
+  actions:
+    - reconectar
+    - conectar de novo
+    - ligar de novo
+    - voltar a funcionar
+    - voltou a funcionar
+    - parou
+    - caiu
+    - desconectou
+    - não chega
+    - quadrado com pontinhos
+    - ler o código
+  objects: [whatsapp, zap, whats, canal, celular, código, quadrado]
+  ownFeatures: [canal, canais, whatsapp, zap, celular, qr]
 assistantOverview: "Abra Canais para reconectar o WhatsApp. O quadrado com pontinhos é o código que liga o celular ao iHelp."
 assistantSuggestions:
   - "Onde encontro o botão Conectar?"

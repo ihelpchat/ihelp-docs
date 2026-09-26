@@ -70,6 +70,7 @@ export async function createBudgetedResponse(client, payload, options = {}) {
       + Number(payload.max_output_tokens ?? 0) * config.outputRate,
   ));
   for (let attempt = 0; attempt < 2; attempt++) {
+    if (options.signal?.aborted) return { kind: 'provider_failed' };
     const id = randomUUID();
     const admitted = await locked(config.file, (ledger) => {
       if (ledger.day !== day) { ledger.day = day; ledger.spent = 0; ledger.reservations = {}; }
@@ -80,7 +81,7 @@ export async function createBudgetedResponse(client, payload, options = {}) {
     });
     if (!admitted) return { kind: 'budget_exhausted' };
     let response;
-    try { response = await client.responses.create(payload); }
+    try { response = await client.responses.create(payload, { signal: options.signal }); }
     catch (error) {
       // A chamada pode ter sido cobrada mesmo quando a resposta se perdeu.
       await locked(config.file, (ledger) => {
@@ -101,7 +102,7 @@ export async function createBudgetedResponse(client, payload, options = {}) {
     if (response.status === 'completed' && typeof response.output_text === 'string' && response.output_text.trim()) {
       return { kind: 'ok', response };
     }
-    if (response.status !== 'incomplete') return { kind: 'provider_failed' };
+    if (options.signal?.aborted || response.status !== 'incomplete') return { kind: 'provider_failed' };
   }
   return { kind: 'provider_failed' };
 }

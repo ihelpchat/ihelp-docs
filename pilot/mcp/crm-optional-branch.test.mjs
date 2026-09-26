@@ -3,12 +3,13 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { answerQuestion, retrieveContext } from './assistant-service.mjs';
+import { freeAnswerClient } from './fixtures/free-answer-client.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const path = '/docs/principais-motivos-de-suporte/crm';
-const client = { responses: { create: async () => ({ output_text: JSON.stringify({
+const client = freeAnswerClient({ responses: { create: async () => ({ output_text: JSON.stringify({
   answer: 'Orientação inicial.', sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: 'complete', found: true,
-}) }) } };
+}) }) } });
 const ask = (question, history = []) => answerQuestion(root, question, { client, history });
 const all = await ask('Quero todos os passos: Como criar pipeline no CRM?');
 assert.equal(all.steps.length, 16);
