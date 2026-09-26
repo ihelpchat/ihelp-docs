@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGuide } from './create-guide.mjs';
@@ -13,6 +13,7 @@ const article = { path: 'docs/usuario-acesso', title: 'Adicionar pessoa da equip
 let plans = 0;
 let generations = 0;
 let submissions = 0;
+let submittedArticle;
 const options = {
   getContext: async () => context(),
   plan: async () => { plans++; return { status: 'needs_information', questions: ['Qual departamento recebe o acesso?'], guidance: 'Confirme o departamento.' }; },
@@ -25,6 +26,7 @@ const options = {
   existing: async () => null,
   submit: async (_root, articles, mode) => {
     submissions++;
+    submittedArticle = articles[0];
     assert.equal(mode, 'draft');
     assert.equal(articles.length, 1);
     return { status: 'draft', articles: [{ path: articles[0].path, draft: '.drafts/1' }] };
@@ -52,9 +54,9 @@ assert.equal(submissions, 1, 'fonte alterada não envia draft');
 const updateOptions = { ...options, existing: async () => ({ path: article.path, guide: { ...article.guide, version: 3 } }) };
 const update = await createGuide(root, input, updateOptions);
 const updateResult = await createGuide(root, { planId: update.planId, answers: ['Vendas'], requestedBy: actor }, updateOptions);
-assert.equal(updateResult.article.guide.guideId, 'usuario-acesso');
-assert.equal(updateResult.article.guide.version, 4, 'atualiza o guia existente');
-assert.equal(updateResult.article.path, article.path);
+assert.equal(submittedArticle.guide.guideId, 'usuario-acesso');
+assert.equal(submittedArticle.guide.version, 4, 'atualiza o guia existente');
+assert.equal(submittedArticle.path, article.path);
 
 const privacyOptions = { ...options, generate: async (_root, request) => {
   assert.doesNotMatch(request.details, /pessoa@example\.com/);
@@ -63,6 +65,35 @@ const privacyOptions = { ...options, generate: async (_root, request) => {
 const privacy = await createGuide(root, input, privacyOptions);
 await createGuide(root, { planId: privacy.planId, answers: ['Envie para pessoa@example.com'], requestedBy: actor }, privacyOptions);
 assert.doesNotMatch(await readFile(join(root, '.guide-plans', `${privacy.planId}.json`), 'utf8'), /pessoa@example\.com/);
+
+const privateRoot = await mkdtemp(join(tmpdir(), 'm536-private-'));
+const namedArticle = { ...article, body: `${article.body} Maria Oliveira confirmou a operação.` };
+const namedOptions = { ...options, generate: async (_root, request) => {
+  assert.match(request.details, /Maria Oliveira/, 'resposta só existe durante a geração');
+  return { status: 'ready', articles: [namedArticle] };
+} };
+const namedPlan = await createGuide(privateRoot, input, namedOptions);
+const namedResult = await createGuide(privateRoot, { planId: namedPlan.planId, answers: ['Maria Oliveira'], requestedBy: actor }, namedOptions);
+assert.equal(namedResult.reviewRequired, true, 'draft exige revisão humana');
+const namedState = JSON.parse(await readFile(join(privateRoot, '.guide-plans', `${namedPlan.planId}.json`), 'utf8'));
+assert.equal(typeof namedState.answerHash, 'string');
+assert.doesNotMatch(JSON.stringify(namedState), /Maria Oliveira/, 'plano não guarda resposta nem artigo gerado');
+assert.equal(namedState.result?.article, undefined);
+assert.deepEqual(await createGuide(privateRoot, { planId: namedPlan.planId, answers: ['Maria Oliveira'], requestedBy: actor }, namedOptions), namedResult);
+
+const ttlRoot = await mkdtemp(join(tmpdir(), 'm536-ttl-'));
+let now = 1_000_000;
+const timed = { ...options, now: () => now, planTtlMs: 1_000 };
+const old = await createGuide(ttlRoot, input, timed);
+now += 999;
+await assert.rejects(createGuide(ttlRoot, { planId: old.planId, answers: ['Vendas'], requestedBy: actor }, { ...timed, getContext: async () => context('b'.repeat(40)) }), /fontes mudaram/i);
+now += 1;
+await assert.rejects(createGuide(ttlRoot, { planId: old.planId, answers: ['Vendas'], requestedBy: actor }, timed), /plano expirado, refaça/i);
+assert.equal((await readdir(join(ttlRoot, '.guide-plans'))).some((name) => name === `${old.planId}.json`), false);
+const abandoned = await createGuide(ttlRoot, input, timed);
+now += 1_001;
+await createGuide(ttlRoot, input, timed);
+assert.equal((await readdir(join(ttlRoot, '.guide-plans'))).some((name) => name === `${abandoned.planId}.json`), false, 'toda chamada limpa planos vencidos');
 
 const realDraftRoot = await mkdtemp(join(tmpdir(), 'm536-draft-'));
 const draftOptions = { ...options, submit: undefined };
