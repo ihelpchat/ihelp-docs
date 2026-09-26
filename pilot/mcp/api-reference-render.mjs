@@ -7,10 +7,13 @@ const publicRoute = (route) => route.replace(/^\/api\/v\d+/iu, '');
 export function renderApiReference(endpoint, examples, page) {
   const factRoute = publicRoute(endpoint.route);
   const referenceRoute = page?.frontmatter?.endpoint;
-  const sameShape = referenceRoute && factRoute.toLowerCase().replace(/\{[^}]+\}/gu, '{}')
-    === referenceRoute.toLowerCase().replace(/\{[^}]+\}/gu, '{}');
+  const shape = (route) => route.toLowerCase().replace(/\{[^}]+\}/gu, '{}');
+  const sameShape = referenceRoute && [factRoute, endpoint.optionalAlias && publicRoute(endpoint.optionalAlias)]
+    .filter(Boolean).some((route) => shape(route) === shape(referenceRoute));
   const displayRoute = sameShape ? referenceRoute : factRoute;
-  const sample = endpoint.route.replace(/\{([^}]+)\}/gu, (_, name) =>
+  const sampleRoute = endpoint.optionalAlias && referenceRoute && shape(publicRoute(endpoint.optionalAlias)) === shape(referenceRoute)
+    ? endpoint.optionalAlias : endpoint.route;
+  const sample = sampleRoute.replace(/\{([^}]+)\}/gu, (_, name) =>
     valueFor(endpoint.parameters?.find((item) => item.name.toLowerCase() === name.toLowerCase()) ?? { type: 'string' }));
   const factParts = factRoute.split('/');
   const displayParts = displayRoute.split('/');

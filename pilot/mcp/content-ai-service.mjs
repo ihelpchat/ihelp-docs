@@ -222,6 +222,12 @@ function requestText(request, existing, productContext) {
   ].filter(Boolean).map(redactSensitiveData).join('\n');
 }
 
+function pageMatchesEndpoint(page, endpoint) {
+  return page?.frontmatter?.method && page?.frontmatter?.endpoint && endpoint.verb === page.frontmatter.method && [endpoint.route, endpoint.optionalAlias].filter(Boolean)
+    .some((route) => route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')
+      === page.frontmatter.endpoint.toLowerCase().replace(/\{[^}]+\}/gu, '{}'));
+}
+
 function groundingPending(context) {
   const missingCitation = context.pending?.filter((item) => item.startsWith('endpoint citado não encontrado')) ?? [];
   if (missingCitation.length) return { status: 'needs_information', summary: missingCitation.join('; '),
@@ -338,15 +344,11 @@ export async function generateContentPackage(root, request, options = {}) {
       if (schemaIssue) return withPending(apiPending(schemaIssue));
       const page = productContext.apiExamples?.find((item) => item.path === prose.path);
       if (!page && selectable.length > 1) return withPending(apiPending(`página sem endpoint documentado: ${prose.path}`));
-      const endpoint = page ? selectable.find((item) => item.verb === page.frontmatter.method
-        && item.route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')
-          === page.frontmatter.endpoint.toLowerCase().replace(/\{[^}]+\}/gu, '{}')) : selectable.length === 1 ? selectable[0] : selectable[index];
+      const endpoint = page ? selectable.find((item) => pageMatchesEndpoint(page, item)) : selectable.length === 1 ? selectable[0] : selectable[index];
       if (!endpoint || usedEndpoints.has(endpoint)) {
         return withPending(apiPending(`endpoint sem fato único: ${prose.path}`));
       }
-      if (endpoint.documented && productContext.apiExamples?.some((item) => item.frontmatter?.method === endpoint.verb
-        && item.frontmatter.endpoint.toLowerCase().replace(/\{[^}]+\}/gu, '{}')
-          === endpoint.route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')) && !page) {
+      if (endpoint.documented && productContext.apiExamples?.some((item) => pageMatchesEndpoint(item, endpoint)) && !page) {
         return withPending(apiPending(`path divergente da página publicada: ${prose.path}`));
       }
       if (!endpoint.verb || !endpoint.route || !Array.isArray(endpoint.parameters)

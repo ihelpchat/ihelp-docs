@@ -196,8 +196,9 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     });
     const matchingExamples = apiExamples.filter((example) => endpoints.some((item) => item.documented
       && item.verb === example.frontmatter.method
-      && item.route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')
-        === example.frontmatter.endpoint.toLowerCase().replace(/\{[^}]+\}/gu, '{}')));
+      && [item.route, item.optionalAlias].filter(Boolean).some((route) =>
+        route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')
+          === example.frontmatter.endpoint.toLowerCase().replace(/\{[^}]+\}/gu, '{}'))));
     apiExamples = (matchingExamples.length ? matchingExamples : apiExamples).slice(0, 8);
     pending = endpointPending;
   }
