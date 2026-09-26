@@ -10,6 +10,7 @@ import { setPendingQuery } from '@/lib/search-query';
 import { clickablesFor, type AssistantReply } from '@/lib/assistant';
 import { supportUrl } from '@/lib/links';
 import { productActionUrl } from '@/lib/links';
+import { assistantDisplayName } from '@/lib/assistant-name';
 
 function useCopy() {
   const [copied, setCopied] = useState<string | null>(null);
@@ -101,9 +102,7 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
     <div className="ih-ai-row">
       {compact ? null : <Avatar />}
       <div className="ih-ai-body">
-        {compact ? null : <p className="ih-ai-name">Claricia · assistente de IA do iHelp</p>}
-        {reply.resolution === 'partial' ? <p className="ih-ai-flag">Parte da resposta exige atendimento</p> : null}
-        {reply.resolution === 'not_found' ? <p className="ih-ai-flag">Procedimento não documentado</p> : null}
+        {compact ? null : <p className="ih-ai-name">{assistantDisplayName}</p>}
         <div className="ih-ai-text">
           {paragraphs.map((text, index) => <p key={index}>{text}</p>)}
         </div>
@@ -220,7 +219,7 @@ function OfflineMessage({ question, compact }: { question: string; compact: bool
     <div className="ih-ai-row">
       {compact ? null : <Avatar />}
       <div className="ih-ai-body">
-        {compact ? null : <p className="ih-ai-name">Claricia · assistente de IA do iHelp</p>}
+        {compact ? null : <p className="ih-ai-name">{assistantDisplayName}</p>}
         <p className="ih-ai-flag">Assistente não conectado</p>
         <div className="ih-ai-text">
           <p>O assistente de IA ainda não está conectado neste ambiente, então não há resposta gerada. A busca da documentação encontra artigos, endpoints e tutoriais sobre a sua pergunta.</p>

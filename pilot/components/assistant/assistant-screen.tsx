@@ -9,6 +9,7 @@ import { AssistantThread } from '@/components/assistant/assistant-thread';
 import { assistantScopes, type SourceKind } from '@/lib/assistant';
 import { supportUrl } from '@/lib/links';
 import { TechnologyMark } from '@/components/site/technology-mark';
+import { assistantDisplayName } from '@/lib/assistant-name';
 
 const starters: { kind: SourceKind; label: string }[] = [
   { kind: 'Ajuda', label: 'Meu WhatsApp desconectou. Como reconecto sem perder o histórico?' },
@@ -94,7 +95,7 @@ export function AssistantScreen() {
             {empty ? (
               <section className="ih-ai-empty">
                 <span className="ih-ai-empty-icon" aria-hidden="true"><Sparkles /></span>
-                <h1>Pergunte qualquer coisa sobre o iHelp</h1>
+                <h1>{assistantDisplayName}</h1>
                 <p>A Claricia é a assistente de IA do iHelp. Ela responde com base na Central de ajuda, nas principais dúvidas, nos tutoriais, nas novidades e na referência da API — e mostra de onde tirou cada resposta.</p>
                 <div className="ih-ai-starters">
                   {starters.map((starter) => (
@@ -107,7 +108,7 @@ export function AssistantScreen() {
               </section>
             ) : (
               <>
-                <h1 className="ih-visually-hidden">Claricia, assistente de IA do iHelp</h1>
+                <h1 className="ih-visually-hidden">{assistantDisplayName}</h1>
                 <AssistantThread />
               </>
             )}

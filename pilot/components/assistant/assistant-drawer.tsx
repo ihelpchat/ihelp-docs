@@ -8,6 +8,8 @@ import { useAssistant } from '@/components/assistant/assistant-context';
 import { AssistantComposer } from '@/components/assistant/assistant-composer';
 import { AssistantThread } from '@/components/assistant/assistant-thread';
 import { TechnologyMark } from '@/components/site/technology-mark';
+import { assistantDisplayName } from '@/lib/assistant-name';
+import { supportUrl } from '@/lib/links';
 
 const sectionLabel: Record<string, string> = {
   docs: 'Central de ajuda',
@@ -52,7 +54,7 @@ export function AssistantLauncher() {
   return (
     <button type="button" className="ih-ai-launcher" onClick={openDrawer} aria-haspopup="dialog">
       <Sparkles aria-hidden="true" />
-      Claricia · assistente de IA
+      {assistantDisplayName}
       {messages.length ? <span className="ih-ai-launcher-dot" aria-label="conversa em andamento" /> : null}
     </button>
   );
@@ -84,11 +86,11 @@ export function AssistantDrawer() {
   const ref = page.section === 'home' ? undefined : { path: page.path, title: page.title };
 
   return (
-    <div className="ih-ai-drawer" role="dialog" aria-label="Claricia, assistente de IA do iHelp" ref={panel}>
+    <div className="ih-ai-drawer" role="dialog" aria-label={assistantDisplayName} ref={panel}>
       <header className="ih-ai-drawer-head">
         <span className="ih-ai-avatar" aria-hidden="true"><Sparkles /></span>
         <div>
-          <p className="ih-ai-drawer-title">Claricia · assistente de IA</p>
+          <p className="ih-ai-drawer-title">{assistantDisplayName}</p>
           <p className="ih-ai-drawer-sub">Responde com base na documentação do iHelp</p>
         </div>
         <button
@@ -132,6 +134,7 @@ export function AssistantDrawer() {
         )}
       </div>
       <div className="ih-ai-drawer-foot">
+        <a className="ih-ai-drawer-human" href={supportUrl} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a>
         <AssistantComposer compact autoFocus placeholder="Pergunte sobre esta página ou qualquer outra coisa" page={ref} />
         <div className="ih-ai-drawer-meta">
           <p>Gerado por IA a partir da documentação. Confira as fontes.</p>

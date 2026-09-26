@@ -8,6 +8,8 @@ import { source } from '@/lib/source';
 import { PageToc } from '@/components/site/toc';
 import { Feedback } from '@/components/site/feedback';
 import { CopyButton } from '@/components/site/copy-button';
+import { GuideExperience } from '@/components/site/guide-experience';
+import { canonicalPages } from '@/lib/guide-pages';
 
 const apiBase = 'https://apiv3.ihelpchat.com/api/v2';
 const updatedFormat = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' });
@@ -88,6 +90,7 @@ export async function ArticleLayout({
   const minutes = meta ? await readingMinutes(page) : 0;
   const hideFirst = await repeatsDescription(page);
   const api = page.url.startsWith('/api');
+  const canonical = canonicalPages().find((item) => item.path === page.url);
 
   return (
     <div className={wide ? 'ih-article-wrap ih-article-wide' : 'ih-article-wrap'}>
@@ -120,6 +123,7 @@ export async function ArticleLayout({
             ) : null}
           </>
         )}
+        {canonical ? <GuideExperience guideId={canonical.guide.guideId} appUrl={canonical.appUrl} steps={canonical.guide.steps} /> : null}
         <div className="ih-prose" data-skip-lead={hideFirst || undefined}>{children}</div>
         {api ? null : <Feedback />}
         <ContinueReading page={page} />
