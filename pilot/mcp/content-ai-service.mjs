@@ -119,12 +119,23 @@ function requestText(request, existing, productContext) {
     request.productRoute ? `Rota confirmada no produto: ${request.productRoute}` : '',
     request.tangoUrl ? `Tango já existente: ${request.tangoUrl}` : '',
     `Documentação publicada semelhante (fonte editorial):\n${existing.length ? existing.map((item) => `- ${item.title} (${item.path}): ${item.description}\n${item.body ?? ''}`).join('\n') : '- Nenhum'}`,
-    `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${redactSensitiveData(item.path)}\n${redactSensitiveData(item.excerpt)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
+    `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${redactSensitiveData(item.path)} LINHA ${item.line ?? 'não informada'} SHA ${item.sha ?? item.ref}\n${redactSensitiveData(item.excerpt)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
     `Regras do suporte:\n${productContext.support?.rules?.map((item) => `- ${item}`).join('\n') ?? '- Nenhuma'}`,
     `Matriz de cobertura:\n${productContext.coverage?.map((item) => `- ${item.module}: ${item.coverage}; rotas=${item.productRoutes.join(', ')}; permissão=${item.permission}`).join('\n') ?? '- Nenhuma correspondência'}`,
     `Catálogo confiável de ProductAction (id, label, route, target):\n${catalogActions().map((action) => JSON.stringify(action)).join('\n')}`,
   ].filter(Boolean).map(redactSensitiveData).join('\n');
+}
+
+function groundingPending(context) {
+  if (!context.groundingRequired || (context.code.length && context.code.every(({ available }) => available) && context.matches.length)) return null;
+  return {
+    status: 'needs_information',
+    summary: 'Código do produto indisponível ou sem evidência para este tema.',
+    guidance: 'Código do produto indisponível ou sem evidência para este tema.',
+    questions: ['Confirme os checkouts autorizados, seus SHAs e a implementação do tema.'],
+    risks: [], suggestedActions: [], articles: [],
+  };
 }
 
 async function related(root, request) {
@@ -145,7 +156,9 @@ async function related(root, request) {
 export async function planContent(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
-  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module).catch(() => ({ repository: 'ihelpchat/front-react', ref: 'master', matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, options.contextOptions).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const pending = groundingPending(productContext);
+  if (pending) return pending;
   const response = await clientOf(options).responses.create(baseRequest('plano_documentacao', PLAN_SCHEMA, [
     {
       role: 'developer',
@@ -161,14 +174,16 @@ export async function planContent(root, request, options = {}) {
     { role: 'user', content: requestText(request, existing, productContext) },
   ], options));
   const parsed = parseJson(response);
-  return { ...parsed, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path }) => `${repository}:${redactSensitiveData(path)}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
+  return { ...parsed, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
 }
 
 export async function generateContentPackage(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
-  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module).catch(() => ({ repository: 'ihelpchat/front-react', ref: 'master', matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
-  const plan = options.plan ?? await planContent(root, request, options);
+  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, options.contextOptions).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const pending = groundingPending(productContext);
+  if (pending) return pending;
+  const plan = options.plan ?? await planContent(root, request, { ...options, productContext });
   if (plan.status === 'needs_information') {
     return { status: 'needs_information', summary: plan.guidance, questions: plan.questions, articles: [], existing, model: plan.model };
   }

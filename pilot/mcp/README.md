@@ -8,6 +8,8 @@ Eventos de sessão em `SESSION_EVENTS_FILE` (padrão `/tmp/ihelp-docs-session-ev
 
 O servidor permite que uma IA consulte a base, valide conteúdo e envie um FAQ/tutorial como draft ou pull request. Ele nunca faz merge ou deploy.
 
+Para gerar conteúdo com grounding de código, configure `PRODUCT_LOCAL_CHECKOUT`, `PRODUCT_LOCAL_SHA`, `BACKEND_LOCAL_CHECKOUT` e `BACKEND_LOCAL_SHA` com checkouts autorizados e SHAs completos. A busca lê apenas código fonte rastreado pelo Git, rejeita symlinks e pastas operacionais e devolve caminho, linha e SHA. Checkout ausente, alterado ou sem correspondência mantém o plano e o pacote em `needs_information`.
+
 ## Ferramentas
 
 - `docs_inventory`: mostra módulos cobertos e gaps.
