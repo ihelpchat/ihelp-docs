@@ -65,6 +65,13 @@ try {
     { ...article, body: `${body}\n\nClique em [**Botão imaginário**](/docs/teste/contatos).` },
     { ...article, body: `${body}\n\nToque no botão [**Algo inventado**](/docs/teste/contatos).` },
     { ...article, body: `${body}\n\nClique em \`Botão imaginário\` para continuar.` },
+    { ...article, body: `${body}\n\n## Clique em **Botão imaginário**` },
+    { ...article, body: `${body}\n\n| Passo |\n| --- |\n| Toque no botão **Fantasma** |` },
+    { ...article, body: `${body}\n\n- Clique em [**Botão imaginário**](/docs/teste/contatos).` },
+    { ...article, body: `${body}\n\n<Callout title='Clique em "Inexistente"'>Leia a instrução.</Callout>` },
+    { ...article, title: 'Clique em "Fantasma"' },
+    { ...article, description: 'Clique em "Fantasma" para importar seus contatos no iHelp com segurança.' },
+    { ...article, body: `${body}\n\n> Selecione **Nada** para continuar.` },
   ];
   for (const unsafe of rejected) {
     const before = calls.length;
