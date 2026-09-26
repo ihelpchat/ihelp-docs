@@ -14,7 +14,7 @@ const completed = { status: 'completed', output_text: '{}', usage: { input_token
 
 try {
   for (const [status, output_text] of [
-    ['failed', ''], ['cancelled', '{}'], ['unknown', '{}'], ['', '{}'], [undefined, '{}'], ['completed', ''],
+    ['failed', ''], ['failed', '{}'], ['cancelled', '{}'], ['unknown', '{}'], ['', '{}'], [undefined, '{}'], ['completed', ''],
   ]) {
     const result = await createBudgetedResponse({ responses: { create: async () => ({ ...completed, status, output_text }) } }, payload, budget(`status-${String(status)}-${output_text.length}.json`));
     assert.equal(result.kind, 'provider_failed', `status ${String(status)} e texto ${JSON.stringify(output_text)} falham fechado`);
