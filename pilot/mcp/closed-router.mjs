@@ -13,6 +13,10 @@ const stem = (word) => word.replace(/s$/u, '').replace(/(?:ou|ar|er|ir)$/u, '');
 const meaningful = (value) => words(value).filter((word) => word.length >= 3 && !ignored.has(word))
   .map(stem).filter((word) => word.length >= 3);
 const supportedByQuestion = (question, item) => {
+  if (item.actions?.length && item.objects?.length) {
+    const contains = (phrase) => new RegExp(`(?:^|\\b)${normalize(phrase).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\b|$)`, 'u').test(normalize(question));
+    return item.actions.some(contains) && item.objects.some(contains);
+  }
   const asked = new Set(meaningful(question));
   return [item.title, item.question, ...(item.aliases ?? []), ...(item.keywords ?? [])]
     .some((phrase) => {
@@ -43,7 +47,8 @@ export async function publishedGuideCatalog(root) {
         title: String(metadata.title ?? ''),
         question: String(metadata.assistantQuestion ?? ''), description: String(metadata.description ?? ''),
         aliases: Array.isArray(metadata.assistantAliases) ? metadata.assistantAliases.filter((value) => typeof value === 'string') : [],
-        keywords: Array.isArray(metadata.assistantKeywords) ? metadata.assistantKeywords.filter((value) => typeof value === 'string') : [] });
+        keywords: Array.isArray(metadata.assistantKeywords) ? metadata.assistantKeywords.filter((value) => typeof value === 'string') : [],
+        actions: metadata.assistantRouting?.actions ?? [], objects: metadata.assistantRouting?.objects ?? [] });
     }
   }
   await visit(directory);

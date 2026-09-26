@@ -10,6 +10,7 @@ export const docsPageSchema = pageSchema.extend({
   guide: guideSchema.optional(),
   assistantAliases: z.array(z.string().min(2).max(120)).max(20).optional(),
   assistantKeywords: z.array(z.string().min(2).max(80)).max(30).optional(),
+  assistantRouting: z.object({ actions: z.array(z.string().min(2)).min(1), objects: z.array(z.string().min(2)).min(1) }).optional(),
   method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).optional(),
   endpoint: z.string().optional(),
   date: z.coerce.date().optional(),

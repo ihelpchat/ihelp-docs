@@ -18,10 +18,11 @@ export function requestsHuman(value) {
   for (let index = 0; index < tokens.length; index++) {
     if (!contact.has(tokens[index])) continue;
     if (['nao', 'nem'].includes(tokens[index - 1]) || ['nao', 'nem'].includes(tokens[index - 2])) continue;
+    if (['quero', 'preciso'].includes(tokens[index])
+      && ['configurar', 'criar', 'automatizar', 'cadastrar', 'adicionar', 'colocar'].includes(tokens[index + 1])) continue;
     if (['colocar', 'coloca', 'coloque'].includes(tokens[index])
       && !(tokens.slice(Math.max(0, index - 2), index).includes('me') && tokens.slice(index + 1, index + 3).includes('com'))) continue;
-    if (tokens.slice(Math.max(0, index - 4), index + 5).some((token) => people.has(token))
-      && !tokens.slice(index + 1, index + 5).some((token) => ['configurar', 'criar', 'automatizar', 'cadastrar', 'adicionar', 'colocar'].includes(token))) return true;
+    if (tokens.slice(Math.max(0, index - 4), index + 5).some((token) => people.has(token))) return true;
   }
   return false;
 }

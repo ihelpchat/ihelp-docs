@@ -6,7 +6,7 @@ import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { isExactCatalogAction } from './product-actions.mjs';
 import { conversationalIssues } from './conversational-contract.mjs';
 import { stringify } from 'yaml';
-import { articleFields } from './article-fields.mjs';
+import { articleFields, articleSchema } from './article-fields.mjs';
 import { githubWriteToken } from './env-compat.mjs';
 import { guideSchema } from '../architecture/conversation-v1.mjs';
 
@@ -341,7 +341,7 @@ function safeArticleList(articles, deletes = []) {
     const reserved = new Set(['path', 'body', 'productActions', 'tangoUrl']);
     for (const [key, value] of Object.entries(article)) {
       if (reserved.has(key)) continue;
-      if (!articleFields.has(key) || (key === 'guide' ? !guideSchema.safeParse(value).success : (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean' && !(Array.isArray(value) && value.every((item) => typeof item === 'string'))))) {
+      if (!articleFields.has(key) || !articleSchema.shape[key].safeParse(value).success) {
         throw new SubmitArticleError('INVALID_PACKAGE', `Metadado inválido: ${key}`);
       }
     }
