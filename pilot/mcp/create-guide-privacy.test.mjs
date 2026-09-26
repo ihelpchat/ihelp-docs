@@ -10,7 +10,7 @@ const request = { guideId: 'usuario-acesso', topic: 'Adicionar pessoa da equipe'
 const article = { path: 'docs/usuario-acesso', title: 'Adicionar pessoa da equipe', description: 'Como adicionar uma pessoa da equipe e verificar o acesso no iHelp.', source: 'produto', contentType: 'guia', body: 'Abra a tela de usuários e confira as permissões antes de salvar. '.repeat(7), guide: { schemaVersion: 1, guideId: 'usuario-acesso', version: 1, mode: 'real', initialStepId: 'inicio', steps: [{ stepId: 'inicio', text: 'Abra Usuários.' }] } };
 const options = {
   getContext: async () => ({ code: [{ repository: 'front', ref: 'a'.repeat(40), available: true }], matches: [] }),
-  plan: async () => ({ status: 'needs_information', questions: ['Qual departamento recebe o acesso?'] }),
+  plan: async () => ({ status: 'needs_information', questions: ['Qual departamento recebe Maria Oliveira?'] }),
   generate: async (_root, resumed) => {
     assert.match(resumed.description, /Maria Oliveira/);
     assert.match(resumed.details, /Maria Oliveira/);
