@@ -84,6 +84,9 @@ assert.equal(validateGroundedOutput({ guidance: 'Clique em Criar robô.', ground
 const fakeModel = { responses: { create: async () => ({ model: 'fixture', output_text: JSON.stringify({ status: 'ready', guidance: 'Clique em Criar robô.', questions: [], risks: [], suggestedActions: [], grounding: [] }) }) } };
 const unguided = await planContent(new URL('../', import.meta.url).pathname, { topic: 'Criar robô de atendimento', module: 'Robôs', description: 'Explicar a tela.' }, { client: fakeModel, contextOptions: { repositoryIds: ['frontend'] } });
 assert.equal(unguided.status, 'needs_evidence');
+const unguidedPackage = await generateContentPackage(new URL('../', import.meta.url).pathname, { topic: 'Criar robô de atendimento', module: 'Robôs', description: 'Explicar a tela.' }, { client: fakeModel, contextOptions: { repositoryIds: ['frontend'] } });
+assert.equal(unguidedPackage.status, 'needs_evidence');
+assert.deepEqual(unguidedPackage.articles, []);
 const fakeBin = join(base, 'fake-bin');
 await mkdir(fakeBin);
 await writeFile(join(fakeBin, 'rg'), '#!/bin/sh\nsleep 10\n');
