@@ -119,7 +119,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     { repository: process.env.PRODUCT_GITHUB_REPOSITORY ?? 'ihelpchat/front-react', ref: process.env.PRODUCT_GITHUB_REF ?? 'master', role: 'Interface, rotas, permissões visíveis e textos de botões' },
     { repository: process.env.BACKEND_GITHUB_REPOSITORY ?? 'ihelpchat/olah-ihelp', ref: process.env.BACKEND_GITHUB_REF ?? 'master', role: 'Regras de negócio, APIs, permissões e validações' },
   ];
-  const localResult = local ? await searchLocalProductContext(topic, module, { repositoryIds: provided.repositoryIds }) : null;
+  const localResult = local ? await searchLocalProductContext(topic, module, { repositoryIds: provided.repositoryIds, explicitEndpoints: provided.explicitEndpoints }) : null;
   const code = localResult?.code ?? [];
   if (!local) for (const source of repositories) {
     const result = await searchProductContext(topic, module, { fetch: fetcher, token, repository: source.repository, ref: source.ref }).catch((error) => ({ available: false, repository: source.repository, ref: source.ref, matches: [], reason: error.message }));
