@@ -118,8 +118,12 @@ async function candidatePaths(root, paths, terms, topic, deadline) {
       candidates.push(...stdout.toString().split('\0').filter(Boolean));
     } catch (error) {
       if (error.code === 'ENOENT') {
-        const stdout = await git(root, deadline, 'grep', '-z', '-l', '-i', ...needles.flatMap((term) => ['-e', term]), '--', ...safe);
-        candidates.push(...stdout.toString().split('\0').filter(Boolean));
+        try {
+          const stdout = await git(root, deadline, 'grep', '-z', '-l', '-i', ...needles.flatMap((term) => ['-e', term]), '--', ...safe);
+          candidates.push(...stdout.toString().split('\0').filter(Boolean));
+        } catch (fallbackError) {
+          if (fallbackError.code !== 1) throw fallbackError;
+        }
         continue;
       }
       if (error.code !== 1) throw error;

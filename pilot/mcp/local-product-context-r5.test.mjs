@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdtemp, mkdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -43,6 +44,19 @@ try {
   });
   assert.equal(again.matches[0]?.path, target);
   assert.equal(reads.length, 1, 'cache por SHA não relê o candidato');
+
+  const noRgBin = join(root, 'no-rg-bin');
+  await mkdir(noRgBin);
+  const oldPath = process.env.PATH;
+  const gitBin = oldPath.split(':').map((part) => join(part, 'git')).find(existsSync);
+  assert.ok(gitBin);
+  await symlink(gitBin, join(noRgBin, 'git'));
+  process.env.PATH = noRgBin;
+  try {
+    const fallback = await searchLocalProductContext('Criar robô de atendimento', '', { repositoryIds: ['frontend'] });
+    assert.equal(fallback.code[0].available, true, fallback.code[0].reason);
+    assert.equal(fallback.matches[0]?.path, target, 'git grep aceita lotes sem matches');
+  } finally { process.env.PATH = oldPath; }
 
   const slowCheckout = join(root, 'slow');
   await mkdir(join(slowCheckout, 'src/pages'), { recursive: true });
