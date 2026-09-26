@@ -227,7 +227,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
               report.screenshots.push(name);
             }
           }
-          if (role === 'denied' && deniedBlocked) {
+          if (role === 'denied') {
             const saves = page.getByRole('button', { name: /Salvar/u });
             const count = await saves.count();
             for (let saveIndex = 0; saveIndex < count; saveIndex++) {
