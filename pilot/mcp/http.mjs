@@ -9,6 +9,8 @@ import { answerQuestion } from './assistant-service.mjs';
 import { normalizeFeedback, saveFeedback, summarizeFeedback } from './feedback-service.mjs';
 import { sanitizeWidgetContext } from './real-state.mjs';
 import { saveSessionEvent, pruneSessionEvents } from './session-events.mjs';
+import { topicForQuestion } from './closed-router.mjs';
+import { actionForQuestion, issueForQuestion } from './gap-classification.mjs';
 import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { publishedPathOrNull } from './published-paths.mjs';
 import { opaqueId } from './opaque-id.mjs';
@@ -147,11 +149,15 @@ export const httpServer = createServer(async (request, response) => {
       const page = pagePath
         ? { path: pagePath, title: body.page.title }
         : undefined;
+      const widgetContext = sanitizeWidgetContext(body.widgetContext);
       let resolvedStep;
       const result = await answerQuestion(root, question, {
-        history, scope, page, guide: body.guide, widgetContext: sanitizeWidgetContext(body.widgetContext),
+        history, scope, page, guide: body.guide, widgetContext,
         onResolvedStep: (step) => { resolvedStep = step; },
       });
+      const topic = topicForQuestion(question);
+      const issue = issueForQuestion(question, widgetContext);
+      const action = issue === 'usage' ? actionForQuestion(question) : undefined;
       try {
         const now = Date.now();
         if (now - lastSessionPrune > 24 * 60 * 60_000) {
@@ -164,6 +170,9 @@ export const httpServer = createServer(async (request, response) => {
           ...resolvedStep,
           durationMs: Math.min(now - startedAt, 300_000),
           result: ['complete', 'partial', 'not_found', 'in_progress'].includes(result.resolution) ? result.resolution : 'not_found',
+          ...(topic ? { topic } : {}),
+          ...(action ? { action } : {}),
+          issue,
           path: pagePath ?? '/assistente',
         }, { now });
       } catch {

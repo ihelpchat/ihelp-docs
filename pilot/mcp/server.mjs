@@ -62,6 +62,18 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     inputSchema: z.object({}),
   }, async () => textResult(await getInventory(root)));
 
+  registerTool('lacunas', {
+    mutates: false,
+    description: 'Agrupa eventos saneados por tópico e devolve propostas para criar_guia; incidentes exigem revisão humana.',
+    inputSchema: z.object({}),
+  }, async () => {
+    try {
+      const { collectGaps } = await import('./lacunas.mjs');
+      return textResult(await collectGaps(root, process.env.SESSION_EVENTS_FILE ?? '/tmp/ihelp-docs-session-events.jsonl'));
+    }
+    catch { return textResult({ error: 'Não foi possível consultar lacunas' }, true); }
+  });
+
   registerTool('docs_search', {
     mutates: false,
     description: 'Busca conteúdo existente antes de criar ou duplicar um FAQ.',
