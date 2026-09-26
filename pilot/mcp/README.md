@@ -49,6 +49,12 @@ DOCS_MCP_API_KEY=... OPENAI_API_KEY=... ASSISTANT_ALLOWED_ORIGINS=https://docs.e
 
 O endpoint `/mcp` exige `Authorization: Bearer <DOCS_MCP_API_KEY>`. O endpoint público `/assistant` aceita somente perguntas curtas, aplica rate limit, envia apenas trechos recuperados da documentação e chama a OpenAI com `store: false`. A chave permanece exclusivamente no servidor.
 
+### Decisões por padrão: IP usado nos limites
+
+`TRUSTED_IP_SOURCE` aceita `x-real-ip`, `xff-hops` ou `socket`. Em `RAILWAY_ENVIRONMENT_NAME=production`, o padrão é `x-real-ip`, conforme o header de cliente documentado pelo Railway. Fora desse ambiente, o padrão mantém `xff-hops`; `TRUST_PROXY_HOPS` (1 por padrão) escolhe o salto contado da direita. `socket` ignora headers de IP. Valor ausente ou inválido na fonte escolhida usa o endereço do socket. Configure `TRUSTED_IP_SOURCE=socket` quando o serviço for acessado diretamente, sem proxy confiável.
+
+No deploy, confira que o tráfego público passa pelo proxy esperado e que ele define `X-Real-IP`. Em staging, envie 10 perguntas com o mesmo `sessionId` a partir de cada uma de duas redes distintas: a 11ª de cada rede deve receber 429 com `Retry-After` próximo do tempo restante da janela, enquanto uma sessão nova da outra rede ainda recebe 200. Confira no DevTools do FAQ em origem diferente que `Retry-After` está disponível para o JavaScript. Se a topologia não garantir `X-Real-IP`, escolha explicitamente `xff-hops` com o número de saltos verificado ou `socket`, e repita a prova antes de publicar.
+
 ### Contexto opcional do widget
 
 `POST /assistant` aceita `widgetContext` além de `question`, `history`, `scope` e `page`. Clientes antigos podem omiti-lo. Exemplo:

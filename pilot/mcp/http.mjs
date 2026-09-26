@@ -24,6 +24,7 @@ const windowMs = 60_000;
 const assistantSessionLimit = 10;
 const assistantIpLimit = Math.max(10, Math.min(100, Number(process.env.ASSISTANT_IP_LIMIT) || 100));
 const feedbackIpLimit = 30;
+const trustedIpSource = process.env.TRUSTED_IP_SOURCE ?? (process.env.RAILWAY_ENVIRONMENT_NAME === 'production' ? 'x-real-ip' : 'xff-hops');
 const configuredProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 1);
 const trustProxyHops = Number.isInteger(configuredProxyHops) && configuredProxyHops >= 0 && configuredProxyHops <= 10 ? configuredProxyHops : 0;
 let lastSweep = Date.now();
@@ -35,11 +36,16 @@ function cors(request, response) {
     response.setHeader('Vary', 'Origin');
     response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.setHeader('Access-Control-Expose-Headers', 'Retry-After');
   }
 }
 
 function clientIp(request) {
-  const forwarded = request.headers['x-forwarded-for'];
+  if (trustedIpSource === 'x-real-ip') {
+    const candidate = request.headers['x-real-ip'];
+    if (typeof candidate === 'string' && isIP(candidate.trim())) return candidate.trim();
+  }
+  const forwarded = trustedIpSource === 'xff-hops' ? request.headers['x-forwarded-for'] : undefined;
   if (trustProxyHops > 0 && typeof forwarded === 'string') {
     const hops = forwarded.split(',').map((value) => value.trim());
     const candidate = hops.at(-trustProxyHops);
