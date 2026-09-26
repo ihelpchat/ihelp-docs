@@ -52,12 +52,14 @@ const post = async (question, guide) => {
 };
 const safe = (reply) => {
   assert.equal(reply.resolution, 'not_found');
-  assert.deepEqual(reply.suggestions, reply.guide?.guideId === 'campanhas'
+  assert.deepEqual(reply.suggestions, !reply.guide
     ? ['Falar com uma pessoa'] : ['Recomeçar', 'Falar com uma pessoa']);
-  assert.ok(reply.guide, 'estado seguro preserva contexto');
-  assert.equal(reply.guide.stateToken, undefined, 'estado seguro não autoriza avançar');
-  if (reply.guide.guideId === 'campanhas') assert.deepEqual(reply.sources, [{ title: 'Central de Ajuda', path: '/docs' }]);
-  else assert.equal(reply.guide.guideId, 'reconectar-canal-qr');
+  assert.equal(reply.guide?.stateToken, undefined, 'estado seguro não autoriza avançar');
+  if (!reply.guide) {
+    assert.deepEqual(reply.sources, [{ title: 'Central de Ajuda', path: '/docs' }]);
+    assert.equal(reply.escalation?.guideId, 'campanhas');
+    assert.equal(reply.escalation?.stepId, undefined);
+  } else assert.equal(reply.guide.guideId, 'reconectar-canal-qr');
 };
 try {
   const first = await post('Começar', state());

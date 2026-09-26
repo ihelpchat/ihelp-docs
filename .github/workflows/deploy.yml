@@ -46,7 +46,6 @@ jobs:
         working-directory: pilot
         env:
           NEXT_PUBLIC_BASE_PATH: /ihelp-docs
-          NEXT_PUBLIC_ASSISTANT_URL: http://127.0.0.1:3100/assistant
       - name: Check guide journey in Chrome
         run: npm run qa:guide
         working-directory: pilot

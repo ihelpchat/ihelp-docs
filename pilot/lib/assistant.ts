@@ -114,8 +114,9 @@ export function supportMessageFor(reply: AssistantReply): string {
     'Olá! Preciso de atendimento no iHelp.',
     `Intenção: ${intentLabels[reply.escalation.intent]}.`,
     `Diagnóstico inicial: ${diagnosisLabels[reply.escalation.diagnosis]}.`,
-    ...((reply.escalation.guideId && reply.escalation.stepId) || reply.guide
-      ? [`Guia: ${reply.escalation.guideId ?? reply.guide?.guideId}; passo: ${reply.escalation.stepId ?? reply.guide?.stepId}.`] : []),
+    ...(reply.escalation.guideId || reply.guide
+      ? [`Guia: ${reply.escalation.guideId ?? reply.guide?.guideId}${reply.escalation.stepId || reply.guide?.stepId
+        ? `; passo: ${reply.escalation.stepId ?? reply.guide?.stepId}` : ''}.`] : []),
     ...(state ? [`Estado informado pelo aplicativo, não confirmado pelo servidor: ${state}.`] : []),
     `Tentativas: ${reply.escalation.attempts.map((item) => attemptLabels[item]).join('; ') || 'nenhuma registrada'}.`,
   ].join('\n');
@@ -205,8 +206,10 @@ function safeEscalation(value: unknown): AssistantEscalation | undefined {
   }
   return {
     intent: raw.intent as AssistantEscalation['intent'], diagnosis: raw.diagnosis as AssistantEscalation['diagnosis'],
-    ...(typeof raw.guideId === 'string' && /^[a-z0-9][a-z0-9-]{2,63}$/u.test(raw.guideId) && typeof raw.stepId === 'string' && /^[a-z0-9][a-z0-9-]{2,63}$/u.test(raw.stepId)
-      ? { guideId: raw.guideId, stepId: raw.stepId } : {}),
+    ...(typeof raw.guideId === 'string' && /^[a-z0-9][a-z0-9-]{2,63}$/u.test(raw.guideId)
+      ? { guideId: raw.guideId } : {}),
+    ...(typeof raw.stepId === 'string' && /^[a-z0-9][a-z0-9-]{2,63}$/u.test(raw.stepId)
+      ? { stepId: raw.stepId } : {}),
     ...(Object.keys(safeState).length ? { state: safeState } : {}),
     attempts: Array.isArray(raw.attempts) ? raw.attempts.filter((item): item is AssistantEscalation['attempts'][number] => escalationAttempts.includes(item)).slice(0, 2) : [],
   };
@@ -252,7 +255,10 @@ export function clickablesFor(reply: AssistantReply, options: {
     const href = options.productActionUrl(step.action);
     if (href) result.push({ kind: 'link', slot: 'action', label: step.action.label, href, stepIndex });
   });
-  reply.suggestions.forEach((label) => request(label, 'suggestion'));
+  reply.suggestions.forEach((label) => {
+    if (!reply.guide && label === 'Falar com uma pessoa') return; // o CTA já abre o handoff validado
+    request(label, 'suggestion');
+  });
   if (reply.guide && reply.resolution === 'in_progress') {
     // O primeiro byte do token codifica o primeiro passo; caminho com um só byte não tem volta.
     if (/^[A-Za-z0-9_-]{3,54}\.[A-Za-z0-9_-]{43}$/.test(reply.guide.stateToken ?? '')) request('Voltar', 'navigation');

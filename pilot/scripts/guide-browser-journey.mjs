@@ -67,7 +67,7 @@ async function post(body) {
 }
 
 const sitePort = 4178;
-const site = spawn('node_modules/.bin/serve', ['out', '-l', String(sitePort)], { cwd: new URL('../', import.meta.url).pathname, stdio: 'ignore' });
+const site = spawn('node_modules/.bin/serve', [process.env.GUIDE_QA_OUT ?? 'out', '-l', String(sitePort)], { cwd: new URL('../', import.meta.url).pathname, stdio: 'ignore' });
 const siteUrl = `http://127.0.0.1:${sitePort}`;
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 let browser;
@@ -89,12 +89,16 @@ try {
       url.pathname = url.pathname.slice(basePath.length);
       await route.fulfill({ response: await route.fetch({ url: url.href }) });
     });
-    await page.route('**/assistant', async (route) => {
+    await page.route(process.env.GUIDE_QA_ASSISTANT_URL ?? '**/assistant', async (route) => {
+      if (route.request().method() === 'OPTIONS') {
+        await route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } });
+        return;
+      }
       const body = route.request().postDataJSON();
       requests.push(body);
       const result = await post(body);
       replies.push(result);
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(result) });
+      await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(result) });
     });
     await page.addInitScript((initial) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages: [
       { id: 'fixture-ai', role: 'ai', reply: initial, question: 'Começar' },
@@ -125,7 +129,7 @@ try {
   async function support(page, guideId, stepId) {
     const href = await page.locator('.ih-ai-row').last().getByRole('link', { name: 'Falar com o atendimento' }).getAttribute('href');
     const message = new URL(href).searchParams.get('text');
-    assert.match(message, new RegExp(`${guideId}.*${stepId}`, 's'), 'CTA visível deve informar guia e passo');
+    assert.match(message, new RegExp(`Guia: ${guideId}${stepId ? `; passo: ${stepId}` : ''}`, 's'), 'CTA visível deve informar contexto validado');
   }
 
   const initial = await post({ question: 'Começar', guide: { guideId: 'reconectar-canal-qr', stepId: 'inicio', version: 1, mode: 'real' } });
@@ -159,9 +163,8 @@ try {
   const missingPage = await pageWith(missing);
   assert.equal(await missingPage.locator('.ih-ai-row').last().getByRole('button', { name: 'Recomeçar' }).count(), 0, 'guia sem MDX não pode recomeçar');
   assert.ok(await missingPage.locator('.ih-ai-row').last().locator('.ih-ai-sources a').count(), 'guia sem MDX oferece FAQ');
-  await support(missingPage, 'campanhas', 'inicio');
-  await click(missingPage, 'Falar com uma pessoa', { guideId: 'campanhas', stepId: 'inicio', resolution: 'partial' });
-  await support(missingPage, 'campanhas', 'inicio');
+  assert.equal(await missingPage.locator('.ih-ai-row').last().getByRole('button', { name: 'Falar com uma pessoa' }).count(), 0, 'sem MDX o CTA vai direto ao suporte');
+  await support(missingPage, 'campanhas');
   await missingPage.close();
   assert.equal(providerCalls, 0, 'jornada inteira sem provider');
   console.log('guide-browser-journey: 3 cenários, cliques reais, payload e provider OK');
