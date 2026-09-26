@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launch } from './visual/measure.mjs';
-import { createSitePage } from './visual/serve-qa-build.mjs';
+import { createSitePage, startQaSite } from './visual/serve-qa-build.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'guide-browser-'));
 await mkdir(join(root, 'content/docs'), { recursive: true });
@@ -67,34 +66,32 @@ async function post(body) {
   return response.json();
 }
 
-const sitePort = 4178;
-const site = spawn('node_modules/.bin/serve', [process.env.GUIDE_QA_OUT ?? 'out', '-l', String(sitePort)], { cwd: new URL('../', import.meta.url).pathname, stdio: 'ignore' });
-const siteUrl = `http://127.0.0.1:${sitePort}`;
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+const site = await startQaSite(process.env.GUIDE_QA_OUT ?? new URL('../out/', import.meta.url).pathname, basePath);
+const siteUrl = site.url;
 let browser;
 try {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (site.exitCode !== null) throw new Error(`serve saiu com ${site.exitCode}`);
-    try { if ((await fetch(siteUrl)).ok) break; } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    if (attempt === 49) throw new Error('serve não iniciou');
-  }
   browser = await launch();
   const requests = [];
   const replies = [];
   async function pageWith(reply) {
-    const page = await createSitePage(browser, siteUrl, basePath);
+    const page = await createSitePage(browser);
     page.on('pageerror', (error) => console.error('browser pageerror', error.message));
     await page.route(process.env.GUIDE_QA_ASSISTANT_URL ?? '**/assistant', async (route) => {
-      if (route.request().method() === 'OPTIONS') {
-        await route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } });
-        return;
+      try {
+        if (route.request().method() === 'OPTIONS') {
+          await route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } });
+          return;
+        }
+        const body = route.request().postDataJSON();
+        requests.push(body);
+        const result = await post(body);
+        replies.push(result);
+        await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(result) });
+      } catch (error) {
+        if (/TargetClosedError|Request context disposed|Fetch response has been disposed|Target page, context or browser has been closed|Route is already handled/i.test(`${error.name}: ${error.message}`)) return;
+        throw error;
       }
-      const body = route.request().postDataJSON();
-      requests.push(body);
-      const result = await post(body);
-      replies.push(result);
-      await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(result) });
     });
     await page.addInitScript((initial) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages: [
       { id: 'fixture-ai', role: 'ai', reply: initial, question: 'Começar' },
@@ -166,7 +163,7 @@ try {
   console.log('guide-browser-journey: 3 cenários, cliques reais, payload e provider OK');
 } finally {
   await browser?.close();
-  site.kill();
+  await site.close();
   await new Promise((resolve) => httpServer.close(resolve));
   await new Promise((resolve) => provider.close(resolve));
   await rm(root, { recursive: true, force: true });
