@@ -79,6 +79,26 @@ try {
     assert.equal(calls.length, before, 'pacote inválido não pode consultar nem escrever no GitHub');
   }
 
+  const unsafeMdxUrls = [
+    '<a href="docs/nao-existe">Abra a página</a>',
+    '<Card href="nao-existe">Abra a página</Card>',
+    '<X to="../../fantasma">Abra a página</X>',
+    '<Img src="img/nao-existe.png">Imagem</Img>',
+    '<a href="javascript:alert(1)">Abra a página</a>',
+    "<Card data={[{ url: 'docs/nao-existe' }]} />",
+    "<Card data={[{ url: 'nao-existe' }]} />",
+    '<X foo="docs/nao-existe">Abra a página</X>',
+  ];
+  for (const snippet of unsafeMdxUrls) {
+    const before = calls.length;
+    await assert.rejects(
+      submitContentPackage(root, [{ ...article, body: `${body}\n\n${snippet}` }], 'pull_request', 'user:tester'),
+      /gate|link|asset|esquema/i,
+      `${snippet}: URL insegura precisa ser rejeitada`,
+    );
+    assert.equal(calls.length, before, `${snippet}: rejeição precisa causar zero writes`);
+  }
+
   const validLabel = { ...article, body: `${body}\n\n## Inicio\n\nClique em “IMPORTAR CONTÁTOS” para continuar. [Veja esta página](/docs/teste/contatos#inicio).` };
   const validLabelResult = await submitContentPackage(root, [validLabel], 'pull_request', 'user:tester');
   assert.equal(validLabelResult.status, 'pull_request', 'rótulo aprovado com variação de acento e link existente passa');
@@ -86,6 +106,8 @@ try {
   assert.equal(validJsx.status, 'pull_request', 'atributo JSX com string estática e rota existente passa');
   const validData = await submitContentPackage(root, [{ ...article, body: `${body}\n\n<Card data={{ href: '/docs/teste/contatos', count: -1, enabled: true, empty: null }} />` }], 'pull_request', 'user:tester');
   assert.equal(validData.status, 'pull_request', 'objeto de dados literais e rota existente passa');
+  const validRelative = await submitContentPackage(root, [{ ...article, body: `${body}\n\n<Card href="contatos">Abra a página</Card>.` }], 'pull_request', 'user:tester');
+  assert.equal(validRelative.status, 'pull_request', 'link relativo existente em JSX passa');
   const validApi = await submitContentPackage(root, [{ ...article, path: 'api/teste/contatos', body: `${body}\n\nUse \`contactId\` para identificar o contato.` }], 'pull_request', 'user:tester');
   assert.equal(validApi.status, 'pull_request', 'código inline na referência de API não é rótulo');
 
