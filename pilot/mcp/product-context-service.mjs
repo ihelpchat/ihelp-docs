@@ -138,13 +138,14 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
   let endpoints = [];
   let apiExamples = [];
   let contextCode = code;
+  let nonPublicEndpoints = false;
   let pending = [];
   if (normalize(module) === 'api' || /\bendpoint\b|\/api\/v\d/iu.test(topic)) {
     endpoints = code.flatMap((source) => source.endpoints ?? []);
     const docsRoot = join(provided.publicReferenceRoot ?? root, 'content/docs/api');
     const pages = (await readdir(docsRoot, { recursive: true }).catch(() => []))
       .filter((path) => path.endsWith('.mdx'))
-      .sort((left, right) => Number(normalize(right).includes(terms.find((term) => term !== 'api') ?? '\0')) - Number(normalize(left).includes(terms.find((term) => term !== 'api') ?? '\0')));
+      .sort((left, right) => Number(normalize(right).includes(terms.find((term) => term.length >= 4 && term !== 'api') ?? '\0')) - Number(normalize(left).includes(terms.find((term) => term.length >= 4 && term !== 'api') ?? '\0')));
     const documented = new Set();
     for (const page of pages) {
       const raw = await readFile(join(docsRoot, page), 'utf8');
@@ -153,7 +154,12 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
       const frontmatter = parse(match[1]);
       if (frontmatter?.source === 'api' && frontmatter?.method && frontmatter?.endpoint) {
         documented.add(`${frontmatter.method} ${String(frontmatter.endpoint).toLowerCase().replace(/\{[^}]+\}/gu, '{}')}`);
-        apiExamples.push({ frontmatter: { source: frontmatter.source, contentType: frontmatter.contentType,
+        apiExamples.push({ path: `api/${page.replace(/\.mdx$/u, '')}`,
+          baseUrl: raw.match(/https:\/\/[^\s/"']+(?=\/api\/v\d+)/u)?.[0] ?? null,
+          paramNames: [...raw.matchAll(/<Param\s+[^>]*name=["']([^"']+)["']/gu)].map((item) => item[1]),
+          components: [...new Set([...raw.matchAll(/<(Params|Param|CodeTabs|Response|Fields|Field)\b/gu)].map((item) => item[1]))],
+          languages: [...new Set([...raw.matchAll(/^```(bash|js|python|http)$/gmu)].map((item) => item[1]))],
+          frontmatter: { source: frontmatter.source, contentType: frontmatter.contentType,
           method: frontmatter.method, endpoint: frontmatter.endpoint },
         sections: [...raw.matchAll(/^## (.+)$/gmu)].map((section) => section[1]) });
       }
@@ -179,6 +185,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     endpointPending.push(...requested.filter((endpoint) => !endpoints.some((item) => cited(item, endpoint)))
       .map((endpoint) => `endpoint citado não encontrado (${endpoint.verb} ${endpoint.route})`));
     const allowedBackendFiles = new Set(endpoints.filter((item) => item.public).map((item) => item.file));
+    nonPublicEndpoints = endpoints.some((item) => !item.public);
     endpoints = endpoints.filter((item) => item.public);
     contextCode = code.map((source) => {
       const backend = source.role === 'backend' || source.repository === 'ihelpchat/olah-ihelp';
@@ -187,7 +194,12 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
         matches: backend ? source.matches.filter((match) => allowedBackendFiles.has(match.path)) : source.matches,
       };
     });
-    apiExamples = apiExamples.slice(0, 4);
+    const matchingExamples = apiExamples.filter((example) => endpoints.some((item) => item.documented
+      && item.verb === example.frontmatter.method
+      && [item.route, item.optionalAlias].filter(Boolean).some((route) =>
+        route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')
+          === example.frontmatter.endpoint.toLowerCase().replace(/\{[^}]+\}/gu, '{}'))));
+    apiExamples = (matchingExamples.length ? matchingExamples : apiExamples).slice(0, 8);
     pending = endpointPending;
   }
   return {
@@ -201,6 +213,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     },
     coverage: relevantCoverage,
     endpoints,
+    nonPublicEndpoints,
     pending,
     apiExamples,
     matches: [...contextCode.flatMap((source) => source.matches.map((match) => ({ ...match, repository: source.repository, ref: source.ref, role: source.role }))),
