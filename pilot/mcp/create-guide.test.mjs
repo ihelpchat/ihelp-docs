@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGuide } from './create-guide.mjs';
+import { submitContentPackage } from './content-service.mjs';
 import { generateCanonicalGuide } from './content-ai-service.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'm536-'));
@@ -102,6 +103,39 @@ const draft = await createGuide(realDraftRoot, { planId: draftPlan.planId, answe
 assert.equal(draft.draft.status, 'draft');
 assert.match(await readFile(join(realDraftRoot, draft.draft.articles[0].path), 'utf8'), /guideId: usuario-acesso/);
 assert.deepEqual(await createGuide(realDraftRoot, { planId: draftPlan.planId, answers: ['Vendas'], requestedBy: actor }, draftOptions), draft);
+
+const retryRoot = await mkdtemp(join(tmpdir(), 'm536-retry-'));
+let submitAttempts = 0;
+const retryOptions = { ...options, submit: async (...args) => {
+  submitAttempts++;
+  const result = await submitContentPackage(...args);
+  if (submitAttempts === 1) throw new Error('Falha injetada após gravar draft, antes de concluir audit/status');
+  return result;
+} };
+const retryPlan = await createGuide(retryRoot, input, retryOptions);
+const retryInput = { planId: retryPlan.planId, answers: ['Vendas'], requestedBy: actor };
+await assert.rejects(createGuide(retryRoot, retryInput, retryOptions), /Falha injetada/);
+const retryResult = await createGuide(retryRoot, retryInput, retryOptions);
+assert.equal(retryResult.status, 'draft');
+assert.equal(retryResult.reviewRequired, true);
+assert.equal(submitAttempts, 2, 'retomada conclui após falha posterior à gravação');
+assert.deepEqual(await createGuide(retryRoot, retryInput, retryOptions), retryResult);
+assert.equal((await readdir(join(retryRoot, '.drafts/docs'))).length, 1, 'não duplica draft');
+
+const conflictRoot = await mkdtemp(join(tmpdir(), 'm536-conflict-'));
+let conflictAttempts = 0;
+const conflictOptions = { ...options, submit: async (...args) => {
+  const result = await submitContentPackage(...args);
+  if (++conflictAttempts === 1) throw new Error('Falha injetada após gravar draft');
+  return result;
+} };
+const conflictPlan = await createGuide(conflictRoot, input, conflictOptions);
+const conflictInput = { planId: conflictPlan.planId, answers: ['Vendas'], requestedBy: actor };
+await assert.rejects(createGuide(conflictRoot, conflictInput, conflictOptions), /Falha injetada/);
+const conflictPath = join(conflictRoot, '.drafts', `${article.path}.mdx`);
+await writeFile(conflictPath, 'draft divergente');
+await assert.rejects(createGuide(conflictRoot, conflictInput, conflictOptions), /conflito|diferente/i);
+assert.equal(await readFile(conflictPath, 'utf8'), 'draft divergente', 'não sobrescreve draft divergente');
 
 const citation = { repository: 'front', path: 'src/pages/Users.tsx', lineStart: 10, lineEnd: 10, sha: 'a'.repeat(40) };
 const generated = { ...article, assistantQuestion: 'Como adicionar uma pessoa?', assistantOverview: 'Abra a tela de usuários.', assistantInitialSteps: 1, assistantSuggestions: ['Como conferir o acesso?'], productActions: [], guide: { ...article.guide, steps: [{ stepId: 'inicio', text: 'Abra Usuários.', actionId: null, choices: [] }] } };
