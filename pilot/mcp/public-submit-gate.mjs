@@ -5,8 +5,8 @@ import { validateCanonicalGuide } from '../lib/canonical-guides.mjs';
 import { validatePublicArtifact } from '../lib/guide-package.mjs';
 import approvedMap from '../product-map/approved.json' with { type: 'json' };
 import { sensitiveKinds } from './sensitive-data.mjs';
-import { internalLinkIssues, parseArticle, parseMdx, plainText, visit } from './editorial-standard.mjs';
-import publishedBaseline from './public-label-baseline.json' with { type: 'json' };
+import { internalLinkIssues, parseMdx, plainText, visit } from './editorial-standard.mjs';
+import publishedBaseline from './public-submit-baseline.json' with { type: 'json' };
 
 // A mesma lista protege texto submetido ao MCP e passos dos guias submetidos.
 export const jargon = Object.freeze(['template', 'API', 'Meta', 'Gupshup', 'janela de 24h', 'US$']);
@@ -16,27 +16,24 @@ const mapLabels = new Set(approvedMap.manifest.labels.map(({ label }) => normali
 // CTA da Claricia é renderizado pelo widget público em pilot/lib/assistant.ts.
 mapLabels.add(normalizeLabel('Falar com uma pessoa'));
 const routes = new Set(approvedMap.manifest.routes.map(({ path }) => path));
-// Conteúdo publicado anterior ao gate: exceção exata, removida ao atualizar o guia.
-const publishedLabelBaseline = new Map([
-  ['docs/principais-motivos-de-suporte/reconectar-canal-qr', '5af9438d1b96e027892a0d17fcb9cc124174e0a15210fdee2c62a63e71e06123'],
-  ['docs/principais-motivos-de-suporte/usuario-acesso', '2694a6e6c6cf4089c49831a675a89e95696c648fe2305976c724f3010df40220'],
-  ['docs/sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario', '5c398b5631d5c99b16d412ea5f85e2ab4569d3722e952ca0720ccc5f3d73e6a7'],
-]);
 // Radicais de ações e substantivos que identificam uma frase sobre a interface.
 const UI_CUES = /\b(?:toc\w*|toq\w*|cliq\w*|cliqu\w*|apert\w*|pression\w*|selecion\w*|escolh\w*|desmarc\w*|marc\w*|acess\w*|desativ\w*|ativ\w*|preench\w*|digit\w*|entr\w*|arrast\w*|desliz\w*|abr\w*|v[aá]\s+(?:at[eé]|em|para)|bot[aã]o|aba|menu|opç[aã]o|campo|tela|[ií]cone|link|chave|caixa)\b/iu;
 
-function checkInterfaceLabels(body) {
+function checkInterfaceLabels(body, path) {
   const tree = parseMdx(body);
   visit(tree, (node) => {
     if (node.type !== 'paragraph') return;
     let text = '';
     const labels = [];
     for (const child of node.children ?? []) {
+      visit(child, (descendant) => {
       const start = text.length;
-      const value = plainText(child);
-      text += value;
-      if (child.type === 'strong' || child.type === 'inlineCode') labels.push({ value, start });
-      if (child.type === 'text') for (const match of value.matchAll(/["“”]([^"“”]+)["“”]/gu)) labels.push({ value: match[1], start: start + match.index });
+      if (descendant.type === 'strong' || (descendant.type === 'inlineCode' && !path.startsWith('api/')))
+        labels.push({ value: plainText(descendant), start });
+      if (descendant.type === 'text') for (const match of descendant.value.matchAll(/["“”]([^"“”]+)["“”]/gu))
+        labels.push({ value: match[1], start: start + match.index });
+      if (descendant.type === 'text' || descendant.type === 'inlineCode') text += descendant.value;
+      });
     }
     for (const label of labels) {
       const before = text.slice(0, label.start);
@@ -63,7 +60,7 @@ function checkJargon(text) {
   }
 }
 
-export async function assertPublicSubmit(root, items, deletes = []) {
+export async function assertPublicSubmit(root, items, deletes = [], { ignoreBaseline = false } = {}) {
   for (const { article, rendered } of items) {
     const kinds = sensitiveKinds(rendered);
     if (kinds.credential || kinds.personal || kinds.internal || kinds.control) reject('fonte interna ou dado privado');
@@ -84,13 +81,9 @@ export async function assertPublicSubmit(root, items, deletes = []) {
     if (article.path.startsWith('docs/') || article.path.startsWith('tutoriais/')) {
       checkJargon([article.title, article.description, article.body, ...(article.guide?.steps ?? []).map(({ text }) => text)].join('\n'));
     }
-    const publishedRaw = publishedBaseline[article.path]
-      ? await readFile(new URL(`../content/docs/${article.path}.mdx`, import.meta.url), 'utf8').catch(() => '')
-      : '';
-    const unchangedBaselineBody = publishedRaw && createHash('sha256').update(publishedRaw).digest('hex') === publishedBaseline[article.path]
-      && parseArticle(publishedRaw, article.path).body === article.body;
-    if (!unchangedBaselineBody && publishedLabelBaseline.get(article.path) !== createHash('sha256').update(article.body).digest('hex')) {
-      for (const text of [article.body, ...(article.guide?.steps ?? []).map(({ text }) => text)]) checkInterfaceLabels(text);
+    const unchangedBaseline = !ignoreBaseline && publishedBaseline[article.path] === createHash('sha256').update(rendered).digest('hex');
+    if (!unchangedBaseline) {
+      for (const text of [article.body, ...(article.guide?.steps ?? []).map(({ text }) => text)]) checkInterfaceLabels(text, article.path);
     }
     const brokenLinks = await internalLinkIssues(root, article.path, article.body);
     if (brokenLinks.length) reject(brokenLinks[0]);

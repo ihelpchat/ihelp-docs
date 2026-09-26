@@ -60,6 +60,7 @@ try {
     { ...article, body: `${body}\n\n[Abra a página](../nao-existe).` },
     { ...article, body: `${body}\n\n<CodeTabs labels={[<a href={'/docs/nao-existe'}>Rota</a>]} />` },
     { ...article, body: `${body}\n\n<Card data={[{ href: '/docs/nao-existe' }]} />` },
+    { ...article, body: `${body}\n\n<Card data={{ '/docs/nao-existe': true }} />` },
     { ...article, body: `${body}\n\n<Card href={\`/docs/\${x}\`} />` },
     { ...article, body: `${body}\n\nClique em [**Botão imaginário**](/docs/teste/contatos).` },
     { ...article, body: `${body}\n\nToque no botão [**Algo inventado**](/docs/teste/contatos).` },
@@ -76,10 +77,12 @@ try {
   assert.equal(validLabelResult.status, 'pull_request', 'rótulo aprovado com variação de acento e link existente passa');
   const validJsx = await submitContentPackage(root, [{ ...article, body: `${body}\n\n<Card href={'/docs/teste/contatos'}>Abra a página</Card>.` }], 'pull_request', 'user:tester');
   assert.equal(validJsx.status, 'pull_request', 'atributo JSX com string estática e rota existente passa');
+  const validData = await submitContentPackage(root, [{ ...article, body: `${body}\n\n<Card data={{ href: '/docs/teste/contatos', count: -1, enabled: true, empty: null }} />` }], 'pull_request', 'user:tester');
+  assert.equal(validData.status, 'pull_request', 'objeto de dados literais e rota existente passa');
   const validApi = await submitContentPackage(root, [{ ...article, path: 'api/teste/contatos', body: `${body}\n\nUse \`contactId\` para identificar o contato.` }], 'pull_request', 'user:tester');
   assert.equal(validApi.status, 'pull_request', 'código inline na referência de API não é rótulo');
 
-  const baselinePath = 'api/crm/acoes-em-massa/excluir-cards-em-massa';
+  const baselinePath = 'api/crm/automacoes/listar-automacoes';
   const published = await readFile(new URL(`../content/docs/${baselinePath}.mdx`, import.meta.url), 'utf8');
   const parsed = parseArticle(published, baselinePath);
   const renamed = { path: baselinePath, ...parsed.metadata, title: `${parsed.metadata.title} atualizado`, body: parsed.body };
@@ -102,7 +105,8 @@ try {
   assert.ok(calls.some(({ path, method }) => path.endsWith('/git/refs') && method === 'POST'));
 
   const guide = await readArticle(new URL('../', import.meta.url).pathname, 'docs/principais-motivos-de-suporte/reconectar-canal-qr');
-  const manual = await assertPublicSubmit(root, [{ article: guide, rendered: renderArticle(guide) }]);
+  const guideRaw = await readFile(new URL('../content/docs/docs/principais-motivos-de-suporte/reconectar-canal-qr.mdx', import.meta.url), 'utf8');
+  const manual = await assertPublicSubmit(root, [{ article: guide, rendered: guideRaw }]);
   assert.deepEqual(manual, { reviewRequired: true, proofStatus: 'manual_required' }, 'prova manual pendente não aprova guia automaticamente');
 } finally {
   McpServer.prototype.registerTool = originalRegister;

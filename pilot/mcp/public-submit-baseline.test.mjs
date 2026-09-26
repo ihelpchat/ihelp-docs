@@ -25,7 +25,7 @@ for (const file of await walk(contentRoot)) {
   const raw = await readFile(file, 'utf8');
   const { metadata, body } = parseArticle(raw, path);
   try {
-    await assertPublicSubmit(root, [{ article: { path, ...metadata, body }, rendered: raw }]);
+    await assertPublicSubmit(root, [{ article: { path, ...metadata, body }, rendered: raw }], [], { ignoreBaseline: true });
     valid++;
   } catch (error) {
     assert.equal(baseline[path], createHash('sha256').update(raw).digest('hex'), `${path}: falha nova no gate: ${error.message}`);

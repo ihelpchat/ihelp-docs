@@ -312,6 +312,23 @@ export function visit(node, callback) {
 export function plainText(node) {
   return node.value ?? (node.children ?? []).map(plainText).join('');
 }
+function dataExpression(node, targets) {
+  if (!node) return false;
+  if (node.type === 'Literal') {
+    if (typeof node.value === 'string' && /^(?:\/|\.\/|\.\.\/|#)/u.test(node.value)) targets.push(node.value);
+    return node.value === null || ['string', 'number', 'boolean'].includes(typeof node.value);
+  }
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0 && node.quasis.length === 1)
+    return dataExpression({ type: 'Literal', value: node.quasis[0].value.cooked }, targets);
+  if (node.type === 'UnaryExpression' && ['-', '+'].includes(node.operator)
+    && node.argument?.type === 'Literal' && typeof node.argument.value === 'number') return true;
+  if (node.type === 'ArrayExpression') return node.elements.every((element) => dataExpression(element, targets));
+  if (node.type === 'ObjectExpression') return node.properties.every((property) =>
+    property.type === 'Property' && property.kind === 'init' && !property.method && !property.shorthand
+    && !property.computed && (property.key?.type === 'Identifier' || dataExpression(property.key, targets))
+    && dataExpression(property.value, targets));
+  return false;
+}
 export function mdxTargets(tree) {
   const targets = [];
   const issues = [];
@@ -321,14 +338,9 @@ export function mdxTargets(tree) {
     for (const attr of node.attributes ?? []) {
       if (attr.type === 'mdxJsxExpressionAttribute') { issues.push('atributo JSX dinâmico não permitido'); continue; }
       if (attr.value && typeof attr.value === 'object') {
-        const expression = attr.value.value?.trim();
-        const literal = expression?.match(/^(['"`])([^'"`$]*)\1$/u);
-        if (literal) {
-          if (/^(?:\/|\.\/|\.\.\/|#)/u.test(literal[2])) targets.push(literal[2]);
-          continue;
-        }
-        // Props de tabelas de API contêm dados, não navegação. Qualquer outro valor dinâmico pode ocultar uma rota.
-        if (!/^(?:headers|labels|required|json|params|files|data)$/u.test(attr.name)) issues.push(`atributo JSX dinâmico não permitido: ${attr.name}`);
+        const program = attr.value.data?.estree;
+        if (program?.body?.length !== 1 || program.body[0]?.type !== 'ExpressionStatement'
+          || !dataExpression(program.body[0].expression, targets)) issues.push(`atributo JSX dinâmico não permitido: ${attr.name}`);
         continue;
       }
       if (typeof attr.value !== 'string') continue;
