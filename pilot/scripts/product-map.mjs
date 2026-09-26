@@ -36,4 +36,4 @@ console.log(`rotas ${report.manifest.routes.length}; rótulos ${report.manifest.
 for (const change of report.changes) console.log(`mudança: ${change}`);
 for (const item of report.informational) console.log(`informação: ${item}`);
 for (const pending of report.pending) console.log(`pendência: ${pending}`);
-if (report.pending.length > 0 && !approving) process.exitCode = 1;
+if (report.pending.length > 0 && !approving && !process.argv.includes('--allow-pending')) process.exitCode = 1;

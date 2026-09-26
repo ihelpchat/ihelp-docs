@@ -1,5 +1,88 @@
 name: Product release
-on: {}
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
 permissions:
   contents: read
-jobs: {}
+
+concurrency:
+  group: product-release
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: docs
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/pilot/package-lock.json
+      - name: Check read-only token availability
+        id: token
+        env:
+          PRODUCT_READ_TOKEN: ${{ secrets.PRODUCT_READ_TOKEN }}
+        run: |
+          if [ -n "$PRODUCT_READ_TOKEN" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo '## Versão do produto: pendente' >> "$GITHUB_STEP_SUMMARY"
+            echo '- Pendente: PRODUCT_READ_TOKEN não configurado' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Install pilot
+        if: steps.token.outputs.ready == 'true'
+        working-directory: docs/pilot
+        run: npm ci
+      - uses: actions/checkout@v4
+        id: front
+        if: steps.token.outputs.ready == 'true'
+        continue-on-error: true
+        with:
+          repository: ihelpchat/front-react
+          ref: master
+          path: front
+          fetch-depth: 1
+          token: ${{ secrets.PRODUCT_READ_TOKEN }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        id: back
+        if: steps.token.outputs.ready == 'true' && steps.front.outcome == 'success'
+        continue-on-error: true
+        with:
+          repository: ihelpchat/olah-ihelp
+          ref: release/validation
+          path: back
+          fetch-depth: 1
+          token: ${{ secrets.PRODUCT_READ_TOKEN }}
+          persist-credentials: false
+      - name: Report checkout failure
+        if: steps.token.outputs.ready == 'true' && (steps.front.outcome == 'failure' || steps.back.outcome == 'failure')
+        run: |
+          echo '## Versão do produto: falha de leitura' >> "$GITHUB_STEP_SUMMARY"
+          echo "- Pendente: checkout do produto falhou (front=${{ steps.front.outcome }}, back=${{ steps.back.outcome }})" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - name: Generate current snapshot
+        if: steps.token.outputs.ready == 'true' && steps.front.outcome == 'success' && steps.back.outcome == 'success'
+        run: |
+          if ! node docs/pilot/scripts/product-map.mjs front back "$RUNNER_TEMP/product-map.json" --approved docs/pilot/product-map/approved.json --allow-pending > "$RUNNER_TEMP/product-map.log" 2>&1; then
+            cat "$RUNNER_TEMP/product-map.log"
+            reason="$(awk '/^(Error:|TypeError:|SyntaxError:|pendência:)/ {print; exit}' "$RUNNER_TEMP/product-map.log")"
+            echo '## Versão do produto: falha de leitura' >> "$GITHUB_STEP_SUMMARY"
+            echo "- Pendente: snapshot do produto falhou: ${reason:-ver log de product-map.mjs}" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/product-map.log"
+      - name: Update FAQ from release
+        if: steps.token.outputs.ready == 'true' && steps.front.outcome == 'success' && steps.back.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.DOCS_WRITE_TOKEN }}
+          DOCS_UPDATE_BASE: ${{ vars.DOCS_UPDATE_BASE }}
+        run: node docs/pilot/scripts/detect-release.mjs docs/pilot/product-map/approved.json "$RUNNER_TEMP/product-map.json"

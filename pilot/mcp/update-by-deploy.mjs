@@ -11,7 +11,7 @@ let queue = Promise.resolve();
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16);
 const shaText = ({ frontSha, backSha }) => `front ${frontSha}; back ${backSha}`;
 
-async function execute(root, { before, after, prova, requestedBy = 'service:deploy' }, deps) {
+async function execute(root, { before, after, prova, base = 'integration/claricia-v2', requestedBy = 'service:deploy' }, deps) {
   const pending = [];
   const proposals = [];
   let impact;
@@ -49,7 +49,7 @@ async function execute(root, { before, after, prova, requestedBy = 'service:depl
       const note = `\n\n{/* Revisão editorial pendente: ${shaText(after)}; ${changes.map(({ kind, dependency }) => `${kind} ${dependency}`).join(', ')}. */}`;
       const article = { ...original, body: `${original.body}${note}` };
       const submitted = await (deps.submit ?? submitContentPackage)(root, [article], 'pull_request', requestedBy, [], {
-        branch, base: 'integration/claricia-v2', draft: true, title: `docs: revisar ${guideId} após deploy`, body,
+        branch, base, draft: true, title: `docs: revisar ${guideId} após deploy`, body,
       });
       proposals.push({ guideId, branch, url: submitted.url, reused: Boolean(submitted.reused) });
     } catch (error) {
