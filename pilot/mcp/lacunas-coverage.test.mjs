@@ -38,11 +38,12 @@ assert.equal(result.documentable[0]?.guideId, 'usuario-acesso');
 
 result = await scenario({ 'alias-only': aliasPage });
 assert.equal(result.documentable[0]?.proposal, 'atualizar', 'alias sem assistantQuestion cobre a ação');
-assert.equal(result.documentable[0]?.guideId, 'alias-only');
+assert.equal(result.documentable[0]?.pageId, 'alias-only');
+assert.equal(result.documentable[0]?.criar_guia, undefined, 'artigo não vira chamada de criar_guia');
 
 result = await scenario({ 'heading-only': headingPage });
 assert.equal(result.documentable[0]?.proposal, 'atualizar', 'heading H2 cobre a ação');
-assert.equal(result.documentable[0]?.guideId, 'heading-only');
+assert.equal(result.documentable[0]?.pageId, 'heading-only');
 
 result = await scenario({ 'alias-only': aliasPage, 'second-page': headingPage });
 assert.deepEqual(result.documentable, [], 'duas páginas com a chave não escolhem destino');
