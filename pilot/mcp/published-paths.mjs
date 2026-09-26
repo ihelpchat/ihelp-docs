@@ -23,3 +23,7 @@ const publishedPaths = new Set(articlePaths(contentRoot));
 export function isPublishedPath(path) {
   return typeof path === 'string' && publishedPaths.has(path);
 }
+
+export function publishedPathOrNull(path) {
+  return isPublishedPath(path) ? path : null;
+}

@@ -17,7 +17,7 @@ export function normalizeFeedback(input) {
   const type = clean(input?.type, 20);
   const value = clean(input?.value, 10);
   const path = clean(input?.path, 300);
-  if (!validTypes.has(type) || !validValues.has(value) || !localPath(path)
+  if (!validTypes.has(type) || !validValues.has(value) || (input?.path !== null && !localPath(path))
     || (input?.eventId !== undefined && !/^[a-z0-9-]{3,100}$/iu.test(input.eventId))
     || (input?.sources !== undefined && (!Array.isArray(input.sources)
       || input.sources.some((source) => !localPath(source))))) {

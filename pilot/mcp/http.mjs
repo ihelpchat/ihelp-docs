@@ -7,6 +7,7 @@ import { saveFeedback, summarizeFeedback } from './feedback-service.mjs';
 import { sanitizeWidgetContext } from './real-state.mjs';
 import { saveSessionEvent, pruneSessionEvents } from './session-events.mjs';
 import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
+import { publishedPathOrNull } from './published-paths.mjs';
 
 const apiKey = process.env.DOCS_MCP_API_KEY;
 if (apiKey && apiKey.length < 24) throw new Error('DOCS_MCP_API_KEY precisa ter ao menos 24 caracteres');
@@ -69,8 +70,9 @@ export const httpServer = createServer(async (request, response) => {
       if (question.length < 4 || question.length > 500) throw new Error('A pergunta deve ter entre 4 e 500 caracteres.');
       const history = Array.isArray(body.history) ? body.history.slice(-6) : [];
       const scope = typeof body.scope === 'string' ? body.scope : 'Tudo';
-      const page = body.page && typeof body.page.path === 'string' && body.page.path.startsWith('/') && body.page.path.length < 300
-        ? { path: body.page.path, title: typeof body.page.title === 'string' ? body.page.title.slice(0, 200) : '' }
+      const pagePath = publishedPathOrNull(body.page?.path);
+      const page = pagePath
+        ? { path: pagePath, title: body.page.title }
         : undefined;
       let resolvedStep;
       const result = await answerQuestion(root, question, {
@@ -90,7 +92,7 @@ export const httpServer = createServer(async (request, response) => {
           ...resolvedStep,
           durationMs: Math.min(now - startedAt, 300_000),
           result: ['complete', 'partial', 'not_found'].includes(result.resolution) ? result.resolution : 'not_found',
-          path: page?.path?.split(/[?#]/u)[0] ?? '/assistente',
+          path: pagePath ?? '/assistente',
         }, { now });
       } catch {
         console.error('Falha ao registrar evento de sessão');
@@ -112,7 +114,17 @@ export const httpServer = createServer(async (request, response) => {
     }
     try {
       const body = await readJson(request);
-      const event = await saveFeedback(feedbackFile, body, { userAgent: request.headers['user-agent'] });
+      const localPath = (path) => typeof path === 'string' && /^\/(?!\/)[a-z0-9/_-]*$/iu.test(path);
+      if (!localPath(body.path) || (body.sources !== undefined
+        && (!Array.isArray(body.sources) || body.sources.some((path) => !localPath(path))))) {
+        throw new Error('Feedback inválido.');
+      }
+      const normalized = {
+        ...body,
+        path: publishedPathOrNull(body.path),
+        ...(body.sources === undefined ? {} : { sources: body.sources.map(publishedPathOrNull).filter(Boolean) }),
+      };
+      const event = await saveFeedback(feedbackFile, normalized, { userAgent: request.headers['user-agent'] });
       response.writeHead(201, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ saved: true, id: event.id }));
     } catch (error) {
       const invalid = /Feedback|payload|JSON/i.test(error.message);
