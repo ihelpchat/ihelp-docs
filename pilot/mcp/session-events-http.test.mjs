@@ -22,10 +22,12 @@ const fakeOpenAI = createServer(async (request, response) => {
   let input = '';
   for await (const chunk of request) input += chunk;
   providerInputs.push(input);
+  const route = JSON.parse(input).text?.format?.name === 'triagem_fechada';
   response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
     id: 'resp_fixture', object: 'response', created_at: 1, model: 'fixture', status: 'completed',
     output: [{ type: 'message', id: 'msg_fixture', status: 'completed', role: 'assistant',
-      content: [{ type: 'output_text', text: JSON.stringify(payload), annotations: [] }] }],
+      content: [{ type: 'output_text', text: route ? '{"choice":"sem guia"}' : JSON.stringify(payload), annotations: [] }] }],
+    usage: { input_tokens: 1, output_tokens: 1 },
   }));
 });
 

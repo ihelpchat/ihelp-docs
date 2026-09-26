@@ -4,6 +4,7 @@ import { loadCredentials, loadLegacyCredential } from './access-control.mjs';
 export const envCompatibility = Object.freeze({
   mcpCredentials: Object.freeze({ old: 'DOCS_MCP_API_KEY', current: 'DOCS_MCP_CREDENTIALS', rule: 'old used only when current is absent' }),
   githubReadToken: Object.freeze({ old: 'GITHUB_TOKEN', current: 'GITHUB_READ_TOKEN', rule: 'old used only when current is absent' }),
+  assistantRouterModel: Object.freeze({ old: 'OPENAI_MODEL', current: 'ASSISTANT_ROUTER_MODEL', rule: 'use OPENAI_MODEL with a warning when current is absent' }),
   localCheckouts: Object.freeze({ frontend: 'PRODUCT_LOCAL_CHECKOUT', backend: 'BACKEND_LOCAL_CHECKOUT' }),
 });
 
@@ -39,4 +40,11 @@ export function githubReadToken(env = process.env) {
 
 export function githubWriteToken(env = process.env) {
   return env[envCompatibility.githubReadToken.old];
+}
+
+export function assistantRouterModel(env = process.env) {
+  const { old, current } = envCompatibility.assistantRouterModel;
+  if (env[current]) return env[current];
+  warnOnce(current, `${current} não configurado; triagem usa ${old}. Configure um modelo pequeno no deploy.`);
+  return env[old] ?? 'gpt-6-luna';
 }

@@ -4,6 +4,28 @@ description: "Crie um usuário, escolha o departamento e confira o acesso."
 source: produto
 contentType: guia
 assistantQuestion: "Como gerenciar usuário e acesso?"
+assistantAliases:
+  - cadastrar secretária
+  - colocar pessoa da equipe
+  - criar usuário
+  - funcionários do setor
+  - clientes do departamento
+  - acesso da atendente
+assistantRouting:
+  anchors: [departamento, setor, só ver os clientes dela, só ver os clientes dele, ver só os atendimentos, restringir o acesso, permissão de usuário, usuário e acesso]
+  actions:
+    - só pode ver
+    - só deve ver
+    - só ver
+    - restringir
+    - limitar
+    - acesso
+    - permissão
+    - separar
+    - departamento dela
+    - cadastrar
+  objects: [secretária, funcionário, atendente, usuário, equipe, vendedor, pessoa]
+  ownFeatures: [usuário, usuários, equipe, departamento, departamentos, atendente]
 assistantOverview: "Em Usuários, crie a pessoa, escolha o departamento e revise as opções de acesso."
 assistantSuggestions:
   - "Como escolher o departamento da pessoa?"

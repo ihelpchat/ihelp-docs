@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 import { answerQuestion } from './assistant-service.mjs';
 import { sanitizeWidgetContext, diagnoseState, diagnosticQuestion } from './real-state.mjs';
+import { freeAnswerClient } from './fixtures/free-answer-client.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const robotPath = '/docs/sobre-o-sistema/robo-de-atendimento';
@@ -13,7 +14,7 @@ const response = { model: 'fixture', output_text: JSON.stringify({
   code: null, sources: [robotPath], suggestions: [], resolution: 'complete', found: true,
 }) };
 const requests = [];
-const client = { responses: { create: async (request) => { requests.push(request); return response; } } };
+const client = freeAnswerClient({ responses: { create: async (request) => { requests.push(request); return response; } } });
 const ask = (question, options = {}) => answerQuestion(root, question, { client, ...options });
 
 const safe = sanitizeWidgetContext({

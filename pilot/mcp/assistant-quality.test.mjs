@@ -10,6 +10,16 @@ const projectRoot = new URL('../', import.meta.url).pathname;
 const testRoot = await mkdtemp(join(tmpdir(), 'ihelp-docs-quality-'));
 await cp(join(projectRoot, 'architecture'), join(testRoot, 'architecture'), { recursive: true });
 await cp(join(projectRoot, 'content'), join(testRoot, 'content'), { recursive: true });
+// Estes cenários exercitam o assistente de resposta livre; os guias canônicos têm suítes próprias.
+for (const path of [
+  'docs/principais-motivos-de-suporte/reconectar-canal-qr',
+  'docs/principais-motivos-de-suporte/usuario-acesso',
+  'docs/sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario',
+]) {
+  const file = join(testRoot, 'content/docs', `${path}.mdx`);
+  const raw = await readFile(file, 'utf8');
+  await writeFile(file, raw.replace(/^guide:\n(?:[ \t].*\n)+/m, ''));
+}
 
 let internalCalls = 0;
 const internalReply = await answerQuestion(testRoot, 'Tem MCP?', {
@@ -309,7 +319,7 @@ const changedTopicClient = {
           sections: [],
           steps: [],
           code: null,
-          sources: ['/docs/sobre-o-sistema/campanhas/como-criar-uma-nova-campanha'],
+          sources: ['/docs/principais-motivos-de-suporte/campanhas'],
           suggestions: ['Como preparo a planilha?'],
           resolution: 'complete',
           found: true,
