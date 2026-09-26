@@ -16,10 +16,24 @@ const states = {
 };
 const manifest = JSON.parse(await readFile(new URL('../../public/guides/manifest.json', import.meta.url), 'utf8'));
 const catalog = JSON.parse(await readFile(new URL(`../../public/guides/${manifest.current}/catalog.json`, import.meta.url), 'utf8'));
-const guidePaths = catalog.guides.map(({ pathSegments, guide }) => ({ path: `/${pathSegments.join('/')}`, id: guide.guideId }));
+for (const file of ['app/(home)/page.tsx', 'components/site/header.tsx', 'components/assistant/assistant-screen.tsx']) {
+  const source = await readFile(new URL(`../../${file}`, import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /Claricia.{0,24}assistente de IA do iHelp|assistente de IA do iHelp.{0,24}Claricia/i, `${file}: nome fora de assistantDisplayName`);
+}
+const guidePaths = catalog.guides.map(({ pathSegments, guide }) => ({ path: `/${pathSegments.join('/')}`, id: guide.guideId, stepId: guide.initialStepId }));
 assert.ok(guidePaths.length > 0, 'pacote publicado sem guias');
 const injectProbe = async (page) => {
   if (process.env.ASSISTANT_LEGIBILITY_PROBE_CSS) await page.addStyleTag({ content: process.env.ASSISTANT_LEGIBILITY_PROBE_CSS });
+};
+const assertSupportContext = async (link, id, stepId) => {
+  const href = await link.getAttribute('href');
+  assert.ok(href, 'link de suporte ausente');
+  const message = new URL(href).searchParams.get('text') ?? '';
+  assert.match(message, new RegExp(`Guia: ${id}; passo: ${stepId}`), 'handoff sem guia e passo do catálogo');
+};
+const assertCurrentName = async (page) => {
+  assert.equal(await page.getByText(/Claricia, assistente de IA do iHelp|A Claricia é a assistente de IA do iHelp/i).count(), 0, 'nome antigo visível');
+  assert.equal(await page.locator('[aria-label="Claricia, assistente de IA do iHelp"]').count(), 0, 'nome antigo acessível');
 };
 
 const audit = (root) => {
@@ -160,29 +174,44 @@ try {
       await page.goto(`${site.url}${basePath}/docs/guias/?origem=suporte`, { waitUntil: 'networkidle' });
       if (zoom === 2) await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
       await injectProbe(page);
+      await assertCurrentName(page);
       const catalog = page.locator('.ih-guide-catalog');
       assert.ok(await catalog.isVisible(), `catálogo/${viewport}/${zoom}: catálogo ausente`);
       assert.equal(await catalog.locator('a.ih-guide-card').count(), guidePaths.length, 'catálogo vem do pacote publicado');
       const catalogAudit = await page.locator('body').evaluate(audit);
       assert.ok(catalogAudit.measured.text > 10, 'catálogo: página completa não medida');
       failures.push(...catalogAudit.failures.map((item) => `catálogo/${viewport}/${zoom}: ${item}`));
+      await page.locator('.ih-ai-launcher').click();
+      const catalogDrawer = page.locator('.ih-ai-drawer');
+      await catalogDrawer.locator('.ih-ai-thread[data-compact] .ih-ai-steps li').first().waitFor();
+      await catalogDrawer.evaluate(async (el) => { await Promise.all(el.getAnimations().map((animation) => animation.finished)); });
+      failures.push(...(await catalogDrawer.evaluate(audit)).failures.map((item) => `catálogo/compacto/${viewport}/${zoom}: ${item}`));
+      await catalogDrawer.getByRole('button', { name: 'Abrir em tela cheia' }).click();
+      await page.waitForURL('**/assistente/');
+      await page.locator('.ih-ai-screen .ih-ai-steps li').first().waitFor();
+      await assertCurrentName(page);
+      failures.push(...(await page.locator('body').evaluate(audit)).failures.map((item) => `catálogo/tela-cheia/${viewport}/${zoom}: ${item}`));
+      await page.goBack({ waitUntil: 'networkidle' });
       const catalogLink = catalog.locator('a.ih-guide-card').first();
       await catalogLink.focus();
       assert.ok(await catalogLink.evaluate((el) => el.matches(':focus-visible')), 'catálogo: foco por teclado');
       await catalogLink.click();
       await page.waitForURL((url) => guidePaths.some(({ path }) => url.pathname.replace(/\/$/, '').endsWith(path)));
       assert.equal(new URL(page.url()).searchParams.get('origem'), 'suporte', 'origem preservada');
-      for (const { path, id } of guidePaths) {
+      for (const { path, id, stepId } of guidePaths) {
         const guidePage = await browser.newPage({ viewport: dimensions, deviceScaleFactor: zoom });
         await guidePage.addInitScript((messages) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages, scope: 'Tudo', sessionId: 'qa-session' })), states.guia);
         await guidePage.goto(`${site.url}${basePath}${path}/?origem=suporte`, { waitUntil: 'networkidle' });
         if (zoom === 2) await guidePage.evaluate(() => { document.documentElement.style.zoom = '2'; });
         await injectProbe(guidePage);
+        await assertCurrentName(guidePage);
         const guide = guidePage.locator('.ih-guide-page');
         assert.ok(await guide.isVisible(), `${path}: página do guia publicado`);
         assert.equal(await guide.locator('a.ih-guide-app').count(), 1, `${path}: Fazer no app`);
         assert.match(await guide.locator('a.ih-guide-app').getAttribute('href'), new RegExp(`ihelpGuide=${id}`), `${path}: app usa guia publicado`);
-        assert.ok(await guide.getByRole('link', { name: 'Falar com uma pessoa' }).isVisible(), `${path}: humano sempre disponível`);
+        const guideHuman = guide.getByRole('link', { name: 'Falar com uma pessoa' });
+        assert.ok(await guideHuman.isVisible(), `${path}: humano sempre disponível`);
+        await assertSupportContext(guideHuman, id, stepId);
         if (id === 'reconectar-canal-qr') {
           await guide.getByRole('button', { name: 'Uso Android' }).click();
           await guide.getByRole('button', { name: 'Voltar' }).click();
@@ -198,12 +227,21 @@ try {
         assert.ok(await drawer.locator('.ih-ai-thread[data-compact] .ih-ai-steps li').first().isVisible(), `${path}: passo compacto`);
         await injectProbe(guidePage);
         await drawer.evaluate(async (el) => { await Promise.all(el.getAnimations().map((animation) => animation.finished)); });
-        assert.ok(await drawer.getByRole('link', { name: 'Falar com uma pessoa' }).isVisible(), `${path}: humano no painel`);
+        const drawerHuman = drawer.getByRole('link', { name: 'Falar com uma pessoa' }).first();
+        assert.ok(await drawerHuman.isVisible(), `${path}: humano no painel`);
+        await assertSupportContext(drawer.locator('.ih-ai-drawer-human'), id, stepId);
         assert.ok(await drawer.locator('.ih-ai-follow button').count() <= 2, `${path}: até duas sugestões`);
         const drawerAudit = await drawer.evaluate(audit);
         assert.ok(drawerAudit.measured.text > 5, `${path}: painel compacto não medido`);
         failures.push(...drawerAudit.failures.map((item) => `${path}/compacto/${viewport}/${zoom}: ${item}`));
         failures.push(...(await guidePage.locator('body').evaluate(audit)).failures.map((item) => `${path}/compacto/${viewport}/${zoom}: ${item}`));
+        await drawer.getByRole('button', { name: 'Abrir em tela cheia' }).click();
+        await guidePage.waitForURL('**/assistente/');
+        const screen = guidePage.locator('.ih-ai-screen');
+        await screen.locator('.ih-ai-steps li').first().waitFor();
+        await assertCurrentName(guidePage);
+        await assertSupportContext(screen.getByRole('link', { name: 'Enviar para o suporte' }), id, stepId);
+        failures.push(...(await guidePage.locator('body').evaluate(audit)).failures.map((item) => `${path}/tela-cheia/${viewport}/${zoom}: ${item}`));
         await guidePage.close();
       }
       await page.close();

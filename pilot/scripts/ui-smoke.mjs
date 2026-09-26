@@ -98,7 +98,7 @@ async function testAssistant(context, errors) {
   const enabled = (await page.locator('.ih-app').getAttribute('data-assistant')) === 'on';
 
   // Entrada pelo menu do topo, sem depender de ⌘K.
-  await page.getByRole('link', { name: 'Claricia, assistente de IA do iHelp' }).first().click();
+  await page.getByRole('link', { name: 'Claricia — assistente virtual do iHelp' }).first().click();
   await page.waitForURL(/\/assistente\/?$/);
   await page.getByRole('heading', { name: 'Pergunte qualquer coisa sobre o iHelp' }).waitFor();
   await page.getByText('Claricia', { exact: false }).first().waitFor();
@@ -165,7 +165,7 @@ async function testAssistant(context, errors) {
   // Painel lateral numa página: contexto da página vai junto; Esc fecha; tela cheia leva a conversa.
   await page.goto(`${baseUrl}/docs/sobre-o-sistema/atendimento/`, { waitUntil: 'networkidle' });
   await page.locator('.ih-ai-launcher').click();
-  const drawer = page.getByRole('dialog', { name: 'Claricia, assistente de IA do iHelp' });
+  const drawer = page.getByRole('dialog', { name: 'Claricia — assistente virtual do iHelp' });
   await drawer.waitFor();
   assert.match(await drawer.locator('.ih-ai-drawer-context strong').textContent(), /Central de ajuda › Atendimento/);
   await drawer.locator('.ih-ai-drawer-empty button').first().click();
@@ -184,7 +184,7 @@ async function testAssistant(context, errors) {
   await page.locator('.ih-header-search').click();
   await page.locator('[data-search-input]').fill('Como autenticar na API');
   await page.keyboard.press('Enter');
-  await page.getByRole('dialog', { name: 'Claricia, assistente de IA do iHelp' }).waitFor();
+  await page.getByRole('dialog', { name: 'Claricia — assistente virtual do iHelp' }).waitFor();
   await page.locator('.ih-ai-drawer .ih-ai-user').last().getByText('Como autenticar na API').waitFor();
   await page.close();
 }
