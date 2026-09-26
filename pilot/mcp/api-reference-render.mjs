@@ -50,13 +50,22 @@ export function renderApiReference(endpoint, examples, page) {
   }
 
   const auth = endpoint.authorization ?? endpoint.policy;
-  if (auth && auth !== 'anonymous') add('autorização', `Autorização: envie \`Authorization: Bearer $IHELP_TOKEN\`.${auth.startsWith('role:') ? ` Papel exigido: ${safe(auth.slice(5))}.` : auth === 'authenticated' ? '' : ` Política exigida: ${safe(auth)}.`}`);
-  const header = auth && auth !== 'anonymous' ? ' -H "Authorization: Bearer $IHELP_TOKEN"' : '';
+  const requestHeaders = [
+    ...(auth && auth !== 'anonymous' ? ['Authorization'] : []),
+    ...(bodyFields.length ? ['Content-Type'] : []),
+  ];
+  const headerValue = (language, name) => name === 'Content-Type' ? 'application/json' : ({
+    bash: 'Bearer $IHELP_TOKEN',
+    js: '`Bearer ${process.env.IHELP_TOKEN}`',
+    python: 'f"Bearer {os.environ[\'IHELP_TOKEN\']}"',
+    http: 'Bearer $IHELP_TOKEN',
+  })[language];
+  if (requestHeaders.includes('Authorization')) add('autorização', `Autorização: envie \`Authorization: Bearer $IHELP_TOKEN\`.${auth.startsWith('role:') ? ` Papel exigido: ${safe(auth.slice(5))}.` : auth === 'authenticated' ? '' : ` Política exigida: ${safe(auth)}.`}`);
   const blocks = [];
-  if (languages.has('bash')) blocks.push(`\`\`\`bash\ncurl${endpoint.verb === 'GET' ? '' : ` -X ${endpoint.verb}`} "${url}"${header}${bodyFields.length ? ` -H "Content-Type: application/json" -d '${bodyJson}'` : ''}\n\`\`\``);
-  if (languages.has('js')) blocks.push(`\`\`\`js\nconst res = await fetch('${url}', { method: '${endpoint.verb}'${auth && auth !== 'anonymous' ? ", headers: { Authorization: `Bearer ${process.env.IHELP_TOKEN}` }" : ''}${bodyFields.length ? `, body: JSON.stringify(${bodyJson})` : ''} });\n\`\`\``);
-  if (languages.has('python')) blocks.push(`\`\`\`python\nimport os, requests\nr = requests.request('${endpoint.verb}', '${url}'${auth && auth !== 'anonymous' ? ', headers={"Authorization": f"Bearer {os.environ[\'IHELP_TOKEN\']}"}' : ''}${bodyFields.length ? `, json=${bodyJson.replace(/\btrue\b/gu, 'True').replace(/\bfalse\b/gu, 'False')}` : ''}, timeout=15)\n\`\`\``);
-  if (languages.has('http')) blocks.push(`\`\`\`http\n${endpoint.verb} ${url}\n\`\`\``);
+  if (languages.has('bash')) blocks.push(`\`\`\`bash\ncurl${endpoint.verb === 'GET' ? '' : ` -X ${endpoint.verb}`} "${url}"${requestHeaders.map((name) => ` -H "${name}: ${headerValue('bash', name)}"`).join('')}${bodyFields.length ? ` -d '${bodyJson}'` : ''}\n\`\`\``);
+  if (languages.has('js')) blocks.push(`\`\`\`js\nconst res = await fetch('${url}', { method: '${endpoint.verb}'${requestHeaders.length ? `, headers: { ${requestHeaders.map((name) => `${JSON.stringify(name)}: ${name === 'Authorization' ? headerValue('js', name) : JSON.stringify(headerValue('js', name))}`).join(', ')} }` : ''}${bodyFields.length ? `, body: JSON.stringify(${bodyJson})` : ''} });\n\`\`\``);
+  if (languages.has('python')) blocks.push(`\`\`\`python\nimport os, requests\nr = requests.request('${endpoint.verb}', '${url}'${requestHeaders.length ? `, headers={${requestHeaders.map((name) => `${JSON.stringify(name)}: ${name === 'Authorization' ? headerValue('python', name) : JSON.stringify(headerValue('python', name))}`).join(', ')}}` : ''}${bodyFields.length ? `, json=${bodyJson.replace(/\btrue\b/gu, 'True').replace(/\bfalse\b/gu, 'False')}` : ''}, timeout=15)\n\`\`\``);
+  if (languages.has('http')) blocks.push(`\`\`\`http\n${endpoint.verb} ${url}${requestHeaders.map((name) => `\n${name}: ${headerValue('http', name)}`).join('')}${bodyFields.length ? `\n\n${bodyJson}` : ''}\n\`\`\``);
   if (blocks.length) add('exemplo', `## ${heading('exemplo', 'Exemplo')}\n\n${components.has('CodeTabs') ? `<CodeTabs labels={${JSON.stringify([...languages].map((language) => ({ bash: 'cURL', js: 'Node', python: 'Python', http: 'URL' })[language]))}}>\n\n` : ''}${blocks.join('\n\n')}${components.has('CodeTabs') ? '\n\n</CodeTabs>' : ''}`);
 
   if (endpoint.responseFields === null) add('resposta', `## ${heading('resposta', 'Resposta')}\n\nCampos de resposta ainda não documentados.`);
