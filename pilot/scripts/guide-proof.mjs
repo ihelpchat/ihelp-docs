@@ -44,16 +44,9 @@ async function login(page, baseUrl, email, password) {
 }
 
 async function sanitizedScreenshot(page, path) {
-  await page.evaluate(() => {
-    document.querySelectorAll('input,textarea').forEach((element) => { element.value = ''; element.setAttribute('placeholder', ''); });
-    document.querySelectorAll('img,svg,canvas,video,iframe').forEach((element) => element.remove());
-    const style = document.createElement('style');
-    style.textContent = '* { background-image: none !important; } *::before, *::after { content: none !important; }';
-    document.head.append(style);
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode()) walker.currentNode.textContent = '▇';
-  });
-  await page.screenshot({ path, fullPage: false });
+  await page.addStyleTag({ content: '#guide-proof-redaction {} * { color: transparent !important; background-image: none !important; text-shadow: none !important; } img,svg,canvas,video,iframe { visibility: hidden !important; } *::before,*::after { content: none !important; }' });
+  try { await page.screenshot({ path, fullPage: false }); }
+  finally { await page.evaluate(() => [...document.head.querySelectorAll('style')].find(style => style.textContent?.includes('#guide-proof-redaction'))?.remove()); }
 }
 
 function stepPlan(guide, step) {
@@ -69,10 +62,8 @@ function locator(page, step, plan, fixture) {
   if (fixture) return page.locator(`[data-proof-step="${step.stepId}"]`);
   if (plan.marker) return page.locator(`[data-tour-id="${plan.marker}"] button, [data-help-id="${plan.marker}"] button, button[data-tour-id="${plan.marker}"], button[data-help-id="${plan.marker}"]`).first();
   const [type, label] = plan.control;
-  return type === 'fill' ? page.getByLabel(label, { exact: false }).first() : page.getByRole('button', { name: label, exact: false }).first();
+  return type === 'fill' ? page.getByLabel(label, { exact: false }) : page.getByRole('button', { name: label, exact: false });
 }
-
-async function readValue(control) { return control.inputValue(); }
 
 export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, credentials, appSha = 'unverified', packageRoot }) {
   const target = assertAllowedTarget(baseUrl);
@@ -84,7 +75,8 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, cre
   const published = await publishedGuides(packageRoot);
   const browser = await launch();
   const report = { mode: fixture ? 'fixture' : 'staging', appSha, guides: published.map(({ guideId, version }) => ({ id: guideId, version })),
-    authorized: 'pending', denied: 'pending', qr: 'manual_required', steps: [], screenshots: [] };
+    authorized: 'pending', denied: 'pending', qr: 'manual_required', steps: [], screenshots: [], cleanup: [], cleanupPending: [] };
+  const runId = `qa-guia-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
   try {
     for (const role of ['authorized', 'denied']) {
       const context = await browser.newContext();
@@ -96,41 +88,75 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, cre
       try {
         if (!fixture) await login(page, target.url, credentials[role].email, credentials[role].password);
         for (const guide of published) {
-          for (const step of guide.steps) {
-            const plan = stepPlan(guide, step);
+          const plans = guide.steps.map(step => stepPlan(guide, step));
+          const initial = plans[0].route;
+          await page.goto(`${target.url}${initial}${fixture && role === 'denied' ? '?role=denied' : ''}`, { waitUntil: 'domcontentloaded' });
+          const filled = new Map();
+          const original = new Map();
+          let created = null;
+          try {
+          for (let index = 0; index < guide.steps.length; index++) {
+            const step = guide.steps[index];
+            const plan = plans[index];
             if (!plan.control) {
               if (role === 'authorized') report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'manual_required' });
               continue;
             }
-            const path = `${plan.route}${fixture && role === 'denied' ? '?role=denied' : ''}`;
-            await page.goto(`${target.url}${path}`, { waitUntil: 'domcontentloaded' });
+            // Only a published catalog route may change the current URL.
+            if (step.actionId && new URL(page.url()).pathname !== plan.route) {
+              await page.goto(`${target.url}${plan.route}${fixture && role === 'denied' ? '?role=denied' : ''}`, { waitUntil: 'domcontentloaded' });
+            }
             const current = new URL(page.url());
             if (current.origin !== target.url || current.pathname !== plan.route) throw new Error(`${guide.guideId}: navegação fora do app autorizado`);
-            if (plan.marker && await page.locator(`[data-tour-id="${plan.marker}"], [data-help-id="${plan.marker}"]`).count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: marcador ausente ${plan.marker}`);
+            if (plan.marker) {
+              const marker = page.locator(`[data-tour-id="${plan.marker}"], [data-help-id="${plan.marker}"]`);
+              await marker.waitFor({ state: 'visible', timeout: 5000 });
+              if (await marker.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: marcador ausente ${plan.marker}`);
+            }
             const control = locator(page, step, plan, fixture);
-            if (await control.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: marcador ou controle ausente ${plan.marker ?? plan.control[1]}`);
+            await control.waitFor({ state: 'visible', timeout: 5000 });
+            if (await control.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: controle ambíguo ${plan.control[1]}`);
             const [type] = plan.control;
             if (type === 'fill') {
-              if (role === 'authorized') await control.fill(`Prova ${step.stepId}`);
-              else await control.fill(`Negado ${step.stepId}`).catch(() => {});
+              original.set(step.stepId, await control.inputValue());
+              const value = step.stepId === 'preencher-dados' ? runId : `${runId}-${step.stepId}`;
+              await control.fill(value);
+              filled.set(step.stepId, value);
             } else if (type === 'save') {
-              const field = fixture ? page.locator('input').first() : page.getByRole('textbox').first();
-              const before = await readValue(field);
-              const candidate = role === 'authorized' ? `Prova ${guide.guideId}` : `Negado ${guide.guideId}`;
-              await field.fill(candidate).catch(() => {});
-              await control.click({ force: true, timeout: 3000 }).catch(() => {});
-              await page.reload({ waitUntil: 'domcontentloaded' });
-              const after = await readValue(fixture ? page.locator('input').first() : page.getByRole('textbox').first());
-              if (role === 'authorized' && after !== candidate) throw new Error(`${guide.guideId}/${step.stepId}: gravação não persistiu`);
-              if (role === 'denied' && after !== before) throw new Error(`${guide.guideId}/${step.stepId}: perfil negado alterou dados`);
-              if (role === 'authorized') {
-                await (fixture ? page.locator('input').first() : page.getByRole('textbox').first()).fill(before);
-                await locator(page, step, plan, fixture).click();
+              const fieldStep = guide.guideId === 'usuario-acesso' ? 'preencher-dados' : 'escrever-recado';
+              const fieldIndex = guide.steps.findIndex(item => item.stepId === fieldStep);
+              if (!filled.has(fieldStep) || fieldIndex < 0) {
+                if (role === 'authorized') report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'manual_required' });
+                continue;
+              }
+              const field = locator(page, guide.steps[fieldIndex], plans[fieldIndex], fixture);
+              const candidate = filled.get(fieldStep);
+              const before = original.get(fieldStep);
+              await control.click({ timeout: 3000 });
+              if (guide.guideId === 'usuario-acesso') {
+                created = candidate;
+                await page.reload({ waitUntil: 'domcontentloaded' });
+                const item = fixture ? page.locator(`[data-proof-item="${candidate}"]`) : page.getByText(candidate, { exact: false });
+                const exists = await item.count() > 0;
+                if (role === 'authorized' && !exists) throw new Error(`${guide.guideId}/${step.stepId}: gravação não persistiu`);
+                if (role === 'denied' && exists) throw new Error(`${guide.guideId}/${step.stepId}: perfil negado alterou dados`);
+              } else {
+                await page.reload({ waitUntil: 'domcontentloaded' });
+                const after = await field.inputValue();
+                if (role === 'authorized' && after !== candidate) throw new Error(`${guide.guideId}/${step.stepId}: gravação não persistiu`);
+                if (role === 'denied' && after !== before) throw new Error(`${guide.guideId}/${step.stepId}: perfil negado alterou dados`);
+                if (role === 'authorized') {
+                  await field.fill(before);
+                  await locator(page, step, plan, fixture).click();
+                  await page.reload({ waitUntil: 'domcontentloaded' });
+                  if (await field.inputValue() !== before) throw new Error(`${guide.guideId}/${step.stepId}: restauração não persistiu`);
+                  report.cleanup.push({ guideId: guide.guideId, status: 'restored' });
+                }
               }
             } else {
               if (role === 'authorized' && !(await control.isEnabled())) throw new Error(`${guide.guideId}/${step.stepId}: perfil autorizado bloqueado`);
               const before = role === 'authorized' && !fixture ? await page.locator('body').innerHTML() : null;
-              await control.click({ force: true, timeout: 3000 }).catch(() => {});
+              await control.click({ timeout: 3000 });
               if (before !== null && await page.locator('body').innerHTML() === before) throw new Error(`${guide.guideId}/${step.stepId}: ação web não concluiu`);
               if (fixture && role === 'authorized' && await control.getAttribute('data-done') !== 'yes') throw new Error(`${guide.guideId}/${step.stepId}: ação web não concluiu`);
             }
@@ -144,13 +170,32 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, cre
               report.screenshots.push(name);
             }
           }
+          } finally {
+          if (role === 'authorized' && created) {
+            // A created user must be removed through the UI, then checked after reload.
+            try {
+              const row = fixture ? page.locator(`[data-proof-item="${created}"]`) : page.getByText(created, { exact: true }).locator('..');
+              if (await row.count() !== 1) throw new Error('item criado não encontrado');
+              await row.getByRole('button', { name: /Excluir|Remover/u }).click({ timeout: 3000 });
+              await page.reload({ waitUntil: 'domcontentloaded' });
+              if (await (fixture ? page.locator(`[data-proof-item="${created}"]`) : page.getByText(created, { exact: false })).count()) throw new Error('item criado ainda aparece');
+              report.cleanup.push({ guideId: guide.guideId, status: 'removed' });
+            } catch (error) {
+              report.cleanupPending.push({ guideId: guide.guideId, item: created, reason: error.message });
+            }
+          }
+          }
         }
         report[role] = 'passed';
       } finally { await context.close(); }
     }
-    await writeFile(join(evidenceDir, 'report.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
+    if (report.cleanupPending.length) throw new Error('limpeza pendente: item criado não removido pela interface');
     return report;
-  } finally { await browser.close(); }
+  } finally {
+    await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
+    await writeFile(join(evidenceDir, 'report.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
+    await browser.close();
+  }
 }
 
 export function credentialsFromEnv(env = process.env) {

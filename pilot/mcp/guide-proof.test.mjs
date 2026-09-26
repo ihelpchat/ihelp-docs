@@ -57,7 +57,7 @@ try {
   const original = await readFile(user, 'utf8');
   await writeFile(user, original.replace("button.dataset.done = 'yes'", "button.dataset.done = 'no'"));
   await assert.rejects(run('broken-handler'), /ação|concluiu|criar-usuario/u);
-  await writeFile(user, original.replace('if (!denied)', 'if (true)'));
+  await writeFile(user, original.replace("if (button.textContent === 'Salvar Alterações') { if (!denied)", "if (button.textContent === 'Salvar Alterações') { if (true)"));
   await assert.rejects(run('denied-write'), /negado|alterou/u);
   await writeFile(user, original.replace('data-tour-id="guide-user-open"', 'data-tour-id="removed"'));
   await assert.rejects(run('missing-marker'), /guide-user-open/u);
