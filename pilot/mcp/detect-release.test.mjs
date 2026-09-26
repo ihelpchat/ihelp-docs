@@ -43,6 +43,12 @@ assert.deepEqual(changed.calls[0].before, approved);
 assert.deepEqual(changed.calls[0].after, current);
 assert.equal(changed.calls[0].base, options.base);
 
+const updatePending = fixture();
+updatePending.deps.update = async () => ({ status: 'propostas', proposals: [], pending: ['prova de staging pendente'] });
+const pendingUpdate = await detectRelease(options, updatePending.deps);
+assert.equal(pendingUpdate.exitCode, 1, 'pendência da atualização falha o job');
+assert.match(formatSummary(pendingUpdate), /prova de staging pendente/);
+
 const failed = fixture();
 failed.deps.read = async () => { throw Error('checkout indisponível'); };
 const readFailure = await detectRelease(options, failed.deps);
@@ -57,4 +63,9 @@ for (const missing of ['token', 'base']) {
   assert.match(result.pending.join(' '), new RegExp(missing === 'token' ? 'DOCS_WRITE_TOKEN' : 'DOCS_UPDATE_BASE'));
   assert.equal(absent.calls.length, 0);
 }
+const missingWithMapPending = fixture({ ...approved, pending: ['reconnect: marcador ausente channel-connect'] });
+const combinedPending = await detectRelease({ ...options, token: '' }, missingWithMapPending.deps);
+assert.equal(combinedPending.exitCode, 1, 'pendência do mapa continua vermelha com configuração ausente');
+assert.match(formatSummary(combinedPending), /DOCS_WRITE_TOKEN/);
+assert.match(formatSummary(combinedPending), /reconnect: marcador ausente channel-connect/);
 console.log('Detecção de versão: idempotência, leitura e configuração OK');
