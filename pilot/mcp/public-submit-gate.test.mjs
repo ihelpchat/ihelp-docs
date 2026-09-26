@@ -22,6 +22,7 @@ globalThis.fetch = async (url, init = {}) => {
   calls.push({ path, method: init.method ?? 'GET' });
   if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: 'fixture-sha' } }) };
   if (path.endsWith('/pulls')) return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/123' }) };
+  if (path.endsWith('/content/docs/docs/teste/destino.mdx') && (init.method ?? 'GET') === 'GET') return { ok: true, json: async () => ({ sha: 'fixture-file-sha' }) };
   if ((init.method ?? 'GET') === 'GET') return { ok: false, status: 404, json: async () => ({}) };
   return { ok: true, json: async () => ({}) };
 };
@@ -137,6 +138,35 @@ try {
   assert.equal(validRelative.status, 'pull_request', 'link relativo existente em JSX passa');
   const validApi = await submitContentPackage(root, [{ ...article, path: 'api/teste/contatos', body: `${body}\n\nUse \`contactId\` para identificar o contato.` }], 'pull_request', 'user:tester');
   assert.equal(validApi.status, 'pull_request', 'código inline na referência de API não é rótulo');
+
+  const removedPath = 'docs/sobre-o-sistema/atendimento';
+  const beforeRemovedLink = calls.length;
+  await assert.rejects(
+    submitContentPackage(root, [{ ...article, path: 'docs/teste/novo', body: `${body}\n\n[Veja atendimentos](/${removedPath}).` }], 'pull_request', 'user:tester', [removedPath]),
+    /link interno inexistente: \/docs\/sobre-o-sistema\/atendimento/u,
+  );
+  assert.equal(calls.length, beforeRemovedLink, 'link para página removida no pacote não pode consultar nem escrever no GitHub');
+
+  await writeFile(join(root, 'content/docs/docs/teste/referencia.mdx'), '# Referência\n\n[Leia o destino](/docs/teste/destino#passo-original).\n');
+  await writeFile(join(root, 'content/docs/docs/teste/destino.mdx'), '# Destino\n\n## Passo original\n');
+  const beforeDeleteOnly = calls.length;
+  await assert.rejects(
+    submitContentPackage(root, [], 'pull_request', 'user:tester', ['docs/teste/destino']),
+    /docs\/teste\/referencia.*link interno inexistente: \/docs\/teste\/destino/u,
+  );
+  assert.equal(calls.length, beforeDeleteOnly, 'remoção com link de entrada não pode consultar nem escrever no GitHub');
+
+  const updatedDestination = { ...article, path: 'docs/teste/destino', body: `${body}\n\n## Passo novo` };
+  const beforeRemovedAnchor = calls.length;
+  await assert.rejects(
+    submitContentPackage(root, [updatedDestination], 'pull_request', 'user:tester'),
+    /docs\/teste\/referencia.*âncora inexistente: \/docs\/teste\/destino#passo-original/u,
+  );
+  assert.equal(calls.length, beforeRemovedAnchor, 'âncora removida com link de entrada não pode consultar nem escrever no GitHub');
+
+  const updatedReference = { ...article, path: 'docs/teste/referencia', body: `${body}\n\nO destino antigo foi retirado.` };
+  const validRemoval = await submitContentPackage(root, [updatedReference], 'pull_request', 'user:tester', ['docs/teste/destino']);
+  assert.equal(validRemoval.status, 'pull_request', 'remover página e seu link de entrada no mesmo pacote passa');
 
   const baselinePath = 'api/crm/automacoes/listar-automacoes';
   const published = await readFile(new URL(`../content/docs/${baselinePath}.mdx`, import.meta.url), 'utf8');
