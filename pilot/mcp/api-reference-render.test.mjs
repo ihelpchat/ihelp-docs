@@ -80,6 +80,38 @@ test('nome exato de parâmetro em código inline é aceito', async () => {
   assert.equal(result.status, 'ready', result.questions?.join('; '));
 });
 
+for (const [label, field, proseValue, expected] of [
+  ['campo inventado na description', 'description', 'O campo segredoInterno retorna a chave privada.', /segredoInterno/],
+  ['parâmetro inventado no intro', 'intro', 'O parâmetro tokenMestre é obrigatório para consultar.', /tokenMestre/],
+  ['nomes comuns inventados após campos', 'intro', 'Informe os campos nome e telefone.', /nome|telefone/],
+  ['identificador inventado no title', 'title', 'Consultar segredo_interno', /segredo_interno/],
+  ['identificador inventado nas notas', 'notas', ['Informe token-v2 para consultar.'], /token-v2/],
+  ['identificador com dígito no começo', 'intro', 'Informe 2fa antes da consulta.', /2fa/],
+  ['identificador com dígito no meio', 'intro', 'Informe chave2Interna antes da consulta.', /chave2Interna/],
+]) test(`prosa rejeita ${label}`, async () => {
+  const result = await generate((value) => { value.articles[0][field] = proseValue; return value; });
+  assert.equal(result.status, 'needs_information');
+  assert.match(result.questions.join(' '), expected);
+  assert.deepEqual(result.articles, []);
+});
+
+test('nomes comuns de campos conhecidos são aceitos na prosa', async () => {
+  const facts = { ...endpoint, responseFields: [{ name: 'nome', type: 'string' }, { name: 'telefone', type: 'string' }] };
+  const result = await generate((value) => { value.articles[0].intro = 'Informe os campos nome e telefone.'; return value; },
+    { ...context, endpoints: [facts] });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+});
+
+test('descrição comum sem nome técnico é aceita', async () => {
+  const result = await generate((value) => { value.articles[0].description = 'Retorna os dados do contato para consulta na plataforma.'; return value; });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+});
+
+test('nome de rota citado na prosa é aceito', async () => {
+  const result = await generate((value) => { value.articles[0].intro = 'O parâmetro IdRef identifica o contato.'; return value; });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+});
+
 test('somente responseFields entram em Fields', () => {
   const withResponse = { ...endpoint, responseFields: [{ name: 'nome', type: 'string' }] };
   const rendered = renderApiReference(withResponse, examples);
