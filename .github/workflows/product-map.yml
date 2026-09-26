@@ -1,0 +1,58 @@
+name: Product map
+
+on:
+  pull_request:
+    branches: [integration/claricia-v2]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}-product-map', github.event.pull_request.number) || 'product-map-manual' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  product-map:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: docs
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/pilot/package-lock.json
+      - name: Install and prove fixture compatibility
+        working-directory: docs/pilot
+        run: npm ci && node mcp/run-tests.mjs
+      - name: Check read-only token availability
+        id: token
+        env:
+          PRODUCT_READ_TOKEN: ${{ secrets.PRODUCT_READ_TOKEN }}
+        run: |
+          if [ -n "$PRODUCT_READ_TOKEN" ]; then echo 'ready=true' >> "$GITHUB_OUTPUT"; else echo 'ready=false' >> "$GITHUB_OUTPUT"; echo 'pendente: PRODUCT_READ_TOKEN não configurado'; fi
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.ready == 'true'
+        with:
+          repository: ihelpchat/front-react
+          ref: master
+          path: front
+          fetch-depth: 1
+          token: ${{ secrets.PRODUCT_READ_TOKEN }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.ready == 'true'
+        with:
+          repository: ihelpchat/olah-ihelp
+          ref: release/validation
+          path: back
+          fetch-depth: 1
+          token: ${{ secrets.PRODUCT_READ_TOKEN }}
+          persist-credentials: false
+      - name: Compare real product with published guides
+        if: steps.token.outputs.ready == 'true'
+        run: |
+          node docs/pilot/scripts/product-map.mjs front back "$RUNNER_TEMP/product-map.json" --approved docs/pilot/product-map/approved.json
