@@ -27,9 +27,12 @@ const priorWriteToken = process.env.GITHUB_TOKEN;
 const priorReadToken = process.env.GITHUB_READ_TOKEN;
 try {
   process.env.GITHUB_TOKEN = 'write-only-fixture';
-  delete process.env.GITHUB_READ_TOKEN;
-  const result = await searchProductContext('atendimento', 'atendimento', { fetch: () => { throw new Error('writer token used for private read'); } });
-  assert.equal(result.available, false, 'write token cannot be reused for private code');
+  process.env.GITHUB_READ_TOKEN = 'read-only-fixture';
+  const result = await searchProductContext('atendimento', 'atendimento', { fetch: async (_url, options) => {
+    assert.equal(options.headers.Authorization, 'Bearer read-only-fixture', 'dedicated read token takes precedence over legacy write token');
+    return { ok: true, json: async () => ({ tree: [] }) };
+  } });
+  assert.equal(result.available, true);
 } finally {
   if (priorWriteToken === undefined) delete process.env.GITHUB_TOKEN;
   else process.env.GITHUB_TOKEN = priorWriteToken;

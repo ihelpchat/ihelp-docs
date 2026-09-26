@@ -7,6 +7,7 @@ import { isExactCatalogAction } from './product-actions.mjs';
 import { conversationalIssues } from './conversational-contract.mjs';
 import { stringify } from 'yaml';
 import { articleFields } from './article-fields.mjs';
+import { githubWriteToken } from './env-compat.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -168,7 +169,7 @@ export async function getInventory(root) {
 }
 
 async function githubRequest(path, init = {}, allowNotFound = false) {
-  const token = process.env.GITHUB_TOKEN;
+  const token = githubWriteToken();
   if (!token) throw new SubmitArticleError('GITHUB_NOT_CONFIGURED', 'GITHUB_TOKEN não configurado');
   const response = await fetch(`https://api.github.com${path}`, {
     ...init,

@@ -53,7 +53,8 @@ Configure `DOCS_MCP_CREDENTIALS` como JSON de credenciais individuais: `[{"actor
 
 1. Confira quais clientes usam `DOCS_MCP_API_KEY` e prepare uma chave individual para cada pessoa ou serviço. Guarde os valores apenas nas variáveis privadas do Railway e nos clientes correspondentes.
 2. Configure `DOCS_MCP_CREDENTIALS` no serviço do Railway com o JSON acima. No próximo restart, a configuração nova prevalece; `DOCS_MCP_API_KEY` é ignorada e um aviso aparece no log sem revelar a chave.
-3. Atualize cada cliente para a própria chave, confirme leitura e escrita conforme o papel e remova `DOCS_MCP_API_KEY` do Railway e dos clientes antigos. Reinicie e confirme que a chave antiga recebe HTTP 401.
+3. Configure `GITHUB_READ_TOKEN` com acesso de leitura a `front-react` e `olah-ihelp`; confirme que `docs_product_context` retorna ambos os repositórios como `available: true`. Enquanto ela faltar, o MCP usa `GITHUB_TOKEN` para leitura e registra um aviso de descontinuação sem mostrar o valor. Mantenha `GITHUB_TOKEN` para escrita em `ihelp-docs` até concluir a separação.
+4. Atualize cada cliente para a própria chave, confirme leitura e escrita conforme o papel e remova `DOCS_MCP_API_KEY` do Railway e dos clientes antigos. Reinicie e confirme que a chave antiga recebe HTTP 401.
 
 Enquanto somente `DOCS_MCP_API_KEY` estiver configurada, o serviço continua aceitando a chave antiga como ator `service:legado`, com acesso às mesmas ferramentas de antes, e registra um aviso de descontinuação. Sem nenhuma das duas variáveis, o processo falha na subida. Configure também `MCP_STATE_DIR` no volume persistente antes de migrar os drafts e o audit.
 

@@ -10,17 +10,11 @@ import { saveSessionEvent, pruneSessionEvents } from './session-events.mjs';
 import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { publishedPathOrNull } from './published-paths.mjs';
 import { opaqueId } from './opaque-id.mjs';
-import { authenticate, loadCredentials, loadLegacyCredential, requestIdentity } from './access-control.mjs';
+import { authenticate, requestIdentity } from './access-control.mjs';
+import { mcpCredentialsFromEnv } from './env-compat.mjs';
 
-const credentials = process.env.DOCS_MCP_CREDENTIALS
-  ? loadCredentials(process.env.DOCS_MCP_CREDENTIALS)
-  : process.env.DOCS_MCP_API_KEY ? [loadLegacyCredential(process.env.DOCS_MCP_API_KEY)] : [];
+const credentials = mcpCredentialsFromEnv();
 if (!credentials.length) throw new Error('Configure DOCS_MCP_CREDENTIALS ou DOCS_MCP_API_KEY antes de iniciar o MCP');
-if (process.env.DOCS_MCP_API_KEY) {
-  console.error(process.env.DOCS_MCP_CREDENTIALS
-    ? 'DOCS_MCP_API_KEY ignorada: DOCS_MCP_CREDENTIALS está configurado.'
-    : 'DOCS_MCP_API_KEY descontinuada: migre para DOCS_MCP_CREDENTIALS.');
-}
 
 const mcpHandler = createMcpHandler(() => buildServer());
 const handler = toNodeHandler(mcpHandler);

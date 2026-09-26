@@ -14,21 +14,22 @@ assert.ok(!baseNames.has('DOCS_MCP_CREDENTIALS') && !baseNames.has('GITHUB_READ_
 
 const sourceDir = new URL('./', import.meta.url);
 for (const file of await readdir(sourceDir)) {
-  if (!file.endsWith('.mjs') || file.endsWith('.test.mjs') || file === 'env-compat.mjs') continue;
+  if (!file.endsWith('.mjs') || file.endsWith('.test.mjs') || file === 'test.mjs' || file === 'env-compat.mjs') continue;
   const source = await readFile(new URL(file, sourceDir), 'utf8');
   assert.doesNotMatch(source, /process\.env\.(?:DOCS_MCP_API_KEY|DOCS_MCP_CREDENTIALS|GITHUB_TOKEN|GITHUB_READ_TOKEN)\b/, `${file} must use the single compatibility table`);
 }
 
-const saved = new Map(['DOCS_MCP_API_KEY', 'DOCS_MCP_CREDENTIALS', 'GITHUB_TOKEN', 'GITHUB_READ_TOKEN', 'DOCS_ROOT', 'PORT'].map((name) => [name, process.env[name]]));
+const saved = new Map(['DOCS_MCP_API_KEY', 'DOCS_MCP_CREDENTIALS', 'GITHUB_TOKEN', 'GITHUB_READ_TOKEN', 'MCP_STATE_DIR', 'DOCS_ROOT', 'PORT'].map((name) => [name, process.env[name]]));
 const originalFetch = globalThis.fetch;
 const root = await mkdtemp(join(tmpdir(), 'm514-base-env-'));
 await mkdir(join(root, 'architecture'));
+await mkdir(join(root, 'content/docs'), { recursive: true });
 for (const file of ['support-signals.json', 'coverage-matrix.json']) {
   await copyFile(new URL(`../architecture/${file}`, import.meta.url), join(root, 'architecture', file));
 }
 const key = 'legacy-base-env-abcdefghijklmnopqrstuvwxyz';
 const token = 'legacy-github-fixture';
-for (const name of ['DOCS_MCP_CREDENTIALS', 'GITHUB_READ_TOKEN']) delete process.env[name];
+for (const name of ['DOCS_MCP_CREDENTIALS', 'GITHUB_READ_TOKEN', 'MCP_STATE_DIR']) delete process.env[name];
 process.env.DOCS_MCP_API_KEY = key;
 process.env.GITHUB_TOKEN = token;
 process.env.DOCS_ROOT = root;
