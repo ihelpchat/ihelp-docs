@@ -130,6 +130,23 @@ test('parâmetro factual é aceito na prosa', async () => {
   assert.equal(result.status, 'ready', result.questions?.join('; '));
 });
 
+test('campo do body e headers fixos são aceitos na prosa', async () => {
+  const facts = { ...endpoint, parameters: [...endpoint.parameters, { name: 'name', type: 'string', in: 'body' }] };
+  const result = await generate((value) => {
+    value.articles[0].intro = 'O campo name identifica o contato. O header Authorization autentica a consulta.';
+    return value;
+  }, { ...context, endpoints: [facts] });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+});
+
+test('campo de resposta não vira parâmetro', async () => {
+  const facts = { ...endpoint, responseFields: [{ name: 'status', type: 'string' }] };
+  const result = await generate((value) => { value.articles[0].intro = 'O parâmetro status identifica o contato.'; return value; },
+    { ...context, endpoints: [facts] });
+  assert.equal(result.status, 'needs_information');
+  assert.match(result.questions.join(' '), /status/);
+});
+
 test('somente responseFields entram em Fields', () => {
   const withResponse = { ...endpoint, responseFields: [{ name: 'nome', type: 'string' }] };
   const rendered = renderApiReference(withResponse, examples);
