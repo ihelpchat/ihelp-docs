@@ -63,6 +63,10 @@ public class ItemsController {
   assert.deepEqual(result.map(({ parameters }) => parameters.map(({ name, type, in: location }) => [name, type, location])), [
     [['id', 'int', 'route']], [['id', 'Guid', 'route']], [['slug', 'string', 'route']], [['name', 'string', 'route']],
   ]);
+  assert.equal(result[1].parameters[0].required, false);
+  assert.equal(result[3].parameters[0].required, false);
+  assert.equal(result[0].parameters[0].required, true);
+  assert.equal(result[1].optionalAlias, '/api/v2/items/guid');
 });
 
 test('leitor inclui campos de DTO de resposta resolvível', () => {
