@@ -498,6 +498,14 @@ function detailedProcedureQuestion(question) {
 
 export async function answerQuestion(root, question, options = {}) {
   question = redactSensitiveData(question);
+  if (/\b(?:falar|conversar) com (?:uma? )?(?:pessoa|atendente|humano)|\b(?:quero|preciso de) (?:um )?(?:atendente|humano|suporte)\b/i.test(normalize(question))) {
+    return {
+      answer: 'Você pode falar com nosso time de atendimento pelo WhatsApp.',
+      sections: [], steps: [], code: null, sources: [], suggestions: [],
+      actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
+      resolution: 'partial', found: false,
+    };
+  }
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   const scope = Object.hasOwn(ASSISTANT_SCOPES, options.scope ?? '') ? options.scope : 'Tudo';
   const pagePath = String(options.page?.path ?? '').split(/[?#]/u)[0];
@@ -569,9 +577,11 @@ export async function answerQuestion(root, question, options = {}) {
     steps: sources[0]?.documentedSteps.slice(0, 3).map((text) => ({ text })) ?? [],
     code: null,
     sources: sources.slice(0, 3).map(({ title, path, description }) => ({ title, path, kind: kindOf(path), excerpt: description })),
-    suggestions: ['Falar com uma pessoa'], resolution: 'partial', found: true,
+    suggestions: [],
+    actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
+    resolution: 'partial', found: true,
   });
-  const client = options.client ?? (apiKey ? new OpenAI({ apiKey }) : null);
+  const client = options.client ?? (apiKey ? new OpenAI({ apiKey, maxRetries: 0, ...(options.baseURL ? { baseURL: options.baseURL } : {}) }) : null);
   const context = sources.map((source, index) => [
     `FONTE ${index + 1}: ${source.title}`,
     `URL: ${source.path}`,

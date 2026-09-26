@@ -98,7 +98,10 @@ export async function createBudgetedResponse(client, payload, options = {}) {
       }
       return { write: true };
     });
-    if (response.status !== 'incomplete') return { kind: 'ok', response };
+    if (response.status === 'completed' && typeof response.output_text === 'string' && response.output_text.trim()) {
+      return { kind: 'ok', response };
+    }
+    if (response.status !== 'incomplete') return { kind: 'provider_failed' };
   }
   return { kind: 'provider_failed' };
 }
