@@ -238,15 +238,42 @@ export function normalizeReply(data: unknown): AssistantReply {
   };
 }
 
-export async function requestAnswer(request: AssistantRequest, signal?: AbortSignal): Promise<AssistantReply> {
-  if (!assistantEnabled) throw new AssistantError('Assistente não configurado.', 503);
-  const response = await fetch(assistantEndpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-    signal,
+function waitForRetry(seconds: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, seconds * 1000);
+    function onAbort() {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new AssistantError((data as { error?: string }).error ?? 'Não foi possível consultar o assistente.', response.status);
-  return normalizeReply(data);
+}
+
+export async function requestAnswer(request: AssistantRequest, signal?: AbortSignal, onRetry?: () => void): Promise<AssistantReply> {
+  if (!assistantEnabled) throw new AssistantError('Assistente não configurado.', 503);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(assistantEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) return normalizeReply(data);
+    if (response.status === 429) {
+      if (attempt === 0) {
+        const parsed = Number(response.headers.get('Retry-After'));
+        onRetry?.();
+        await waitForRetry(Number.isFinite(parsed) ? Math.max(1, Math.min(60, parsed)) : 1, signal);
+        continue;
+      }
+      throw new AssistantError('Só um instante. Ainda estou aguardando para responder; tente de novo em breve.', 429);
+    }
+    throw new AssistantError((data as { error?: string }).error ?? 'Não foi possível consultar o assistente.', response.status);
+  }
+  throw new AssistantError('Tive um problema. Tente de novo.', 502);
 }

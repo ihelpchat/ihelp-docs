@@ -4895,6 +4895,7 @@ button {
 .ih-ai-error {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 12px 14px;
   border: 1px solid #fecaca;
@@ -4912,16 +4913,24 @@ button {
 .ih-ai-error span {
   flex: 1;
   color: #991b1b;
-  font-size: 13px;
+  font-size: 16px;
 }
 
-.ih-ai-error button {
+.ih-ai-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ih-ai-error-actions button,
+.ih-ai-error-actions a {
   display: flex;
   align-items: center;
-  height: 30px;
+  justify-content: center;
+  min-height: 44px;
   padding: 0 11px;
   color: #991b1b;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 600;
   white-space: nowrap;
   border: 1px solid #fecaca;
@@ -4929,7 +4938,8 @@ button {
   background: var(--ih-white);
 }
 
-.ih-ai-error button:hover {
+.ih-ai-error-actions button:hover,
+.ih-ai-error-actions a:hover {
   background: #fef2f2;
 }
 
@@ -4939,7 +4949,7 @@ button {
   gap: 10px;
   margin: 6px 0 12px;
   color: var(--ih-slate-500);
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .ih-ai-dots {
@@ -5134,20 +5144,21 @@ button {
 }
 
 .ih-ai-thread[data-compact] .ih-ai-error span {
-  font-size: 12px;
+  font-size: 16px;
 }
 
-.ih-ai-thread[data-compact] .ih-ai-error button {
-  height: auto;
-  padding: 0;
-  border: 0;
-  background: transparent;
+.ih-ai-thread[data-compact] .ih-ai-error-actions button {
+  min-height: 44px;
+}
+
+.ih-ai-thread[data-compact] .ih-ai-error-actions a {
+  min-height: 44px;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-busy-label {
   gap: 8px;
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-dots span {
