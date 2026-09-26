@@ -186,6 +186,24 @@ test('query e body usam nomes e valores tipados dos fatos', () => {
   assert.match(rendered.body, /-d '\{"name":"abc123"\}'/);
 });
 
+test('todos os exemplos compartilham os headers exigidos pelos fatos', () => {
+  const cases = [
+    { fact: { ...endpoint, verb: 'POST', route: '/api/v2/contacts',
+      parameters: [{ name: 'name', type: 'string', in: 'body' }] }, contentType: true },
+    { fact: endpoint, contentType: false },
+  ];
+  for (const { fact, contentType } of cases) {
+    const rendered = renderApiReference(fact, examples);
+    const blocks = [...rendered.body.matchAll(/```(\w+)\n([\s\S]*?)\n```/gu)];
+    assert.deepEqual(blocks.map((block) => block[1]), examples[0].languages);
+    for (const [, language, code] of blocks) {
+      assert.match(code, /Authorization/i, `${language} ${fact.verb}: Authorization ausente`);
+      if (contentType) assert.match(code, /Content-Type['"]?\s*:\s*['"]?application\/json/i, `${language} POST: Content-Type ausente`);
+      else assert.doesNotMatch(code, /Content-Type/i, `${language} GET: Content-Type indevido`);
+    }
+  }
+});
+
 test('seções técnicas seguem a ordem lida da página', () => {
   const style = [{ ...examples[0], sections: ['Exemplo', 'Parâmetros de rota', 'Resposta'] }];
   const body = renderApiReference(endpoint, style).body;
