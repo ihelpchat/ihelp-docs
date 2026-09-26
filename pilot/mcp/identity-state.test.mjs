@@ -22,8 +22,9 @@ assert.throws(() => authorizeTool(reader, 'docs_submit_article', {}), /forbidden
 assert.throws(() => authorizeTool(writer, 'docs_product_context', {}), /forbidden/i, 'writer cannot read private product code');
 assert.throws(() => authorizeTool(writer, 'docs_submit_article', { requestedBy: 'user:reader' }), /requestedBy/i, 'body cannot forge actor');
 assert.equal(authorizeTool(writer, 'docs_submit_article', {}), 'user:writer');
-for (let index = 0; index < 30; index += 1) authorizeTool(writer, 'docs_submit_article', {}, { now: 1000, limit: 30 });
-assert.throws(() => authorizeTool(writer, 'docs_submit_article', {}, { now: 1000, limit: 30 }), /rate limit/i, 'per actor quota is independent of IP');
+const quotaWindow = Date.now() + 61_000;
+for (let index = 0; index < 30; index += 1) authorizeTool(writer, 'docs_submit_article', {}, { now: quotaWindow, limit: 30 });
+assert.throws(() => authorizeTool(writer, 'docs_submit_article', {}, { now: quotaWindow, limit: 30 }), /rate limit/i, 'per actor quota is independent of IP');
 
 const contentRoot = await mkdtemp(join(tmpdir(), 'm514-content-'));
 const stateRoot = await mkdtemp(join(tmpdir(), 'm514-state-'));
