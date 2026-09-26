@@ -4,7 +4,7 @@ import { createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { buildServer } from './server.mjs';
 import { answerQuestion } from './assistant-service.mjs';
-import { saveFeedback, summarizeFeedback } from './feedback-service.mjs';
+import { normalizeFeedback, saveFeedback, summarizeFeedback } from './feedback-service.mjs';
 import { sanitizeWidgetContext } from './real-state.mjs';
 
 const apiKey = process.env.DOCS_MCP_API_KEY;
@@ -134,6 +134,7 @@ export const httpServer = createServer(async (request, response) => {
   if (pathname === '/feedback' && request.method === 'POST') {
     try {
       const body = await readJson(request);
+      normalizeFeedback(body);
       const ip = clientIp(request);
       if (rateLimit(response, [quota(feedbackIps, ip, feedbackIpLimit, Date.now())])) return;
       const event = await saveFeedback(feedbackFile, body, { userAgent: request.headers['user-agent'] });
