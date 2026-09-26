@@ -1,0 +1,4 @@
+{
+  "abrir-canais": { "type": "click", "marker": "guide-qr-open", "name": "Canais" },
+  "conectar": { "type": "click", "name": "Conectar" }
+}

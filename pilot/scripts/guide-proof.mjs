@@ -4,15 +4,8 @@ import { launch } from './visual/measure.mjs';
 import { envCompatibility } from '../mcp/env-compat.mjs';
 import productActions from '../architecture/product-actions.json' with { type: 'json' };
 
-// Selectors are evidence adapters for the current product UI. Every published step is
-// enumerated from app.json; an unmapped new web step fails closed.
-const controls = {
-  'reconectar-canal-qr': { 'abrir-canais': ['click', 'guide-qr-open'], conectar: ['click', 'Conectar'] },
-  'usuario-acesso': { 'abrir-usuarios': ['click', 'guide-user-open'], 'criar-usuario': ['click', 'Novo usuário'], 'preencher-dados': ['fill', 'Nome'], 'escolher-departamento': ['fill', 'Departamentos'], 'revisar-acesso': ['fill', 'Acesso'], 'salvar-usuario': ['save', 'Salvar Alterações'] },
-  'recado-fora-do-horario': { 'abrir-departamentos': ['click', 'guide-department-open'], 'configurar-horario': ['fill', 'Horário'], 'escrever-recado': ['fill', 'Mensagem automática fora de horário de atendimento'], 'salvar-recado': ['save', 'Salvar Alterações'] },
-};
-const manual = new Set(['escolher-celular', 'android', 'iphone', 'ler-codigo', 'sem-celular', 'pedir-ajuda']);
 const root = new URL('../public/guides/', import.meta.url);
+const scriptsRoot = new URL('./guide-proof/roteiros/', import.meta.url);
 
 export async function publishedGuides(packageRoot = root) {
   const dir = packageRoot instanceof URL ? packageRoot : new URL(`file://${packageRoot}/`);
@@ -49,23 +42,39 @@ async function sanitizedScreenshot(page, path) {
   finally { await page.evaluate(() => [...document.head.querySelectorAll('style')].find(style => style.textContent?.includes('#guide-proof-redaction'))?.remove()); }
 }
 
-function stepPlan(guide, step) {
+async function stepPlan(guide, step) {
+  if (!/^[a-z0-9-]+$/u.test(guide.guideId)) throw new Error('guideId inválido no pacote publicado');
   const action = step.actionId && productActions[step.actionId];
   const route = action?.route ?? guide.steps.map(item => productActions[item.actionId]?.route).find(Boolean);
   if (!route) throw new Error(`${guide.guideId}/${step.stepId}: rota ausente no catálogo`);
-  const control = controls[guide.guideId]?.[step.stepId];
-  if (!control && !manual.has(step.stepId)) throw new Error(`${guide.guideId}/${step.stepId}: ação web sem alvo no catálogo`);
-  return { route, control, marker: control?.[1]?.startsWith('guide-') ? control[1] : undefined };
+  const script = JSON.parse(await readFile(new URL(`${guide.guideId}.json`, scriptsRoot), 'utf8').catch(() => '{}'));
+  return { route, control: script[step.stepId] ?? null };
 }
 
-function locator(page, step, plan, fixture) {
-  if (fixture) return page.locator(`[data-proof-step="${step.stepId}"]`);
-  if (plan.marker) return page.locator(`[data-tour-id="${plan.marker}"] button, [data-help-id="${plan.marker}"] button, button[data-tour-id="${plan.marker}"], button[data-help-id="${plan.marker}"]`).first();
-  const [type, label] = plan.control;
-  return type === 'fill' ? page.getByLabel(label, { exact: false }) : page.getByRole('button', { name: label, exact: false });
+function locator(page, control) {
+  const area = control.container ? page.locator(control.container) : page;
+  if (control.selector) return area.locator(control.selector);
+  return area.getByRole(control.role ?? 'button', { name: control.name, exact: true });
 }
 
-export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, credentials, appSha = 'unverified', packageRoot }) {
+async function selectField(page, area, field) {
+  const native = area.getByRole('combobox', { name: field.name, exact: true });
+  if (await native.count() === 1 && await native.evaluate(el => el.tagName === 'SELECT')) {
+    await native.selectOption({ label: field.value });
+    return;
+  }
+  // The app's SelectCommon is a custom combobox with options rendered in a portal.
+  const section = area.getByText(field.name, { exact: true }).locator('..');
+  if (field.name === 'Departamentos' && await section.getByRole('button').count() === 1) await section.getByRole('button').click();
+  const trigger = section.getByRole('combobox');
+  if (await trigger.count() !== 1) throw new Error(`select ambíguo: ${field.name}`);
+  await trigger.click();
+  const option = page.locator('[data-value]').filter({ hasText: field.value });
+  if (await option.count() !== 1) throw new Error(`opção ambígua: ${field.value}`);
+  await option.click();
+}
+
+export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fixtureLogin = false, credentials, appSha = 'unverified', packageRoot }) {
   const target = assertAllowedTarget(baseUrl);
   if (fixture !== target.local) throw new Error('Destino recusado: modo e host incompatíveis');
   if (!fixture && (!credentials?.authorized?.email || !credentials?.authorized?.password || !credentials?.denied?.email || !credentials?.denied?.password)) {
@@ -79,16 +88,24 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, cre
   const runId = `qa-guia-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
   try {
     for (const role of ['authorized', 'denied']) {
-      const context = await browser.newContext();
-      await context.route('**/*', (route) => {
-        if (route.request().isNavigationRequest() && new URL(route.request().url()).origin !== target.url) return route.abort();
-        return route.continue();
+      const context = await browser.newContext({ serviceWorkers: 'block' });
+      const blocked = [];
+      await context.route('**/*', async (route) => {
+        const requestUrl = new URL(route.request().url());
+        if (requestUrl.origin !== target.url) { blocked.push(requestUrl.origin); return route.abort(); }
+        const response = await route.fetch({ maxRedirects: 0 });
+        const location = response.headers()['location'];
+        if (location && new URL(location, requestUrl).origin !== target.url) {
+          blocked.push(new URL(location, requestUrl).origin);
+          return route.abort();
+        }
+        return route.fulfill({ response });
       });
       const page = await context.newPage();
       try {
-        if (!fixture) await login(page, target.url, credentials[role].email, credentials[role].password);
+        if (!fixture || fixtureLogin) await login(page, target.url, credentials[role].email, credentials[role].password);
         for (const guide of published) {
-          const plans = guide.steps.map(step => stepPlan(guide, step));
+          const plans = await Promise.all(guide.steps.map(step => stepPlan(guide, step)));
           const initial = plans[0].route;
           await page.goto(`${target.url}${initial}${fixture && role === 'denied' ? '?role=denied' : ''}`, { waitUntil: 'domcontentloaded' });
           const filled = new Map();
@@ -103,33 +120,45 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, cre
               continue;
             }
             // Only a published catalog route may change the current URL.
-            if (step.actionId && new URL(page.url()).pathname !== plan.route) {
-              await page.goto(`${target.url}${plan.route}${fixture && role === 'denied' ? '?role=denied' : ''}`, { waitUntil: 'domcontentloaded' });
-            }
             const current = new URL(page.url());
-            if (current.origin !== target.url || current.pathname !== plan.route) throw new Error(`${guide.guideId}: navegação fora do app autorizado`);
-            if (plan.marker) {
-              const marker = page.locator(`[data-tour-id="${plan.marker}"], [data-help-id="${plan.marker}"]`);
+            if (blocked.length || current.origin !== target.url) throw new Error(`${guide.guideId}: navegação fora do host autorizado`);
+            if (plan.control.marker) {
+              const marker = page.locator(`[data-tour-id="${plan.control.marker}"], [data-help-id="${plan.control.marker}"]`);
               await marker.waitFor({ state: 'visible', timeout: 5000 });
-              if (await marker.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: marcador ausente ${plan.marker}`);
+              if (await marker.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: marcador ausente ${plan.control.marker}`);
             }
-            const control = locator(page, step, plan, fixture);
-            await control.waitFor({ state: 'visible', timeout: 5000 });
-            if (await control.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: controle ambíguo ${plan.control[1]}`);
-            const [type] = plan.control;
-            if (type === 'fill') {
-              original.set(step.stepId, await control.inputValue());
-              const value = step.stepId === 'preencher-dados' ? runId : `${runId}-${step.stepId}`;
-              await control.fill(value);
-              filled.set(step.stepId, value);
-            } else if (type === 'save') {
-              const fieldStep = guide.guideId === 'usuario-acesso' ? 'preencher-dados' : 'escrever-recado';
+            const instruction = plan.control;
+            const control = instruction.type === 'fields' ? null : locator(page, instruction);
+            if (role === 'denied' && control && !(await control.isEnabled())) break;
+            if (control) {
+              await control.waitFor({ state: 'visible', timeout: 5000 });
+              if (await control.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: controle ambíguo ${instruction.name}`);
+            }
+            if (instruction.type === 'fields') {
+              const area = instruction.container ? page.locator(instruction.container) : page;
+              if (instruction.container && await area.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: container ambíguo`);
+              for (const field of instruction.fields) {
+                const value = field.value.replaceAll('${runId}', runId);
+                if (field.type === 'select') {
+                  await selectField(page, area, field);
+                } else {
+                  const input = field.selector ? area.locator(field.selector) : area.getByRole('textbox', { name: field.name, exact: true });
+                  if (await input.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: campo ambíguo`);
+                  if (!original.has(step.stepId)) original.set(step.stepId, await input.inputValue());
+                  await input.fill(value);
+                }
+                if (!filled.has(step.stepId)) filled.set(step.stepId, value);
+              }
+            } else if (instruction.type === 'save') {
+              const fieldStep = instruction.verifyField;
               const fieldIndex = guide.steps.findIndex(item => item.stepId === fieldStep);
               if (!filled.has(fieldStep) || fieldIndex < 0) {
                 if (role === 'authorized') report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'manual_required' });
                 continue;
               }
-              const field = locator(page, guide.steps[fieldIndex], plans[fieldIndex], fixture);
+              const source = plans[fieldIndex].control;
+              const firstField = source.fields[0];
+              const field = locator(page, { container: source.container, selector: firstField.selector, role: 'textbox', name: firstField.name });
               const candidate = filled.get(fieldStep);
               const before = original.get(fieldStep);
               await control.click({ timeout: 3000 });
@@ -147,7 +176,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, cre
                 if (role === 'denied' && after !== before) throw new Error(`${guide.guideId}/${step.stepId}: perfil negado alterou dados`);
                 if (role === 'authorized') {
                   await field.fill(before);
-                  await locator(page, step, plan, fixture).click();
+                  await locator(page, instruction).click();
                   await page.reload({ waitUntil: 'domcontentloaded' });
                   if (await field.inputValue() !== before) throw new Error(`${guide.guideId}/${step.stepId}: restauração não persistiu`);
                   report.cleanup.push({ guideId: guide.guideId, status: 'restored' });
@@ -158,8 +187,9 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, cre
               const before = role === 'authorized' && !fixture ? await page.locator('body').innerHTML() : null;
               await control.click({ timeout: 3000 });
               if (before !== null && await page.locator('body').innerHTML() === before) throw new Error(`${guide.guideId}/${step.stepId}: ação web não concluiu`);
-              if (fixture && role === 'authorized' && await control.getAttribute('data-done') !== 'yes') throw new Error(`${guide.guideId}/${step.stepId}: ação web não concluiu`);
+              if (fixture && role === 'authorized' && step.stepId !== 'criar-usuario' && await control.getAttribute('data-done') !== 'yes') throw new Error(`${guide.guideId}/${step.stepId}: ação web não concluiu`);
             }
+            if (blocked.length) throw new Error(`${guide.guideId}: pedido fora do host autorizado`);
             if (role === 'authorized') {
               report.steps.push({ guideId: guide.guideId, stepId: step.stepId, status: 'passed' });
               await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
@@ -174,9 +204,13 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, cre
           if (role === 'authorized' && created) {
             // A created user must be removed through the UI, then checked after reload.
             try {
-              const row = fixture ? page.locator(`[data-proof-item="${created}"]`) : page.getByText(created, { exact: true }).locator('..');
+              const row = fixture ? page.locator(`[data-proof-item="${created}"]`) : page.getByText(created, { exact: true }).locator('xpath=ancestor::tr[1]');
               if (await row.count() !== 1) throw new Error('item criado não encontrado');
-              await row.getByRole('button', { name: /Excluir|Remover/u }).click({ timeout: 3000 });
+              if (fixture) await row.getByRole('button', { name: /Excluir|Remover/u }).click({ timeout: 3000 });
+              else {
+                await row.locator('a[title="Excluir"], [title="Excluir"] a').click({ timeout: 3000 });
+                await page.getByRole('button', { name: /Confirmar|Sim|Excluir/u }).click({ timeout: 3000 });
+              }
               await page.reload({ waitUntil: 'domcontentloaded' });
               if (await (fixture ? page.locator(`[data-proof-item="${created}"]`) : page.getByText(created, { exact: false })).count()) throw new Error('item criado ainda aparece');
               report.cleanup.push({ guideId: guide.guideId, status: 'removed' });

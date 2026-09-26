@@ -1,0 +1,6 @@
+{
+  "abrir-departamentos": { "type": "click", "marker": "guide-department-open", "name": "Departamentos" },
+  "configurar-horario": { "type": "fields", "fields": [{ "type": "text", "name": "Horário", "value": "09:00" }] },
+  "escrever-recado": { "type": "fields", "fields": [{ "type": "text", "name": "Mensagem automática fora de horário de atendimento", "value": "Mensagem de teste ${runId}" }] },
+  "salvar-recado": { "type": "save", "name": "Salvar Alterações", "verifyField": "escrever-recado" }
+}

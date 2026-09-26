@@ -1,0 +1,17 @@
+{
+  "abrir-usuarios": { "type": "click", "marker": "guide-user-open", "container": "[data-tour-id=guide-user-open]", "role": "button", "name": "Usuários" },
+  "criar-usuario": { "type": "click", "container": "main", "role": "button", "name": "Novo usuário" },
+  "preencher-dados": { "type": "fields", "container": "section[aria-label='Dados do usuário'], [class*='basis-1/2']:has(input[name=nome])", "fields": [
+    { "type": "text", "selector": "input[name=nome]", "value": "${runId}" },
+    { "type": "text", "selector": "input[name=email]", "value": "${runId}@example.invalid" },
+    { "type": "text", "selector": "input[name=senha]", "value": "Prova-2026!" },
+    { "type": "text", "selector": "input[name=senhaConfirmacao]", "value": "Prova-2026!" }
+  ] },
+  "escolher-departamento": { "type": "fields", "container": "section[aria-label='Dados do usuário'], [class*='basis-1/2']:has(input[name=nome])", "fields": [
+    { "type": "select", "name": "Departamentos", "value": "Demo" }
+  ] },
+  "revisar-acesso": { "type": "fields", "container": "section[aria-label='Dados do usuário'], [class*='basis-1/2']:has(input[name=nome])", "fields": [
+    { "type": "select", "name": "Perfil", "value": "Atendente" }
+  ] },
+  "salvar-usuario": { "type": "save", "container": "section[aria-label='Dados do usuário'], [class*='basis-1/2']:has(input[name=nome])", "role": "button", "name": "Salvar Alterações", "verifyField": "preencher-dados" }
+}
