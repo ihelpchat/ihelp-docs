@@ -7,7 +7,7 @@ import { resolveGuideId } from '../architecture/conversation-v1.mjs';
 import { parseAssistantSuggestions } from './conversational-contract.mjs';
 import { sanitizeWidgetContext, diagnoseState, diagnosticQuestion, escalationFor } from './real-state.mjs';
 import { redactSensitiveData } from './sensitive-data.mjs';
-import { answerGuide } from './guide-state.mjs';
+import { answerGuide, requestsHuman } from './guide-state.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
 import { publishedGuideCatalog, routeMessage } from './closed-router.mjs';
 
@@ -23,13 +23,6 @@ function normalize(value) {
 
 function normalizePath(path) {
   return `/${String(path).split(/[?#]/)[0].replace(/^\/+|\/+$/g, '')}`;
-}
-
-function campaignGuideQuestion(question) {
-  const value = normalize(question).replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '');
-  if (/\b(?:templates?|api|arquivos?|anexos?|midia)\b/.test(value)) return false;
-  return /\bcampanhas?\b/.test(value)
-    && /\b(?:criar|enviar|envio|disparar|disparo|fazer|montar|configurar|whatsapp)\b/.test(value);
 }
 
 let cachedRaw;
@@ -188,9 +181,12 @@ export function kindOf(path) {
 export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo', page, preferredPaths = [], requiredPath } = {}) {
   const contentRoot = join(root, 'content/docs');
   const normalizedQuestion = normalize(question);
-  const campaignRequest = campaignGuideQuestion(question);
-  const terms = [...new Set(normalizedQuestion.split(/[^a-z0-9]+/).filter((term) => term.length > 2 && !STOP_WORDS.has(term)))];
-  if (!terms.length && !page?.path) return [];
+  const searchQuestion = normalizedQuestion.replace(/\brecados?\b/g, 'mensagem');
+  const negatedTerms = [...normalizedQuestion.matchAll(/\b(?:nao e|nem)\s+(\w+)/g)].map((match) => match[1].replace(/s$/, ''));
+  const terms = [...new Set(searchQuestion.split(/[^a-z0-9]+/).filter((term) => term.length > 2
+    && !STOP_WORDS.has(term) && !['nao', 'nem'].includes(term)
+    && !negatedTerms.some((negated) => term.replace(/s$/, '') === negated)))];
+  if (!terms.length && !page?.path && !preferredPaths.length) return [];
 
   const ranked = [];
   for (const file of await walk(contentRoot)) {
@@ -214,6 +210,12 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
     const guideQuestion = normalize(frontmatterValue(raw, 'assistantQuestion'));
     const guideRequest = normalizedQuestion.replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '');
     const guideMatch = guideQuestion && (normalizedQuestion === guideQuestion || guideRequest === guideQuestion);
+    const guideTerms = guideQuestion.split(/[^a-z0-9]+/).filter((term) => term.length > 3 && !STOP_WORDS.has(term));
+    const guideOverlap = guideTerms.filter((term) => terms.some((word) => term === word || term.replace(/s$/, '') === word.replace(/s$/, ''))).length;
+    const titleMatch = terms.some((term) => titleText.split(/[^a-z0-9]+/).some((word) => word === term || word.replace(/s$/, '') === term.replace(/s$/, '')));
+    const phrases = searchQuestion.split(/[^a-z0-9]+/);
+    const phraseMatch = phrases.some((_, index) => index + 3 < phrases.length
+      && bodyText.includes(phrases.slice(index, index + 4).join(' ')));
     const assistantIntent = frontmatterValue(raw, 'assistantIntent');
     const score = matches.length * 5
       + terms.reduce((total, term) => total + (titleText.includes(term) ? 12 : 0) + (descriptionText.includes(term) ? 4 : 0), 0)
@@ -222,7 +224,10 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       // Pergunta feita no painel de uma página: essa página entra primeiro no contexto.
       + (onPage ? 100 : 0)
       + (guideMatch ? 200 : 0)
-      + (campaignRequest && assistantIntent === 'campaigns' ? 300 : 0);
+      + (guideOverlap >= 2 ? guideOverlap * 20 : 0)
+      + (frontmatterValue(raw, 'contentType') === 'guia' && titleMatch ? 20 : 0)
+      + (frontmatterValue(raw, 'assistantOverview') && titleMatch ? 15 : 0)
+      + (phraseMatch ? 30 : 0);
     const screenshots = screenshotsOf(raw);
     const documentedSteps = documentedStepsOf(raw);
     ranked.push({
@@ -501,6 +506,12 @@ export async function answerQuestion(root, question, options = {}) {
   if (options.guide) {
     return answerGuide(root, question, options.guide, options);
   }
+  if (requestsHuman(question)) return {
+    answer: 'Você pode falar com nosso time de atendimento pelo WhatsApp.',
+    sections: [], steps: [], code: null, sources: [], suggestions: [],
+    actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
+    resolution: 'partial', found: false,
+  };
   const published = await publishedGuideCatalog(root);
   if (published.length) {
     const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
@@ -522,14 +533,6 @@ export async function answerQuestion(root, question, options = {}) {
     if (route.kind === 'perguntar' || route.kind === 'none') return {
       answer: 'Qual tarefa você quer fazer no iHelp?', sections: [], steps: [], code: null,
       sources: [], suggestions: ['Falar com uma pessoa'], resolution: 'not_found', found: false,
-    };
-  }
-  if (/\b(?:falar|conversar) com (?:uma? )?(?:pessoa|atendente|humano)|\b(?:quero|preciso de) (?:um )?(?:atendente|humano|suporte)\b/i.test(normalize(question))) {
-    return {
-      answer: 'Você pode falar com nosso time de atendimento pelo WhatsApp.',
-      sections: [], steps: [], code: null, sources: [], suggestions: [],
-      actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
-      resolution: 'partial', found: false,
     };
   }
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
@@ -577,10 +580,13 @@ export async function answerQuestion(root, question, options = {}) {
   const activeBlocked = !activeChoice && Boolean(optionalBranch && priorGuide.assistantOptionalBlockedPrompt)
     && normalize(activeText) === normalize(priorGuide.assistantOptionalBlockedPrompt);
   if ((choice && (activeChoice || activeDiagnosis || activeResume || activeBlocked)) || (recovery && activeBlocked)) continuation = true;
-  const exactGuide = sources.find((source) => source.assistantQuestion && (
+  const exactQuestionGuide = sources.find((source) => source.assistantQuestion && (
     normalize(source.assistantQuestion) === normalize(question.trim())
     || (detailedProcedure && normalize(question).replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '') === normalize(source.assistantQuestion))
-  )) || (campaignGuideQuestion(question) ? sources.find((source) => source.assistantIntent === 'campaigns') : undefined);
+  ));
+  const exactGuide = exactQuestionGuide || sources.find((source, index) => index === 0 && source.assistantOverview && source.score >= 40
+    && normalize(source.title).split(/[^a-z0-9]+/).some((word) => word.length > 4
+      && normalize(question).split(/[^a-z0-9]+/).some((term) => term.replace(/s$/, '') === word.replace(/s$/, ''))));
   if (exactGuide?.assistantOverview && !continuation && !detailedProcedure) overviewProcedure = true;
   const historyGuide = continuation ? priorGuide : undefined;
   if (continuation && historyGuide?.assistantQuestion
@@ -588,7 +594,7 @@ export async function answerQuestion(root, question, options = {}) {
     originalQuestion = historyGuide.assistantQuestion;
   }
   const diagnosis = diagnoseState(originalQuestion, widgetContext);
-  if (exactGuide || historyGuide) sources = [exactGuide || historyGuide];
+  if (historyGuide) sources = [historyGuide];
   if (!sources.length) {
     return {
       answer: 'Esse procedimento ainda não está documentado. Nosso time de atendimento pode orientar você e concluir o próximo passo pelo WhatsApp.',
@@ -668,7 +674,8 @@ export async function answerQuestion(root, question, options = {}) {
   const chosen = parsed.citations
     ? sources.filter((source) => parsed.citations.includes(source.path) || parsed.citations.includes(source.title))
     : parsed.sources.map((path) => byPath.get(`/${String(path).split(/[?#]/)[0].replace(/^\/+|\/+$/g, '')}`)).filter(Boolean);
-  const selected = (historyGuide ? [historyGuide] : exactGuide ? [exactGuide] : chosen.length ? chosen : parsed.found ? sources.slice(0, 3) : [])
+  const selected = (historyGuide ? [historyGuide] : exactQuestionGuide ? [exactQuestionGuide]
+    : chosen.length ? chosen : exactGuide ? [exactGuide] : parsed.found ? sources.slice(0, 3) : [])
     .filter((source, index, list) => list.indexOf(source) === index);
   const used = procedure && selected.some((source) => source.documentedSteps.length)
     ? selected.filter((source) => source.documentedSteps.length || source.productActions.length)

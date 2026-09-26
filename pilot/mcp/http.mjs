@@ -11,10 +11,11 @@ import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { publishedPathOrNull } from './published-paths.mjs';
 import { opaqueId } from './opaque-id.mjs';
 import { authenticate, requestIdentity } from './access-control.mjs';
-import { mcpCredentialsFromEnv } from './env-compat.mjs';
+import { assistantRouterModel, mcpCredentialsFromEnv } from './env-compat.mjs';
 
 const credentials = mcpCredentialsFromEnv();
 if (!credentials.length) throw new Error('Configure DOCS_MCP_CREDENTIALS ou DOCS_MCP_API_KEY antes de iniciar o MCP');
+assistantRouterModel();
 
 const mcpHandler = createMcpHandler(() => buildServer());
 const handler = toNodeHandler(mcpHandler);

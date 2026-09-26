@@ -58,7 +58,7 @@ Configure `DOCS_MCP_CREDENTIALS` como JSON de credenciais individuais: `[{"actor
 
 Enquanto somente `DOCS_MCP_API_KEY` estiver configurada, o serviço continua aceitando a chave antiga como ator `service:legado`, com acesso às mesmas ferramentas de antes, e registra um aviso de descontinuação. Sem nenhuma das duas variáveis, o processo falha na subida. Configure também `MCP_STATE_DIR` no volume persistente antes de migrar os drafts e o audit.
 
-Use `GITHUB_READ_TOKEN` com acesso de leitura apenas a `front-react` e `olah-ihelp`. Use `GITHUB_TOKEN` separado, com acesso de escrita apenas a `ihelp-docs`, para abrir pull requests; configure `GITHUB_REPOSITORY=ihelpchat/ihelp-docs` e `GITHUB_BASE_BRANCH`. Para ativar o assistente, configure `OPENAI_API_KEY`; o modelo padrão é `gpt-6-luna` e pode ser trocado por `OPENAI_MODEL`.
+Use `GITHUB_READ_TOKEN` com acesso de leitura apenas a `front-react` e `olah-ihelp`. Use `GITHUB_TOKEN` separado, com acesso de escrita apenas a `ihelp-docs`, para abrir pull requests; configure `GITHUB_REPOSITORY=ihelpchat/ihelp-docs` e `GITHUB_BASE_BRANCH`. Para ativar o assistente, configure `OPENAI_API_KEY`; o modelo da resposta final é `OPENAI_MODEL` (padrão `gpt-6-luna`). Configure `ASSISTANT_ROUTER_MODEL` com um modelo pequeno para a triagem. Se essa variável faltar, a triagem usa `OPENAI_MODEL` e registra um aviso uma vez na subida. O timeout da triagem é de 2 s e aborta a chamada antes do fallback lexical.
 
 ```bash
 DOCS_MCP_CREDENTIALS='[...]' OPENAI_API_KEY=... ASSISTANT_ALLOWED_ORIGINS=https://docs.exemplo.com npm run mcp:http

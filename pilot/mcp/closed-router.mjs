@@ -4,6 +4,7 @@ import { parseDocument } from 'yaml';
 import { parseGuide } from '../architecture/conversation-v1.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
 import { redactSensitiveData } from './sensitive-data.mjs';
+import { assistantRouterModel } from './env-compat.mjs';
 
 const normalize = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 const words = (value) => normalize(value).match(/[a-z0-9]+/g) ?? [];
@@ -47,7 +48,7 @@ export function lexicalFallback(question, catalog) {
   const value = normalize(question).replace(/[?!.]/g, '').trim();
   const matches = catalog.filter((item) => {
     if (negated(question, item)) return false;
-    const title = normalize(item.title).trim();
+    const title = normalize(item.title).trim().replace(/s$/u, '');
     const prompt = normalize(item.question).replace(/[?!.]/g, '').trim();
     return value === prompt || (title.length >= 5 && new RegExp(`\\b${title}s?\\b`).test(value));
   });
@@ -62,7 +63,7 @@ export async function routeMessage(question, { catalog, client, budget, history 
   if (!catalog?.length || !client) return NONE;
   const identifiers = new Set(catalog.map(({ guideId }) => guideId));
   const payload = {
-    model: process.env.OPENAI_ROUTER_MODEL ?? 'gpt-6-luna', store: false,
+    model: assistantRouterModel(), store: false,
     max_output_tokens: 80, reasoning: { effort: 'minimal' },
     text: { format: { type: 'json_schema', name: 'triagem_fechada', strict: true,
       schema: { type: 'object', additionalProperties: false, required: ['choice'],
@@ -78,14 +79,18 @@ export async function routeMessage(question, { catalog, client, budget, history 
     { role: 'user', content: safeQuestion }],
   };
   let timer;
+  const controller = new AbortController();
   const deadline = timeout ?? new Promise((resolve) => { timer = setTimeout(() => resolve('timeout'), 2_000); });
   try {
     if (timeout && await Promise.race([deadline, Promise.resolve('start')]) === 'timeout') {
       return lexicalFallback(safeQuestion, catalog);
     }
-    const pending = createBudgetedResponse(client, payload, budget ?? {});
+    const pending = createBudgetedResponse(client, payload, { ...budget, signal: controller.signal });
     const result = await Promise.race([pending, deadline]);
-    if (result === 'timeout') return lexicalFallback(safeQuestion, catalog);
+    if (result === 'timeout') {
+      controller.abort();
+      return lexicalFallback(safeQuestion, catalog);
+    }
     if (result.kind !== 'ok') return NONE;
     let parsed;
     try { parsed = JSON.parse(result.response.output_text); } catch { return NONE; }

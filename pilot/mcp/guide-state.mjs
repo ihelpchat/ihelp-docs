@@ -9,7 +9,7 @@ import { diagnoseState, escalationFor, sanitizeWidgetContext } from './real-stat
 import { guideStateToken, guideStatePath } from './opaque-id.mjs';
 
 const plain = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
-const human = (value) => /(?:falar com (?:uma )?pessoa|falar com (?:um )?humano|atendimento|suporte)/.test(value);
+export const requestsHuman = (value) => /\b(?:falar|conversar) com (?:uma? )?(?:pessoa|atendente|humano)|\b(?:quero|preciso de) (?:um )?(?:atendente|humano|suporte)|^(?:suporte|atendimento)$/.test(plain(value));
 const failure = (value) => /(?:deu certo\? nao|nao deu certo|nao funcionou)/.test(value);
 const guideIds = new Set(canonicalGuideIds);
 
@@ -99,7 +99,7 @@ export async function answerGuide(root, question, state, options = {}) {
     const initial = guide.steps.find((step) => step.stepId === guide.initialStepId);
     return reply(source, initial, 'Vamos recomeçar pelo primeiro passo.');
   }
-  if (human(command) || failure(command)) {
+  if (requestsHuman(command) || failure(command)) {
     const escalation = handoff();
     escalation.attempts = failure(command) ? [...escalation.attempts, 'reported_stuck'] : escalation.attempts;
     const answer = source
