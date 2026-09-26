@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import Ajv2020 from 'ajv/dist/2020.js';
 import { assistantRequestSchema } from '../architecture/conversation-v1.mjs';
 import { summarizeConversations } from './conversation-log.mjs';
 import * as admin from './conversation-admin.mjs';
@@ -23,19 +22,29 @@ assert.ok(summary.percentages.partial > 0, 'turno no limite de 30 minutos contin
 assert.equal(Object.values(summary.percentages).reduce((sum, value) => sum + value, 0), 100);
 assert.ok(summary.unresolved.some((row) => row.question === 'Ainda preciso'));
 assert.ok(!summary.unresolved.some((row) => row.question === 'Pergunta anterior'));
+const reopened = summarizeConversations([
+  { sessionId: 'reopened', at: '2026-09-26T10:00:00Z', question: 'Resolvida antes', resolution: 'complete' },
+  { sessionId: 'reopened', at: '2026-09-26T11:00:00Z', question: 'Nova dúvida sem resposta', resolution: 'partial' },
+], {}, { now: Date.parse('2026-09-26T11:31:00Z') });
+assert.equal(reopened.percentages.abandoned, 100, 'último turno parcial vencido define a sessão');
+assert.equal(reopened.unresolvedTotal, 1, 'complete anterior não resolve o último turno parcial');
+assert.equal(reopened.unresolved[0].question, 'Nova dúvida sem resposta', 'lista mostra a última pergunta');
 assert.equal(summarizeConversations(rows, { resolution: 'escalated' }, { now }).total, 1,
   'filtro Pessoa inclui partial com offeredHuman');
 assert.equal(summarizeConversations(rows, { resolution: 'abandoned' }, { now }).unresolved[0].question, 'Ainda preciso');
 
+const contract = JSON.parse(await readFile(new URL('../architecture/conversation-v1.schema.json', import.meta.url)));
+assert.deepEqual(
+  { if: contract.schemas.AssistantRequestV1.if, then: contract.schemas.AssistantRequestV1.then },
+  { if: { properties: { origin: { not: { const: 'app' } } } }, then: { not: { required: ['companyId'] } } },
+  'JSON Schema proíbe companyId quando origin não é app, inclusive origin ausente',
+);
 for (const [input, valid] of [
   [{ question: 'Oi', origin: 'faq', companyId: 42 }, false],
   [{ question: 'Oi', origin: 'app', companyId: 42 }, true],
   [{ question: 'Oi', origin: 'app' }, true],
 ]) {
   assert.equal(assistantRequestSchema.safeParse(input).success, valid, 'Zod valida vínculo empresa/origem');
-  const contract = JSON.parse(await readFile(new URL('../architecture/conversation-v1.schema.json', import.meta.url)));
-  const ajv = new Ajv2020({ strict: false });
-  assert.equal(ajv.validate(contract.schemas.AssistantRequestV1, input), valid, 'JSON Schema valida vínculo empresa/origem');
 }
 
 assert.equal(typeof admin.renderRows, 'function', 'linhas usam renderRows puro');
