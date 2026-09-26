@@ -104,6 +104,7 @@ try {
       await page.locator('.ih-ai-thread').waitFor();
       const expected = { normal: '.ih-ai-sources', guia: '.ih-ai-steps li', fallback: '.ih-ai-human-action', erro: '.ih-ai-error' };
       assert.ok(await root.locator(expected[state]).first().isVisible(), `${state}/${viewport}: estado não foi renderizado`);
+      assert.equal(await root.getByText(/Procedimento não documentado|Parte da resposta exige atendimento/i).count(), 0, `${state}/${viewport}: etiqueta proibida`);
       const targets = await page.locator('.ih-ai-screen a, .ih-ai-screen button, .ih-ai-screen textarea, .ih-ai-screen summary').evaluateAll((els) => els.flatMap((el, i) => el.getClientRects().length && !el.matches(':disabled') ? [i] : []));
       const collect = async (mode) => {
         const result = await root.evaluate(audit);
