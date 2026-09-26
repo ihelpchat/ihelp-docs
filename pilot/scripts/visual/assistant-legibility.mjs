@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { launch } from './measure.mjs';
 import { viewports } from './probes.mjs';
 import { startQaSite } from './serve-qa-build.mjs';
@@ -12,6 +13,27 @@ const states = {
   guia: [{ ...question }, { id: 'a1', role: 'ai', question: question.text, reply: reply({ answer: 'Vamos fazer juntos. Primeiro, abra Configurações.', steps: [{ text: 'Abra Configurações e escolha Canais.', action: { id: 'open-channels', label: 'Abrir Canais', route: '/configuracoes/canais' } }, { text: 'Confira o código na tela.' }], suggestions: ['Achei'] }) }],
   fallback: [{ ...question }, { id: 'a1', role: 'ai', question: question.text, reply: reply({ answer: 'O assistente está indisponível. Use o guia ou fale com uma pessoa.', resolution: 'partial', actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }] }) }],
   erro: [{ ...question }, { id: 'e1', role: 'error', question: question.text, message: 'Tive um problema. Tente de novo.', status: 429 }],
+};
+const manifest = JSON.parse(await readFile(new URL('../../public/guides/manifest.json', import.meta.url), 'utf8'));
+const catalog = JSON.parse(await readFile(new URL(`../../public/guides/${manifest.current}/catalog.json`, import.meta.url), 'utf8'));
+for (const file of ['app/(home)/page.tsx', 'components/site/header.tsx', 'components/assistant/assistant-screen.tsx']) {
+  const source = await readFile(new URL(`../../${file}`, import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /Claricia.{0,24}assistente de IA do iHelp|assistente de IA do iHelp.{0,24}Claricia/i, `${file}: nome fora de assistantDisplayName`);
+}
+const guidePaths = catalog.guides.map(({ pathSegments, guide }) => ({ path: `/${pathSegments.join('/')}`, id: guide.guideId, stepId: guide.initialStepId }));
+assert.ok(guidePaths.length > 0, 'pacote publicado sem guias');
+const injectProbe = async (page) => {
+  if (process.env.ASSISTANT_LEGIBILITY_PROBE_CSS) await page.addStyleTag({ content: process.env.ASSISTANT_LEGIBILITY_PROBE_CSS });
+};
+const assertSupportContext = async (link, id, stepId) => {
+  const href = await link.getAttribute('href');
+  assert.ok(href, 'link de suporte ausente');
+  const message = new URL(href).searchParams.get('text') ?? '';
+  assert.match(message, new RegExp(`Guia: ${id}; passo: ${stepId}`), 'handoff sem guia e passo do catálogo');
+};
+const assertCurrentName = async (page) => {
+  assert.equal(await page.getByText(/Claricia, assistente de IA do iHelp|A Claricia é a assistente de IA do iHelp/i).count(), 0, 'nome antigo visível');
+  assert.equal(await page.locator('[aria-label="Claricia, assistente de IA do iHelp"]').count(), 0, 'nome antigo acessível');
 };
 
 const audit = (root) => {
@@ -96,14 +118,13 @@ try {
       const page = await browser.newPage({ viewport: dimensions });
       await page.addInitScript((value) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages: value, scope: 'Tudo', sessionId: 'qa-session' })), messages);
       await page.goto(url, { waitUntil: 'networkidle' });
-      if (process.env.ASSISTANT_LEGIBILITY_PROBE_CSS) {
-        await page.addStyleTag({ content: process.env.ASSISTANT_LEGIBILITY_PROBE_CSS });
-      }
+      await injectProbe(page);
       const root = page.locator('.ih-ai-screen');
       await root.waitFor();
       await page.locator('.ih-ai-thread').waitFor();
       const expected = { normal: '.ih-ai-sources', guia: '.ih-ai-steps li', fallback: '.ih-ai-human-action', erro: '.ih-ai-error' };
       assert.ok(await root.locator(expected[state]).first().isVisible(), `${state}/${viewport}: estado não foi renderizado`);
+      assert.equal(await root.getByText(/Procedimento não documentado|Parte da resposta exige atendimento/i).count(), 0, `${state}/${viewport}: etiqueta proibida`);
       const targets = await page.locator('.ih-ai-screen a, .ih-ai-screen button, .ih-ai-screen textarea, .ih-ai-screen summary').evaluateAll((els) => els.flatMap((el, i) => el.getClientRects().length && !el.matches(':disabled') ? [i] : []));
       const collect = async (mode) => {
         const result = await root.evaluate(audit);
@@ -142,12 +163,104 @@ try {
       }
       await page.close();
     }
+    for (const zoom of [1, 2]) {
+      const page = await browser.newPage({ viewport: dimensions, deviceScaleFactor: zoom });
+      await page.addInitScript((messages) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages, scope: 'Tudo', sessionId: 'qa-session' })), states.guia);
+      await page.goto(`${site.url}${basePath}/docs/guias/?origem=suporte`, { waitUntil: 'networkidle' });
+      if (zoom === 2) await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
+      await injectProbe(page);
+      await assertCurrentName(page);
+      const catalog = page.locator('.ih-guide-catalog');
+      assert.ok(await catalog.isVisible(), `catálogo/${viewport}/${zoom}: catálogo ausente`);
+      assert.equal(await catalog.locator('a.ih-guide-card').count(), guidePaths.length, 'catálogo vem do pacote publicado');
+      const catalogAudit = await page.locator('body').evaluate(audit);
+      assert.ok(catalogAudit.measured.text > 10, 'catálogo: página completa não medida');
+      failures.push(...catalogAudit.failures.map((item) => `catálogo/${viewport}/${zoom}: ${item}`));
+      await page.locator('.ih-ai-launcher').click();
+      const catalogDrawer = page.locator('.ih-ai-drawer');
+      await catalogDrawer.locator('.ih-ai-thread[data-compact] .ih-ai-steps li').first().waitFor();
+      await catalogDrawer.evaluate(async (el) => { await Promise.all(el.getAnimations().map((animation) => animation.finished)); });
+      failures.push(...(await catalogDrawer.evaluate(audit)).failures.map((item) => `catálogo/compacto/${viewport}/${zoom}: ${item}`));
+      await catalogDrawer.getByRole('button', { name: 'Abrir em tela cheia' }).click();
+      await page.waitForURL((url) => /\/assistente\/?$/.test(url.pathname));
+      await injectProbe(page);
+      await page.locator('.ih-ai-screen .ih-ai-steps li').first().waitFor();
+      await assertCurrentName(page);
+      assert.ok(await page.locator('.ih-ai-screen-human').isVisible(), 'catálogo/tela-cheia: humano disponível');
+      failures.push(...(await page.locator('body').evaluate(audit)).failures.map((item) => `catálogo/tela-cheia/${viewport}/${zoom}: ${item}`));
+      await page.goBack({ waitUntil: 'networkidle' });
+      const catalogLink = catalog.locator('a.ih-guide-card').first();
+      await page.keyboard.press('Tab');
+      let catalogFocused = false;
+      for (let attempt = 0; attempt < 80; attempt++) {
+        if (await catalogLink.evaluate((el) => el === document.activeElement && el.matches(':focus-visible'))) {
+          catalogFocused = true;
+          break;
+        }
+        await page.keyboard.press('Tab');
+      }
+      assert.ok(catalogFocused, 'catálogo: foco por teclado');
+      await catalogLink.click();
+      await page.waitForURL((url) => guidePaths.some(({ path }) => url.pathname.replace(/\/$/, '').endsWith(path)));
+      assert.equal(new URL(page.url()).searchParams.get('origem'), 'suporte', 'origem preservada');
+      for (const { path, id, stepId } of guidePaths) {
+        const guidePage = await browser.newPage({ viewport: dimensions, deviceScaleFactor: zoom });
+        await guidePage.addInitScript((messages) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages, scope: 'Tudo', sessionId: 'qa-session' })), states.guia);
+        await guidePage.goto(`${site.url}${basePath}${path}/?origem=suporte`, { waitUntil: 'networkidle' });
+        if (zoom === 2) await guidePage.evaluate(() => { document.documentElement.style.zoom = '2'; });
+        await injectProbe(guidePage);
+        await assertCurrentName(guidePage);
+        const guide = guidePage.locator('.ih-guide-page');
+        assert.ok(await guide.isVisible(), `${path}: página do guia publicado`);
+        assert.equal(await guide.locator('a.ih-guide-app').count(), 1, `${path}: Fazer no app`);
+        assert.match(await guide.locator('a.ih-guide-app').getAttribute('href'), new RegExp(`ihelpGuide=${id}`), `${path}: app usa guia publicado`);
+        const guideHuman = guide.getByRole('link', { name: 'Falar com uma pessoa' });
+        assert.ok(await guideHuman.isVisible(), `${path}: humano sempre disponível`);
+        await assertSupportContext(guideHuman, id, stepId);
+        if (id === 'reconectar-canal-qr') {
+          await guide.getByRole('button', { name: 'Uso Android' }).click();
+          await guide.getByRole('button', { name: 'Voltar' }).click();
+          await guide.getByRole('button', { name: 'Uso iPhone' }).click();
+          assert.ok(await guide.getByText(/No iPhone, abra WhatsApp/).isVisible(), 'escolha corrigível');
+        }
+        const selectedStepId = id === 'reconectar-canal-qr' ? 'iphone' : stepId;
+        const guideAudit = await guidePage.locator('body').evaluate(audit);
+        assert.ok(guideAudit.measured.text > 10, `${path}: página completa não medida`);
+        failures.push(...guideAudit.failures.map((item) => `${path}/${viewport}/${zoom}: ${item}`));
+        await guide.getByRole('button', { name: /Perguntar à Claricia/ }).click();
+        const drawer = guidePage.locator('.ih-ai-drawer');
+        assert.ok(await drawer.locator('.ih-ai-thread[data-compact] .ih-ai-text p').first().isVisible(), `${path}: resposta compacta`);
+        assert.ok(await drawer.locator('.ih-ai-thread[data-compact] .ih-ai-steps li').first().isVisible(), `${path}: passo compacto`);
+        await injectProbe(guidePage);
+        await drawer.evaluate(async (el) => { await Promise.all(el.getAnimations().map((animation) => animation.finished)); });
+        const drawerHuman = drawer.getByRole('link', { name: 'Falar com uma pessoa' }).first();
+        assert.ok(await drawerHuman.isVisible(), `${path}: humano no painel`);
+        await assertSupportContext(drawer.locator('.ih-ai-drawer-human'), id, selectedStepId);
+        assert.ok(await drawer.locator('.ih-ai-follow button').count() <= 2, `${path}: até duas sugestões`);
+        const drawerAudit = await drawer.evaluate(audit);
+        assert.ok(drawerAudit.measured.text > 5, `${path}: painel compacto não medido`);
+        failures.push(...drawerAudit.failures.map((item) => `${path}/compacto/${viewport}/${zoom}: ${item}`));
+        failures.push(...(await guidePage.locator('body').evaluate(audit)).failures.map((item) => `${path}/compacto/${viewport}/${zoom}: ${item}`));
+        await drawer.getByRole('button', { name: 'Abrir em tela cheia' }).click();
+        await guidePage.waitForURL((url) => /\/assistente\/?$/.test(url.pathname));
+        await injectProbe(guidePage);
+        const screen = guidePage.locator('.ih-ai-screen');
+        await screen.locator('.ih-ai-steps li').first().waitFor();
+        await assertCurrentName(guidePage);
+        const fullHuman = screen.getByRole('link', { name: 'Falar com uma pessoa' });
+        assert.ok(await fullHuman.isVisible(), `${path}: humano na tela cheia`);
+        await assertSupportContext(fullHuman, id, selectedStepId);
+        failures.push(...(await guidePage.locator('body').evaluate(audit)).failures.map((item) => `${path}/tela-cheia/${viewport}/${zoom}: ${item}`));
+        await guidePage.close();
+      }
+      await page.close();
+    }
   }
 } finally {
   await browser.close();
   await site.close();
 }
 assert.ok(textCount > 100 && clickCount > 50, `cobertura insuficiente: ${textCount} textos, ${clickCount} clicáveis`);
-for (const item of [...new Set(failures.map((failure) => failure.replace(/\/interactive\d+:/, '/interactive:')))].slice(0, 100)) console.error(`FALHA ${item}`);
+for (const item of [...new Set(failures.map((failure) => failure.replace(/^.*?: /, '')))]) console.error(`FALHA ${item}`);
 assert.equal(failures.length, 0, `${failures.length} falhas de legibilidade`);
-console.log(`qa:assistant: ${Object.keys(states).length} estados × ${Object.keys(viewports).length} viewports; ${textCount} textos, ${clickCount} clicáveis; 0 falhas.`);
+console.log(`qa:assistant: ${Object.keys(states).length} estados × ${Object.keys(viewports).length} viewports; catálogo + ${guidePaths.length} guias publicados; ${textCount} textos, ${clickCount} clicáveis; 0 falhas.`);

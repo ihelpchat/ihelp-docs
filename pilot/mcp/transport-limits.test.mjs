@@ -256,7 +256,10 @@ const ui = { exports: {}, require: (name) => {
     messages: [{ id: 'error-1', role: 'error', question: 'sim', message: 'Só um instante.', status: 429 }],
     busy: false, retry: () => {},
   }) };
-  if (name === '@/lib/links') return { supportUrl: 'https://wa.me/551730422307', productActionUrl: () => null };
+  if (name === '@/lib/links') return {
+    supportUrl: 'https://wa.me/551730422307', productActionUrl: () => null,
+    supportLink: () => 'https://wa.me/551730422307', supportGuideFromPage: () => undefined, supportGuideFromReply: () => undefined,
+  };
   if (name === 'lucide-react') return new Proxy({}, { get: () => () => null });
   return {};
 } };

@@ -256,7 +256,7 @@ export function clickablesFor(reply: AssistantReply, options: {
     const href = options.productActionUrl(step.action);
     if (href) result.push({ kind: 'link', slot: 'action', label: step.action.label, href, stepIndex });
   });
-  reply.suggestions.forEach((label) => {
+  reply.suggestions.slice(0, 2).forEach((label) => {
     if (!reply.guide && label === 'Falar com uma pessoa') return; // o CTA já abre o handoff validado
     request(label, 'suggestion');
   });

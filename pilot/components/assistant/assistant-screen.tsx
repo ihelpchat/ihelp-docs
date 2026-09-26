@@ -7,8 +7,9 @@ import { useAssistant, type ChatMessage } from '@/components/assistant/assistant
 import { AssistantComposer } from '@/components/assistant/assistant-composer';
 import { AssistantThread } from '@/components/assistant/assistant-thread';
 import { assistantScopes, type SourceKind } from '@/lib/assistant';
-import { supportUrl } from '@/lib/links';
+import { supportLink, supportGuideFromPage, supportGuideFromReply } from '@/lib/links';
 import { TechnologyMark } from '@/components/site/technology-mark';
+import { assistantDisplayName } from '@/lib/assistant-name';
 
 const starters: { kind: SourceKind; label: string }[] = [
   { kind: 'Ajuda', label: 'Meu WhatsApp desconectou. Como reconecto sem perder o histórico?' },
@@ -33,6 +34,7 @@ function SourcesPanel() {
   const last = [...messages].reverse().find((message): message is Extract<ChatMessage, { role: 'ai' }> => message.role === 'ai');
   const sources = last?.reply.sources ?? [];
   const hasChat = messages.some((message) => message.role === 'user');
+  const guide = supportGuideFromPage() ?? supportGuideFromReply(last?.reply);
 
   return (
     <aside className="ih-ai-panel" aria-label="Fontes da resposta">
@@ -59,7 +61,7 @@ function SourcesPanel() {
       <div className="ih-ai-panel-support">
         <strong>A resposta não resolveu?</strong>
         <p>{hasChat ? 'A conversa vai pronta na mensagem para o suporte, sem você repetir nada.' : 'Fale com o suporte pelo WhatsApp.'}</p>
-        <a className="ih-button" href={`${supportUrl}?text=${encodeURIComponent(transcript(messages))}`} target="_blank" rel="noreferrer noopener">
+        <a className="ih-button" href={supportLink({ guide, message: transcript(messages) })} target="_blank" rel="noreferrer noopener">
           Enviar para o suporte
         </a>
       </div>
@@ -71,6 +73,8 @@ export function AssistantScreen() {
   const { messages, busy, ask, scope, setScope, newChat } = useAssistant();
   const scroller = useRef<HTMLDivElement>(null);
   const empty = messages.length === 0 && !busy;
+  const latestReply = [...messages].reverse().find((message) => message.role === 'ai')?.reply;
+  const humanHref = supportLink({ guide: supportGuideFromPage() ?? supportGuideFromReply(latestReply), message: transcript(messages) });
 
   useEffect(() => {
     const node = scroller.current;
@@ -94,8 +98,8 @@ export function AssistantScreen() {
             {empty ? (
               <section className="ih-ai-empty">
                 <span className="ih-ai-empty-icon" aria-hidden="true"><Sparkles /></span>
-                <h1>Pergunte qualquer coisa sobre o iHelp</h1>
-                <p>A Claricia é a assistente de IA do iHelp. Ela responde com base na Central de ajuda, nas principais dúvidas, nos tutoriais, nas novidades e na referência da API — e mostra de onde tirou cada resposta.</p>
+                <h1>{assistantDisplayName}</h1>
+                <p>{assistantDisplayName}. Responde com base na Central de ajuda, nas principais dúvidas, nos tutoriais, nas novidades e na referência da API — e mostra de onde tirou cada resposta.</p>
                 <div className="ih-ai-starters">
                   {starters.map((starter) => (
                     <button type="button" key={starter.label} onClick={() => ask(starter.label)}>
@@ -107,7 +111,7 @@ export function AssistantScreen() {
               </section>
             ) : (
               <>
-                <h1 className="ih-visually-hidden">Claricia, assistente de IA do iHelp</h1>
+                <h1 className="ih-visually-hidden">{assistantDisplayName}</h1>
                 <AssistantThread />
               </>
             )}
@@ -127,6 +131,7 @@ export function AssistantScreen() {
               ) : null}
             </div>
             <AssistantComposer placeholder="Pergunte sobre atendimento, campanhas, API, tutoriais…" autoFocus />
+            <a className="ih-ai-screen-human" href={humanHref} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a>
             <div className="ih-ai-hint">
               <span>Respostas geradas por IA a partir da documentação. Confira as fontes antes de agir.</span>
               <span className="ih-ai-hint-meta">

@@ -56,6 +56,12 @@ jobs:
       - name: Smoke public artifact
         run: node scripts/release.mjs artifact out
         working-directory: pilot
+      - name: Check UI smoke in Chrome
+        run: npm run qa:ui
+        working-directory: pilot
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          NEXT_PUBLIC_BASE_PATH: /ihelp-docs
       - name: Check guide journey in Chrome
         run: npm run qa:guide
         working-directory: pilot

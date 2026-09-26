@@ -13,6 +13,8 @@ import { TutorialsPage } from '@/components/site/tutorials';
 import { formatNewsDate, getNews } from '@/lib/news';
 import { getPageImageUrl, withBasePath } from '@/lib/shared';
 import Link from 'next/link';
+import { GuideCatalog } from '@/components/site/guide-experience';
+import { canonicalPages } from '@/lib/guide-pages';
 
 // URLs antigas do CRM (uma página por endpoint desde set/2026). O GitHub Pages não faz redirect,
 // então cada uma vira uma página estática com meta refresh. A Vercel usa os redirects do vercel.json.
@@ -89,6 +91,13 @@ export default async function Page(props: PageProps<'/[...slug]'>) {
         <FaqBody body={MDX} components={components} />
       </div>
     );
+  }
+
+  if (page.url === '/docs/guias') {
+    return <ArticleLayout page={page} toc={[]} meta={false}>
+      <MDX components={components} />
+      <GuideCatalog pages={canonicalPages()} />
+    </ArticleLayout>;
   }
 
   if (page.url === '/api') {

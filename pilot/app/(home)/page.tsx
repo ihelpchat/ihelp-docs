@@ -6,6 +6,7 @@ import { getSiteCounts } from '@/lib/site';
 import { supportPhone, supportUrl } from '@/lib/links';
 import { withBasePath } from '@/lib/shared';
 import { TechnologyMark } from '@/components/site/technology-mark';
+import { assistantDisplayName } from '@/lib/assistant-name';
 
 const startHere = [
   ['01', 'Reconectar WhatsApp', 'Canal desconectado e leitura do QR Code', '/docs/sobre-o-sistema/configuracoes/canais'],
@@ -36,7 +37,7 @@ export default function HomePage() {
         <div className="design-container design-hero-content">
           <span className="design-badge">
             <Sparkles aria-hidden="true" />
-            {assistantEnabled ? 'Claricia, assistente de IA do iHelp' : 'Busca inteligente em toda a documentação do iHelp'}
+            {assistantEnabled ? assistantDisplayName : 'Busca inteligente em toda a documentação do iHelp'}
           </span>
           <h1>Tire sua dúvida sobre o iHelp em uma pergunta.</h1>
           <p>Central de ajuda para o dia a dia do atendimento e referência técnica da API — no mesmo lugar, com busca que entende o que você quer.</p>
