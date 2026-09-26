@@ -47,7 +47,6 @@ try {
       body: JSON.stringify({
         question: 'Como criar e enviar uma campanha?', sessionId: 'fixture-session',
         page: { path: hostilePath, title: 'Campanhas' },
-        guide: { guideId: 'reconectar-canal-qr', stepId: 'passo-forjado', version: 1, mode: 'real' },
       }),
     });
     assert.equal(response.status, 200);

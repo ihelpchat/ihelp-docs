@@ -29,6 +29,7 @@ const stateSchema = z.object({
   pendingChoiceId: id.optional(),
   pendingChoice: id.optional(),
   choiceId: id.optional(),
+  stateToken: z.string().max(128).optional(),
 }).strict();
 const choiceSchema = z.object({ id, label: z.string().trim().min(1).max(100), nextStepId: id.optional() }).strict();
 const stepSchema = z.object({
@@ -107,7 +108,7 @@ export const assistantReplySchema = z.object({
   code: z.object({ language: z.string(), content: z.string() }).strict().nullable().optional(),
   sources: z.array(sourceSchema).optional(),
   suggestions: z.array(z.string()).optional(),
-  resolution: z.enum(['complete', 'partial', 'not_found']).optional(),
+  resolution: z.enum(['complete', 'partial', 'not_found', 'in_progress']).optional(),
   found: z.boolean().optional(),
   diagnosis: z.object({ cause: diagnosis }).strict().optional(),
   escalation: z.object({
@@ -115,8 +116,11 @@ export const assistantReplySchema = z.object({
     diagnosis,
     state: widgetContextSchema.optional(),
     attempts: z.array(z.enum(['documented_guide', 'reported_stuck'])),
+    guideId: knownGuideId.optional(),
+    stepId: id.optional(),
   }).strict().optional(),
   guide: stateSchema.optional(),
+  guideChoices: z.array(choiceSchema.pick({ id: true, label: true })).max(6).optional(),
   actions: z.array(productActionSchema).max(8).optional(),
   model: z.string().optional(),
 }).strict();
