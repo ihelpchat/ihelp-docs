@@ -79,11 +79,6 @@ function evidencePending() {
 function apiPending(reason) {
   return { status: 'needs_information', summary: reason, questions: [reason], articles: [] };
 }
-function explicitEndpoints(request) {
-  return [...Object.values(request).filter((value) => typeof value === 'string').join(' ').matchAll(/(?:\/api\/v\d+)?\/(?:[A-Za-z][\w-]*\/)*[A-Za-z][\w-]*(?:\/\{\w+\})?/gu)]
-    .map((match) => match[0]);
-}
-
 export function normalizeCatalogLabel(action) {
   return resolveCatalogAction(action) ?? action;
 }
@@ -207,7 +202,7 @@ function parseJson(response) {
 }
 
 function requestText(request, existing, productContext) {
-  const explicit = explicitEndpoints(request).length > 0;
+  const explicit = explicitEndpointsFrom(request).length > 0;
   const selectedEndpoints = (productContext.endpoints ?? []).filter((item) => explicit ? item.explicit : item.documented);
   return [
     `Tema: ${request.topic}`,
@@ -228,6 +223,9 @@ function requestText(request, existing, productContext) {
 }
 
 function groundingPending(context) {
+  const missingCitation = context.pending?.filter((item) => item.startsWith('endpoint citado não encontrado')) ?? [];
+  if (missingCitation.length) return { status: 'needs_information', summary: missingCitation.join('; '),
+    questions: missingCitation, articles: [], pending: context.pending };
   if (!context.groundingRequired || (context.code.length && context.code.every(({ available }) => available) && context.matches.length)) return null;
   return {
     status: 'needs_information',
@@ -236,6 +234,12 @@ function groundingPending(context) {
     questions: ['Confirme os checkouts autorizados, seus SHAs e a implementação do tema.'],
     risks: [], suggestedActions: [], articles: [],
   };
+}
+
+export function explicitEndpointsFrom(request) {
+  const text = [request.description, request.details].filter((value) => typeof value === 'string').join('\n');
+  return [...text.matchAll(/\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\/(?:[A-Za-z0-9_{}:?-]+\/)*[A-Za-z0-9_{}:?-]+)/giu)]
+    .map((match) => ({ verb: match[1].toUpperCase(), route: match[2].replace(/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\??\}/gu, '{$1}').replace(/\/+$/u, '') }));
 }
 
 async function related(root, request) {
@@ -256,7 +260,8 @@ async function related(root, request) {
 export async function planContent(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
-  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpoints(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpointsFrom(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  if (productContext.pending?.some((item) => item.startsWith('endpoint citado não encontrado'))) return groundingPending(productContext);
   if (request.module === 'api' && !productContext.endpoints?.length) return apiPending(productContext.nonPublicEndpoints ? 'endpoint não público: confirmar' : 'endpoints estruturados ausentes');
   if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return apiPending('endpoint não público: confirmar');
   const pending = groundingPending(productContext);
@@ -285,8 +290,9 @@ export async function planContent(root, request, options = {}) {
 export async function generateContentPackage(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
-  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpoints(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpointsFrom(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
   const withPending = (result) => ({ ...result, pending: [...new Set([...(productContext.pending ?? []), ...(result.pending ?? [])])] });
+  if (productContext.pending?.some((item) => item.startsWith('endpoint citado não encontrado'))) return groundingPending(productContext);
   if (request.module === 'api' && !productContext.endpoints?.length) return withPending(apiPending(productContext.nonPublicEndpoints ? 'endpoint não público: confirmar' : 'endpoints estruturados ausentes'));
   if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return withPending(apiPending('endpoint não público: confirmar'));
   const pending = groundingPending(productContext);
@@ -321,7 +327,7 @@ export async function generateContentPackage(root, request, options = {}) {
   if (request.module === 'api' && !parsed.articles.length) return withPending(apiPending('nenhuma página de API gerada'));
   if (request.module === 'api') {
     if (!productContext.apiExamples?.length) return withPending(apiPending('formato da referência API indisponível'));
-    const explicit = explicitEndpoints(request).length > 0;
+    const explicit = explicitEndpointsFrom(request).length > 0;
     const selectable = productContext.endpoints.filter((item) => item.public && (explicit ? item.explicit : item.documented));
     if (parsed.articles.length !== selectable.length) return withPending(apiPending(`artigos sem fato correspondente: ${parsed.articles.length}/${selectable.length}`));
     const articles = [];

@@ -164,19 +164,26 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
         sections: [...raw.matchAll(/^## (.+)$/gmu)].map((section) => section[1]) });
       }
     }
-    const publicControllers = new Set(endpoints.filter((item) => /^\/api\/v2\//iu.test(item.route) &&
-      documented.has(`${item.verb} ${item.route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')}`))
+    const requested = provided.explicitEndpoints ?? [];
+    const routeKey = (route) => String(route).replace(/\{([A-Za-z][A-Za-z0-9_]*)(?::[^{}]+)?\??\}/gu, '{$1}').replace(/\/+$/u, '').toLowerCase();
+    const cited = (item, endpoint) => endpoint.verb === item.verb &&
+      (routeKey(endpoint.route) === routeKey(item.route) ||
+        (!/^\/api\/v\d+\//iu.test(endpoint.route) && routeKey(endpoint.route) === routeKey(item.route.replace(/^\/api\/v\d+/iu, ''))));
+    const documentedFor = (item) => /^\/api\/v2\//iu.test(item.route) &&
+      [item.route, item.optionalAlias].filter(Boolean).some((route) =>
+        documented.has(`${item.verb} ${route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')}`));
+    const publicControllers = new Set(endpoints.filter(documentedFor)
       .map((item) => item.file));
     endpoints = endpoints.map((item) => ({ ...item,
-      documented: /^\/api\/v2\//iu.test(item.route) && documented.has(`${item.verb} ${item.route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')}`),
-      explicit: (provided.explicitEndpoints ?? []).some((route) => route.toLowerCase() === item.route.toLowerCase()
-        || route.toLowerCase() === item.route.replace(/^\/api\/v\d+/iu, '').toLowerCase()),
+      documented: documentedFor(item),
+      explicit: requested.some((endpoint) => cited(item, endpoint)),
       public: publicControllers.has(item.file)
-      || (provided.explicitEndpoints ?? []).some((route) => route.toLowerCase() === item.route.toLowerCase()
-        || route.toLowerCase() === item.route.replace(/^\/api\/v\d+/iu, '').toLowerCase()) }));
+      || requested.some((endpoint) => cited(item, endpoint)) }));
     const endpointPending = endpoints.flatMap((item) => item.public
       ? item.pending ?? []
       : [`endpoint não público: confirmar (${item.verb} ${item.route})`]);
+    endpointPending.push(...requested.filter((endpoint) => !endpoints.some((item) => cited(item, endpoint)))
+      .map((endpoint) => `endpoint citado não encontrado (${endpoint.verb} ${endpoint.route})`));
     const allowedBackendFiles = new Set(endpoints.filter((item) => item.public).map((item) => item.file));
     nonPublicEndpoints = endpoints.some((item) => !item.public);
     endpoints = endpoints.filter((item) => item.public);

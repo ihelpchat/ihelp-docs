@@ -36,7 +36,7 @@ const endpoints = [
 ];
 test('leitor extrai os três endpoints, query DTO e evidência de linha', () => {
   assert.deepEqual(endpoints.map(({ verb, route }) => [verb, route]), [
-    ['GET', '/api/v2/contacts'],
+    ['GET', '/api/v2/contacts/{letter}'],
     ['GET', '/api/v2/contacts/details/{IdRef}'],
     ['GET', '/api/v2/contactTags/getContactsTagByContactId/{contactId}'],
   ]);
@@ -46,6 +46,23 @@ test('leitor extrai os três endpoints, query DTO e evidência de linha', () => 
   assert.equal(endpoints[0].verbSource, 'Controllers/ContactsController.cs:5');
   assert.equal(endpoints[0].authorizationSource, 'Controllers/ContactsController.cs:1');
   assert.equal(endpoints[0].parameters.find(({ name }) => name === 'letter')?.source, 'Controllers/ContactsController.cs:6');
+});
+
+test('leitor remove constraints e mantém parâmetros opcionais na rota', () => {
+  const source = `[ApiVersion("2")][Route("api/v{version:apiVersion}/items")]
+public class ItemsController {
+  [HttpGet("{id:int}")] public IActionResult ById(int id) { return null; }
+  [HttpGet("guid/{id:guid?}")] public IActionResult ByGuid(Guid id) { return null; }
+  [HttpGet("slug/{slug}")] public IActionResult BySlug(string slug) { return null; }
+  [HttpGet("optional/{name?}")] public IActionResult ByName(string name) { return null; }
+}`;
+  const result = readCsharpEndpoints(source, 'Controllers/ItemsController.cs', { dtoSources: [] });
+  assert.deepEqual(result.map(({ route }) => route), [
+    '/api/v2/items/{id}', '/api/v2/items/guid/{id}', '/api/v2/items/slug/{slug}', '/api/v2/items/optional/{name}',
+  ]);
+  assert.deepEqual(result.map(({ parameters }) => parameters.map(({ name, type, in: location }) => [name, type, location])), [
+    [['id', 'int', 'route']], [['id', 'Guid', 'route']], [['slug', 'string', 'route']], [['name', 'string', 'route']],
+  ]);
 });
 
 test('leitor inclui campos de DTO de resposta resolvível', () => {
@@ -107,13 +124,13 @@ test('contexto local indexa fatos e mantém controller sem página privado', asy
     await writeFile(join(root, 'content/docs/api/contatos/buscar.mdx'), '---\nsource: api\ncontentType: referencia\nmethod: GET\nendpoint: /contacts\n---\n\n## Parâmetros\n');
     process.env.BACKEND_LOCAL_CHECKOUT = backend;
     const found = await getIhelpContext(root, 'API de Contatos', 'api', { requireLocal: true, repositoryIds: ['backend'], cache: false });
-    assert.equal(found.endpoints.find((item) => item.route === '/api/v2/contacts')?.public, true);
+    assert.equal(found.endpoints.find((item) => item.route === '/api/v2/contacts/{letter}')?.public, true);
     assert.equal(found.endpoints.some((item) => item.route.includes('getContactsTagByContactId')), false);
-    assert.deepEqual(found.endpoints.find((item) => item.route === '/api/v2/contacts')?.parameters.filter((item) => item.in === 'query').map((item) => [item.name, item.type]), [['searchData', 'string'], ['page', 'int'], ['limit', 'int']]);
+    assert.deepEqual(found.endpoints.find((item) => item.route === '/api/v2/contacts/{letter}')?.parameters.filter((item) => item.in === 'query').map((item) => [item.name, item.type]), [['searchData', 'string'], ['page', 'int'], ['limit', 'int']]);
     const copy = join(root, 'copy');
     await cp(join(root, 'architecture'), join(copy, 'architecture'), { recursive: true });
     const removed = await getIhelpContext(copy, 'API de Contatos', 'api', { requireLocal: true, repositoryIds: ['backend'], publicReferenceRoot: root });
-    assert.equal(removed.endpoints.find((item) => item.route === '/api/v2/contacts')?.public, true);
+    assert.equal(removed.endpoints.find((item) => item.route === '/api/v2/contacts/{letter}')?.public, true);
   } finally {
     if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
     else process.env.BACKEND_LOCAL_CHECKOUT = previous;
@@ -207,6 +224,54 @@ public class InternalContactsController {
     assert.equal(prompts.length, 2);
     assert.doesNotMatch(prompts[1], /internal-contacts|InternalContactsController/);
     assert.ok(packageResult.pending.includes('endpoint não público: confirmar (GET /api/v2/internal-contacts/private)'), JSON.stringify(packageResult));
+  } finally {
+    if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('pedido explícito libera apenas endpoint extraído no fluxo de plano e pacote', async () => {
+  const root = await mkdtemp(join(await realpath(tmpdir()), 'api-request-route-'));
+  const backend = join(root, 'back');
+  const previous = process.env.BACKEND_LOCAL_CHECKOUT;
+  try {
+    const controllers = join(backend, 'Comzada.Application/Controllers/V2');
+    await mkdir(controllers, { recursive: true });
+    await writeFile(join(controllers, 'ContactsController.cs'), `[ApiVersion("2")][Route("api/v{version:apiVersion}/contacts")]
+public class ContactsController {
+  [HttpGet("details/{id}")] public IActionResult Details(int id) { return null; }
+}`);
+    execFileSync('git', ['init', '-q', backend]);
+    execFileSync('git', ['-C', backend, 'add', '.']);
+    execFileSync('git', ['-C', backend, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']);
+    await mkdir(join(root, 'architecture'), { recursive: true });
+    await writeFile(join(root, 'architecture/support-signals.json'), JSON.stringify({ categories: [], rules: [] }));
+    await writeFile(join(root, 'architecture/coverage-matrix.json'), '[]');
+    process.env.BACKEND_LOCAL_CHECKOUT = backend;
+    const prompts = [];
+    const client = { responses: { create: async (payload) => {
+      prompts.push(payload.input[1].content);
+      return { output_text: JSON.stringify({ status: 'needs_information', summary: '', guidance: '', questions: [], risks: [], suggestedActions: [], articles: [], grounding: [] }), model: 'fake' };
+    } } };
+    const options = { client, contextOptions: { repositoryIds: ['backend'], cache: false } };
+    const full = { topic: 'API de Contatos', module: 'api', description: 'Documentar GET /api/v2/contacts/details/{id}' };
+    const planned = await planContent(root, full, options);
+    assert.equal(prompts.length, 1, JSON.stringify(planned));
+    assert.match(prompts[0], /"route":"\/api\/v2\/contacts\/details\/\{id\}"/);
+    assert.deepEqual(planned.pending, ['campos de resposta não verificáveis: GET /api/v2/contacts/details/{id}']);
+    const short = { topic: 'API de Contatos', module: 'api', description: 'Referência de contatos', details: 'GET /contacts/details/{id}' };
+    const generated = await generateContentPackage(root, short, { ...options, plan: { status: 'ready' } });
+    assert.equal(prompts.length, 2, JSON.stringify(generated));
+    assert.match(prompts[1], /"route":"\/api\/v2\/contacts\/details\/\{id\}"/);
+    assert.deepEqual(generated.pending, ['campos de resposta não verificáveis: GET /api/v2/contacts/details/{id}']);
+    const missing = await generateContentPackage(root, { ...short, details: 'GET /contacts/unknown/{id}' }, { ...options, plan: { status: 'ready' } });
+    assert.ok(missing.pending.includes('endpoint citado não encontrado (GET /contacts/unknown/{id})'), JSON.stringify(missing));
+    const wrongVersion = await generateContentPackage(root, { ...short, details: 'GET /api/v9/contacts/details/{id}' }, { ...options, plan: { status: 'ready' } });
+    assert.ok(wrongVersion.pending.includes('endpoint citado não encontrado (GET /api/v9/contacts/details/{id})'), JSON.stringify(wrongVersion));
+    const wrongMethod = await generateContentPackage(root, { ...short, details: 'POST /contacts/details/{id}' }, { ...options, plan: { status: 'ready' } });
+    assert.ok(wrongMethod.pending.includes('endpoint citado não encontrado (POST /contacts/details/{id})'), JSON.stringify(wrongMethod));
+    assert.equal(prompts.length, 2);
   } finally {
     if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
     else process.env.BACKEND_LOCAL_CHECKOUT = previous;
