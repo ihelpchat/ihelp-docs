@@ -20,7 +20,8 @@ export const approvedGuideSentences = {
     'Responderemos quando a equipe voltar.”',
     'Volte ao departamento e confira se o horário e o recado continuam preenchidos.',
     'O horário e o recado aparecem ao abrir o departamento novamente.',
-    'O envio real do recado precisa ser conferido em homologação com uma conta de teste, fora do horário configurado.',
+    'Peça a alguém que envie uma mensagem de outro celular para esse número fora do horário configurado.',
+    'Confira com essa pessoa se recebeu o recado.',
     'Colocar um recado fora do horário',
     'Escolha o horário do departamento e escreva o recado para quando ele estiver fechado.',
     'Abra Departamentos para configurar o horário e escrever o recado que aparece quando a equipe está fechada.',
@@ -44,6 +45,7 @@ export const hashApprovedSentence = (sentence) => createHash('sha256').update(ca
 const approvedSentences = Object.fromEntries(Object.entries(approvedGuideSentences)
   .map(([id, sentences]) => [id, new Set(sentences.map(canonical))]));
 const controlledTerm = /\b(?:mensag\w*|convers\w*|recad\w*|chat\w*|notifica\w*|perd\w*|recuper\w*|volt\w*|reaparec\w*|sincroniz\w*|chega[m]? depois|aparece[m]? depois|se perde|nao perde)\b/u;
+const internalEnvironmentTerm = /(?:^|[^\p{L}])(?:homologacao|staging|conta de teste|ambiente de teste)(?=$|[^\p{L}])/u;
 
 function renderedSentences(text) {
   const visible = text
@@ -94,6 +96,7 @@ export function validateCanonicalGuide(raw, expectedId) {
   const allowed = new Set((approval.guides?.[expectedId] ?? []).map(({ hash }) => hash));
   for (const { sentence, hash } of approvedTextEntries(raw, expectedId)) {
     const normalized = canonical(sentence);
+    if (internalEnvironmentTerm.test(normalized)) throw new Error(`${expectedId}: termo de ambiente interno no texto público: ${sentence}`);
     if (!allowed.has(hash)) throw new Error(`${expectedId}: frase não aprovada: ${sentence}`);
     if (controlledTerm.test(normalized) && !approvedSentences[expectedId]?.has(normalized)) {
       throw new Error(`${expectedId}: frase com termo controlado não aprovada: ${sentence}`);

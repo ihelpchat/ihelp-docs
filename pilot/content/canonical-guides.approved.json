@@ -1,7 +1,7 @@
 {
   "aprovadoPor": "pendente: Bruno",
   "aprovadoEm": null,
-  "geradoEm": "2026-09-26T03:11:39.046Z",
+  "geradoEm": "2026-09-26T03:30:09.474Z",
   "guides": {
     "reconectar-canal-qr": [
       {"sentence":"O quadrado com pontinhos é o código que liga o WhatsApp do celular ao iHelp.","hash":"b62f75c69411216a77fcecc29cbdae34f9eb0368df733ebe6262574306901aab"},
@@ -74,7 +74,7 @@
     "usuario-acesso": [
       {"sentence":"Só um administrador pode criar usuários.","hash":"7998149b8aeed7122b8609113bde830ebcaea0e00540f8c6631359c997ceb258"},
       {"sentence":"O setor é chamado de departamento no iHelp.","hash":"73c470a4a575011a2c1489ebe18444f17e04c80ecd9eaa0ec4ec4d21a8921d13"},
-      {"sentence":"Cadastre a pessoa no setor certo e confira o acesso com uma conta de teste: a escolha do departamento, sozinha, não comprova que outros dados ficaram invisíveis.","hash":"c7f6028c00184fd32c61dbf822afe2f5450d6ef378d2068f1b4121ca8b4330b9"},
+      {"sentence":"Cadastre a pessoa no setor certo e peça a ela para conferir o acesso: a escolha do departamento, sozinha, não comprova que outros dados ficaram invisíveis.","hash":"32f1423868f3679f6ef8f57c99c4479c3fc2a3ecc6263187cd89c02687971299"},
       {"sentence":"Pré-requisitos","hash":"ac15697e7bb96ac2a3c3a1e913d9bb0450649ef40077b057c3f29e54b5fae958"},
       {"sentence":"Entre como administrador e confirme qual departamento a pessoa deve atender.","hash":"f06d2fec71635e76575b881ca582c747c0e291eb858b5b362fdea6d258ddc2fd"},
       {"sentence":"Não envie dados de acesso à Claricia.","hash":"087030edbb54f1a23aa0907bea43a35e4e447b137858b072e17277207508f2de"},
@@ -119,7 +119,7 @@
       {"sentence":"Em Departamentos, adicione apenas o setor dessa pessoa.","hash":"a6b3fa0a50604975d8ef041af4a43c3528906135b3a4dbb0296c01f03c168ca3"},
       {"sentence":"Remova outro setor que tenha sido selecionado por engano.","hash":"c6fd111d9b50fdae4a584a45ddf88ea7103b1c4bec28ee54ab49d30df9630eda"},
       {"sentence":"Revise as opções de acesso.","hash":"bdf0cc41797e37518335996eb0118535ba810c7734a259101f634dec5ed4706f"},
-      {"sentence":"Desative o acesso que não for necessário e confira a restrição com uma conta de teste antes de usar.","hash":"7e52a237b207951decbd4dba45cae667b594d5a0de6f3cecd8aa09ac5843fe53"},
+      {"sentence":"Desative o acesso que não for necessário e peça à pessoa para entrar e conferir a restrição antes de usar.","hash":"dbe20708ca964fd949798b203fec8cf4a017efff7e5e5d46768af4cce0148ed9"},
       {"sentence":"Clique em Salvar Alterações.","hash":"644fcb0784709c1ff7b924dc52f84d98e6f42fc7cb3ab3adb5d358df9a2ba4ce"},
       {"sentence":"Peça à pessoa para entrar e conferir o que aparece.","hash":"8672539580a2d850affbd6eda719e0cbc3b47d901a0ed4037d509d36f5e67463"},
       {"sentence":"Funcionou","hash":"9216fa03cb0733718070b5e52e721c99aa178a9ef38d233804c269700a97571d"},
@@ -148,7 +148,8 @@
       {"sentence":"Informe qual departamento e qual opção faltou.","hash":"99626c06d02ce739c493bfb9c0e8a3c72e7a50d04491b80373a6280e424a43d0"},
       {"sentence":"Como confirmar","hash":"182b860eedb398abf05f30bfc1194fcf5397cc050fc6b077e1fafcebee74cecd"},
       {"sentence":"O horário e o recado aparecem ao abrir o departamento novamente.","hash":"3524a6a47f29a06008a732c42768c11f3e265ab2e2e51331b153d7022ef87f74"},
-      {"sentence":"O envio real do recado precisa ser conferido em homologação com uma conta de teste, fora do horário configurado.","hash":"ae7a4f648dedfb796f96053a4be0a2e611ee370bf360e4765abe37be418611c9"},
+      {"sentence":"Peça a alguém que envie uma mensagem de outro celular para esse número fora do horário configurado.","hash":"e55d3e77a4bd1f7826acb2bacff4607fbc306ad63ce01804bafdbf8dd6712d53"},
+      {"sentence":"Confira com essa pessoa se recebeu o recado.","hash":"d0f22511239f50246c087dde4170ca606ed1c7651d0a6f3ea7e5beec3161be19"},
       {"sentence":"Colocar um recado fora do horário","hash":"6e09bcd97db0a219ce87b2b18ea8f058747e9717223a3ee31817cf6a5dd60811"},
       {"sentence":"Escolha o horário do departamento e escreva o recado para quando ele estiver fechado.","hash":"0a38db424e47033142d80149c60c83b7df12a24174ed37eced9d921883f1948c"},
       {"sentence":"Como colocar uma resposta automática quando meu atendimento está fechado?","hash":"7e6dba45b0d090ae7ab615100ed9e7159fa591b9bafc52b2214c4ae0706b74de"},
