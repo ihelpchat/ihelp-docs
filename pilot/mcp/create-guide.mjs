@@ -148,7 +148,20 @@ export async function createGuide(root, input, options = {}) {
     if (!guideSchema.safeParse(article.guide).success || !validateArticle(article).valid) throw new Error('Guia gerado não passou pela validação');
     if (sourceDigest(await getContext(stored.request)) !== stored.source
       || digest(await existing(root, stored.request.guideId)) !== digest(stored.guide)) throw new Error('As fontes mudaram; refaça o plano');
-    const draft = await submit(root, [article], 'draft', input.requestedBy);
+    const draftHash = digest(article);
+    if (stored.draftHash && stored.draftHash !== draftHash) throw new Error('Conflito: guia gerado diferente na retomada');
+    const retry = stored.draftHash === draftHash;
+    stored.draftHash = draftHash;
+    await save(file, stored);
+    let draft;
+    try { draft = await submit(root, [article], 'draft', input.requestedBy, [], { allowExistingDraft: retry }); }
+    catch (error) {
+      if (error.code === 'DRAFT_EXISTS') {
+        delete stored.draftHash;
+        await save(file, stored);
+      }
+      throw error;
+    }
     const result = { status: 'draft', planId: input.planId, draft, reviewRequired: true };
     await save(file, { ...stored, status: 'draft', result });
     return result;

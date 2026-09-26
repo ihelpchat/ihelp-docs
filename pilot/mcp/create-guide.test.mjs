@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGuide } from './create-guide.mjs';
-import { submitContentPackage } from './content-service.mjs';
+import { auditOperation, submitContentPackage } from './content-service.mjs';
 import { generateCanonicalGuide } from './content-ai-service.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'm536-'));
@@ -108,13 +108,14 @@ const retryRoot = await mkdtemp(join(tmpdir(), 'm536-retry-'));
 let submitAttempts = 0;
 const retryOptions = { ...options, submit: async (...args) => {
   submitAttempts++;
-  const result = await submitContentPackage(...args);
-  if (submitAttempts === 1) throw new Error('Falha injetada após gravar draft, antes de concluir audit/status');
-  return result;
+  return submitContentPackage(...args.slice(0, 5), { ...args[5], audit: async (stateRoot, event) => {
+    if (submitAttempts === 1 && event.result === 'success') throw new Error('Falha injetada no audit final');
+    return auditOperation(stateRoot, event);
+  } });
 } };
 const retryPlan = await createGuide(retryRoot, input, retryOptions);
 const retryInput = { planId: retryPlan.planId, answers: ['Vendas'], requestedBy: actor };
-await assert.rejects(createGuide(retryRoot, retryInput, retryOptions), /Falha injetada/);
+await assert.rejects(createGuide(retryRoot, retryInput, retryOptions), /SUBMIT_FAILED|Não foi possível enviar/);
 const retryResult = await createGuide(retryRoot, retryInput, retryOptions);
 assert.equal(retryResult.status, 'draft');
 assert.equal(retryResult.reviewRequired, true);
@@ -125,17 +126,26 @@ assert.equal((await readdir(join(retryRoot, '.drafts/docs'))).length, 1, 'não d
 const conflictRoot = await mkdtemp(join(tmpdir(), 'm536-conflict-'));
 let conflictAttempts = 0;
 const conflictOptions = { ...options, submit: async (...args) => {
-  const result = await submitContentPackage(...args);
-  if (++conflictAttempts === 1) throw new Error('Falha injetada após gravar draft');
-  return result;
+  conflictAttempts++;
+  return submitContentPackage(...args.slice(0, 5), { ...args[5], audit: async (stateRoot, event) => {
+    if (conflictAttempts === 1 && event.result === 'success') throw new Error('Falha injetada no audit final');
+    return auditOperation(stateRoot, event);
+  } });
 } };
 const conflictPlan = await createGuide(conflictRoot, input, conflictOptions);
 const conflictInput = { planId: conflictPlan.planId, answers: ['Vendas'], requestedBy: actor };
-await assert.rejects(createGuide(conflictRoot, conflictInput, conflictOptions), /Falha injetada/);
+await assert.rejects(createGuide(conflictRoot, conflictInput, conflictOptions), /SUBMIT_FAILED|Não foi possível enviar/);
 const conflictPath = join(conflictRoot, '.drafts', `${article.path}.mdx`);
 await writeFile(conflictPath, 'draft divergente');
 await assert.rejects(createGuide(conflictRoot, conflictInput, conflictOptions), /conflito|diferente/i);
 assert.equal(await readFile(conflictPath, 'utf8'), 'draft divergente', 'não sobrescreve draft divergente');
+
+const occupiedRoot = await mkdtemp(join(tmpdir(), 'm536-occupied-'));
+const occupiedPlan = await createGuide(occupiedRoot, input, { ...options, submit: undefined });
+await submitContentPackage(occupiedRoot, [article], 'draft', actor);
+const occupiedInput = { planId: occupiedPlan.planId, answers: ['Vendas'], requestedBy: actor };
+await assert.rejects(createGuide(occupiedRoot, occupiedInput, { ...options, submit: undefined }), /Draft já existe/);
+await assert.rejects(createGuide(occupiedRoot, occupiedInput, { ...options, submit: undefined }), /Draft já existe/, 'draft de outro plano não vira retomada aceita');
 
 const citation = { repository: 'front', path: 'src/pages/Users.tsx', lineStart: 10, lineEnd: 10, sha: 'a'.repeat(40) };
 const generated = { ...article, assistantQuestion: 'Como adicionar uma pessoa?', assistantOverview: 'Abra a tela de usuários.', assistantInitialSteps: 1, assistantSuggestions: ['Como conferir o acesso?'], productActions: [], guide: { ...article.guide, steps: [{ stepId: 'inicio', text: 'Abra Usuários.', actionId: null, choices: [] }] } };

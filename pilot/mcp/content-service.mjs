@@ -295,7 +295,7 @@ async function submitArticleAudited(root, article, mode, requestedBy) {
   return result;
 }
 
-async function createDraft(root, article, rendered) {
+async function createDraft(root, article, rendered, { allowExistingDraft = false } = {}) {
   const draftRoot = join(stateRoot(root), '.drafts');
   const parts = article.path.split('/');
   let directory = draftRoot;
@@ -313,7 +313,18 @@ async function createDraft(root, article, rendered) {
   const canonicalParent = await realpath(directory);
   if (!canonicalParent.startsWith(`${canonicalRoot}/`)) throw new SubmitArticleError('UNSAFE_DRAFT_PATH', 'Path de draft fora da base');
   const target = join(directory, `${parts.at(-1)}.mdx`);
-  const file = await open(target, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+  let file;
+  try { file = await open(target, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600); }
+  catch (error) {
+    if (error.code !== 'EEXIST' || !allowExistingDraft) throw error;
+    const existing = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const stat = await existing.stat();
+      if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o077) !== 0) throw new SubmitArticleError('DRAFT_CONFLICT', 'Conflito: draft existente inseguro');
+      if (await existing.readFile('utf8') !== rendered) throw new SubmitArticleError('DRAFT_CONFLICT', 'Conflito: draft existente diferente');
+    } finally { await existing.close(); }
+    return { status: 'draft', path: relative(stateRoot(root), target) };
+  }
   try {
     await file.writeFile(rendered);
     await file.sync();
@@ -456,7 +467,8 @@ async function createPackagePullRequest(items, deletes, actor, beforePull) {
   return { status: 'pull_request', url: pull.html_url, branch, articles: items.map(({ article }) => article.path), deleted: deletes };
 }
 
-export async function submitContentPackage(root, articles, mode = 'draft', requestedBy, deletes = []) {
+export async function submitContentPackage(root, articles, mode = 'draft', requestedBy, deletes = [], draftOptions = {}) {
+  const recordAudit = draftOptions.audit ?? auditOperation;
   if (!isSafeRequestedBy(requestedBy)) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
   const actor = isSafeRequestedBy(requestedBy) ? requestedBy : null;
   const targets = [...(Array.isArray(articles) ? articles.map((article) => article?.path) : []), ...(Array.isArray(deletes) ? deletes : [])].filter((path) => typeof path === 'string' && SAFE_PATH.test(path)).map(redactSensitiveData);
@@ -466,13 +478,13 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
     safeArticleList(articles, deletes);
     return { status: 'dry_run', articles: articles.map(({ path }) => path), deleted: deletes };
   }
-  await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'attempt' });
+  await recordAudit(root, { actor, operation, mode: auditMode, target: targets, result: 'attempt' });
   try {
     const items = safeArticleList(articles, deletes);
     let result;
     if (mode === 'draft') {
       const drafts = [];
-      for (const { article, rendered } of items) drafts.push(await createDraft(root, article, rendered));
+      for (const { article, rendered } of items) drafts.push(await createDraft(root, article, rendered, draftOptions));
       for (const path of deletes) {
         const manifest = { operation: 'delete', path };
         drafts.push(await createDraft(root, { path: `docs/remocoes/${path.replaceAll('/', '-')}` }, `${JSON.stringify(manifest, null, 2)}\n`));
@@ -484,7 +496,7 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
       throw new SubmitArticleError('INVALID_MODE', 'mode deve ser draft ou pull_request');
     }
     try {
-      await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'success', reference: result.branch });
+      await recordAudit(root, { actor, operation, mode: auditMode, target: targets, result: 'success', reference: result.branch });
     } catch (error) {
       if (mode === 'pull_request') {
         const safeUrl = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9]\d*$/.test(result.url) ? result.url : '(URL indisponível)';
@@ -495,7 +507,7 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
     return result;
   } catch (error) {
     if (error instanceof SubmitArticleError && error.code === 'PR_CREATED_AUDIT_FAILED') throw error;
-    if (actor) await auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'failure' });
+    if (actor) await recordAudit(root, { actor, operation, mode: auditMode, target: targets, result: 'failure' });
     throw publicSubmitError(error);
   }
 }

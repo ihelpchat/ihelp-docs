@@ -60,6 +60,7 @@ try {
   };
   for (const [name, config] of registered) {
     assert.equal(typeof config.mutates, 'boolean', `${name} deve declarar mutates explicitamente`);
+    if (writeArguments[name]) assert.equal(config.mutates, true, `${name} grava e exige writer`);
     if (!config.mutates) continue;
     assert.ok(writeArguments[name], `${name} precisa de fixture HTTP de escrita`);
     for (const [client, requestedBy, message] of [
