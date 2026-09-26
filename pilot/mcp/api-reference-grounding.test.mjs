@@ -196,3 +196,19 @@ test('descrição e prosa de resposta sem DTO também passam pelo gate', () => {
     assert.match(issues.join(' '), changed.description ? /rota divergente.*v9/i : /campos de resposta não verificáveis.*page/i);
   }
 });
+
+test('rota versionada preserva nome do placeholder', () => {
+  const versioned = { ...article, endpoint: endpoints[2].route, body: '## Parâmetros de rota\n<Params><Param name="contactId" type="number">Contato</Param></Params>' };
+  assert.equal(validateGroundedOutput(versioned, context, []), true);
+  const issues = [];
+  assert.equal(validateGroundedOutput({ ...versioned, endpoint: versioned.endpoint.replace('{contactId}', '{fake}') }, context, [], issues), false);
+  assert.match(issues.join(' '), /rota divergente/i);
+});
+
+test('Campos relevantes continua no escopo da resposta', () => {
+  const base = { ...verifiedArticle, body: `${verifiedArticle.body}\n\n## Campos relevantes\nO campo name aparece na resposta.` };
+  assert.equal(validateGroundedOutput(base, verifiedContext, []), true);
+  const issues = [];
+  assert.equal(validateGroundedOutput({ ...base, body: base.body.replace('campo name aparece', 'campo page aparece') }, verifiedContext, [], issues), false);
+  assert.match(issues.join(' '), /campo inexistente: page/i);
+});
