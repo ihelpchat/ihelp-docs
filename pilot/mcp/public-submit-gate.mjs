@@ -1,4 +1,4 @@
-import { access } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { validateCanonicalGuide } from '../lib/canonical-guides.mjs';
 import { validatePublicArtifact } from '../lib/guide-package.mjs';
@@ -29,6 +29,7 @@ export async function assertPublicSubmit(root, items, deletes = []) {
   for (const { article, rendered } of items) {
     const kinds = sensitiveKinds(rendered);
     if (kinds.credential || kinds.personal || kinds.internal || kinds.control) reject('fonte interna ou dado privado');
+    if (/<(?:img|Image)\b/iu.test(article.body)) reject('print sem aprovação editorial');
 
     if (article.guide) {
       validatePublicArtifact(article.guide, article.path);
@@ -58,6 +59,8 @@ export async function assertPublicSubmit(root, items, deletes = []) {
       if (match[0].startsWith('!')) {
         if (!/^\/img\/help\/[A-Za-z0-9/_-]+\.(?:png|webp|jpg)$/u.test(value)) reject('print fora do catálogo público');
         try { await access(join(root, 'public', value.slice(1))); } catch { reject('print não aprovado'); }
+        const published = await readFile(join(root, 'content/docs', `${article.path}.mdx`), 'utf8').catch(() => '');
+        if (!published.includes(match[0])) reject('print sem aprovação editorial');
         continue;
       }
       if (value.startsWith('/')) {
