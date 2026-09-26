@@ -46,6 +46,12 @@ jobs:
         working-directory: pilot
         env:
           NEXT_PUBLIC_BASE_PATH: /ihelp-docs
+      - name: Check guide journey in Chrome
+        run: npm run qa:guide
+        working-directory: pilot
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          NEXT_PUBLIC_BASE_PATH: /ihelp-docs
       - name: Check assistant legibility
         run: CHROME_PATH=/usr/bin/google-chrome NEXT_PUBLIC_BASE_PATH=/ihelp-docs npm run qa:assistant && CHROME_PATH=/usr/bin/google-chrome NEXT_PUBLIC_BASE_PATH=/ihelp-docs node scripts/visual/assistant-legibility.test.mjs
         working-directory: pilot
