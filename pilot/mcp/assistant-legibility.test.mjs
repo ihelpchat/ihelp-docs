@@ -29,6 +29,7 @@ let measuredRules = 0;
 let measuredType = 0;
 let measuredTargets = 0;
 let measuredContrast = 0;
+let measuredStates = 0;
 const rules = [];
 css.walkRules((rule) => {
   if (!/(?:\.ih-ai-|\.ih-assistant-)/.test(rule.selector)) return;
@@ -44,7 +45,9 @@ css.walkRules((rule) => {
     && !/(?:\bsvg\b|::|:hover|:disabled|:focus|\[aria-|\[data-compact\])/.test(rule.selector);
   if (clickable) {
     measuredTargets++;
-    const height = Math.max(...[declarations.height, declarations['min-height']].map((value) => pixels(value ?? '')).filter(Number.isFinite));
+    const inherited = rules.find((item) => item.selector === rule.selector && (item.declarations.height || item.declarations['min-height']));
+    const height = Math.max(...[declarations.height, declarations['min-height'], inherited?.declarations.height, inherited?.declarations['min-height']]
+      .map((value) => pixels(value ?? '')).filter(Number.isFinite));
     if (!Number.isFinite(height) || height < 44) failures.push(`${rule.source.start.line}: ${rule.selector} target ${height || 'sem altura'}px`);
   }
 });
@@ -65,7 +68,25 @@ for (const rule of rules) {
   measuredContrast++;
   if (contrast(front, back) < 4.5) failures.push(`${rule.line}: ${rule.selector} contraste ${contrast(front, back).toFixed(2)}:1`);
 }
+// Reavaliar hover, disabled e pressed: cor ou fundo pode vir da regra base.
+for (const rule of rules.filter((item) => /:hover|:disabled|\[aria-pressed=/.test(item.selector))) {
+  if (/\bsvg\b/.test(rule.selector)) continue;
+  const baseSelector = rule.selector.replace(/:hover(?::not\(:disabled\))?|:disabled|\[aria-pressed='true'\]|\[data-rating='(?:up|down)'\]/g, '');
+  const base = rules.find((item) => item.selector.replace(/\s+/g, ' ').trim() === baseSelector.replace(/\s+/g, ' ').trim());
+  const color = rule.declarations.color === 'inherit' ? undefined : rule.declarations.color ?? base?.declarations.color;
+  if (!color) continue;
+  const foreground = rgb(color);
+  const parent = rule.selector.includes('.ih-ai-error') ? '#fef2f2'
+    : rule.selector.includes('.ih-ai-code') ? '#0b1220'
+    : rule.selector.includes('.ih-ai-support-cta') ? '#fef7f5' : '#ffffff';
+  const background = rule.declarations.background ?? rule.declarations['background-color'] ?? base?.declarations.background ?? base?.declarations['background-color'] ?? parent;
+  const back = rgb(background === 'transparent' ? parent : background);
+  if (!foreground || !back) { failures.push(`${rule.line}: estado sem cores resolvidas em ${rule.selector}`); continue; }
+  measuredStates++;
+  if (contrast(foreground, back) < 4.5) failures.push(`${rule.line}: ${rule.selector} estado com contraste ${contrast(foreground, back).toFixed(2)}:1`);
+}
 assert.ok(measuredRules > 100 && measuredType > 50 && measuredTargets > 10 && measuredContrast > 50,
   `varredura incompleta: ${measuredRules} regras, ${measuredType} fontes, ${measuredTargets} alvos, ${measuredContrast} contrastes`);
+assert.ok(measuredStates >= 8, `Estados medidos: ${measuredStates}`);
 assert.deepEqual(failures, [], `Legibilidade do assistente:\n${failures.join('\n')}`);
-console.log(`Legibilidade: ${measuredRules} regras, ${measuredType} fontes, ${measuredTargets} alvos, ${measuredContrast} contrastes.`);
+console.log(`Legibilidade: ${measuredRules} regras, ${measuredType} fontes, ${measuredTargets} alvos, ${measuredContrast} contrastes, ${measuredStates} estados.`);
