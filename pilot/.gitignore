@@ -27,3 +27,5 @@ yarn-error.log*
 .drafts/
 .audit/
 next-env.d.ts
+
+/public/release.json
