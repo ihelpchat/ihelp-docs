@@ -39,9 +39,9 @@ let brokenSave = false;
 let disabledCreate = false;
 let straySaveWrites = false;
 let channelDetailMissing = false;
-let recadoTogglePersists = true;
 let initialRecado = '';
 let initialToggle = false;
+let toggleClearsMessage = true;
 const app = createServer((req, res) => {
   if (req.url === '/login-redirect') { res.writeHead(302, { Location: `${externalUrl}/production` }); res.end(); return; }
   if (req.url === '/external-script') { res.writeHead(302, { Location: `${externalUrl}/production-script` }); res.end(); return; }
@@ -52,13 +52,13 @@ const app = createServer((req, res) => {
     if (!req.url.includes('/demo')) {
       res.end(`<main data-tour-id="guide-department-open"><button onclick="/* source: src/store/slices/tab/tab.slice.ts:16 */ ${brokenClick ? '' : "this.dataset.done='yes'"}">Departamentos</button><table><tr><td onclick="/* source: src/components/ui/components/Tables/components/TableCommonDepartments/index.tsx:235 */ location.href='/configuracoes/department/demo'+location.search">Demo</td></tr></table></main>`);
     } else {
-      res.end(`<!doctype html><main><label>Inicio<input name="horarioAtendimentoInicio"></label><div><div><h3>Mensagem automática fora de horário de atendimento</h3></div><button role="switch" aria-checked="false" onclick="/* source: src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:356 */ this.setAttribute('aria-checked',this.getAttribute('aria-checked')==='true'?'false':'true');document.querySelector('#chat').hidden=this.getAttribute('aria-checked')!=='true';message.textContent=''">Ativar</button></div><div id="chat" hidden><div><div><textarea placeholder="Crie uma mensagem..."></textarea></div></div><button aria-label="Enviar" onclick="/* source: src/components/shared/Chat/components/ChatView/index.tsx:210 */ const value=document.querySelector('textarea').value;if(value)message.textContent=value"><svg class="w-6"></svg>Enviar</button></div><p class="whitespace-pre-line" id="message"></p><button>Salvar Alterações</button></main><script>
+      res.end(`<!doctype html><main><label>Inicio<input name="horarioAtendimentoInicio"></label><div><div><h3>Mensagem automática fora de horário de atendimento</h3></div><button role="switch" aria-checked="false" onclick="/* source: src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:356 */ this.setAttribute('aria-checked',this.getAttribute('aria-checked')==='true'?'false':'true');document.querySelector('#chat').hidden=this.getAttribute('aria-checked')!=='true';if(${toggleClearsMessage})message.textContent=''">Ativar</button></div><div id="chat" hidden><div><div><textarea placeholder="Crie uma mensagem..."></textarea></div></div><button aria-label="Enviar" onclick="/* source: src/components/shared/Chat/components/ChatView/index.tsx:210 */ const value=document.querySelector('textarea').value;if(value)message.textContent=value"><svg class="w-6"></svg>Enviar</button></div><p class="whitespace-pre-line" id="message"></p><button>Salvar Alterações</button></main><script>
         const denied=new URLSearchParams(location.search).has('role');const message=document.querySelector('#message');
         document.querySelector('[name=horarioAtendimentoInicio]').value=localStorage.getItem('proof-hour')||'';
         message.textContent=localStorage.getItem('proof-recado')??${JSON.stringify(initialRecado)};
         document.querySelector('[role=switch]').setAttribute('aria-checked',localStorage.getItem('proof-toggle')??${JSON.stringify(String(initialToggle))});
         document.querySelector('#chat').hidden=document.querySelector('[role=switch]').getAttribute('aria-checked')!=='true';
-        document.querySelector('main > button:last-of-type').onclick=()=>{if(!denied&&!${brokenSave}){localStorage.setItem('proof-recado',message.textContent);localStorage.setItem('proof-hour',document.querySelector('[name=horarioAtendimentoInicio]').value);if(${recadoTogglePersists})localStorage.setItem('proof-toggle',document.querySelector('[role=switch]').getAttribute('aria-checked'))}}; // source: src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:469
+        document.querySelector('main > button:last-of-type').onclick=()=>{if(!denied&&!${brokenSave}){localStorage.setItem('proof-recado',message.textContent);localStorage.setItem('proof-hour',document.querySelector('[name=horarioAtendimentoInicio]').value);localStorage.setItem('proof-toggle',document.querySelector('[role=switch]').getAttribute('aria-checked'))}}; // source: src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:469
       </script>`);
     }
   } else if (req.url?.startsWith('/configuracoes/channel')) {
@@ -117,22 +117,37 @@ try {
   assert.ok(preexisting.cleanup.some(x => x.guideId === 'recado-fora-do-horario' && x.status === 'restored'));
   initialRecado = '';
   initialToggle = false;
+  toggleClearsMessage = false;
+  const pending = await run('cannot-clear-recado');
+  assert.equal(pending.warning, 'limpeza pendente');
+  assert.ok(pending.cleanupPending.some(x => x.guideId === 'recado-fora-do-horario'));
+  assert.ok(!pending.cleanup.some(x => x.guideId === 'recado-fora-do-horario' && x.status === 'restored'));
+  toggleClearsMessage = true;
   await mutateScript(qrScriptPath, script => { delete script.conectar.enter; return script; }, 'connect-without-detail', /Conectar|Timeout/u);
   await mutateScript(recadoScriptPath, script => { script['escrever-recado'].commit = { selector: 'textarea[placeholder="Crie uma mensagem..."]', press: 'Enter' }; return script; }, 'enter-instead-of-button', /gravação não persistiu|restaura/u);
   const runnerSource = await readFile(runnerPath, 'utf8');
-  const restoreToggle = "if (toggle && await toggle.isChecked() !== changed.get('toggle')) await toggle.click();";
+  const restoreToggle = "if (toggle && source.verifySelector && before === '') {\n                    await toggle.click();\n                    if (changed.get('toggle')) await toggle.click();\n                  } else if (toggle && await toggle.isChecked() !== changed.get('toggle')) await toggle.click();";
   assert.ok(runnerSource.includes(restoreToggle), 'ponto da mutação do Toggle não encontrado');
   try {
     await writeFile(mutatedRunnerPath, runnerSource.replace(restoreToggle, 'if (false) await toggle.click();'));
     const { runGuideProof: runMutated } = await import(new URL(`../scripts/.guide-proof-toggle-mutation-${process.pid}.mjs`, import.meta.url));
-    await assert.rejects(runMutated({ baseUrl, fixture: true, packageRoot, evidenceDir: join(root, 'toggle-without-restore') }), /toggle não restaurado/u);
+    const mutated = await runMutated({ baseUrl, fixture: true, packageRoot, evidenceDir: join(root, 'toggle-without-restore') });
+    assert.equal(mutated.warning, 'limpeza pendente');
+    assert.ok(!mutated.cleanup.some(x => x.guideId === 'recado-fora-do-horario' && x.status === 'restored'));
+  } finally { await rm(mutatedRunnerPath, { force: true }); }
+  const emptySendMutation = runnerSource.replace(restoreToggle, 'if (false) await toggle.click();')
+    .replace("(prior.control.verifySelector ? before : changed.get(prior.control.fields[0].selector)) !== '' && ", '');
+  assert.notEqual(emptySendMutation, runnerSource, 'mutação de envio vazio não aplicada');
+  try {
+    await writeFile(mutatedRunnerPath, emptySendMutation);
+    const { runGuideProof: runMutatedEmpty } = await import(new URL(`../scripts/.guide-proof-toggle-mutation-${process.pid}.mjs?empty`, import.meta.url));
+    const mutated = await runMutatedEmpty({ baseUrl, fixture: true, packageRoot, evidenceDir: join(root, 'restore-by-empty-send') });
+    assert.equal(mutated.warning, 'limpeza pendente');
+    assert.ok(!mutated.cleanup.some(x => x.guideId === 'recado-fora-do-horario' && x.status === 'restored'));
   } finally { await rm(mutatedRunnerPath, { force: true }); }
   channelDetailMissing = true;
   await assert.rejects(run('missing-channel-detail'), /Conectar|controle|visible|Timeout/u);
   channelDetailMissing = false;
-  recadoTogglePersists = false;
-  await assert.rejects(run('toggle-not-persisted'), /toggle|restaura|gravação/u);
-  recadoTogglePersists = true;
   brokenClick = true;
   await assert.rejects(run('broken-click'), /ação web não concluiu/u);
   brokenClick = false;

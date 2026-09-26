@@ -11,7 +11,7 @@ if (stagingUrl) {
     credentials: credentialsFromEnv(),
     appSha: process.env[names.appSha],
   });
-  console.log(JSON.stringify({ mode: result.mode, authorized: result.authorized, denied: result.denied, qr: result.qr }));
+  console.log(JSON.stringify({ mode: result.mode, authorized: result.authorized, denied: result.denied, qr: result.qr, warning: result.warning, cleanupPending: result.cleanupPending }));
 } else {
   console.log('pendente: conta de teste de homologação (Bruno)');
   await import('../mcp/guide-proof-rework.test.mjs');

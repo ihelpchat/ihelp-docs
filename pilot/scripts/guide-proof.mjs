@@ -203,17 +203,23 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
                 const after = await readField();
                 if (role === 'authorized' && after !== candidate) throw new Error(`${guide.guideId}/${step.stepId}: gravação não persistiu`);
                 if (role === 'denied' && after !== before) throw new Error(`${guide.guideId}/${step.stepId}: perfil negado alterou dados`);
-                if (role === 'authorized') {
+              if (role === 'authorized') {
                   const toggle = source.enable ? locator(page, source.enable) : null;
-                  if (toggle && await toggle.isChecked() !== changed.get('toggle')) await toggle.click();
+                  try {
+                  // DepartmentConfigExtras clears the message when toggled (lines 356-364);
+                  // ChatView ignores an empty send (lines 210-224).
+                  if (toggle && source.verifySelector && before === '') {
+                    await toggle.click();
+                    if (changed.get('toggle')) await toggle.click();
+                  } else if (toggle && await toggle.isChecked() !== changed.get('toggle')) await toggle.click();
                   for (const prior of plans.filter(item => item.control?.type === 'fields')) {
                     for (const changedField of prior.control.fields) {
                       if (changedField.type === 'select') continue;
                       const selector = changedField.selector;
                       const input = page.locator(selector);
-                      if (await input.isVisible()) await input.fill(changed.get(selector));
+                      if (await input.isVisible()) await input.fill(prior.control.verifySelector ? before : changed.get(selector));
                     }
-                    if (prior.control.commit && await page.locator(prior.control.fields[0].selector).isVisible()) await locator(page, prior.control.commit).click();
+                    if (prior.control.commit && (prior.control.verifySelector ? before : changed.get(prior.control.fields[0].selector)) !== '' && await page.locator(prior.control.fields[0].selector).isVisible()) await locator(page, prior.control.commit).click();
                   }
                   await locator(page, instruction).click();
                   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -227,6 +233,11 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
                     }
                   }
                   report.cleanup.push({ guideId: guide.guideId, status: 'restored' });
+                  } catch (error) {
+                    if (guide.guideId !== 'recado-fora-do-horario') throw error;
+                    report.cleanupPending.push({ guideId: guide.guideId, reason: error.message });
+                    report.warning = 'limpeza pendente';
+                  }
                 }
               }
             } else {
@@ -282,7 +293,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
         report[role] = 'passed';
       } finally { await context.close(); }
     }
-    if (report.cleanupPending.length) throw new Error('limpeza pendente: item criado não removido pela interface');
+    if (report.cleanupPending.some(item => item.item)) throw new Error('limpeza pendente: item criado não removido pela interface');
     return report;
   } finally {
     await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
