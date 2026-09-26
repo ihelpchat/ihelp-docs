@@ -1,7 +1,8 @@
 import { chromium } from 'playwright-core';
 import { designHelpers, screens, viewports } from './probes.mjs';
 
-export const executablePath = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+export const chromeExecutablePath = (platform = process.platform, env = process.env) => env.CHROME_PATH || (platform === 'linux' ? '/usr/bin/google-chrome' : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+export const executablePath = chromeExecutablePath();
 
 /** Tamanho do bloco da grade de cor, em px CSS. */
 export const gridBlock = { desktop: 40, mobile: 26 };
