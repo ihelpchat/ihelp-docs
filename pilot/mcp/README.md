@@ -8,6 +8,14 @@ O gate compara essas árvores com `product-map/approved.json`, versionado neste 
 
 O relatório temporário inclui os SHAs, rotas, rótulos, marcadores, permissões e diferenças em relação ao commit anterior de cada produto. Só valores literais que passam pela varredura de dado sensível entram no manifest; expressões dinâmicas viram pendências. Marcador ou rota de ação usada por guia publicado que desaparecer bloqueia o check. O relatório não é publicado como artefato. Para uma transição, atualize e publique a nova versão do guia antes de remover o marcador; para rollback, restaure o marcador no front ou volte a versão do guia por PR revisável.
 
+## Prova dos guias no navegador (M5.34)
+
+`npm run qa:guide-proof` usa o Chrome do QA existente (`CHROME_PATH`, se necessário). Sem conta de teste, roda somente a fixture local e imprime `pendente: conta de teste de homologação (Bruno)`. O relatório e os prints com texto e imagens ocultados ficam em `pilot/.guide-proof/`, ignorado pelo Git. Nunca copie essa pasta para `public/` ou para uma PR; no CI, só publique como artifact privado de retenção curta.
+
+Para homologação, defina `GUIDE_QA_STAGING_URL` e `GUIDE_QA_ALLOWED_HOSTS` com o host exato, aprovado pela equipe, além de `GUIDE_QA_AUTHORIZED_EMAIL`, `GUIDE_QA_AUTHORIZED_PASSWORD`, `GUIDE_QA_DENIED_EMAIL`, `GUIDE_QA_DENIED_PASSWORD` e `GUIDE_QA_APP_SHA`. São contas fictícias criadas pela interface; não coloque valores no repositório. O runner recusa produção e outros hosts antes de abrir o navegador. A conta negada deve ter os controles de alteração desabilitados. A prova externa de QR fica `manual_required`.
+
+O estado `marker_verified` de homologação comprova apenas a presença do marcador e do controle web, sem afirmar que houve save. Para concluir o aceite, a equipe precisa criar as duas contas e marcar os controles dos três guias no app de homologação; isso depende de trabalho no front fora desta PR. Até lá, a prova local não substitui a jornada real.
+
 ## Dados da Claricia
 
 O `/assistant` remove padrões conhecidos de credenciais, email, CPF e telefone da pergunta e do histórico antes da chamada ao provider. A redaction não detecta nomes nem endereços e não é anonimização total. O `/feedback` guarda voto e caminhos, sem pergunta ou user agent. Caminhos com query ou fragmento são rejeitados.
