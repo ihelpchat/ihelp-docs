@@ -6,6 +6,10 @@ import { buildServer } from './server.mjs';
 import { answerQuestion } from './assistant-service.mjs';
 import { normalizeFeedback, saveFeedback, summarizeFeedback } from './feedback-service.mjs';
 import { sanitizeWidgetContext } from './real-state.mjs';
+import { saveSessionEvent, pruneSessionEvents } from './session-events.mjs';
+import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
+import { publishedPathOrNull } from './published-paths.mjs';
+import { opaqueId } from './opaque-id.mjs';
 
 const apiKey = process.env.DOCS_MCP_API_KEY;
 if (apiKey && apiKey.length < 24) throw new Error('DOCS_MCP_API_KEY precisa ter ao menos 24 caracteres');
@@ -15,8 +19,10 @@ const handler = toNodeHandler(mcpHandler);
 const port = Number(process.env.PORT ?? 3100);
 const root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname;
 const feedbackFile = process.env.FEEDBACK_FILE ?? '/tmp/ihelp-docs-feedback.jsonl';
+const sessionEventsFile = process.env.SESSION_EVENTS_FILE ?? '/tmp/ihelp-docs-session-events.jsonl';
 const feedbackAdminToken = process.env.FEEDBACK_ADMIN_TOKEN;
 const allowedOrigins = new Set((process.env.ASSISTANT_ALLOWED_ORIGINS ?? 'http://127.0.0.1:4173,http://localhost:4173').split(',').map((value) => value.trim()).filter(Boolean));
+let lastSessionPrune = 0;
 const assistantSessions = new Map();
 const assistantIps = new Map();
 const feedbackIps = new Map();
@@ -104,7 +110,8 @@ export const httpServer = createServer(async (request, response) => {
   }
   if (pathname === '/assistant' && request.method === 'POST') {
     try {
-      const body = await readJson(request);
+      const startedAt = Date.now();
+      const body = parseAssistantRequest(await readJson(request));
       const question = typeof body.question === 'string' ? body.question.trim() : '';
       if (question.length < 1 || question.length > 500) throw new Error('A pergunta deve ter entre 1 e 500 caracteres.');
       const ip = clientIp(request);
@@ -117,16 +124,38 @@ export const httpServer = createServer(async (request, response) => {
       ])) return;
       const history = Array.isArray(body.history) ? body.history.slice(-6) : [];
       const scope = typeof body.scope === 'string' ? body.scope : 'Tudo';
-      const page = body.page && typeof body.page.path === 'string' && body.page.path.startsWith('/') && body.page.path.length < 300
-        ? { path: body.page.path, title: typeof body.page.title === 'string' ? body.page.title.slice(0, 200) : '' }
+      const pagePath = publishedPathOrNull(body.page?.path);
+      const page = pagePath
+        ? { path: pagePath, title: body.page.title }
         : undefined;
-      const result = await answerQuestion(root, question, { history, scope, page, widgetContext: sanitizeWidgetContext(body.widgetContext) });
+      let resolvedStep;
+      const result = await answerQuestion(root, question, {
+        history, scope, page, widgetContext: sanitizeWidgetContext(body.widgetContext),
+        onResolvedStep: (step) => { resolvedStep = step; },
+      });
+      try {
+        const now = Date.now();
+        if (now - lastSessionPrune > 24 * 60 * 60_000) {
+          await pruneSessionEvents(sessionEventsFile, { now });
+          lastSessionPrune = now;
+        }
+        await saveSessionEvent(sessionEventsFile, {
+          sessionId: opaqueId('session', body.sessionId ?? crypto.randomUUID()),
+          origin: body.origin === 'app' ? 'app' : 'faq',
+          ...resolvedStep,
+          durationMs: Math.min(now - startedAt, 300_000),
+          result: ['complete', 'partial', 'not_found'].includes(result.resolution) ? result.resolution : 'not_found',
+          path: pagePath ?? '/assistente',
+        }, { now });
+      } catch {
+        console.error('Falha ao registrar evento de sessão');
+      }
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(result));
     } catch (error) {
       const unavailable = /OPENAI_API_KEY/.test(error.message);
-      const invalid = /pergunta|payload|JSON/i.test(error.message);
+      const invalid = error.name === 'ZodError' || /pergunta|payload|JSON/i.test(error.message);
       const status = unavailable ? 503 : invalid ? 400 : 502;
-      const message = unavailable || !invalid ? 'Assistente temporariamente indisponível.' : error.message;
+      const message = unavailable || !invalid ? 'Assistente temporariamente indisponível.' : error.name === 'ZodError' ? 'Pedido inválido.' : error.message;
       response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: message }));
     }
     return;
@@ -134,10 +163,21 @@ export const httpServer = createServer(async (request, response) => {
   if (pathname === '/feedback' && request.method === 'POST') {
     try {
       const body = await readJson(request);
-      normalizeFeedback(body);
+      const localPath = (path) => typeof path === 'string' && /^\/(?!\/)[a-z0-9/_-]*$/iu.test(path);
+      if (!localPath(body.path) || (body.sources !== undefined
+        && (!Array.isArray(body.sources) || body.sources.some((path) => !localPath(path))))) {
+        throw new Error('Feedback inválido.');
+      }
+      const normalized = {
+        ...body,
+        ...(body.eventId === undefined ? {} : { eventId: opaqueId('event', body.eventId) }),
+        path: publishedPathOrNull(body.path),
+        ...(body.sources === undefined ? {} : { sources: body.sources.map(publishedPathOrNull).filter(Boolean) }),
+      };
+      normalizeFeedback(normalized);
       const ip = clientIp(request);
       if (rateLimit(response, [quota(feedbackIps, ip, feedbackIpLimit, Date.now())])) return;
-      const event = await saveFeedback(feedbackFile, body, { userAgent: request.headers['user-agent'] });
+      const event = await saveFeedback(feedbackFile, normalized, { userAgent: request.headers['user-agent'] });
       response.writeHead(201, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ saved: true, id: event.id }));
     } catch (error) {
       const invalid = /Feedback|payload|JSON/i.test(error.message);

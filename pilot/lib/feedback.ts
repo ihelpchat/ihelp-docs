@@ -7,7 +7,6 @@ type FeedbackEvent = {
   type: 'assistant' | 'article';
   value: FeedbackValue;
   path: string;
-  question?: string;
   sources?: string[];
 };
 

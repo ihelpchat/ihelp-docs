@@ -26,6 +26,7 @@ export type AssistantRequestV1 = {
   schemaVersion?: 1;
   question: string;
   sessionId?: string;
+  origin?: "faq" | "app";
   history?: Array<{
   role: "user" | "assistant";
   content: string;
@@ -148,4 +149,3 @@ export type ProductActionV1 = {
   route: string;
   target?: string;
 };
-
