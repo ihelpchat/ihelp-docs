@@ -37,8 +37,12 @@ try {
     writeFileSync(releaseFile, source);
     return spawnSync(process.execPath, [checker, '--product-release', releaseFile], { encoding: 'utf8' });
   };
+  assert.match(release, /^    environment: product-release$/m, 'job deve usar environment protegido');
+  assert.match(release, /^    if: github\.ref == format\('refs\/heads\/\{0\}', github\.event\.repository\.default_branch\)$/m, 'job deve limitar ref à branch padrão');
   assert.equal(checkRelease(release).status, 0, 'workflow de versão seguro passa');
   const releaseMutations = [
+    ['sem environment', (s) => s.replace('    environment: product-release\n', ''), /environment.*product-release/i],
+    ['sem guard de ref', (s) => s.replace("    if: github.ref == format('refs\/heads\/{0}', github.event.repository.default_branch)\n", ''), /github\.ref|default_branch/i],
     ['pull_request', (s) => s.replace('  workflow_dispatch:', '  pull_request:\n  workflow_dispatch:'), /schedule.*workflow_dispatch|pull_request/i],
     ['GITHUB_TOKEN para escrita', (s) => s.replace('GITHUB_TOKEN: ${{ secrets.DOCS_WRITE_TOKEN }}', 'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}'), /DOCS_WRITE_TOKEN/i],
     ['base main', (s) => s.replace('DOCS_UPDATE_BASE: ${{ vars.DOCS_UPDATE_BASE }}', 'DOCS_UPDATE_BASE: main'), /DOCS_UPDATE_BASE/i],
@@ -51,6 +55,11 @@ try {
     assert.notEqual(verdict.status, 0, label);
     assert.match(verdict.stderr, reason, `${label}: motivo específico`);
   }
+  const other = join(temp, 'other.yml');
+  writeFileSync(other, 'name: Other\n# secrets.DOCS_WRITE_TOKEN\n');
+  const otherVerdict = checkRelease(release);
+  assert.notEqual(otherVerdict.status, 0, 'outro workflow citando DOCS_WRITE_TOKEN deve falhar');
+  assert.match(otherVerdict.stderr, /other\.yml.*DOCS_WRITE_TOKEN|DOCS_WRITE_TOKEN.*other\.yml/i);
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }

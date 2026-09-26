@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { detectRelease } from '../scripts/detect-release.mjs';
+import { detectRelease, formatSummary } from '../scripts/detect-release.mjs';
 
 const sha = (char) => char.repeat(40);
 const approved = { frontSha: sha('a'), backSha: sha('b'), manifest: { routes: [], labels: [], markers: [], permissions: [] } };
@@ -22,6 +22,14 @@ const same = fixture(approved);
 const unchanged = await detectRelease({ beforeFile: 'approved', afterFile: 'current', token: 'write', base: 'integration/claricia-v2' }, same.deps);
 assert.equal(unchanged.status, 'sem versão nova');
 assert.equal(same.calls.length, 0, 'SHA aprovado não chama impacto');
+
+const pendingSame = fixture({ ...approved, pending: ['reconnect: marcador ausente channel-connect'] });
+const pendingUnchanged = await detectRelease({ beforeFile: 'approved', afterFile: 'current', token: 'write', base: 'integration/claricia-v2' }, pendingSame.deps);
+assert.equal(pendingUnchanged.exitCode, 1, 'pendência do mapa com SHA repetido falha o job');
+assert.match(formatSummary(pendingUnchanged), /reconnect: marcador ausente channel-connect/, 'resumo preserva a pendência');
+assert.equal(pendingSame.calls.length, 0, 'SHA aprovado não chama impacto mesmo com pendência');
+assert.equal(unchanged.exitCode, 0);
+assert.match(formatSummary(unchanged), /sem versão nova/);
 
 const changed = fixture();
 const options = { beforeFile: 'approved', afterFile: 'current', token: 'write', base: 'integration/claricia-v2' };
