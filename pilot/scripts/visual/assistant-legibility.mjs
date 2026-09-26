@@ -1,14 +1,10 @@
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
-import { join, extname, normalize, sep } from 'node:path';
-import { once } from 'node:events';
 import { launch } from './measure.mjs';
 import { viewports } from './probes.mjs';
+import { startQaSite } from './serve-qa-build.mjs';
 
 const out = new URL('../../out/', import.meta.url).pathname;
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '/ihelp-docs';
-const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2' };
 const reply = (extra = {}) => ({ answer: 'Abra Configurações e confira o canal.', sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: 'complete', found: true, actions: [], ...extra });
 const question = { id: 'q1', role: 'user', text: 'Como reconectar o WhatsApp?' };
 const states = {
@@ -17,29 +13,6 @@ const states = {
   fallback: [{ ...question }, { id: 'a1', role: 'ai', question: question.text, reply: reply({ answer: 'O assistente está indisponível. Use o guia ou fale com uma pessoa.', resolution: 'partial', actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }] }) }],
   erro: [{ ...question }, { id: 'e1', role: 'error', question: question.text, message: 'Tive um problema. Tente de novo.', status: 429 }],
 };
-
-function serveBuild() {
-  const server = createServer(async (req, res) => {
-    try {
-      const url = new URL(req.url, 'http://localhost');
-      let path = decodeURIComponent(url.pathname);
-      if (basePath && path.startsWith(`${basePath}/`)) path = path.slice(basePath.length);
-      if (path === '/') path = '/index.html';
-      else if (path.endsWith('/')) path += 'index.html';
-      const relative = normalize(path).replace(/^[/\\]+/, '');
-      if (relative.startsWith('..') || relative.split(sep).includes('..')) throw new Error('path inválido');
-      let file = join(out, relative);
-      if (!(await stat(file).catch(() => null))?.isFile()) file = join(out, relative, 'index.html');
-      const data = await readFile(file);
-      res.writeHead(200, { 'Content-Type': mime[extname(file)] ?? 'application/octet-stream' });
-      res.end(data);
-    } catch {
-      res.writeHead(404); res.end('Not found');
-    }
-  });
-  server.listen(0, '127.0.0.1');
-  return server;
-}
 
 const audit = (root) => {
   const failures = [];
@@ -111,14 +84,13 @@ const audit = (root) => {
   return { failures, measured };
 };
 
-const server = serveBuild();
-await once(server, 'listening');
+const site = await startQaSite(out, basePath);
 const browser = await launch();
 const failures = [];
 let textCount = 0;
 let clickCount = 0;
 try {
-  const url = `http://127.0.0.1:${server.address().port}${basePath}/assistente/`;
+  const url = `${site.url}${basePath}/assistente/`;
   for (const [viewport, dimensions] of Object.entries(viewports)) {
     for (const [state, messages] of Object.entries(states)) {
       const page = await browser.newPage({ viewport: dimensions });
@@ -173,7 +145,7 @@ try {
   }
 } finally {
   await browser.close();
-  await new Promise((resolve) => server.close(resolve));
+  await site.close();
 }
 assert.ok(textCount > 100 && clickCount > 50, `cobertura insuficiente: ${textCount} textos, ${clickCount} clicáveis`);
 for (const item of [...new Set(failures.map((failure) => failure.replace(/\/interactive\d+:/, '/interactive:')))].slice(0, 100)) console.error(`FALHA ${item}`);
