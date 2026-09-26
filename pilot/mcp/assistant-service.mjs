@@ -1,7 +1,8 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import OpenAI from 'openai';
-import { catalogAction } from './product-actions.mjs';
+import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
+import { resolveGuideId } from '../architecture/conversation-v1.mjs';
 import { parseAssistantSuggestions } from './conversational-contract.mjs';
 import { sanitizeWidgetContext, diagnoseState, diagnosticQuestion, escalationFor } from './real-state.mjs';
 import { redactSensitiveData } from './sensitive-data.mjs';
@@ -134,16 +135,10 @@ function attributesOf(tag) {
 }
 
 function productActionsOf(raw) {
-  return [...raw.matchAll(/<ProductAction\b[^>]*\/>/g)]
-    .map(([tag]) => attributesOf(tag))
-    .filter(({ id, label, route, target }) =>
-      /^[a-z0-9][a-z0-9-]{2,63}$/.test(id ?? '')
-      && typeof label === 'string' && label.length >= 3 && label.length <= 80
-      && /^\/(?!\/)[a-z0-9/_-]*$/.test(route ?? '')
-      && (!target || /^[a-z][a-z0-9-]{2,63}$/.test(target))
-      && catalogAction(id)?.route === route
-      && catalogAction(id)?.target === target)
-    .map(({ id }) => catalogAction(id));
+  const found = [...raw.matchAll(/<ProductAction\b[^>]*\/>/g)]
+    .map(([tag]) => resolveCatalogAction(attributesOf(tag)))
+    .filter(Boolean);
+  return [...new Map(found.map((action) => [action.id, action])).values()];
 }
 
 async function walk(root) {
@@ -669,7 +664,7 @@ export async function answerQuestion(root, question, options = {}) {
   }
   const resolvedStepIndex = fallbackSource?.documentedSteps.findIndex((step) =>
     normalize(step) === normalize(safeSteps[0]?.text ?? '')) ?? -1;
-  const resolvedGuideId = fallbackSource?.path.split('/').at(-1);
+  const resolvedGuideId = resolveGuideId(fallbackSource?.path.split('/').at(-1));
   if (resolvedStepIndex >= 0 && /^[a-z0-9][a-z0-9-]{2,63}$/iu.test(resolvedGuideId ?? '')) {
     options.onResolvedStep?.({ guideId: resolvedGuideId, stepId: `passo-${resolvedStepIndex + 1}` });
   }
