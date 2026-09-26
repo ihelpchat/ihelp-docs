@@ -21,6 +21,14 @@ const GROUNDING_SCHEMA = { type: 'array', items: {
   type: 'object', additionalProperties: false, required: ['text', 'citations'],
   properties: { text: { type: 'string' }, citations: { type: 'array', items: CITATION_SCHEMA } },
 } };
+const API_GROUNDING_SCHEMA = { type: 'array', items: {
+  type: 'object', additionalProperties: false, required: ['text', 'citations'],
+  properties: { text: { type: 'string' }, citations: { type: 'array', items: { anyOf: [
+    CITATION_SCHEMA,
+    { type: 'object', additionalProperties: false, required: ['source', 'quote'],
+      properties: { source: { type: 'string', enum: ['pedido'] }, quote: { type: 'string' } } },
+  ] } } },
+} };
 
 function proseIssue(article, endpoint) {
   const parameters = endpoint.parameters ?? [];
@@ -89,13 +97,22 @@ export function validateGroundedOutput(output, context, fields) {
       .flatMap((item) => item.split(/(?<=[.!?])\s+|\n/u).map((line) => line.trim()).filter(Boolean));
   });
   if (!lines.length || lines.some((line) => !claims.some((claim) => claim.text === line))) return false;
+  const normalizeSpaces = (value) => value.replace(/\s+/gu, ' ').trim();
   return claims.length > 0 && claims.every((claim) => typeof claim.text === 'string'
     && lines.includes(claim.text) && Array.isArray(claim.citations) && claim.citations.length > 0
-    && claim.citations.every((citation) => context.matches.some((match) =>
-      citation.repository === match.repository && citation.path === match.path
-      && citation.sha === match.sha && citation.sha === match.ref
-      && Number.isInteger(citation.lineStart) && citation.lineStart === match.line
-      && citation.lineEnd === match.line)));
+    && claim.citations.every((citation) => {
+      if (citation?.source === 'pedido') {
+        const quote = typeof citation.quote === 'string' ? normalizeSpaces(citation.quote) : '';
+        return context.module === 'api' && quote.length >= 12
+          && [context.request?.details, context.request?.description].some((value) =>
+            typeof value === 'string' && normalizeSpaces(value).includes(quote));
+      }
+      return context.matches.some((match) =>
+        citation?.repository === match.repository && citation.path === match.path
+        && citation.sha === match.sha && citation.sha === match.ref
+        && Number.isInteger(citation.lineStart) && citation.lineStart === match.line
+        && citation.lineEnd === match.line);
+    }));
 }
 
 function evidencePending() {
@@ -181,10 +198,10 @@ const API_ARTICLE_SCHEMA = {
   type: 'object', additionalProperties: false,
   required: ['path', 'title', 'description', 'intro', 'notas', 'grounding'],
   properties: { path: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' },
-    intro: { type: 'string' }, notas: { type: 'array', items: { type: 'string' } }, grounding: GROUNDING_SCHEMA },
+    intro: { type: 'string' }, notas: { type: 'array', items: { type: 'string' } }, grounding: API_GROUNDING_SCHEMA },
 };
 const API_PACKAGE_SCHEMA = { ...PACKAGE_SCHEMA, properties: { ...PACKAGE_SCHEMA.properties,
-  articles: { type: 'array', items: API_ARTICLE_SCHEMA } } };
+  articles: { type: 'array', items: API_ARTICLE_SCHEMA }, grounding: API_GROUNDING_SCHEMA } };
 
 function checkRequest(request) {
   const value = Object.values(request).filter((item) => typeof item === 'string').join('\n');
@@ -347,7 +364,7 @@ export async function generateContentPackage(root, request, options = {}) {
         request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
         request.module === 'api' ? 'Se faltar método, rota, parâmetros ou autorização, use needs_information e deixe articles vazio. responseFields=null é permitido: a resposta terá nota fixa e pendência.' : 'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
         request.module === 'api' ? 'A prosa não pode conter método HTTP, caminho, bloco de código, componente JSX nem código inline, exceto nome exato de parâmetro ou campo dos fatos.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
-        request.module === 'api' ? 'Cite cada frase de summary, description, intro e notas com grounding estruturado.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
+        request.module === 'api' ? 'Cite cada frase de summary, description, intro e notas com grounding estruturado. Quando a frase vier das respostas do time, cite um trecho literal de details ou description com {source: "pedido", quote: "trecho literal"} (mínimo 12 caracteres). Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].filter(Boolean).join(' '),
     },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`) },
@@ -384,7 +401,7 @@ export async function generateContentPackage(root, request, options = {}) {
       usedEndpoints.add(endpoint);
       const issue = proseIssue(prose, endpoint);
       if (issue) return withPending(apiPending(issue));
-      if (!validateGroundedOutput(prose, productContext, ['description', 'intro', 'notas'])) return withPending(evidencePending());
+      if (!validateGroundedOutput(prose, { ...productContext, module: 'api', request }, ['description', 'intro', 'notas'])) return withPending(evidencePending());
       const technical = renderApiReference(endpoint, productContext.apiExamples, page);
       const renderedParams = [...technical.body.matchAll(/<Param\s+[^>]*name="([^"]+)"/gu)].map((match) => match[1]);
       if (renderedParams.length !== endpoint.parameters.length) {
@@ -401,7 +418,7 @@ export async function generateContentPackage(root, request, options = {}) {
     }
     const summaryIssue = proseIssue({ title: parsed.summary, description: '', intro: '', notas: [] }, { parameters: [], responseFields: [] });
     if (summaryIssue) return withPending(apiPending(summaryIssue));
-    if (!validateGroundedOutput(parsed, productContext, ['summary'])) return withPending(evidencePending());
+    if (!validateGroundedOutput(parsed, { ...productContext, module: 'api', request }, ['summary'])) return withPending(evidencePending());
     return withPending({ ...safePackage, articles, pending: [...new Set([...(productContext.pending ?? []), ...pending])], existing, model: response.model });
   }
   if (parsed.articles.some((article) => article.source === 'api' || /^api\//u.test(article.path ?? ''))) {
