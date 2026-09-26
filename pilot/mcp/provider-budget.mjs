@@ -38,8 +38,10 @@ async function locked(file, operation) {
 function settings(options) {
   const numeric = (value, fallback) => value === undefined ? fallback : Number(value);
   const config = {
-    file: options.file ?? process.env.ASSISTANT_BUDGET_FILE ?? '/data/claricia-budget.json',
-    dailyLimit: cents(numeric(options.dailyLimitUsd ?? process.env.ASSISTANT_DAILY_LIMIT_USD, 1)),
+    file: options.file ?? process.env.ASSISTANT_BUDGET_FILE ?? (process.env.RAILWAY_ENVIRONMENT_NAME
+      ? '/data/claricia-budget.json' : `/tmp/claricia-budget-dev-${process.pid}.json`),
+    dailyLimit: cents(numeric(options.dailyLimitUsd ?? process.env.ASSISTANT_DAILY_LIMIT_USD,
+      process.env.RAILWAY_ENVIRONMENT_NAME ? 1 : 100)),
     reserve: cents(numeric(options.reserveUsd ?? process.env.ASSISTANT_RESERVE_USD, 1)),
     inputRate: numeric(options.inputUsdPerMillion ?? process.env.ASSISTANT_INPUT_USD_PER_MILLION, 10),
     outputRate: numeric(options.outputUsdPerMillion ?? process.env.ASSISTANT_OUTPUT_USD_PER_MILLION, 10),
@@ -63,13 +65,17 @@ function usageCost(usage, config) {
 export async function createBudgetedResponse(client, payload, options = {}) {
   const config = settings(options);
   const day = config.now().toISOString().slice(0, 10);
+  const reserve = Math.max(config.reserve, Math.ceil(
+    Buffer.byteLength(JSON.stringify(payload), 'utf8') * config.inputRate
+      + Number(payload.max_output_tokens ?? 0) * config.outputRate,
+  ));
   for (let attempt = 0; attempt < 2; attempt++) {
     const id = randomUUID();
     const admitted = await locked(config.file, (ledger) => {
       if (ledger.day !== day) { ledger.day = day; ledger.spent = 0; ledger.reservations = {}; }
       const reserved = Object.values(ledger.reservations).reduce((total, value) => total + value, 0);
-      if (ledger.spent + reserved + config.reserve > config.dailyLimit) return { value: false, write: true };
-      ledger.reservations[id] = config.reserve;
+      if (ledger.spent + reserved + reserve > config.dailyLimit) return { value: false, write: true };
+      ledger.reservations[id] = reserve;
       return { value: true, write: true };
     });
     if (!admitted) return { kind: 'budget_exhausted' };
