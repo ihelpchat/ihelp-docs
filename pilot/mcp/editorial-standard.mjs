@@ -312,21 +312,35 @@ export function visit(node, callback) {
 export function plainText(node) {
   return node.value ?? (node.children ?? []).map(plainText).join('');
 }
-function dataExpression(node, targets) {
+const URL_POSITION = /(?:href|src|url|link|to|route|path|action|poster)$/iu;
+const EXTERNAL_SCHEME = /^(?:https:|mailto:|tel:)/iu;
+const ANY_SCHEME = /^[a-z][a-z0-9+.-]*:/iu;
+
+function collectTarget(value, name, targets, issues) {
+  if (!URL_POSITION.test(name ?? '') && (/\s/u.test(value) || !value.includes('/'))) return;
+  if (EXTERNAL_SCHEME.test(value)) return;
+  if (ANY_SCHEME.test(value)) {
+    issues.push(`esquema de URL não permitido: ${value}`);
+    return;
+  }
+  targets.push(value);
+}
+
+function dataExpression(node, targets, issues, name) {
   if (!node) return false;
   if (node.type === 'Literal') {
-    if (typeof node.value === 'string' && /^(?:\/|\.\/|\.\.\/|#)/u.test(node.value)) targets.push(node.value);
+    if (typeof node.value === 'string') collectTarget(node.value, name, targets, issues);
     return node.value === null || ['string', 'number', 'boolean'].includes(typeof node.value);
   }
   if (node.type === 'TemplateLiteral' && node.expressions.length === 0 && node.quasis.length === 1)
-    return dataExpression({ type: 'Literal', value: node.quasis[0].value.cooked }, targets);
+    return dataExpression({ type: 'Literal', value: node.quasis[0].value.cooked }, targets, issues, name);
   if (node.type === 'UnaryExpression' && ['-', '+'].includes(node.operator)
     && node.argument?.type === 'Literal' && typeof node.argument.value === 'number') return true;
-  if (node.type === 'ArrayExpression') return node.elements.every((element) => dataExpression(element, targets));
+  if (node.type === 'ArrayExpression') return node.elements.every((element) => dataExpression(element, targets, issues, name));
   if (node.type === 'ObjectExpression') return node.properties.every((property) =>
     property.type === 'Property' && property.kind === 'init' && !property.method && !property.shorthand
-    && !property.computed && (property.key?.type === 'Identifier' || dataExpression(property.key, targets))
-    && dataExpression(property.value, targets));
+    && !property.computed && (property.key?.type === 'Identifier' || dataExpression(property.key, targets, issues))
+    && dataExpression(property.value, targets, issues, property.key.name ?? property.key.value));
   return false;
 }
 export function mdxTargets(tree) {
@@ -340,14 +354,14 @@ export function mdxTargets(tree) {
       if (attr.value && typeof attr.value === 'object') {
         const program = attr.value.data?.estree;
         if (program?.body?.length !== 1 || program.body[0]?.type !== 'ExpressionStatement'
-          || !dataExpression(program.body[0].expression, targets)) issues.push(`atributo JSX dinâmico não permitido: ${attr.name}`);
+          || !dataExpression(program.body[0].expression, targets, issues, attr.name)) issues.push(`atributo JSX dinâmico não permitido: ${attr.name}`);
         continue;
       }
       if (typeof attr.value !== 'string') continue;
-      if (/^(?:\/|\.\/|\.\.\/|#)/u.test(attr.value)) targets.push(attr.value);
+      collectTarget(attr.value, attr.name, targets, issues);
     }
   });
-  return { targets: targets.filter((target) => !/^(?:https?:|mailto:|tel:)/u.test(target)), issues };
+  return { targets: targets.filter((target) => !EXTERNAL_SCHEME.test(target)), issues };
 }
 
 export async function readArticle(root, contentPath) {
