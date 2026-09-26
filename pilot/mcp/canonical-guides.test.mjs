@@ -19,4 +19,33 @@ for (const [file, id, required] of cases) {
   assert.throws(() => validateCanonicalGuide(raw.replace(/\{\/\* fonte:[^\n]+\*\/\}/u, ''), id), /fonte/iu, 'remover fonte de passo reprova');
   assert.throws(() => validateCanonicalGuide(raw.replace('## Como confirmar', 'As mensagens recebidas enquanto o canal estava desconectado serão recuperadas.\n\n## Como confirmar'), id), /mensagens|recuperad/iu, 'promessa de recuperação reprova');
 }
+
+const qr = await readFile(join(root.pathname, cases[0][0]), 'utf8');
+const approved = 'As mensagens enviadas enquanto o WhatsApp estava desconectado podem não aparecer no iHelp. Se for importante, confira no celular.';
+const withConfirmation = (sentence) => qr.replace('## Como confirmar', `${sentence}\n\n## Como confirmar`);
+for (const sentence of [
+  'As mensagens do período desconectado voltam ao reconectar.',
+  'As mensagens que chegaram enquanto estava desconectado chegam depois.',
+  'Você não perde nenhuma mensagem durante a desconexão.',
+  'Nada se perde enquanto estiver fora do ar.',
+  'As conversas de quando caiu aparecem depois.',
+  'As mensagens recebidas enquanto o canal estava desconectado serão recuperadas.',
+]) {
+  assert.throws(
+    () => validateCanonicalGuide(withConfirmation(sentence), 'reconectar-canal-qr'),
+    (error) => error.message.includes(sentence),
+    `frase fora da lista deve aparecer no erro: ${sentence}`,
+  );
+}
+assert.doesNotThrow(() => validateCanonicalGuide(withConfirmation(approved), 'reconectar-canal-qr'));
+assert.throws(
+  () => validateCanonicalGuide(withConfirmation('Mensagens OFFLINE aparecem depois!'), 'reconectar-canal-qr'),
+  /Mensagens OFFLINE aparecem depois!/u,
+  'normalização de acentos e caixa não libera frase fora da lista',
+);
+assert.throws(
+  () => validateCanonicalGuide(qr.replace('No iHelp, abra Configurações e depois Canais.', 'Mensagens offline chegam depois. No iHelp, abra Configurações e depois Canais.'), 'reconectar-canal-qr'),
+  /Mensagens offline chegam depois/u,
+  'texto dos passos publicados também é validado',
+);
 console.log('M5.21: três guias, fontes por passo e promessa offline validados.');
