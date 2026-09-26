@@ -14,14 +14,16 @@ const guides = compiled.catalog.guides;
 assert.equal(guides.length, 3, 'usar os três guias publicados da base');
 const index = buildGuideReferenceIndex(guides, actions, compiled.sources, snapshot.manifest);
 const recado = index.find(({ guideId }) => guideId === 'recado-fora-do-horario');
-assert.ok(recado.references.some(({ kind, key }) => kind === 'label' && key === 'Salvar Alterações'), 'fonte do MDX associa rótulo ao guia');
+assert.ok(recado.references.some(({ kind, key }) => kind === 'label' && key.endsWith(':Salvar Alterações')), 'fonte do MDX associa rótulo ao guia');
 assert.ok(recado.references.some(({ kind }) => kind === 'permission'), 'rota da ação associa endpoint ao guia');
 
 const labelAfter = structuredClone(snapshot);
 labelAfter.frontSha = 'c'.repeat(40);
-labelAfter.manifest.labels = labelAfter.manifest.labels.map((item) => item.label === 'Salvar Alterações'
+labelAfter.manifest.labels = labelAfter.manifest.labels.map((item) => item.label === 'Salvar Alterações' &&
+  item.file === 'src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx'
   ? { ...item, label: 'Salvar modificações' } : item);
 const labelImpact = calculateGuideImpact({ before: snapshot, after: labelAfter, guides, actions, sources: compiled.sources });
+assert.equal(JSON.stringify(labelImpact), JSON.stringify(calculateGuideImpact({ before: snapshot, after: labelAfter, guides, actions, sources: compiled.sources })), 'replay do par real é idêntico');
 assert.deepEqual([...new Set(labelImpact.proposals.filter((item) => item.dependency === 'label').map((item) => item.guideId))],
   ['recado-fora-do-horario'], 'rótulo alterado deve impactar só o guia de recado');
 
@@ -30,7 +32,8 @@ const permission = snapshot.manifest.permissions.find((item) => recado.reference
 assert.ok(permission);
 const permissionAfter = structuredClone(snapshot);
 permissionAfter.backSha = 'd'.repeat(40);
-permissionAfter.manifest.permissions = permissionAfter.manifest.permissions.filter((item) => item !== permission);
+permissionAfter.manifest.permissions = permissionAfter.manifest.permissions.filter((item) =>
+  `${item.controller}.${item.method}:${item.verb}:${item.route}` !== `${permission.controller}.${permission.method}:${permission.verb}:${permission.route}`);
 const permissionImpact = calculateGuideImpact({ before: snapshot, after: permissionAfter, guides, actions, sources: compiled.sources });
 assert.ok(permissionImpact.proposals.some((item) => item.guideId === recado.guideId && item.dependency === 'permission' && item.kind === 'avisar'));
 

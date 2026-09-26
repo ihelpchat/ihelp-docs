@@ -59,6 +59,7 @@ async function walk(dir) {
 export async function compileGuidePackage(root) {
   const contentRoot = join(root, 'content/docs');
   const guides = [];
+  const sources = {};
   const ids = new Set();
   for (const file of await walk(contentRoot)) {
     const path = relative(contentRoot, file).replace(/\.mdx$/, '').replace(/\/index$/, '');
@@ -70,6 +71,9 @@ export async function compileGuidePackage(root) {
     const guide = guideSchema.parse(metadata.guide);
     if (ids.has(guide.guideId)) throw new Error(`${path}: guideId duplicado: ${guide.guideId}`);
     ids.add(guide.guideId);
+    sources[guide.guideId] = [...raw.matchAll(/\{\/\* fonte: ([a-z0-9-]+) \| (front|back)@([a-f0-9]{12}):([^\s|]+):(\d+) \| alvo: ([^\n]+) \*\/\}/gu)]
+      .map(([, stepId, side, sha, file, line, target]) => ({ stepId, side, sha, file, line: Number(line), target: target.trim() }))
+      .filter(({ stepId }) => guide.steps.some((step) => step.stepId === stepId));
     if (typeof metadata.title !== 'string' || typeof metadata.description !== 'string') throw new Error(`${path}: título ou descrição ausente`);
     guides.push({ pathSegments: path.split('/'), title: metadata.title, description: metadata.description, guide });
   }
@@ -84,7 +88,7 @@ export async function compileGuidePackage(root) {
   };
   validatePublicArtifact(output.catalog, 'catalog');
   validatePublicArtifact(output.app, 'app');
-  return output;
+  return { ...output, sources };
 }
 
 export async function writeGuidePackage(root) {
