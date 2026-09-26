@@ -212,3 +212,10 @@ test('Campos relevantes continua no escopo da resposta', () => {
   assert.equal(validateGroundedOutput({ ...base, body: base.body.replace('campo name aparece', 'campo page aparece') }, verifiedContext, [], issues), false);
   assert.match(issues.join(' '), /campo inexistente: page/i);
 });
+
+test('responseFields null rejeita até JSON de resposta vazio', () => {
+  const issues = [];
+  const changed = { ...article, body: `${article.body}\n\n## Resposta\n\`\`\`json\n{}\n\`\`\`` };
+  assert.equal(validateGroundedOutput(changed, context, [], issues), false);
+  assert.match(issues.join(' '), /campos de resposta não verificáveis/i);
+});
