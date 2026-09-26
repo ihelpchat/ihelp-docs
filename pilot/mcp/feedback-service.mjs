@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { redactSensitiveData } from './sensitive-data.mjs';
+import { isPublishedPath } from './published-paths.mjs';
 
 const validTypes = new Set(['assistant', 'article']);
 const validValues = new Set(['up', 'down']);
@@ -29,10 +29,10 @@ export function normalizeFeedback(input) {
     createdAt: new Date().toISOString(),
     type,
     value,
-    path,
+    path: isPublishedPath(path) ? path : null,
     // Keep the vote and source paths only. Free text is not needed for metrics.
     sources: Array.isArray(input.sources)
-      ? input.sources.map((source) => redactSensitiveData(clean(source, 300))).slice(0, 4)
+      ? input.sources.filter(isPublishedPath).slice(0, 4)
       : [],
   };
 }

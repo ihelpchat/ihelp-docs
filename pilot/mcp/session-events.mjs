@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import guideIds from '../architecture/guide-ids.json' with { type: 'json' };
+import { isPublishedPath } from './published-paths.mjs';
 
 const DAY_MS = 24 * 60 * 60_000;
 const FIELDS = new Set(['sessionId', 'origin', 'guideId', 'stepId', 'durationMs', 'result', 'path', 'createdAt']);
@@ -40,7 +41,7 @@ export function normalizeSessionEvent(input, { now = Date.now() } = {}) {
     ...(input.stepId === undefined ? {} : { stepId: input.stepId }),
     durationMs: input.durationMs,
     result: input.result,
-    path: input.path,
+    path: isPublishedPath(input.path) ? input.path : null,
     createdAt,
   };
 }
