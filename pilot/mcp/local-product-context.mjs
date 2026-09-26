@@ -1,19 +1,20 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { lstat, readFile, realpath } from 'node:fs/promises';
+import { lstat, open, realpath } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { redactSensitiveData } from './sensitive-data.mjs';
 
 const run = promisify(execFile);
 const SOURCE = /\.(?:ts|tsx|js|jsx|cs)$/iu;
 const BLOCKED = /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.git|node_modules|dist|build|out|bin|obj|data|logs?|backups?|coverage|migrations?|secrets?|credentials?|fixtures?|__tests__|tests?|public)(?:\/|$)/iu;
-const BLOCKED_FILE = /(?:^|\/)(?:(?:credentials?|secrets?|tokens?|private[-_]?keys?)(?:\.[^/]*)?|[^/]*\.(?:min|designer|generated|spec|test)\.(?:ts|tsx|js|jsx|cs))$/iu;
+const BLOCKED_FILE = /(?:^|\/)(?:[^/]*(?:secret|credential|token|private[-_]?key)[^/]*|[^/]*\.(?:min|designer|generated|spec|test)|styles?)\.(?:ts|tsx|js|jsx|cs)$/iu;
 const SHA = /^[a-f0-9]{40}$/u;
 const STOP = new Set(['para', 'pelo', 'pela', 'como', 'criar', 'configurar', 'codigo', 'code', 'de', 'com', 'uma', 'um']);
-const ALIASES = { robo: ['robot'], robos: ['robot'], canal: ['channel'], canais: ['channel'], horario: ['schedule', 'hour'], horarios: ['schedule', 'hour'], departamento: ['department'], departamentos: ['department'], atendimento: ['attendance'], reconectar: ['reconnect'], contatos: ['contacts'], campanha: ['campaign'] };
+const ALIASES = { robo: ['robot'], robos: ['robot'], canal: ['channel'], canais: ['channel'], horario: ['schedule', 'hour'], horarios: ['schedule', 'hour'], departamento: ['department'], departamentos: ['department'], atendimento: ['attendance'], reconectar: ['reconnect', 'connection'], contatos: ['contacts'], campanha: ['campaign'] };
 
 function normalize(value) {
-  return String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
+  return String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 }
 
 function words(topic, module) {
@@ -22,14 +23,46 @@ function words(topic, module) {
     .flatMap((word) => [word, ...(ALIASES[word] ?? [])]))];
 }
 
-function safePath(path) {
+export function isAllowedSourcePath(path) {
   return SOURCE.test(path) && !BLOCKED.test(path) && !BLOCKED_FILE.test(path)
     && !path.startsWith('/') && !path.split('/').includes('..');
+}
+
+function pathRelevance(path, terms, moduleTerms) {
+  const value = normalize(path);
+  const primary = [terms[0], ...(ALIASES[terms[0]] ?? [])];
+  return (primary.some((term) => value.includes(term)) ? 50 : 0)
+    + terms.filter((term) => value.includes(term)).length * 15
+    + (moduleTerms.some((term) => value.includes(term)) ? 80 : 0)
+    + (value.includes('/pages/') ? 10 : 0)
+    + (/\/index\.tsx$/u.test(path) ? 4 : 0)
+    - path.split('/').length * 2;
 }
 
 async function git(root, ...args) {
   const { stdout } = await run('git', ['-C', root, ...args], { encoding: 'buffer', maxBuffer: 16 * 1024 * 1024 });
   return stdout;
+}
+
+async function candidatePaths(root, paths, terms, topic) {
+  const first = terms[0];
+  const accented = String(topic).split(/[^\p{L}\p{N}]+/u).find((word) => normalize(word) === first);
+  const needles = [...new Set([first, accented, ...(ALIASES[first] ?? [])].filter(Boolean))];
+  const candidates = [];
+  for (let index = 0; index < paths.length; index += 100) {
+    const safe = (await Promise.all(paths.slice(index, index + 100).map(async (path) =>
+      (await lstat(join(root, path))).isSymbolicLink() ? null : path))).filter(Boolean);
+    if (!safe.length) continue;
+    try {
+      const { stdout } = await run('rg', ['--hidden', '-l', '-0', '-i', '-F', ...needles.flatMap((term) => ['-e', term]), '--', ...safe], {
+        cwd: root, encoding: 'buffer', maxBuffer: 16 * 1024 * 1024,
+      });
+      candidates.push(...stdout.toString().split('\0').filter(Boolean));
+    } catch (error) {
+      if (error.code !== 1) throw error;
+    }
+  }
+  return candidates;
 }
 
 function pending(source, reason) {
@@ -44,32 +77,51 @@ async function scan(source, topic, module) {
     if ((await git(root, 'rev-parse', '--show-toplevel')).toString().trim() !== root) return pending(source, 'Raiz Git divergente');
     if ((await git(root, 'rev-parse', 'HEAD')).toString().trim() !== source.sha) return pending(source, 'SHA divergente');
     if ((await git(root, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Checkout com alterações não commitadas');
-    const paths = (await git(root, 'ls-files', '-z')).toString().split('\0').filter(safePath);
+    const paths = (await git(root, 'ls-files', '-z')).toString().split('\0').filter(isAllowedSourcePath);
     const terms = words(topic, module);
+    const moduleTerms = words('', module);
     const phrase = normalize(topic).trim();
-    const matches = [];
-    for (const path of paths) {
+    if (!terms.length) return pending(source, 'Tema sem termos pesquisáveis');
+    const rawTerms = [...new Set([...terms, ...`${topic} ${module}`.split(/[^\p{L}\p{N}]+/u).map((word) => word.toLowerCase())])];
+    const textual = await candidatePaths(root, paths, terms, topic);
+    const candidates = [...new Set([...textual, ...paths.filter((path) => terms.some((term) => normalize(path).includes(term)))])]
+      .sort((a, b) => pathRelevance(b, terms, moduleTerms) - pathRelevance(a, terms, moduleTerms))
+      .slice(0, 64);
+    async function matchFile(path) {
       const full = join(root, path);
-      if ((await lstat(full)).isSymbolicLink()) continue;
+      if ((await lstat(full)).isSymbolicLink()) return null;
       const actual = await realpath(full);
       const rel = relative(root, actual);
-      if (!rel || rel === '..' || rel.startsWith(`..${sep}`)) continue;
-      if ((await lstat(actual)).size > 256_000) continue;
-      const content = await readFile(actual, 'utf8');
-      if (content.includes('\0')) continue;
+      if (!rel || rel === '..' || rel.startsWith(`..${sep}`)) return null;
+      if ((await lstat(actual)).size > 256_000) return null;
+      const handle = await open(actual, constants.O_RDONLY | constants.O_NOFOLLOW);
+      let content;
+      try { content = await handle.readFile('utf8'); } finally { await handle.close(); }
+      if (content.includes('\0')) return null;
       const lines = content.split('\n');
+      const pathScore = pathRelevance(path, terms, moduleTerms);
       let best = null;
       for (let index = 0; index < lines.length; index += 1) {
+        const lower = lines[index].toLowerCase();
+        if (!rawTerms.some((term) => term.length > 2 && lower.includes(term))) continue;
         const line = normalize(lines[index]);
         const hits = terms.filter((term) => line.includes(term)).length;
         if (!hits) continue;
-        const score = (phrase && line.includes(phrase) ? 100 : 0) + hits * 12 + (normalize(path).includes(normalize(module)) ? 8 : 0);
-        if (!best || score > best.score) best = { score, line: index + 1, excerpt: lines.slice(Math.max(0, index - 2), index + 3).map((value, offset) => `${Math.max(0, index - 2) + offset + 1}: ${value}`).join('\n') };
+        const score = (phrase && line.includes(phrase) ? 100 : 0) + hits * 12 + pathScore;
+        if (!best || score > best.score) best = { score, line: index + 1, excerpt: lines.slice(Math.max(0, index - 2), index + 3).map((value, offset) => `${Math.max(0, index - 2) + offset + 1}: ${value.slice(0, 400)}`).join('\n').slice(0, 2_000) };
       }
-      if (best) matches.push({ repository: source.repository, role: source.role, path: redactSensitiveData(path), sha: source.sha, ref: source.sha, line: best.line, excerpt: redactSensitiveData(best.excerpt), score: best.score });
+      if (!best && moduleTerms.some((term) => normalize(path).includes(term))) {
+        const index = lines.findIndex((line) => /\b(?:export|function|const|class)\b/u.test(line));
+        if (index >= 0) best = { score: pathScore, line: index + 1, excerpt: `${index + 1}: ${lines[index].slice(0, 400)}` };
+      }
+      return best ? { repository: source.repository, role: source.role, path, sha: source.sha, ref: source.sha, line: best.line, excerpt: best.excerpt, score: best.score } : null;
+    }
+    const matches = [];
+    for (let index = 0; index < candidates.length; index += 64) {
+      matches.push(...(await Promise.all(candidates.slice(index, index + 64).map(matchFile))).filter(Boolean));
     }
     if ((await git(root, 'rev-parse', 'HEAD')).toString().trim() !== source.sha || (await git(root, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Fonte alterada durante a leitura');
-    return { available: true, repository: source.repository, ref: source.sha, role: source.role, matches: matches.sort((a, b) => b.score - a.score).slice(0, 8).map(({ score: _score, ...match }) => match) };
+    return { available: true, repository: source.repository, ref: source.sha, role: source.role, matches: matches.sort((a, b) => b.score - a.score).slice(0, 8).map(({ score: _score, path, excerpt, ...match }) => ({ ...match, path: redactSensitiveData(path), excerpt: redactSensitiveData(excerpt) })) };
   } catch {
     return pending(source, 'Checkout indisponível');
   }
