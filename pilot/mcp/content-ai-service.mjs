@@ -6,6 +6,8 @@ import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './se
 import { catalogActions, isCatalogAction } from './product-actions.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 
+export function validateGroundedOutput() { throw new Error('não implementado'); }
+
 export function normalizeCatalogLabel(action) {
   return resolveCatalogAction(action) ?? action;
 }
