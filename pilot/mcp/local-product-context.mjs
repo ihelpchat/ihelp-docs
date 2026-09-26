@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { isAbsolute, join, relative, sep, dirname, parse } from 'node:path';
 import { redactSensitiveData } from './sensitive-data.mjs';
 
 const run = promisify(execFile);
@@ -10,6 +10,15 @@ const SOURCE = /\.(?:ts|tsx|js|jsx|cs)$/iu;
 const BLOCKED = /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.git|node_modules|dist|build|out|bin|obj|data|logs?|backups?|coverage|migrations?|secrets?|credentials?|fixtures?|__tests__|tests?|public)(?:\/|$)/iu;
 const BLOCKED_FILE = /(?:^|\/)(?:[^/]*(?:secret|credential|token|private[-_]?key)[^/]*|[^/]*\.(?:min|designer|generated|spec|test)|styles?)\.(?:ts|tsx|js|jsx|cs)$/iu;
 const SHA = /^[a-f0-9]{40}$/u;
+const MAX_LISTED = 10_000;
+const MAX_SEARCH_FILES = 4_096;
+const MAX_FILE_BYTES = 256_000;
+const MAX_TOTAL_BYTES = 64_000_000;
+const TIMEOUT_MS = 2_000;
+const SOURCES = Object.freeze({
+  frontend: { repository: 'ihelpchat/front-react', role: 'frontend', env: 'PRODUCT_LOCAL_CHECKOUT' },
+  backend: { repository: 'ihelpchat/olah-ihelp', role: 'backend', env: 'BACKEND_LOCAL_CHECKOUT' },
+});
 const STOP = new Set(['para', 'pelo', 'pela', 'como', 'criar', 'configurar', 'codigo', 'code', 'de', 'com', 'uma', 'um']);
 const ALIASES = { robo: ['robot'], robos: ['robot'], canal: ['channel'], canais: ['channel'], horario: ['schedule', 'hour'], horarios: ['schedule', 'hour'], departamento: ['department'], departamentos: ['department'], atendimento: ['attendance'], reconectar: ['reconnect', 'connection'], contatos: ['contacts'], campanha: ['campaign'] };
 
@@ -40,8 +49,15 @@ function pathRelevance(path, terms, moduleTerms) {
 }
 
 async function git(root, ...args) {
-  const { stdout } = await run('git', ['-C', root, ...args], { encoding: 'buffer', maxBuffer: 16 * 1024 * 1024 });
+  const { stdout } = await run('git', ['-C', root, ...args], { encoding: 'buffer', maxBuffer: 2 * 1024 * 1024, timeout: TIMEOUT_MS });
   return stdout;
+}
+
+async function hasSymlink(path, stop = parse(path).root) {
+  for (let current = path; current !== stop; current = dirname(current)) {
+    if ((await lstat(current)).isSymbolicLink()) return true;
+  }
+  return false;
 }
 
 async function candidatePaths(root, paths, terms, topic) {
@@ -50,12 +66,11 @@ async function candidatePaths(root, paths, terms, topic) {
   const needles = [...new Set([first, accented, ...(ALIASES[first] ?? [])].filter(Boolean))];
   const candidates = [];
   for (let index = 0; index < paths.length; index += 100) {
-    const safe = (await Promise.all(paths.slice(index, index + 100).map(async (path) =>
-      (await lstat(join(root, path))).isSymbolicLink() ? null : path))).filter(Boolean);
+    const safe = paths.slice(index, index + 100);
     if (!safe.length) continue;
     try {
       const { stdout } = await run('rg', ['--hidden', '-l', '-0', '-i', '-F', ...needles.flatMap((term) => ['-e', term]), '--', ...safe], {
-        cwd: root, encoding: 'buffer', maxBuffer: 16 * 1024 * 1024,
+        cwd: root, encoding: 'buffer', maxBuffer: 2 * 1024 * 1024, timeout: TIMEOUT_MS,
       });
       candidates.push(...stdout.toString().split('\0').filter(Boolean));
     } catch (error) {
@@ -70,30 +85,46 @@ function pending(source, reason) {
 }
 
 async function scan(source, topic, module) {
-  if (!source || !isAbsolute(source.root ?? '') || !SHA.test(source.sha ?? '')) return pending(source ?? {}, 'Checkout ou SHA esperado ausente');
+  if (!source || !isAbsolute(source.root ?? '')) return pending(source ?? {}, 'Checkout autorizado ausente');
   try {
-    if ((await lstat(source.root)).isSymbolicLink()) return pending(source, 'Checkout por symlink não autorizado');
+    if (await hasSymlink(source.root)) return pending(source, 'Checkout por symlink não autorizado');
     const root = await realpath(source.root);
     if ((await git(root, 'rev-parse', '--show-toplevel')).toString().trim() !== root) return pending(source, 'Raiz Git divergente');
-    if ((await git(root, 'rev-parse', 'HEAD')).toString().trim() !== source.sha) return pending(source, 'SHA divergente');
+    const sha = (await git(root, 'rev-parse', 'HEAD')).toString().trim();
+    if (!SHA.test(sha)) return pending(source, 'SHA do checkout inválido');
+    source = { ...source, sha };
     if ((await git(root, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Checkout com alterações não commitadas');
-    const paths = (await git(root, 'ls-files', '-z')).toString().split('\0').filter(isAllowedSourcePath);
+    const listed = (await git(root, 'ls-files', '-z')).toString().split('\0').filter(Boolean);
+    if (listed.length > MAX_LISTED) return pending(source, 'Limite de arquivos listados excedido');
+    const paths = listed.filter(isAllowedSourcePath);
+    if (paths.length > MAX_SEARCH_FILES) return pending(source, 'Limite de arquivos pesquisáveis excedido');
     const terms = words(topic, module);
     const moduleTerms = words('', module);
     const phrase = normalize(topic).trim();
     if (!terms.length) return pending(source, 'Tema sem termos pesquisáveis');
     const rawTerms = [...new Set([...terms, ...`${topic} ${module}`.split(/[^\p{L}\p{N}]+/u).map((word) => word.toLowerCase())])];
-    const textual = await candidatePaths(root, paths, terms, topic);
-    const candidates = [...new Set([...textual, ...paths.filter((path) => terms.some((term) => normalize(path).includes(term)))])]
-      .sort((a, b) => pathRelevance(b, terms, moduleTerms) - pathRelevance(a, terms, moduleTerms))
-      .slice(0, 64);
+    const ranked = paths.sort((a, b) => pathRelevance(b, terms, moduleTerms) - pathRelevance(a, terms, moduleTerms));
+    const eligible = [];
+    let totalBytes = 0;
+    for (const path of ranked) {
+      const full = join(root, path);
+      if (await hasSymlink(full, root)) continue;
+      const size = (await lstat(full)).size;
+      if (size > MAX_FILE_BYTES) continue;
+      totalBytes += size;
+      if (totalBytes > MAX_TOTAL_BYTES) return pending(source, 'Limite de bytes pesquisados excedido');
+      eligible.push(path);
+    }
+    const textual = await candidatePaths(root, eligible, terms, topic);
+    const candidates = [...new Set([...textual, ...eligible.filter((path) => terms.some((term) => normalize(path).includes(term)))])]
+      .sort((a, b) => pathRelevance(b, terms, moduleTerms) - pathRelevance(a, terms, moduleTerms)).slice(0, 64);
     async function matchFile(path) {
       const full = join(root, path);
-      if ((await lstat(full)).isSymbolicLink()) return null;
+      if (await hasSymlink(full, root)) return null;
       const actual = await realpath(full);
       const rel = relative(root, actual);
       if (!rel || rel === '..' || rel.startsWith(`..${sep}`)) return null;
-      if ((await lstat(actual)).size > 256_000) return null;
+      if ((await lstat(actual)).size > MAX_FILE_BYTES) return null;
       const handle = await open(actual, constants.O_RDONLY | constants.O_NOFOLLOW);
       let content;
       try { content = await handle.readFile('utf8'); } finally { await handle.close(); }
@@ -120,15 +151,24 @@ async function scan(source, topic, module) {
     for (let index = 0; index < candidates.length; index += 64) {
       matches.push(...(await Promise.all(candidates.slice(index, index + 64).map(matchFile))).filter(Boolean));
     }
-    if ((await git(root, 'rev-parse', 'HEAD')).toString().trim() !== source.sha || (await git(root, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Fonte alterada durante a leitura');
-    return { available: true, repository: source.repository, ref: source.sha, role: source.role, matches: matches.sort((a, b) => b.score - a.score).slice(0, 8).map(({ score: _score, path, excerpt, ...match }) => ({ ...match, path: redactSensitiveData(path), excerpt: redactSensitiveData(excerpt) })) };
-  } catch {
-    return pending(source, 'Checkout indisponível');
+    if ((await git(root, 'rev-parse', 'HEAD')).toString().trim() !== sha || (await git(root, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Fonte alterada durante a leitura');
+    return { available: true, repository: source.repository, ref: source.sha, role: source.role, matches: matches
+      .filter(({ path }) => redactSensitiveData(path) === path)
+      .sort((a, b) => b.score - a.score).slice(0, 8)
+      .map(({ score: _score, path, excerpt, ...match }) => ({ ...match, path, excerpt: redactSensitiveData(excerpt) })) };
+  } catch (error) {
+    if (error.killed || error.signal === 'SIGTERM') return pending(source, 'Tempo limite de subprocesso excedido');
+    if (error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return pending(source, 'Limite de bytes do subprocesso excedido');
+    return pending(source, `Checkout indisponível: ${error.code ?? 'leitura falhou'}`);
   }
 }
 
-export async function searchLocalProductContext(topic, module, { checkouts = [] } = {}) {
+export async function searchLocalProductContext(topic, module, { repositoryIds = Object.keys(SOURCES) } = {}) {
   const code = [];
-  for (const source of checkouts) code.push(await scan(source, topic, module));
+  for (const id of repositoryIds) {
+    const configured = SOURCES[id];
+    if (!configured) { code.push(pending({ repository: id }, 'Repositório não autorizado')); continue; }
+    code.push(await scan({ repository: configured.repository, role: configured.role, root: process.env[configured.env] }, topic, module));
+  }
   return { code, matches: code.flatMap((item) => item.matches), groundingRequired: true };
 }
