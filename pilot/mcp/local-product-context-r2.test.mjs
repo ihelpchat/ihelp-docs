@@ -48,12 +48,13 @@ try {
   boundaryGit('config', 'user.email', 'test@example.invalid');
   boundaryGit('config', 'user.name', 'Fixture');
   const prefix = 'export const label = "Criar robô";\n';
-  const source = join(boundary, 'Robots.tsx');
+  await mkdir(join(boundary, 'src/pages'), { recursive: true });
+  const source = join(boundary, 'src/pages/Robots.tsx');
   await writeFile(source, prefix + ' '.repeat(256_000 - Buffer.byteLength(prefix)));
   boundaryGit('add', '-A'); boundaryGit('commit', '-qm', '256000 bytes');
   const atLimit = await search();
   assert.equal(atLimit.code[0].available, true, atLimit.code[0].reason);
-  assert.equal(atLimit.matches[0]?.path, 'Robots.tsx', '256000 bytes aceitos');
+  assert.equal(atLimit.matches[0]?.path, 'src/pages/Robots.tsx', '256000 bytes aceitos');
   await writeFile(source, prefix + ' '.repeat(256_001 - Buffer.byteLength(prefix)));
   boundaryGit('add', '-A'); boundaryGit('commit', '-qm', '256001 bytes');
   const fakeBin = join(base, 'fake-bin');

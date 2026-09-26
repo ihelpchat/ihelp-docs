@@ -16,8 +16,11 @@ git('config', 'user.name', 'Fixture');
 const files = {
   'src/pages/Robots/Safe.tsx': 'export const label = "Criar robô";',
   'src/pages/Robots/Control.tsx': '// Criar robô sk-\u200bproj-ABCDEFGHIJKLMNOPQRSTUVWXYZ123456',
+  'src/pages/Robots/ControlOnly.tsx': '// Criar robô fixture-control\u200b-only',
   'src/config/api-keys.ts': 'export const label = "Criar robô fixture-api-keys";',
+  'src/pages/Robots/api-keys.ts': 'export const label = "Criar robô fixture-allowed-api-keys";',
   'src/.env.local.ts': 'export const label = "Criar robô fixture-env-local";',
+  'src/pages/Robots/.env.local.ts': 'export const label = "Criar robô fixture-allowed-env-local";',
   'src/components/secrets.tsx': 'export const label = "Criar robô fixture-secrets";',
   'src/internal/Other.tsx': 'export const label = "Criar robô fixture-outside-allowlist";',
 };
@@ -31,13 +34,18 @@ const original = process.env.PRODUCT_LOCAL_CHECKOUT;
 process.env.PRODUCT_LOCAL_CHECKOUT = checkout;
 try {
   for (const path of Object.keys(files).filter((path) => path !== 'src/pages/Robots/Safe.tsx')) {
-    if (path !== 'src/pages/Robots/Control.tsx') assert.equal(isAllowedSourcePath(path), false, `${path} inelegível`);
+    if (!['src/pages/Robots/Control.tsx', 'src/pages/Robots/ControlOnly.tsx'].includes(path)) {
+      assert.equal(isAllowedSourcePath(path), false, `${path} inelegível`);
+    }
   }
   assert.equal(isAllowedSourcePath('src/pages/Robots/Safe.tsx'), true);
+  assert.equal(isAllowedSourcePath('Comzada.Application/Controllers/RobotsController.cs', 'backend'), true);
+  assert.equal(isAllowedSourcePath('ihelp.PublicApi/Controllers/RobotsController.cs', 'backend'), true);
+  assert.equal(isAllowedSourcePath('Comzada.Application/Services/Robot.cs', 'backend'), false);
   const result = await searchLocalProductContext('Criar robô', 'Robôs', { repositoryIds: ['frontend'] });
   assert.equal(result.code[0].available, true, result.code[0].reason);
   assert.deepEqual(result.matches.map(({ path }) => path), ['src/pages/Robots/Safe.tsx']);
-  const forbidden = /fixture-api-keys|fixture-env-local|fixture-secrets|fixture-outside-allowlist|ABCDEFGHIJKLMNOPQRSTUVWXYZ123456|Control\.tsx|api-keys\.ts|\.env\.local\.ts|secrets\.tsx|Other\.tsx/u;
+  const forbidden = /fixture-(?:allowed-)?api-keys|fixture-(?:allowed-)?env-local|fixture-secrets|fixture-outside-allowlist|fixture-control|ABCDEFGHIJKLMNOPQRSTUVWXYZ123456|Control(?:Only)?\.tsx|api-keys\.ts|\.env\.local\.ts|secrets\.tsx|Other\.tsx/u;
   assert.doesNotMatch(JSON.stringify(result), forbidden);
   let prompt;
   await planContent(new URL('../', import.meta.url).pathname,
