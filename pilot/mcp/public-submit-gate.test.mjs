@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { McpServer } from '@modelcontextprotocol/server';
+import { buildServer } from './server.mjs';
+import { submitArticle, submitContentPackage } from './content-service.mjs';
+
+const root = await mkdtemp(join(tmpdir(), 'm537-public-gate-'));
+const body = 'Abra Contatos no menu lateral. Confira a lista antes de continuar. Selecione a opção de importar. Revise o arquivo escolhido e confirme as colunas. Corrija as linhas inválidas antes de concluir. Aguarde o resultado aparecer na tela. Pesquise um contato recém cadastrado para confirmar o sucesso. Se o contato não aparecer, revise o número e repita apenas a linha corrigida. Este procedimento mantém os demais contatos já cadastrados na conta.';
+const article = { path: 'docs/teste/contatos', title: 'Importar contatos', description: 'Passo a passo público para importar contatos no iHelp.', source: 'produto', contentType: 'tutorial', body };
+const calls = [];
+const oldFetch = globalThis.fetch;
+const oldToken = process.env.GITHUB_TOKEN;
+process.env.GITHUB_TOKEN = 'fixture-token';
+globalThis.fetch = async (url, init = {}) => {
+  const path = new URL(url).pathname;
+  calls.push({ path, method: init.method ?? 'GET' });
+  if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: 'fixture-sha' } }) };
+  if (path.endsWith('/pulls')) return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/123' }) };
+  if ((init.method ?? 'GET') === 'GET') return { ok: false, status: 404, json: async () => ({}) };
+  return { ok: true, json: async () => ({}) };
+};
+
+const registered = new Map();
+const originalRegister = McpServer.prototype.registerTool;
+McpServer.prototype.registerTool = function (name, config, callback) {
+  registered.set(name, { config, callback });
+  return originalRegister.call(this, name, config, callback);
+};
+try {
+  buildServer(root);
+  const writers = [...registered].filter(([, { config }]) => config.mutates).map(([name]) => name);
+  assert.deepEqual(writers.sort(), ['criar_guia', 'docs_delete_article', 'docs_submit_article', 'docs_submit_package', 'docs_update_article'].sort(), 'nova ferramenta mutates precisa entrar no teste');
+
+  const rejected = [
+    { ...article, body: `${body}\n\nClique no botão "Botão imaginário" para continuar.` },
+    { ...article, body: `${body}\n\n[Instrução interna](https://intranet.example.test/manual).` },
+    { ...article, body: `${body}\n\n[Abra o link](https://evil.example.test/coleta).` },
+    { ...article, body: `${body}\n\n![Print de teste](/img/help/print-nao-aprovado.png)` },
+    { ...article, body: `${body}\n\nUse template para continuar.` },
+  ];
+  for (const unsafe of rejected) {
+    const before = calls.length;
+    await assert.rejects(submitContentPackage(root, [unsafe], 'pull_request', 'user:tester'), /gate|fonte|link|print|jargão|aprovad|mapa/i);
+    assert.equal(calls.length, before, 'pacote inválido não pode consultar nem escrever no GitHub');
+  }
+
+  const beforeIndividual = calls.length;
+  await assert.rejects(submitArticle(root, rejected[2], 'pull_request', 'user:tester'), /gate|link|aprovad/i);
+  assert.equal(calls.length, beforeIndividual, 'submit individual não pode contornar o gate');
+
+  const throughTool = registered.get('docs_submit_article').callback;
+  const beforeTool = calls.length;
+  const result = await throughTool({ ...rejected[2], mode: 'pull_request', requestedBy: 'user:tester' });
+  assert.equal(result.isError, true, 'registro mutates deve rejeitar o bypass pelo submit individual');
+  assert.equal(calls.length, beforeTool, 'ferramenta individual não escreve no GitHub');
+
+  const valid = await submitContentPackage(root, [article], 'pull_request', 'user:tester');
+  assert.equal(valid.status, 'pull_request', 'pacote público válido passa');
+  assert.ok(calls.some(({ path, method }) => path.endsWith('/git/refs') && method === 'POST'));
+} finally {
+  McpServer.prototype.registerTool = originalRegister;
+  globalThis.fetch = oldFetch;
+  if (oldToken === undefined) delete process.env.GITHUB_TOKEN;
+  else process.env.GITHUB_TOKEN = oldToken;
+}
