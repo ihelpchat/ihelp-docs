@@ -3,6 +3,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGuide } from './create-guide.mjs';
+import { generateCanonicalGuide } from './content-ai-service.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'm536-'));
 const actor = 'user:editor-1';
@@ -70,3 +71,13 @@ const draft = await createGuide(realDraftRoot, { planId: draftPlan.planId, answe
 assert.equal(draft.draft.status, 'draft');
 assert.match(await readFile(join(realDraftRoot, draft.draft.articles[0].path), 'utf8'), /guideId: usuario-acesso/);
 assert.deepEqual(await createGuide(realDraftRoot, { planId: draftPlan.planId, answers: ['Vendas'], requestedBy: actor }, draftOptions), draft);
+
+const citation = { repository: 'front', path: 'src/pages/Users.tsx', lineStart: 10, lineEnd: 10, sha: 'a'.repeat(40) };
+const generated = { ...article, assistantQuestion: 'Como adicionar uma pessoa?', assistantOverview: 'Abra a tela de usuários.', assistantInitialSteps: 1, assistantSuggestions: ['Como conferir o acesso?'], productActions: [], guide: { ...article.guide, steps: [{ stepId: 'inicio', text: 'Abra Usuários.', actionId: null, choices: [] }] } };
+const sentences = [generated.description, 'Abra a tela de usuários e confira as permissões antes de salvar.', generated.assistantOverview, ...generated.assistantSuggestions, generated.guide.steps[0].text];
+generated.grounding = sentences.map((text) => ({ text, citations: [citation] }));
+const model = { responses: { create: async () => ({ model: 'fake', output_text: JSON.stringify({ status: 'ready', questions: [], article: generated }) }) } };
+const canonical = await generateCanonicalGuide(root, input, { productContext: context(), existingGuide: null, plan: { status: 'ready', questions: [] }, client: model });
+assert.equal(canonical.status, 'ready');
+assert.equal(canonical.articles[0].guide.guideId, 'usuario-acesso');
+assert.equal(canonical.articles[0].grounding, undefined, 'citações ficam no gate, não no MDX');
