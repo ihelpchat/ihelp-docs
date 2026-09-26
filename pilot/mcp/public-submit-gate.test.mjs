@@ -73,9 +73,27 @@ try {
     { ...article, description: 'Clique em "Fantasma" para importar seus contatos no iHelp com segurança.' },
     { ...article, body: `${body}\n\n> Selecione **Nada** para continuar.` },
   ];
-  for (const unsafe of rejected) {
+  const rejectedReasons = [
+    ...actionVerbs.map(() => /rótulo fora do mapa/u),
+    /rótulo fora do mapa/u, /rótulo fora do mapa/u,
+    /link interno inexistente/u, /link interno inexistente/u, /link interno inexistente/u,
+    /link externo proibido/u, /link externo proibido/u,
+    /asset inexistente/u, /jargão sem explicação/u,
+    /rótulo fora do mapa/u, /rótulo fora do mapa/u, /rótulo fora do mapa/u,
+    /rótulo fora do mapa/u,
+    /link interno inexistente/u, /link interno inexistente/u,
+    /atributo JSX dinâmico/u, /link interno inexistente/u, /link interno inexistente/u,
+    /atributo JSX dinâmico/u, /link interno inexistente/u, /link interno inexistente/u,
+    /atributo JSX dinâmico/u,
+    /rótulo fora do mapa/u, /rótulo fora do mapa/u, /rótulo fora do mapa/u,
+    /rótulo fora do mapa/u, /rótulo fora do mapa/u, /rótulo fora do mapa/u,
+    /rótulo fora do mapa/u, /rótulo fora do mapa/u, /rótulo fora do mapa/u,
+    /rótulo fora do mapa/u,
+  ];
+  assert.equal(rejectedReasons.length, rejected.length, 'cada caso negativo precisa de motivo esperado');
+  for (const [index, unsafe] of rejected.entries()) {
     const before = calls.length;
-    await assert.rejects(submitContentPackage(root, [unsafe], 'pull_request', 'user:tester'), /gate|fonte|link|print|jargão|aprovad|mapa/i);
+    await assert.rejects(submitContentPackage(root, [unsafe], 'pull_request', 'user:tester'), rejectedReasons[index], `caso negativo ${index}: ${unsafe.body.slice(-100)}`);
     assert.equal(calls.length, before, 'pacote inválido não pode consultar nem escrever no GitHub');
   }
 
@@ -85,15 +103,24 @@ try {
     '<X to="../../fantasma">Abra a página</X>',
     '<Img src="img/nao-existe.png">Imagem</Img>',
     '<a href="javascript:alert(1)">Abra a página</a>',
+    '<a href="javascript:../../contatos">Abra a página</a>',
     "<Card data={[{ url: 'docs/nao-existe' }]} />",
     "<Card data={[{ url: 'nao-existe' }]} />",
     '<X foo="docs/nao-existe">Abra a página</X>',
   ];
-  for (const snippet of unsafeMdxUrls) {
+  const unsafeMdxReasons = [
+    /link interno inexistente/u, /link interno inexistente/u,
+    /link interno inexistente/u, /print sem aprovação editorial/u,
+    /esquema de URL não permitido/u, /esquema de URL não permitido/u,
+    /link interno inexistente/u, /link interno inexistente/u,
+    /link interno inexistente/u,
+  ];
+  assert.equal(unsafeMdxReasons.length, unsafeMdxUrls.length, 'cada URL negativa precisa de motivo esperado');
+  for (const [index, snippet] of unsafeMdxUrls.entries()) {
     const before = calls.length;
     await assert.rejects(
       submitContentPackage(root, [{ ...article, body: `${body}\n\n${snippet}` }], 'pull_request', 'user:tester'),
-      /gate|link|asset|esquema/i,
+      unsafeMdxReasons[index],
       `${snippet}: URL insegura precisa ser rejeitada`,
     );
     assert.equal(calls.length, before, `${snippet}: rejeição precisa causar zero writes`);
@@ -116,17 +143,18 @@ try {
   const parsed = parseArticle(published, baselinePath);
   const renamed = { path: baselinePath, ...parsed.metadata, title: `${parsed.metadata.title} atualizado`, body: parsed.body };
   const beforeRenamed = calls.length;
-  await assert.rejects(submitContentPackage(root, [renamed], 'pull_request', 'user:tester'), /gate|rótulo/i);
+  await assert.rejects(submitContentPackage(root, [renamed], 'pull_request', 'user:tester'), /rótulo fora do mapa/u);
   assert.equal(calls.length, beforeRenamed, 'título alterado em página legada exige revalidação antes de writes');
 
   const beforeIndividual = calls.length;
-  await assert.rejects(submitArticle(root, rejected[2], 'pull_request', 'user:tester'), /gate|link|aprovad/i);
+  await assert.rejects(submitArticle(root, rejected[2], 'pull_request', 'user:tester'), /rótulo fora do mapa/u);
   assert.equal(calls.length, beforeIndividual, 'submit individual não pode contornar o gate');
 
   const throughTool = registered.get('docs_submit_article').callback;
   const beforeTool = calls.length;
   const result = await throughTool({ ...rejected[2], mode: 'pull_request', requestedBy: 'user:tester' });
   assert.equal(result.isError, true, 'registro mutates deve rejeitar o bypass pelo submit individual');
+  assert.match(JSON.stringify(result.content), /rótulo fora do mapa/u, 'ferramenta individual deve rejeitar pelo motivo esperado');
   assert.equal(calls.length, beforeTool, 'ferramenta individual não escreve no GitHub');
 
   const valid = await submitContentPackage(root, [article], 'pull_request', 'user:tester');
