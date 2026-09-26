@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as env from './env-compat.mjs';
@@ -16,6 +16,18 @@ const dir = await mkdtemp(join(tmpdir(), 'm548-provider-'));
 const budget = (name) => ({ file: join(dir, name), dailyLimitUsd: 1, reserveUsd: 0.1 });
 
 try {
+  await test('bypass de admissão só aparece no self-check', async () => {
+    const files = (await readdir(new URL('./', import.meta.url))).filter((name) => name.endsWith('.mjs') && !name.endsWith('.test.mjs'));
+    const uses = [];
+    for (const name of files) {
+      const source = await readFile(new URL(name, import.meta.url), 'utf8');
+      if (/bypassAdmission:\s*true/u.test(source)) uses.push(name);
+    }
+    assert.deepEqual(uses, ['closed-router.mjs'], 'somente routerSelfCheck pode ignorar admissão');
+    assert.match(await readFile(new URL('./closed-router.mjs', import.meta.url), 'utf8'),
+      /routerSelfCheck[\s\S]*?createBudgetedResponse\([^\n]*bypassAdmission: true/u,
+      'self-check deve passar bypass explícito');
+  });
   await test('todo payload da triagem usa o esforço configurado', async () => {
     assert.equal(typeof env.assistantRouterEffort, 'function', 'assistantRouterEffort deve existir');
     assert.equal(env.assistantRouterEffort({}), 'none', 'padrão compatível com gpt-6-luna');

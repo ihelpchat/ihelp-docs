@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -25,8 +25,9 @@ async function freePort() {
   return port;
 }
 
-async function scenario(providerStatus, withKey = true) {
+async function scenario(providerStatus, withKey = true, { spent = 0, retry = false } = {}) {
   let calls = 0;
+  let currentStatus = providerStatus;
   const provider = createServer(async (request, response) => {
     calls++;
     let raw = '';
@@ -35,9 +36,9 @@ async function scenario(providerStatus, withKey = true) {
     assert.equal(payload.model, 'fixture-router');
     assert.equal(payload.reasoning.effort, 'low');
     assert.equal(payload.text.format.schema.properties.choice.enum.length, 5, 'catálogo mínimo de 2 guias e 3 escolhas');
-    response.writeHead(providerStatus, { 'Content-Type': 'application/json' });
-    response.end(JSON.stringify(providerStatus === 400
-      ? { error: { message: "Unsupported value: 'low'", type: 'invalid_request_error' } }
+    response.writeHead(currentStatus, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify(currentStatus !== 200
+      ? { error: { message: currentStatus === 400 ? "Unsupported value: 'low'" : 'Provider unavailable', type: 'invalid_request_error' } }
       : { id: 'resp_fixture', object: 'response', created_at: 1, model: 'fixture-router', status: 'completed',
         output: [{ type: 'message', id: 'msg_fixture', status: 'completed', role: 'assistant',
           content: [{ type: 'output_text', text: '{"choice":"perguntar"}', annotations: [] }] }],
@@ -46,11 +47,14 @@ async function scenario(providerStatus, withKey = true) {
   provider.listen(0, '127.0.0.1');
   await once(provider, 'listening');
   const port = await freePort();
+  const ledgerFile = join(root, `ledger-${providerStatus}-${withKey}-${spent}-${retry}.json`);
+  await writeFile(ledgerFile, JSON.stringify({ day: new Date().toISOString().slice(0, 10), spent, reservations: {} }));
   const child = spawn(process.execPath, [new URL('./http.mjs', import.meta.url).pathname], {
     env: { ...process.env, PORT: String(port), DOCS_ROOT: root, DOCS_MCP_API_KEY: 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz',
       OPENAI_API_KEY: withKey ? 'fixture-openai-key' : '', OPENAI_BASE_URL: `http://127.0.0.1:${provider.address().port}/v1`,
       ASSISTANT_ROUTER_MODEL: 'fixture-router', ASSISTANT_ROUTER_EFFORT: 'low',
-      ASSISTANT_BUDGET_FILE: join(root, `ledger-${providerStatus}-${withKey}.json`) },
+      ASSISTANT_BUDGET_FILE: ledgerFile, ASSISTANT_DAILY_LIMIT_USD: '1',
+      ASSISTANT_INPUT_USD_PER_MILLION: '10', ASSISTANT_OUTPUT_USD_PER_MILLION: '10' },
     stdio: ['ignore', 'ignore', 'pipe'],
   });
   let stderr = '';
@@ -66,7 +70,15 @@ async function scenario(providerStatus, withKey = true) {
     const second = await fetch(`http://127.0.0.1:${port}/health`);
     assert.equal(second.status, first.status, 'self-check em cache');
     assert.equal(calls, withKey ? 1 : 0, 'uma chamada por processo; sem chave pula');
-    return first;
+    let final = first;
+    if (retry) {
+      currentStatus = 200;
+      await new Promise((resolve) => setTimeout(resolve, 30_100));
+      const afterRetry = await fetch(`http://127.0.0.1:${port}/health`);
+      final = { status: afterRetry.status, body: await afterRetry.json() };
+      assert.equal(calls, 2, '500 deve permitir nova tentativa após 30 s');
+    }
+    return { first, final, calls, ledger: JSON.parse(await readFile(ledgerFile, 'utf8')) };
   } finally {
     if (child.exitCode === null) {
       const exited = once(child, 'exit');
@@ -79,18 +91,34 @@ async function scenario(providerStatus, withKey = true) {
 
 try {
   await test('provider 400 torna /health 503 com motivo', async () => {
-    const result = await scenario(400);
+    const { first: result } = await scenario(400);
     assert.equal(result.status, 503);
     assert.equal(result.body.error, 'triagem rejeitada pelo provider');
     assert.match(result.body.reason, /Unsupported value: 'low'/u);
   });
   await test('provider aceita triagem e /health responde 200', async () => {
-    const result = await scenario(200);
+    const { first: result } = await scenario(200);
     assert.equal(result.status, 200, JSON.stringify(result.body));
     assert.equal(result.body.codeSha, codeSha);
   });
   await test('sem OPENAI_API_KEY self-check é pulado', async () => {
-    const result = await scenario(400, false);
+    const { first: result } = await scenario(400, false);
     assert.equal(result.status, 200);
+  });
+  await test('spent perto do teto não impede self-check e custo real é contabilizado', async () => {
+    const result = await scenario(200, true, { spent: 999_990 });
+    assert.equal(result.first.status, 200, JSON.stringify(result.first.body));
+    assert.equal(result.ledger.spent, 1_000_010, 'usage de 1 token por direção custa 20 unidades');
+  });
+  await test('provider 500 não fica em cache; nova tentativa aceita dá 200', async () => {
+    const result = await scenario(500, true, { retry: true });
+    assert.equal(result.first.status, 503);
+    assert.match(result.first.body.reason, /Provider HTTP 500/u);
+    assert.equal(result.final.status, 200, JSON.stringify(result.final.body));
+  });
+  await test('orçamento esgotado é estado de uso no /health 200', async () => {
+    const result = await scenario(200, true, { spent: 1_000_000 });
+    assert.equal(result.first.status, 200, JSON.stringify(result.first.body));
+    assert.equal(result.first.body.budget, 'exhausted');
   });
 } finally { await rm(root, { recursive: true, force: true }); }
