@@ -36,11 +36,12 @@ async function containsUrl(dir, url) {
   return false;
 }
 
-async function artifact(out) {
+async function artifact(out, expectedUrl) {
   const release = await parse(join(out, 'release.json'));
   if (!validSha(release.codeSha, 40) || !validSha(release.contentSha256, 64)) throw new Error('Release sem SHAs válidos');
   if (!enabled) { console.log('pendente: deploy da Claricia desativado (CLARICIA_DEPLOY_ENABLED)'); return; }
   const url = requireHttps(release.assistantUrl);
+  if (expectedUrl && url !== requireHttps(expectedUrl)) throw new Error('Artifact usa URL de outro environment');
   if (!await containsUrl(out, url)) throw new Error('Artifact publicado sem endereço da Claricia');
   console.log(`Artifact contém ${url}`);
 }
@@ -56,20 +57,29 @@ async function site(out, siteUrl) {
   console.log(`Staging docs SHA ${actual.codeSha} / ${actual.contentSha256}`);
 }
 
-async function service(out, healthUrl) {
+async function service(out, expectedUrl) {
   const release = await parse(join(out, 'release.json'));
-  const url = new URL(healthUrl);
-  if (!['https:', 'http:'].includes(url.protocol) || url.pathname !== '/health') throw new Error('Health URL inválida');
-  const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  const assistantUrl = requireHttps(release.assistantUrl);
+  if (assistantUrl !== requireHttps(expectedUrl)) throw new Error('Serviço usa URL de outro environment');
+  if (!await containsUrl(out, assistantUrl)) throw new Error('Artifact publicado sem endereço da Claricia');
+  const origin = process.env.CLARICIA_DOCS_ORIGIN?.trim();
+  if (!origin) throw new Error('CLARICIA_DOCS_ORIGIN obrigatória');
+  const docs = new URL(origin);
+  if (docs.protocol !== 'https:' || docs.origin !== origin) throw new Error('CLARICIA_DOCS_ORIGIN deve ser origem HTTPS');
+  const siteUrl = process.env.CLARICIA_DOCS_URL?.trim();
+  if (!siteUrl || new URL(siteUrl).origin !== origin) throw new Error('CLARICIA_DOCS_ORIGIN difere da URL publicada do site');
+  const response = await fetch(new URL('/health', assistantUrl), { signal: AbortSignal.timeout(10_000) });
   if (!response.ok) throw new Error(`Health HTTP ${response.status}`);
-  const origin = process.env.CLARICIA_DOCS_ORIGIN;
   if (origin) {
-    const preflight = await fetch(new URL('/assistant', url), {
-      method: 'OPTIONS', headers: { Origin: origin, 'Access-Control-Request-Method': 'POST' },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (preflight.status !== 204 || preflight.headers.get('access-control-allow-origin') !== origin) {
-      throw new Error('CORS da Claricia incompatível com docs');
+    for (const candidate of [origin, 'https://untrusted.example.test']) {
+      const preflight = await fetch(assistantUrl, {
+        method: 'OPTIONS', headers: { Origin: candidate, 'Access-Control-Request-Method': 'POST' },
+        signal: AbortSignal.timeout(10_000),
+      });
+      const allowed = preflight.headers.get('access-control-allow-origin');
+      if (candidate === origin ? preflight.status !== 204 || allowed !== origin : allowed === candidate || allowed === '*') {
+        throw new Error('CORS da Claricia incompatível com docs');
+      }
     }
   }
   const health = await response.json();
@@ -81,10 +91,10 @@ async function service(out, healthUrl) {
 
 try {
   if (command === 'prepare') await prepare();
-  else if (command === 'artifact') await artifact(process.argv[3]);
+  else if (command === 'artifact') await artifact(process.argv[3], process.argv[4]);
   else if (command === 'site') await site(process.argv[3], process.argv[4]);
   else if (command === 'service') await service(process.argv[3], process.argv[4]);
-  else throw new Error('Uso: release.mjs prepare | artifact <out> | site <out> <url> | service <out> <health-url>');
+  else throw new Error('Uso: release.mjs prepare | artifact <out> [expected-url] | site <out> <url> | service <out> <assistant-url>');
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;

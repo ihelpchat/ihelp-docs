@@ -44,10 +44,12 @@ await writeFile(mock, `globalThis.fetch = async (input, options = {}) => {
   return new Response(null, { status: allowed ? 204 : 403, headers: allowed ? { 'access-control-allow-origin': origin } : {} });
 };`);
 const runService = (env = {}, args = ['service', out, url]) => run(args, {
-  NODE_OPTIONS: `--import=${mock}`, CLARICIA_DOCS_ORIGIN: 'https://docs.example.test', ...env,
+  NODE_OPTIONS: `--import=${mock}`, CLARICIA_DOCS_ORIGIN: 'https://docs.example.test',
+  CLARICIA_DOCS_URL: 'https://docs.example.test/ihelp-docs', ...env,
 });
 assert.equal(runService().status, 0);
 assert.notEqual(runService({ CLARICIA_DOCS_ORIGIN: '' }).status, 0, 'origem do docs vazia deve falhar');
+assert.notEqual(runService({ CLARICIA_DOCS_URL: 'https://other.example.test/ihelp-docs' }).status, 0, 'origem do smoke deve ser a do site publicado');
 assert.notEqual(runService({ MOCK_MODE: 'bad-cors' }).status, 0, 'CORS aberto a outra origem deve falhar');
 assert.notEqual(runService({ MOCK_MODE: 'wrong-version' }).status, 0, 'versão incompatível deve falhar');
 assert.notEqual(runService({}, ['service', out, 'https://staging.example.test/assistant']).status, 0, 'health separado do artifact deve falhar');
