@@ -4,7 +4,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export const requestIdentity = new AsyncLocalStorage();
 const actorCalls = new Map();
 const actorPattern = /^(?:user|service):[a-z0-9][a-z0-9_-]{2,63}$/;
-const writerTools = new Set(['docs_submit_article', 'docs_submit_package', 'docs_update_article', 'docs_delete_article']);
+const writerTools = new Set(['docs_submit_article', 'docs_submit_package', 'docs_update_article', 'docs_delete_article', 'criar_guia']);
 const privateTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package']);
 
 export function loadCredentials(serialized) {

@@ -8,9 +8,10 @@ import { auditContent, readArticle } from './editorial-standard.mjs';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
 import { authorizeTool, requestIdentity } from './access-control.mjs';
+import { createGuide } from './create-guide.mjs';
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
-const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article']);
+const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia']);
 const requestedBySchema = z.string().optional().describe('Ator opcional; se informado, deve coincidir com o ator da credencial');
 const contentRequestSchema = z.object({
   topic: z.string().min(3).max(120),
@@ -129,6 +130,19 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_package', target: auditTarget(request.module, request.topic), result: 'failure' });
       return textResult({ error: error instanceof Error ? error.message : String(error) }, true);
     }
+  });
+
+  registerTool('criar_guia', {
+    description: 'Na primeira chamada, cria um plano com perguntas; na segunda, retoma pelo planId e cria somente um draft de guia canônico.',
+    inputSchema: z.strictObject({
+      guideId: z.string().optional(), topic: z.string().min(3).max(120).optional(),
+      module: z.string().min(2).max(80).optional(), description: z.string().min(10).max(1_000).optional(),
+      details: z.string().max(8_000).optional(), planId: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+      answers: z.array(z.string().min(1).max(2_000)).max(20).optional(), requestedBy: requestedBySchema,
+    }),
+  }, async (args) => {
+    try { return textResult(await createGuide(root, args)); }
+    catch (error) { return textResult({ error: error instanceof Error ? error.message : 'Falha ao criar guia' }, true); }
   });
 
   registerTool('docs_submit_package', {
