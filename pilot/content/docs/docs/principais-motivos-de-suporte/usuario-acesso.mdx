@@ -3,7 +3,7 @@ title: "Colocar uma pessoa da equipe no departamento dela"
 description: "Crie um usuário, escolha o departamento e confira o acesso."
 source: produto
 contentType: guia
-assistantQuestion: "Como cadastrar uma pessoa da equipe para atender só o setor dela?"
+assistantQuestion: "Como gerenciar usuário e acesso?"
 assistantOverview: "Em Usuários, crie a pessoa, escolha o departamento e revise as opções de acesso."
 assistantSuggestions:
   - "Como escolher o departamento da pessoa?"
@@ -49,6 +49,10 @@ guide:
 
 Só um administrador pode criar usuários. O setor é chamado de **departamento** no iHelp. Cadastre a pessoa no setor certo e confira o acesso com uma conta de teste: a escolha do departamento, sozinha, não comprova que outros dados ficaram invisíveis.
 
+## Pré-requisitos
+
+Entre como administrador e confirme qual departamento a pessoa deve atender. Não envie dados de acesso à Claricia.
+
 <ProductAction id="abrir-usuarios" label="Abrir a tela Usuários" route="/configuracoes/user" />
 
 1. Em Configurações, abra Usuários. Entre como administrador.
@@ -63,6 +67,8 @@ Só um administrador pode criar usuários. O setor é chamado de **departamento*
 {/* fonte: revisar-acesso | front@9c3690b98d81:src/components/pages/Configuration/pages/UserById/components/UserConfigExtras/index.tsx:116 | alvo: Visualizar Departamentos */}
 6. Clique em **Salvar Alterações**. Peça à pessoa para entrar e conferir o menu e os atendimentos visíveis.
 {/* fonte: salvar-usuario | front@9c3690b98d81:src/components/pages/Configuration/pages/UserById/components/UserData/index.tsx:293 | alvo: Salvar Alterações */}
+
+## Se não funcionar
 
 **Acesso inesperado ou botão bloqueado:** toque em **Falar com uma pessoa** no iHelp. Informe o nome da opção que apareceu. Não amplie permissões para testar.
 {/* fonte: pedir-ajuda | front@9c3690b98d81:src/components/pages/Configuration/components/TabUser/index.tsx:67 | alvo: Apenas administradores podem criar usuários */}
