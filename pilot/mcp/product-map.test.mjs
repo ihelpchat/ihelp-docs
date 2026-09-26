@@ -10,8 +10,10 @@ const guides = [{ guide: { guideId: 'reconnect', steps: [{ stepId: 'connect', ac
 const root = await mkdtemp(join(tmpdir(), 'product-map-'));
 try {
   await cp(fixture, root, { recursive: true });
-  const scan = () => buildProductMap({ frontRoot: join(root, 'front'), backRoot: join(root, 'back'), guides, actions });
+  let baseline;
+  const scan = () => buildProductMap({ frontRoot: join(root, 'front'), backRoot: join(root, 'back'), guides, actions, baseline });
   const first = await scan();
+  baseline = first.manifest;
   assert.deepEqual(first.pending, []);
   assert.ok(first.manifest.markers.some((item) => item.id === 'channel-connect'));
   assert.ok(first.manifest.routes.some((item) => item.path === '/configuracoes/channel'));
