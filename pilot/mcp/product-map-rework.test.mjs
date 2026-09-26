@@ -47,11 +47,13 @@ try {
   const script = resolve(import.meta.dirname, '../scripts/product-map.mjs');
   const guideFile = join(root, 'guides.json');
   const output = join(root, 'report.json');
+  const actionsFile = join(root, 'actions.json');
   await writeFile(guideFile, JSON.stringify(guides));
+  await writeFile(actionsFile, JSON.stringify(actions));
   execFileSync('git', ['init', '-q', frontRoot]);
   execFileSync('git', ['init', '-q', backRoot]);
   for (const dir of [frontRoot, backRoot]) execFileSync('git', ['-C', dir, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'fixture']);
-  const run = () => spawnSync(process.execPath, [script, frontRoot, backRoot, '-', '-', output, '--guides-file', guideFile], { encoding: 'utf8' });
+  const run = () => spawnSync(process.execPath, [script, frontRoot, backRoot, '-', '-', output, '--guides-file', guideFile, '--actions-file', actionsFile], { encoding: 'utf8' });
   assert.equal(run().status, 0, 'coherent guide and marker must pass');
   await writeFile(frontFile, front.replace('channel-connect', 'channel-gone'));
   assert.notEqual(run().status, 0, 'missing published marker must fail the script');
