@@ -20,10 +20,11 @@ const featureTerms = new Set([
   ...extraFeatures.terms.map(normalize),
 ]);
 const hasTerm = (question, term) => {
-  const expression = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const expression = normalize(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(?:^|\\b)${expression}s?(?:\\b|$)`, 'u').test(normalize(question));
 };
 const deniedElsewhere = (question, item) => {
+  if (!item.ownFeatures?.length) return false;
   const own = new Set([...(item.ownFeatures ?? []), ...words(item.title), ...words(item.guideId)]
     .map((term) => normalize(term).replace(/s$/u, '')));
   return [...featureTerms].some((term) => {
@@ -31,6 +32,18 @@ const deniedElsewhere = (question, item) => {
     // "Não é campanha, quero recado" excludes campaign rather than requesting it.
     return !new RegExp(`\\b(?:nao|nem) (?:e |quero |sobre )?(?:uma? )?${term}s?\\b`, 'u')
       .test(normalize(question));
+  });
+};
+const anchoredToGuide = (question, item) => {
+  if (!item.anchors?.length) return true;
+  return item.anchors.some((anchor) => {
+    if (normalize(anchor) === 'celular da loja') {
+      return hasTerm(question, anchor) && /\b(?:conect\w*|ligar de novo)\b/u.test(normalize(question));
+    }
+    if (normalize(anchor) === 'depois das horas') {
+      return /\bdepois das? \d{1,2} horas?\b/u.test(normalize(question));
+    }
+    return hasTerm(question, anchor);
   });
 };
 const supportedByQuestion = (question, item) => {
@@ -70,6 +83,7 @@ export async function publishedGuideCatalog(root) {
         aliases: Array.isArray(metadata.assistantAliases) ? metadata.assistantAliases.filter((value) => typeof value === 'string') : [],
         keywords: Array.isArray(metadata.assistantKeywords) ? metadata.assistantKeywords.filter((value) => typeof value === 'string') : [],
         actions: metadata.assistantRouting?.actions ?? [], objects: metadata.assistantRouting?.objects ?? [],
+        anchors: metadata.assistantRouting?.anchors ?? [],
         ownFeatures: metadata.assistantRouting?.ownFeatures ?? [] });
     }
   }
@@ -87,7 +101,7 @@ function negated(question, item) {
 export function lexicalFallback(question, catalog) {
   const value = normalize(question).replace(/[?!.]/g, '').trim();
   const matches = catalog.filter((item) => {
-    if (negated(question, item) || deniedElsewhere(question, item)) return false;
+    if (negated(question, item) || deniedElsewhere(question, item) || !anchoredToGuide(question, item)) return false;
     const title = normalize(item.title).trim().replace(/s$/u, '');
     const prompt = normalize(item.question).replace(/[?!.]/g, '').trim();
     return value === prompt || (title.length >= 5 && new RegExp(`\\b${title}s?\\b`).test(value));
@@ -142,6 +156,7 @@ export async function routeMessage(question, { catalog, client, budget, history 
       const explicit = lexicalFallback(safeQuestion, catalog);
       return negated(safeQuestion, catalog.find(({ guideId }) => guideId === parsed.choice))
         || deniedElsewhere(safeQuestion, catalog.find(({ guideId }) => guideId === parsed.choice))
+        || !anchoredToGuide(safeQuestion, catalog.find(({ guideId }) => guideId === parsed.choice))
         || !supportedByQuestion(safeQuestion, catalog.find(({ guideId }) => guideId === parsed.choice))
         || (explicit.kind === 'guide' && explicit.guideId !== parsed.choice)
         ? NONE : { kind: 'guide', guideId: parsed.choice };

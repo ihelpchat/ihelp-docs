@@ -32,4 +32,20 @@ for (const [question, choice] of competing) {
   assert.deepEqual(await routeMessage(question, { catalog, client: provider(choice), budget }),
     { kind: 'none' }, question);
 }
-console.log('M5.20 r6: 20 frases concorrentes do revisor abstidas.');
+const layQuestions = {
+  'reconectar-canal-qr': ['Meu zap caiu e preciso ligar de novo', 'O quadrado com pontinhos apareceu no computador', 'Quero reconectar o WhatsApp da loja', 'Meu canal desconectou ontem', 'Não chega conversa nova no zap', 'Como faço para ler o código no celular?', 'O WhatsApp parou de receber mensagens', 'Preciso conectar de novo o número', 'O celular perdeu a ligação com o iHelp', 'O zap da loja não funciona mais'],
+  'usuario-acesso': ['Quero cadastrar uma secretária', 'Minha funcionária só pode ver clientes dela', 'Preciso limitar acesso da vendedora', 'Como separar minha equipe por departamento?', 'Quero criar usuário para meu empregado', 'Minha atendente não pode ver todos os clientes', 'Preciso dar permissão para a nova pessoa', 'Quero colocar a secretária só no setor dela', 'Onde cadastro meu funcionário?', 'Meu vendedor precisa de acesso ao iHelp'],
+  'recado-fora-do-horario': ['Quero avisar clientes quando a loja fecha', 'Como deixar mensagem automática à noite?', 'Preciso de recado no domingo', 'Quero uma resposta quando ninguém trabalha', 'O salão fecha às seis; quero avisar quem escreve', 'Como responder sozinho fora do horário?', 'Preciso avisar que estamos de férias', 'Quero recado para quem chamar no feriado', 'Como colocar mensagem quando o expediente acabar?', 'Quando fechar, o cliente precisa receber um aviso'],
+};
+const totals = { correct: 0, abstained: 0, wrong: 0 };
+for (const [choice, questions] of Object.entries(layQuestions)) {
+  for (const question of questions) {
+    const result = await routeMessage(question, { catalog, client: provider(choice), budget });
+    if (result.kind === 'guide' && result.guideId === choice) totals.correct++;
+    else if (result.kind === 'none') totals.abstained++;
+    else totals.wrong++;
+  }
+}
+assert.equal(totals.correct + totals.abstained + totals.wrong, 30);
+assert.equal(totals.wrong, 0, JSON.stringify(totals));
+console.log(`M5.20 r6: 20 concorrentes abstidas; 30 leigas: ${JSON.stringify(totals)}`);
