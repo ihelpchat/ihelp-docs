@@ -43,6 +43,10 @@ O conteúdo aprovado deve seguir para um draft ou pull request. Confira títulos
 };
 const auditFile = join(testRoot, '.audit/docs-submissions.jsonl');
 const auditEvents = async () => (await readFile(auditFile, 'utf8')).trim().split('\n').map(JSON.parse);
+const freeAnswerClient = (client) => ({ responses: { create: (request, options) =>
+  request.text?.format?.name === 'triagem_fechada'
+    ? Promise.resolve({ status: 'completed', output_text: '{"choice":"sem guia"}', usage: { input_tokens: 1, output_tokens: 1 } })
+    : client.responses.create(request, options) } });
 
 try {
   await client.connect(transport);
@@ -259,7 +263,7 @@ globalThis.fetch = async (url, init = {}) => {
       },
     },
   };
-  const assistant = await answerQuestion(testRoot, 'como transferir um atendimento', { client: fakeClient });
+  const assistant = await answerQuestion(testRoot, 'como transferir um atendimento', { client: freeAnswerClient(fakeClient) });
   assert.equal(assistant.model, 'gpt-test');
   assert.match(assistant.answer, /transferência/);
   // Resposta estruturada: passos, código e fontes; fonte fora da recuperação local é descartada.
@@ -286,7 +290,7 @@ globalThis.fetch = async (url, init = {}) => {
     },
   };
   const structured = await answerQuestion(testRoot, 'como transferir', {
-    client: structuredClient,
+    client: freeAnswerClient(structuredClient),
     scope: 'Ajuda e FAQ',
     page: { path: '/docs/sobre-o-sistema/atendimento', title: 'Atendimento' },
   });
@@ -305,7 +309,7 @@ globalThis.fetch = async (url, init = {}) => {
   await writeFile(join(mediaDir, 'claricia-tango.mdx'), `---\ntitle: "Guia Claricia Tango"\ndescription: "Guia de teste da mídia real."\n---\n<TutorialCard title="Fluxo" url="https://app.tango.us/app/workflow/Fluxo-586c4a6cabce4edd8032e657bf2979ae" embedUrl="https://app.tango.us/app/embed/586c4a6cabce4edd8032e657bf2979ae" />\n`);
   await writeFile(join(mediaDir, 'claricia-sem-midia.mdx'), `---\ntitle: "Guia Claricia Sem Mídia"\ndescription: "Guia de teste sem vídeo."\n---\nResposta completa sem vídeo.\n`);
   await writeFile(join(mediaDir, 'claricia-url-insegura.mdx'), `---\ntitle: "Guia Claricia URL Insegura"\ndescription: "Guia de teste da URL."\n---\n<VideoEmbed url="javascript:alert(1)" />\n`);
-  const mediaClient = (path) => ({ responses: { create: async () => ({ model: 'gpt-test', output_text: JSON.stringify({ answer: 'Consulte o guia.', sources: [path, 'https://evil.example/falso'], resolution: 'partial', found: true }) }) } });
+  const mediaClient = (path) => freeAnswerClient({ responses: { create: async () => ({ model: 'gpt-test', output_text: JSON.stringify({ answer: 'Consulte o guia.', sources: [path, 'https://evil.example/falso'], resolution: 'partial', found: true }) }) } });
   const tangoReply = await answerQuestion(testRoot, 'Guia Claricia Tango', { client: mediaClient('/docs/teste/claricia-tango') });
   assert.deepEqual(tangoReply.sources.map((source) => source.path), ['/docs/teste/claricia-tango']);
   assert.deepEqual(tangoReply.sources[0].media, { kind: 'tango', url: 'https://app.tango.us/app/workflow/Fluxo-586c4a6cabce4edd8032e657bf2979ae', embedUrl: 'https://app.tango.us/app/embed/586c4a6cabce4edd8032e657bf2979ae' });
