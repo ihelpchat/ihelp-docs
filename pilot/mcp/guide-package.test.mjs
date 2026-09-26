@@ -1,0 +1,59 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { stringify } from 'yaml';
+import { compileGuidePackage, writeGuidePackage } from '../lib/guide-package.mjs';
+import { articleSchema } from './article-fields.mjs';
+import { docsPageSchema } from '../lib/docs-page-schema.mjs';
+import { readArticle } from './editorial-standard.mjs';
+import { renderArticle } from './content-service.mjs';
+
+const root = await mkdtemp(join(tmpdir(), 'm5-19-'));
+const content = join(root, 'content/docs/docs');
+await mkdir(content, { recursive: true });
+const path = 'docs/exemplo';
+const title = 'Reconectar canal de exemplo';
+const description = 'Aprenda a reconectar um canal de exemplo com passos públicos e verificáveis.';
+const guide = {
+  schemaVersion: 1, guideId: 'reconectar-canal-qr', version: 1, mode: 'real', initialStepId: 'inicio',
+  steps: [{ stepId: 'inicio', text: 'Abra a tela Canais.', actionId: 'abrir-canais', choices: [{ id: 'achei', label: 'Achei' }] }],
+};
+const body = 'Orientação pública de exemplo. '.repeat(65);
+const metadata = { title, description, source: 'produto', contentType: 'guia', guide };
+const mdx = (fields) => `---\n${stringify(fields, { lineWidth: 0 })}---\n\n${body}\n`;
+await writeFile(join(content, 'exemplo.mdx'), mdx(metadata));
+await writeFile(join(content, 'legado.mdx'), mdx({ title: 'Artigo legado', description, source: 'produto', contentType: 'faq' }));
+
+assert.equal(docsPageSchema.safeParse(metadata).success, true, 'página aceita guide aninhado');
+assert.equal(articleSchema.safeParse({ path, ...metadata, body }).success, true, 'MCP aceita guide na lista fechada');
+assert.deepEqual((await readArticle(root, path)).guide, guide, 'leitura MCP preserva todos os campos');
+assert.deepEqual((await readArticle(root, path)).guide, guide, 'leitura repetida preserva guide');
+assert.deepEqual((await readArticle(root, 'docs/legado')).body, body, 'artigo legado continua legível');
+assert.deepEqual((await readArticle(root, path)).guide, guide);
+const rendered = renderArticle({ path, ...metadata, body });
+assert.deepEqual((await import('yaml')).parse(rendered.split('---\n')[1]).guide, guide, 'escrita MCP preserva guide');
+
+const first = await compileGuidePackage(root);
+assert.equal(first.manifest.schemaVersion, 1);
+assert.equal(first.manifest.version, 1);
+assert.match(first.manifest.contentSha256, /^[a-f0-9]{64}$/);
+assert.equal(first.manifest.guides.length, 1, 'artigo legado não vira guia');
+assert.deepEqual(first.manifest.guides[0].guide, guide, 'roteiro do app não perde campos');
+assert.deepEqual(first.catalog.guides[0].guide, guide, 'catálogo da Claricia não perde campos');
+assert.equal(first.manifest.aliases['abrir-usuarios'], 'usuario-acesso', 'aliases publicados continuam válidos');
+assert.equal(first.manifest.aliases['abrir-canais'], null, 'alias ambíguo continua navegação');
+assert.deepEqual(await compileGuidePackage(root), first, 'geração repetida é determinística');
+await writeFile(join(content, 'exemplo.mdx'), mdx({ guide: { steps: [{ choices: [{ label: 'Achei', id: 'achei' }], actionId: 'abrir-canais', text: 'Abra a tela Canais.', stepId: 'inicio' }], initialStepId: 'inicio', mode: 'real', version: 1, guideId: 'reconectar-canal-qr', schemaVersion: 1 }, contentType: 'guia', source: 'produto', description, title }));
+assert.equal((await compileGuidePackage(root)).manifest.contentSha256, first.manifest.contentSha256, 'ordem de chaves YAML não muda SHA');
+await writeFile(join(content, 'exemplo.mdx'), mdx(metadata));
+await writeGuidePackage(root);
+assert.deepEqual(JSON.parse(await readFile(join(root, 'public/guides/manifest.json'), 'utf8')), first.manifest);
+assert.deepEqual(JSON.parse(await readFile(join(root, 'public/guides/catalog.json'), 'utf8')), first.catalog);
+assert.deepEqual(JSON.parse(await readFile(join(root, 'public/guides/app.json'), 'utf8')), first.app);
+await writeFile(join(content, 'legado.mdx'), mdx({ title: 'Artigo legado', description, source: 'produto', contentType: 'faq', guide: { schemaVersion: 1 } }));
+await assert.rejects(compileGuidePackage(root), /guide|schema|steps/i, 'guide inválido deve falhar sem invalidar artigos legados sem guide');
+await writeFile(join(content, 'legado.mdx'), mdx({ title: 'Artigo legado', description, source: 'produto', contentType: 'faq' }));
+await writeFile(join(content, 'exemplo.mdx'), mdx({ ...metadata, internalNote: 'Não publicar' }));
+await assert.rejects(compileGuidePackage(root), /campo desconhecido/i, 'campo privado não entra no pacote');
+console.log('M5.19: pacote determinístico, roundtrip, legado, aliases e rejeição pública passaram.');
