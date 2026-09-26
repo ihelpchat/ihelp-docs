@@ -1,7 +1,7 @@
 {
   "aprovadoPor": "pendente: Bruno",
   "aprovadoEm": null,
-  "geradoEm": "2026-09-26T03:30:09.474Z",
+  "geradoEm": "2026-09-26T03:48:28.750Z",
   "guides": {
     "reconectar-canal-qr": [
       {"sentence":"O quadrado com pontinhos é o código que liga o WhatsApp do celular ao iHelp.","hash":"b62f75c69411216a77fcecc29cbdae34f9eb0368df733ebe6262574306901aab"},
@@ -74,7 +74,8 @@
     "usuario-acesso": [
       {"sentence":"Só um administrador pode criar usuários.","hash":"7998149b8aeed7122b8609113bde830ebcaea0e00540f8c6631359c997ceb258"},
       {"sentence":"O setor é chamado de departamento no iHelp.","hash":"73c470a4a575011a2c1489ebe18444f17e04c80ecd9eaa0ec4ec4d21a8921d13"},
-      {"sentence":"Cadastre a pessoa no setor certo e peça a ela para conferir o acesso: a escolha do departamento, sozinha, não comprova que outros dados ficaram invisíveis.","hash":"32f1423868f3679f6ef8f57c99c4479c3fc2a3ecc6263187cd89c02687971299"},
+      {"sentence":"Cadastre a pessoa no setor certo e peça a ela para conferir o acesso.","hash":"bd59391db3f7ea09f67e04b8894faa6033d5f0d5f36f60dcfade9807a472d408"},
+      {"sentence":"A escolha do departamento, sozinha, não comprova que outros dados ficaram invisíveis.","hash":"055a7879f4f8f7b5ea30ab6748eeea333949a8e13d44e6f36de45dbe8af8e36a"},
       {"sentence":"Pré-requisitos","hash":"ac15697e7bb96ac2a3c3a1e913d9bb0450649ef40077b057c3f29e54b5fae958"},
       {"sentence":"Entre como administrador e confirme qual departamento a pessoa deve atender.","hash":"f06d2fec71635e76575b881ca582c747c0e291eb858b5b362fdea6d258ddc2fd"},
       {"sentence":"Não envie dados de acesso à Claricia.","hash":"087030edbb54f1a23aa0907bea43a35e4e447b137858b072e17277207508f2de"},
