@@ -35,6 +35,9 @@ for (const sentence of [
 assert.throws(() => validateCanonicalGuide(qr.replace('No iHelp, abra Configurações e depois Canais.',
   'No iHelp, abra Configurações, e depois Canais.'), 'reconectar-canal-qr'),
   /frase não aprovada/u, 'alterar uma vírgula reprova');
+assert.throws(() => validateCanonicalGuide(qr.replace('label="Abrir a tela Canais"',
+  'label="As mensagens perdidas serão recuperadas"'), 'reconectar-canal-qr'),
+  /frase não aprovada/u, 'label renderizado do ProductAction também reprova');
 
 const directory = await mkdtemp(join(tmpdir(), 'guides-approve-'));
 try {
