@@ -18,6 +18,8 @@ const CREDENTIAL_SEGMENTS = new Set(['token', 'secret', 'password', 'passwd', 'p
 const DESCRIPTIVE_SUFFIXES = new Set(['hint', 'description', 'count', 'name', 'label', 'type', 'enabled', 'example']);
 const PLACEHOLDER = /^(?:\$[A-Z_][A-Z0-9_]*|\$\{[A-Z_][A-Z0-9_]*\})$/u;
 const NON_SECRET_LITERAL = /^(?:null|true|false|undefined|string|number)$/iu;
+const OPAQUE_SEQUENCE = /[A-Za-z0-9+/=_-]{24,}/gu;
+const HEX_SEQUENCE = /^[A-Fa-f0-9]{32,}$/u;
 
 function entropy(value) {
   const counts = new Map();
@@ -26,6 +28,15 @@ function entropy(value) {
     const probability = count / value.length;
     return sum - probability * Math.log2(probability);
   }, 0);
+}
+
+function opaqueSequence(value) {
+  return HEX_SEQUENCE.test(value) || entropy(value) >= 3.5;
+}
+
+function opaqueSequences(value) {
+  return [...String(value ?? '').matchAll(OPAQUE_SEQUENCE)]
+    .filter(([candidate]) => opaqueSequence(candidate));
 }
 
 function secretLike(value) {
@@ -81,7 +92,7 @@ function redact(value, patterns, marker) {
   return patterns.reduce((text, pattern) => text.replace(new RegExp(pattern.source, `${pattern.flags}g`), marker), String(value ?? ''));
 }
 
-export function sensitiveKinds(value) {
+export function sensitiveKinds(value, { detectOpaque = false } = {}) {
   const text = String(value ?? '');
   const visible = text.normalize('NFKC').replace(/[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, '');
   const mapped = visible.replace(/[ІІАВЕКМНОРСТХΥΑΒΕΗΙΚΜΝΟΡΤΧ]/gu, (letter) => ({
@@ -92,14 +103,14 @@ export function sensitiveKinds(value) {
     /\p{Script=Latin}/u.test(word) && /[\p{Script=Cyrillic}\p{Script=Greek}]/u.test(word));
   return {
     personal: matchesAny(text, PERSONAL),
-    credential: matchesAny(text, CREDENTIALS) || credentialPairs(text).length > 0,
+    credential: matchesAny(text, CREDENTIALS) || credentialPairs(text).length > 0 || (detectOpaque && opaqueSequences(text).length > 0),
     internal: /🟡|🔴|\b(?:INTERNO|CONFIDENCIAL)\b|\b(?:interno|confidencial)\s*:/u.test(mapped),
     control: mixedAlphabet || /[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text),
   };
 }
 
-export function containsSensitiveData(value) {
-  const kinds = sensitiveKinds(value);
+export function containsSensitiveData(value, options) {
+  const kinds = sensitiveKinds(value, options);
   return kinds.personal || kinds.credential || kinds.internal || kinds.control;
 }
 

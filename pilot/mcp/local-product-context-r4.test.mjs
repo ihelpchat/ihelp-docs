@@ -10,7 +10,7 @@ import { containsSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 const encoded = Buffer.from('sk-proj-SYNTHETIC-ONLY-0123456789abcdef').toString('base64');
 const hex = Buffer.from('sk-proj-SYNTHETIC-ONLY-0123456789abcdef').toString('hex');
 const random = 'Q8mF2vN7pL4xR9cT3kB6zY1hW5sD0jA8uE2gP4nV';
-const safeRoute = '/configuracoes/robos/criar-robo/editar-resposta-automatica';
+const safeRoute = '/robos/criar-robo/editar-robo/mostrar-robo';
 const safeClass = 'botao-robo-botao-robo-botao-robo-botao-robo';
 const files = {
   'src/pages/Robots/Encoded.tsx': `// Criar robô base64: ${encoded}`,
@@ -19,11 +19,11 @@ const files = {
   'src/pages/Robots/Legitimate.tsx': `export const route = '${safeRoute}'; export const className = '${safeClass}'; // Criar robô`,
 };
 for (const value of [encoded, hex, random]) {
-  assert.equal(sensitiveKinds(value).credential, true, 'sequência opaca deve ser credencial');
-  assert.equal(containsSensitiveData(value), true);
+  assert.equal(sensitiveKinds(value, { detectOpaque: true }).credential, true, 'sequência opaca deve ser credencial');
+  assert.equal(containsSensitiveData(value, { detectOpaque: true }), true);
 }
 for (const value of [safeRoute, safeClass, files['src/pages/Robots/Legitimate.tsx']]) {
-  assert.equal(containsSensitiveData(value), false, 'código de interface legítimo deve passar');
+  assert.equal(containsSensitiveData(value, { detectOpaque: true }), false, 'código de interface legítimo deve passar');
 }
 
 const base = await realpath(await mkdtemp(join(tmpdir(), 'm530-r4-')));

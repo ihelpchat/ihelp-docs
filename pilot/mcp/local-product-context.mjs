@@ -104,7 +104,7 @@ function pending(source, reason) {
 
 function sensitiveSource(content) {
   const normalized = content.normalize('NFKC').replace(/[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, '');
-  return content.includes('\0') || containsSensitiveData(content) || containsSensitiveData(normalized);
+  return content.includes('\0') || containsSensitiveData(content, { detectOpaque: true }) || containsSensitiveData(normalized, { detectOpaque: true });
 }
 
 async function scan(source, topic, module) {
