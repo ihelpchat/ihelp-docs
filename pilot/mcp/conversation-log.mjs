@@ -46,7 +46,7 @@ export function summarizeConversations(rows, filters = {}, { now = Date.now() } 
   }));
   const category = ({ rows: session, row }) => {
     if (session.some((entry) => entry.offeredHuman || entry.resolution === 'escalated')) return 'escalated';
-    if (session.some((entry) => entry.resolution === 'complete')) return 'complete';
+    if (row.resolution === 'complete') return 'complete';
     if (row.resolution === 'abandoned' ||
       (['in_progress', 'partial'].includes(row.resolution) && !row.offeredHuman &&
         now - Date.parse(row.at) > ABANDONED_AFTER_MS)) return 'abandoned';

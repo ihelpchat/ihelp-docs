@@ -418,19 +418,20 @@
       ],
       "additionalProperties": false,
       "if": {
-        "required": [
-          "companyId"
-        ]
-      },
-      "then": {
         "properties": {
           "origin": {
-            "const": "app"
+            "not": {
+              "const": "app"
+            }
           }
-        },
-        "required": [
-          "origin"
-        ]
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "companyId"
+          ]
+        }
       }
     },
     "AssistantReplyV1": {
