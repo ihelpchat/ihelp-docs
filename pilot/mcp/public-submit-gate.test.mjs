@@ -49,6 +49,13 @@ try {
     { ...article, body: `${body}\n\n[Abra o link](https://evil.example.test/coleta).` },
     { ...article, body: `${body}\n\n![Print de teste](/img/help/print-nao-aprovado.png)` },
     { ...article, body: `${body}\n\nUse template para continuar.` },
+    { ...article, body: `${body}\n\nToque no botão **Algo inventado**.` },
+    { ...article, body: `${body}\n\nPressione o ícone "Fantasma".` },
+    { ...article, body: `${body}\n\nNa tela **Inexistente**, confira.` },
+    { ...article, body: `${body}\n\n<a href="/docs/nao-existe">Abra a página</a>.` },
+    { ...article, body: `${body}\n\n<Card href="/docs/nao-existe">Abra a página</Card>.` },
+    { ...article, body: `${body}\n\n<Link href={variavel}>Abra a página</Link>.` },
+    { ...article, body: `${body}\n\n[Abra a página](../nao-existe).` },
   ];
   for (const unsafe of rejected) {
     const before = calls.length;
