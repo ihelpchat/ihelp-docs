@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stringify } from 'yaml';
-import { compileGuidePackage } from '../lib/guide-package.mjs';
+import { compileGuidePackage, routeSentenceEndPunctuation } from '../lib/guide-package.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'm5-19-r4-'));
 const dir = join(root, 'content/docs');
@@ -20,11 +20,14 @@ async function compile(text) {
   return compileGuidePackage(root);
 }
 
-for (const suffix of ['?next=%2Fadmin%2Foperacoes', '#frag', '?', '#', '/', '/../admin', '%2f', '&x=1']) {
+for (const suffix of ['?next=%2Fadmin%2Foperacoes', '#frag', '?', '#', '/', '/../admin', '%2f', '&x=1', '?…', '😀']) {
   const text = `Abra /configuracoes/channel${suffix}`;
-  await assert.rejects(compile(text), /rota fora do catálogo/i, text);
+  await assert.rejects(compile(text), /rota fora do catálogo|caractere privado proibido/i, text);
 }
-for (const text of ['Abra /configuracoes/channel.', '(/configuracoes/channel)']) {
+for (const suffix of ['.', '…', '...']) {
+  assert.equal(`/configuracoes/channel${suffix}`.replace(routeSentenceEndPunctuation, ''), '/configuracoes/channel', suffix);
+}
+for (const text of ['Abra /configuracoes/channel.', 'Abra /configuracoes/channel…', 'Abra /configuracoes/channel...', '(/configuracoes/channel)']) {
   await compile(text);
 }
 console.log('M5.19 r4: token completo da rota rejeitado; pontuação de frase aceita.');
