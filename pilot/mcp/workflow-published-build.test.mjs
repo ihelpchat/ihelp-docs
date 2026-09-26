@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const checker = new URL('../scripts/workflow-concurrency.check.mjs', import.meta.url).pathname;
+const packageVercel = new URL('../scripts/prepare-vercel-release.mjs', import.meta.url).pathname;
 const workflow = readFileSync(new URL('../../.github/workflows/deploy.yml', import.meta.url), 'utf8');
 const release = readFileSync(new URL('../../.github/workflows/product-release.yml', import.meta.url), 'utf8');
 const temp = mkdtempSync(join(tmpdir(), 'published-build-'));
@@ -12,6 +13,20 @@ try {
   const safe = join(temp, 'safe.yml');
   writeFileSync(safe, workflow);
   assert.equal(spawnSync(process.execPath, [checker, safe], { encoding: 'utf8' }).status, 0, 'workflow seguro passa');
+  const artifact = join(temp, 'out');
+  const deployment = join(temp, 'deploy');
+  mkdirSync(artifact);
+  writeFileSync(join(artifact, 'release.json'), JSON.stringify({ codeSha: 'a'.repeat(40), contentSha256: 'b'.repeat(64) }));
+  writeFileSync(join(artifact, 'index.html'), 'artifact original');
+  assert.equal(spawnSync(process.execPath, [packageVercel, artifact, deployment], { encoding: 'utf8' }).status, 0, 'artifact deve ser empacotado sem build');
+  assert.equal(readFileSync(join(deployment, '.vercel/output/static/ihelp-docs/index.html'), 'utf8'), 'artifact original');
+  const originalConfig = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+  assert.deepEqual(JSON.parse(readFileSync(join(deployment, 'vercel.json'), 'utf8')), originalConfig, 'vercel.json preservado');
+  const outputConfig = JSON.parse(readFileSync(join(deployment, '.vercel/output/config.json'), 'utf8'));
+  assert.equal(outputConfig.version, 3);
+  assert.equal(outputConfig.routes.filter((route) => route.status).length, originalConfig.redirects.length, 'todos os redirects no prebuilt');
+  assert.equal(outputConfig.routes.filter((route) => route.continue).length, originalConfig.headers.length, 'todos os headers no prebuilt');
+  assert.ok(outputConfig.routes.some((route) => route.src === '^/ihelp-docs/(.*)/$' && route.dest === '/ihelp-docs/$1/index.html'), 'Next.js trailingSlash preservado');
   const unsafe = join(temp, 'unsafe.yml');
   writeFileSync(unsafe, readFileSync(safe, 'utf8').replace(
     '          NEXT_PUBLIC_BASE_PATH: /ihelp-docs',
