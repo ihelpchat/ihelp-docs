@@ -1,33 +1,105 @@
 ---
-title: "Reconectar canal pelo QR"
-description: "Localize o canal, gere o QR code e confira se a conexão voltou."
+title: "Reconectar o WhatsApp"
+description: "Veja o código na tela e reconecte o WhatsApp do celular ao iHelp."
 source: produto
 contentType: guia
-assistantQuestion: "Como reconectar canal pelo QR?"
-assistantOverview: "Canal é o número de WhatsApp usado no atendimento. Comece em Canais e confira o estado do número antes de ler um novo QR code."
+assistantQuestion: "Como reconectar meu WhatsApp?"
+assistantOverview: "Abra Canais para reconectar o WhatsApp. O quadrado com pontinhos é o código que liga o celular ao iHelp."
+assistantSuggestions:
+  - "Onde encontro o botão Conectar?"
+  - "Estou sem o celular, o que faço?"
 assistantInitialSteps: 1
 assistantResolution: partial
+guide:
+  schemaVersion: 1
+  guideId: reconectar-canal-qr
+  version: 1
+  mode: real
+  initialStepId: abrir-canais
+  steps:
+    - stepId: abrir-canais
+      text: "No iHelp, abra Configurações e depois Canais. Escolha o número desconectado."
+      actionId: abrir-canais
+    - stepId: conectar
+      text: "Clique em Conectar. O iHelp mostra um quadrado com pontinhos ou um código curto."
+      choices:
+        - id: apareceu
+          label: "Apareceu"
+          nextStepId: escolher-celular
+        - id: nao-apareceu
+          label: "Não apareceu"
+          nextStepId: pedir-ajuda
+    - stepId: escolher-celular
+      text: "O celular com esse WhatsApp está com você? Use outra tela para mostrar o código do iHelp."
+      choices:
+        - id: android
+          label: "Uso Android"
+          nextStepId: android
+        - id: iphone
+          label: "Uso iPhone"
+          nextStepId: iphone
+        - id: sem-celular
+          label: "Estou sem o celular agora"
+          nextStepId: sem-celular
+    - stepId: android
+      text: "No Android, abra WhatsApp, toque nos três pontinhos e em Aparelhos conectados. Toque em Conectar um aparelho."
+      choices:
+        - id: achei
+          label: "Achei"
+          nextStepId: ler-codigo
+        - id: nao-achei
+          label: "Não achei"
+          nextStepId: pedir-ajuda
+    - stepId: iphone
+      text: "No iPhone, abra WhatsApp, toque em Configurações e em Aparelhos conectados. Toque em Conectar um aparelho."
+      choices:
+        - id: achei
+          label: "Achei"
+          nextStepId: ler-codigo
+        - id: nao-achei
+          label: "Não achei"
+          nextStepId: pedir-ajuda
+    - stepId: ler-codigo
+      text: "Com a câmera do celular, leia o quadrado na outra tela. Se aparecer código curto, siga a instrução mostrada no celular. Depois confira Conectado no iHelp."
+      choices:
+        - id: conectou
+          label: "Conectou"
+        - id: falhou
+          label: "Não conectou"
+          nextStepId: pedir-ajuda
+    - stepId: sem-celular
+      text: "Espere até ter o celular desse número. Sem ele não dá para concluir. Você pode falar com uma pessoa."
+    - stepId: pedir-ajuda
+      text: "Falar com uma pessoa. Diga em qual passo parou. Não envie o código a ninguém."
 ---
 
-Se o canal de WhatsApp desconectou, confira o estado dele em Canais. O guia de conexão existente confirma o fluxo de QR code; ele não comprova a causa de uma queda nem garante preservação de mensagens não recebidas durante a desconexão.
+O quadrado com pontinhos é o código que liga o WhatsApp do celular ao iHelp. Este guia vale para um número conectado pelo celular. Se a sua empresa usa a conexão oficial, peça ajuda ao suporte.
 
-## Pré-requisitos
+## Antes de começar
 
-- Ter acesso à tela Canais e ao celular com o WhatsApp do número que será conectado.
-- Confirmar que você está tratando um canal por QR, não um número da API Oficial.
+Tenha o celular desse número e uma **outra tela** para mostrar o código do iHelp. Pode ser um computador. Se você está lendo este guia no celular, abra o iHelp no computador para mostrar o código.
 
 <ProductAction id="abrir-canais" label="Abrir a tela Canais" route="/configuracoes/channel" />
 
-1. Abra Canais em Configurações e localize o canal desconectado.
-2. No canal correto, clique em Conectar e aguarde o QR code aparecer.
-3. No celular com esse WhatsApp, abra Configurações e depois Dispositivos conectados.
-4. Leia o QR code exibido na tela do iHelp com esse celular.
-5. Volte à tela Canais e confira se o canal aparece conectado antes de retomar o atendimento.
+1. Abra Canais em Configurações. Escolha o número marcado como Desconectado.
+{/* fonte: abrir-canais | front@9c3690b98d81:src/components/pages/Configuration/pages/ChannelById/components/ChannelDetails/index.tsx:111 | alvo: Desconectado */}
+2. Clique em Conectar. Aguarde o quadrado com pontinhos ou o código curto.
+{/* fonte: conectar | front@9c3690b98d81:src/components/pages/Configuration/pages/ChannelById/components/ChannelDetails/index.tsx:122 | alvo: Conectar */}
+3. Pegue o celular com esse WhatsApp e mantenha o código do iHelp aberto em outra tela.
+{/* fonte: escolher-celular | front@9c3690b98d81:src/components/ui/components/Modal/components/ModalQRCode/index.tsx:51 | alvo: Nova Conexão */}
+4. **Android:** abra o WhatsApp, toque nos três pontinhos, depois em Aparelhos conectados e em Conectar um aparelho.
+{/* fonte: android | front@9c3690b98d81:src/features/onboarding/components/steps/Step6Conectar.tsx:273 | alvo: Aparelhos conectados */}
+5. **iPhone:** abra o WhatsApp, toque em Configurações, depois em Aparelhos conectados e em Conectar um aparelho. A ordem no celular precisa de confirmação manual.
+{/* fonte: iphone | front@9c3690b98d81:src/features/onboarding/components/steps/Step6Conectar.tsx:273 | alvo: Aparelhos conectados */}
+6. Leia o quadrado com a câmera do celular. Se aparecer um código curto, siga a instrução exibida no celular. Volte a Canais e confira se aparece Conectado.
+{/* fonte: ler-codigo | front@9c3690b98d81:src/components/pages/Configuration/pages/ChannelById/components/ChannelDetails/index.tsx:111 | alvo: Conectado */}
+
+**Estou sem o celular agora:** espere até ter o aparelho. A conexão só termina com ele. toque em **Falar com uma pessoa** no iHelp.
+{/* fonte: sem-celular | front@9c3690b98d81:src/features/onboarding/components/steps/Step6Conectar.tsx:273 | alvo: Conectar um aparelho */}
+
+**Não apareceu ou não conectou:** não desconecte outros aparelhos por tentativa. toque em **Falar com uma pessoa** no iHelp e diga em qual passo parou.
+{/* fonte: pedir-ajuda | front@9c3690b98d81:src/components/pages/Configuration/pages/ChannelById/components/ChannelDetails/index.tsx:122 | alvo: Conectar */}
 
 ## Como confirmar
 
-O canal aparece conectado na tela Canais. Esse estado não comprova entrega de mensagens durante o período em que esteve desconectado.
-
-## Se não funcionar
-
-Se o QR não aparecer, não for aceito ou a conexão cair novamente, informe em qual dessas etapas parou. Não remova dispositivos pareados nem altere o número sem orientação do atendimento.
+O número aparece como **Conectado** em Canais. Isso não confirma a entrega de mensagens do período em que ele esteve desconectado.
