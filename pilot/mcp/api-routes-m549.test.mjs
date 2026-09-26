@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -19,7 +19,7 @@ public class ContactsController {
   public IActionResult Post([FromRoute] int contactId) { return null; }
 }`;
 
-async function contextFor(source, requested) {
+async function contextFor(source, requested, { topic = 'API Contatos', repeat = 1, readFile: reader, cache = false } = {}) {
   const root = await mkdtemp(join(await realpath(tmpdir()), 'api-routes-m549-'));
   const backend = join(root, 'back');
   const previous = process.env.BACKEND_LOCAL_CHECKOUT;
@@ -34,8 +34,11 @@ async function contextFor(source, requested) {
     await writeFile(join(root, 'architecture/support-signals.json'), JSON.stringify({ categories: [], rules: [] }));
     await writeFile(join(root, 'architecture/coverage-matrix.json'), '[]');
     process.env.BACKEND_LOCAL_CHECKOUT = backend;
-    return await getIhelpContext(root, 'API Contatos', 'api', { requireLocal: true, repositoryIds: ['backend'],
-      explicitEndpoints: [requested], cache: false });
+    const contexts = [];
+    for (let index = 0; index < repeat; index += 1) contexts.push(await getIhelpContext(root, topic, 'api', {
+      requireLocal: true, repositoryIds: ['backend'], explicitEndpoints: [requested], cache, readFile: reader,
+    }));
+    return repeat === 1 ? contexts[0] : contexts;
   } finally {
     if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
     else process.env.BACKEND_LOCAL_CHECKOUT = previous;
@@ -55,6 +58,42 @@ test('rota opcional casa com e sem o segmento e a página o marca opcional', asy
   assert.match(rendered.body, /<Param name="letter" type="string">route \(string\), opcional<\/Param>/);
   const constrained = await contextFor(optional.replace('{letter?}', '{letter:alpha?}'), { verb: 'GET', route: '/api/v2/contacts' });
   assert.equal(constrained.endpoints[0]?.explicit, true);
+});
+
+test('tema genérico seleciona action absoluta citada com valor concreto', async () => {
+  const requested = { verb: 'POST', route: '/api/v2/crm/contacts/42/tags' };
+  const context = await contextFor(absolute('/'), requested, { topic: 'Referência da API' });
+  assert.equal(context.endpoints[0]?.route, '/api/v2/crm/contacts/{contactId}/tags');
+  assert.equal(context.endpoints[0]?.explicit, true);
+  assert.ok(!context.pending.some((reason) => reason.startsWith('endpoint citado não encontrado')), context.pending.join('; '));
+
+  const missing = await contextFor(absolute('/'), { ...requested, route: '/api/v2/crm/contacts/42/unknown' }, { topic: 'Referência da API' });
+  assert.ok(missing.pending.includes('endpoint citado não encontrado (POST /api/v2/crm/contacts/42/unknown)'), missing.pending.join('; '));
+});
+
+test('tema genérico seleciona action opcional com e sem segmento', async () => {
+  const source = optional.replace('{letter?}', '{letter:alpha?}');
+  for (const route of ['/api/v2/contacts/abc', '/api/v2/contacts']) {
+    const context = await contextFor(source, { verb: 'GET', route }, { topic: 'Referência da API' });
+    assert.equal(context.endpoints[0]?.explicit, true, context.pending.join('; '));
+    assert.ok(!context.pending.some((reason) => reason.startsWith('endpoint citado não encontrado')), context.pending.join('; '));
+  }
+  const missing = await contextFor(source, { verb: 'GET', route: '/api/v2/unknown' }, { topic: 'Referência da API' });
+  assert.ok(missing.pending.includes('endpoint citado não encontrado (GET /api/v2/unknown)'), missing.pending.join('; '));
+});
+
+test('controller citado usa cache por caminho e mtime entre pedidos', async () => {
+  let reads = 0;
+  const reader = async (path, options) => {
+    if (path.endsWith('ContactsController.cs')) reads += 1;
+    return readFile(path, options);
+  };
+  const contexts = await contextFor(optional, { verb: 'GET', route: '/api/v2/contacts/abc' }, {
+    topic: 'Referência da API', repeat: 2, cache: true, readFile: reader,
+  });
+  assert.equal(contexts.length, 2);
+  assert.equal(contexts[1].endpoints[0]?.explicit, true);
+  assert.equal(reads, 1, `controller lido ${reads} vezes`);
 });
 
 test('rota opcional não aceita prefixo parecido; segmento obrigatório não aceita rota curta', async () => {
