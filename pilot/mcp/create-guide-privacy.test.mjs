@@ -21,8 +21,9 @@ const options = {
 };
 const plan = await createGuide(root, request, options);
 assert.equal(plan.questionIds.length, 1);
-const resume = { ...request, planId: plan.planId, questions: plan.questions, questionIds: plan.questionIds, answers: ['Maria Oliveira'] };
+const resume = { ...request, planId: plan.planId, plan: plan.plan, questions: plan.questions, questionIds: plan.questionIds, answers: ['Maria Oliveira'] };
 await assert.rejects(createGuide(root, { ...resume, description: `${request.description}x` }, options), /plano não confere, refaça/i);
+await assert.rejects(createGuide(root, { ...resume, questions: ['Outra pergunta'] }, options), /plano não confere, refaça/i);
 const result = await createGuide(root, resume, options);
 assert.equal(result.reviewRequired, true);
 assert.deepEqual(await createGuide(root, resume, options), result);

@@ -9,6 +9,7 @@ import { generateCanonicalGuide } from './content-ai-service.mjs';
 const root = await mkdtemp(join(tmpdir(), 'm536-'));
 const actor = 'user:editor-1';
 const input = { guideId: 'usuario-acesso', topic: 'Adicionar pessoa da equipe', module: 'usuarios', description: 'Criar acesso para uma pessoa da equipe.', requestedBy: actor };
+const resume = (plan, answers, requestedBy = actor) => ({ ...input, planId: plan.planId, plan: plan.plan, questions: plan.questions, questionIds: plan.questionIds, answers, requestedBy });
 const context = (sha = 'a'.repeat(40)) => ({ groundingRequired: true, code: [{ repository: 'front', ref: sha, available: true }], matches: [{ repository: 'front', path: 'src/pages/Users.tsx', line: 10, sha, ref: sha, excerpt: 'Criar usuário' }], support: { categories: [], rules: [] }, coverage: [] });
 const article = { path: 'docs/usuario-acesso', title: 'Adicionar pessoa da equipe', description: 'Como adicionar uma pessoa da equipe e verificar o acesso no iHelp.', source: 'produto', contentType: 'guia', body: 'Abra a tela de usuários e confira as permissões antes de salvar. '.repeat(7), guide: { schemaVersion: 1, guideId: 'usuario-acesso', version: 1, mode: 'real', initialStepId: 'inicio', steps: [{ stepId: 'inicio', text: 'Abra Usuários.' }] } };
 let plans = 0;
@@ -37,24 +38,24 @@ const first = await createGuide(root, input, options);
 assert.match(first.planId, /^[a-f0-9]{32,}$/);
 assert.deepEqual(first.questions, ['Qual departamento recebe o acesso?']);
 assert.equal(generations, 0);
-const resumed = await createGuide(root, { planId: first.planId, answers: ['Vendas'], requestedBy: actor }, options);
+const resumed = await createGuide(root, resume(first, ['Vendas'], actor), options);
 assert.equal(plans, 1, 'retomada usa o plano aprovado sem replanejar');
 assert.equal(resumed.status, 'draft');
 assert.equal(submissions, 1);
-assert.deepEqual(await createGuide(root, { planId: first.planId, answers: ['Vendas'], requestedBy: actor }, options), resumed, 'repetição devolve o mesmo draft');
+assert.deepEqual(await createGuide(root, resume(first, ['Vendas'], actor), options), resumed, 'repetição devolve o mesmo draft');
 assert.equal(generations, 1, 'repetição não gera outro pacote');
 assert.equal(submissions, 1, 'repetição não duplica draft');
-await assert.rejects(createGuide(root, { planId: first.planId, answers: ['Vendas'], requestedBy: actor }, { ...options, getContext: async () => context('c'.repeat(40)) }), /fontes mudaram.*refaça o plano/i);
-await assert.rejects(createGuide(root, { planId: first.planId, answers: ['Outro'], requestedBy: actor }, options), /respostas diferentes/i);
-await assert.rejects(createGuide(root, { planId: first.planId, answers: ['Vendas'], requestedBy: 'user:outro-1' }, options), /ator/i);
+await assert.rejects(createGuide(root, resume(first, ['Vendas'], actor), { ...options, getContext: async () => context('c'.repeat(40)) }), /fontes mudaram.*refaça o plano/i);
+await assert.rejects(createGuide(root, resume(first, ['Outro'], actor), options), /respostas diferentes/i);
+await assert.rejects(createGuide(root, resume(first, ['Vendas'], 'user:outro-1'), options), /ator/i);
 
 const changed = await createGuide(root, input, options);
-await assert.rejects(createGuide(root, { planId: changed.planId, answers: ['Vendas'], requestedBy: actor }, { ...options, getContext: async () => context('b'.repeat(40)) }), /fontes mudaram.*refaça o plano/i);
+await assert.rejects(createGuide(root, resume(changed, ['Vendas'], actor), { ...options, getContext: async () => context('b'.repeat(40)) }), /fontes mudaram.*refaça o plano/i);
 assert.equal(submissions, 1, 'fonte alterada não envia draft');
 
 const updateOptions = { ...options, existing: async () => ({ path: article.path, guide: { ...article.guide, version: 3 } }) };
 const update = await createGuide(root, input, updateOptions);
-const updateResult = await createGuide(root, { planId: update.planId, answers: ['Vendas'], requestedBy: actor }, updateOptions);
+const updateResult = await createGuide(root, resume(update, ['Vendas'], actor), updateOptions);
 assert.equal(submittedArticle.guide.guideId, 'usuario-acesso');
 assert.equal(submittedArticle.guide.version, 4, 'atualiza o guia existente');
 assert.equal(submittedArticle.path, article.path);
@@ -64,7 +65,7 @@ const privacyOptions = { ...options, generate: async (_root, request) => {
   return { status: 'ready', articles: [article] };
 } };
 const privacy = await createGuide(root, input, privacyOptions);
-await createGuide(root, { planId: privacy.planId, answers: ['Envie para pessoa@example.com'], requestedBy: actor }, privacyOptions);
+await createGuide(root, resume(privacy, ['Envie para pessoa@example.com'], actor), privacyOptions);
 assert.doesNotMatch(await readFile(join(root, '.guide-plans', `${privacy.planId}.json`), 'utf8'), /pessoa@example\.com/);
 
 const privateRoot = await mkdtemp(join(tmpdir(), 'm536-private-'));
@@ -74,22 +75,22 @@ const namedOptions = { ...options, generate: async (_root, request) => {
   return { status: 'ready', articles: [namedArticle] };
 } };
 const namedPlan = await createGuide(privateRoot, input, namedOptions);
-const namedResult = await createGuide(privateRoot, { planId: namedPlan.planId, answers: ['Maria Oliveira'], requestedBy: actor }, namedOptions);
+const namedResult = await createGuide(privateRoot, resume(namedPlan, ['Maria Oliveira'], actor), namedOptions);
 assert.equal(namedResult.reviewRequired, true, 'draft exige revisão humana');
 const namedState = JSON.parse(await readFile(join(privateRoot, '.guide-plans', `${namedPlan.planId}.json`), 'utf8'));
 assert.equal(typeof namedState.answerHash, 'string');
 assert.doesNotMatch(JSON.stringify(namedState), /Maria Oliveira/, 'plano não guarda resposta nem artigo gerado');
 assert.equal(namedState.result?.article, undefined);
-assert.deepEqual(await createGuide(privateRoot, { planId: namedPlan.planId, answers: ['Maria Oliveira'], requestedBy: actor }, namedOptions), namedResult);
+assert.deepEqual(await createGuide(privateRoot, resume(namedPlan, ['Maria Oliveira'], actor), namedOptions), namedResult);
 
 const ttlRoot = await mkdtemp(join(tmpdir(), 'm536-ttl-'));
 let now = 1_000_000;
 const timed = { ...options, now: () => now, planTtlMs: 1_000 };
 const old = await createGuide(ttlRoot, input, timed);
 now += 999;
-await assert.rejects(createGuide(ttlRoot, { planId: old.planId, answers: ['Vendas'], requestedBy: actor }, { ...timed, getContext: async () => context('b'.repeat(40)) }), /fontes mudaram/i);
+await assert.rejects(createGuide(ttlRoot, resume(old, ['Vendas'], actor), { ...timed, getContext: async () => context('b'.repeat(40)) }), /fontes mudaram/i);
 now += 1;
-await assert.rejects(createGuide(ttlRoot, { planId: old.planId, answers: ['Vendas'], requestedBy: actor }, timed), /plano expirado, refaça/i);
+await assert.rejects(createGuide(ttlRoot, resume(old, ['Vendas'], actor), timed), /plano expirado, refaça/i);
 assert.equal((await readdir(join(ttlRoot, '.guide-plans'))).some((name) => name === `${old.planId}.json`), false);
 const abandoned = await createGuide(ttlRoot, input, timed);
 now += 1_001;
@@ -99,10 +100,10 @@ assert.equal((await readdir(join(ttlRoot, '.guide-plans'))).some((name) => name 
 const realDraftRoot = await mkdtemp(join(tmpdir(), 'm536-draft-'));
 const draftOptions = { ...options, submit: undefined };
 const draftPlan = await createGuide(realDraftRoot, input, draftOptions);
-const draft = await createGuide(realDraftRoot, { planId: draftPlan.planId, answers: ['Vendas'], requestedBy: actor }, draftOptions);
+const draft = await createGuide(realDraftRoot, resume(draftPlan, ['Vendas'], actor), draftOptions);
 assert.equal(draft.draft.status, 'draft');
 assert.match(await readFile(join(realDraftRoot, draft.draft.articles[0].path), 'utf8'), /guideId: usuario-acesso/);
-assert.deepEqual(await createGuide(realDraftRoot, { planId: draftPlan.planId, answers: ['Vendas'], requestedBy: actor }, draftOptions), draft);
+assert.deepEqual(await createGuide(realDraftRoot, resume(draftPlan, ['Vendas'], actor), draftOptions), draft);
 
 const retryRoot = await mkdtemp(join(tmpdir(), 'm536-retry-'));
 let submitAttempts = 0;
@@ -114,7 +115,7 @@ const retryOptions = { ...options, submit: async (...args) => {
   } });
 } };
 const retryPlan = await createGuide(retryRoot, input, retryOptions);
-const retryInput = { planId: retryPlan.planId, answers: ['Vendas'], requestedBy: actor };
+const retryInput = resume(retryPlan, ['Vendas'], actor);
 await assert.rejects(createGuide(retryRoot, retryInput, retryOptions), /SUBMIT_FAILED|Não foi possível enviar/);
 const retryResult = await createGuide(retryRoot, retryInput, retryOptions);
 assert.equal(retryResult.status, 'draft');
@@ -133,7 +134,7 @@ const conflictOptions = { ...options, submit: async (...args) => {
   } });
 } };
 const conflictPlan = await createGuide(conflictRoot, input, conflictOptions);
-const conflictInput = { planId: conflictPlan.planId, answers: ['Vendas'], requestedBy: actor };
+const conflictInput = resume(conflictPlan, ['Vendas'], actor);
 await assert.rejects(createGuide(conflictRoot, conflictInput, conflictOptions), /SUBMIT_FAILED|Não foi possível enviar/);
 const conflictPath = join(conflictRoot, '.drafts', `${article.path}.mdx`);
 await writeFile(conflictPath, 'draft divergente');
@@ -143,7 +144,7 @@ assert.equal(await readFile(conflictPath, 'utf8'), 'draft divergente', 'não sob
 const occupiedRoot = await mkdtemp(join(tmpdir(), 'm536-occupied-'));
 const occupiedPlan = await createGuide(occupiedRoot, input, { ...options, submit: undefined });
 await submitContentPackage(occupiedRoot, [article], 'draft', actor);
-const occupiedInput = { planId: occupiedPlan.planId, answers: ['Vendas'], requestedBy: actor };
+const occupiedInput = resume(occupiedPlan, ['Vendas'], actor);
 await assert.rejects(createGuide(occupiedRoot, occupiedInput, { ...options, submit: undefined }), /Draft já existe/);
 await assert.rejects(createGuide(occupiedRoot, occupiedInput, { ...options, submit: undefined }), /Draft já existe/, 'draft de outro plano não vira retomada aceita');
 
