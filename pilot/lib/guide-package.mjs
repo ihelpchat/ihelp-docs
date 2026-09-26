@@ -19,7 +19,7 @@ const serialized = (value) => `${canonical(value)}\n`;
 const allowedCharacters = /^[A-Za-zÀÁÂÃÇÉÊÍÓÔÕÚÜàáâãçéêíóôõúü0-9 .,;:!?()\[\]{}'"“”‘’…•●○◉—–\-_/\\@#%&+=*<>|$]+$/u;
 export const routeSentenceEndPunctuation = /[.,;:!?)[\]}"'`“”‘’…]+$/u;
 
-function validatePublicArtifact(artifact, name) {
+export function validatePublicArtifact(artifact, name) {
   function visit(value, location, key) {
     if (typeof value === 'string') {
       const normalized = value.normalize('NFKC');

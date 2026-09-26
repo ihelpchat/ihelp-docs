@@ -9,6 +9,7 @@ import { stringify } from 'yaml';
 import { articleFields, articleSchema } from './article-fields.mjs';
 import { githubWriteToken } from './env-compat.mjs';
 import { guideSchema } from '../architecture/conversation-v1.mjs';
+import { assertPublicSubmit } from './public-submit-gate.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -27,6 +28,7 @@ export class SubmitArticleError extends Error {
 
 function publicSubmitError(error) {
   if (error instanceof SubmitArticleError) return error;
+  if (error?.code === 'PUBLIC_GATE') return new SubmitArticleError('PUBLIC_GATE', error.message);
   if (error?.code === 'EEXIST') return new SubmitArticleError('DRAFT_EXISTS', 'Draft já existe');
   return new SubmitArticleError('SUBMIT_FAILED', 'Não foi possível enviar o artigo');
 }
@@ -335,9 +337,13 @@ async function createDraft(root, article, rendered, { allowExistingDraft = false
 }
 
 async function submitValidatedArticle(root, article, mode, actor, beforePull) {
-  const [{ rendered }] = safeArticleList([article]);
+  const items = safeArticleList([article]);
+  const [{ rendered }] = items;
   safeContentPath(root, article.path);
-  if (mode === 'pull_request') return createPullRequest(article, rendered, actor, beforePull);
+  if (mode === 'pull_request') {
+    const gate = await assertPublicSubmit(root, items);
+    return { ...await createPullRequest(article, rendered, actor, beforePull), ...gate };
+  }
   if (mode !== 'draft') throw new Error('mode deve ser draft ou pull_request');
   return createDraft(root, article, rendered);
 }
@@ -491,7 +497,8 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
       }
       result = { status: 'draft', articles: drafts };
     } else if (mode === 'pull_request') {
-      result = await createPackagePullRequest(items, deletes, actor, (branch) => auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'external_request', reference: branch }));
+      const gate = await assertPublicSubmit(root, items, deletes);
+      result = { ...await createPackagePullRequest(items, deletes, actor, (branch) => auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'external_request', reference: branch })), ...gate };
     } else {
       throw new SubmitArticleError('INVALID_MODE', 'mode deve ser draft ou pull_request');
     }
