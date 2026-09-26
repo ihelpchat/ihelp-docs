@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { searchLocalProductContext } from './local-product-context.mjs';
+import { isAllowedSourcePath, searchLocalProductContext } from './local-product-context.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
 
@@ -21,6 +21,7 @@ const files = {
   'src/pages/Contacts/index.tsx': 'export function Contacts() { return <button>Importar contatos</button>; }',
   '.env': 'Criar robô de atendimento fixture-credential',
   'src/private/credentials.ts': 'Criar robô de atendimento credential-file-marker',
+  'src/auth/my-token.ts': 'Criar robô de atendimento token-file-marker',
   'src/data/customer.ts': 'export const x = "Criar robô de atendimento operational marker";',
 };
 for (let index = 0; index < 75; index += 1) files[`src/components/AttendanceChat${index}.tsx`] = 'export const AttendanceChat = "atendimento";';
@@ -33,9 +34,13 @@ await writeFile(outside, 'export const stolen = "Criar robô de atendimento exte
 await symlink(outside, join(checkout, 'src/pages/Outside.tsx'));
 await symlink(checkout, join(base, 'link'));
 git('add', '-A');
+git('add', '-f', '.env');
 git('commit', '-qm', 'fixture');
 const sha = git('rev-parse', 'HEAD');
 const source = { repository: 'ihelpchat/front-react', root: checkout, sha, role: 'frontend' };
+assert.equal(isAllowedSourcePath('.env'), false, '.env não pode sequer ser elegível para leitura');
+assert.equal(isAllowedSourcePath('src/data/customer.ts'), false);
+assert.equal(isAllowedSourcePath('src/auth/my-token.ts'), false);
 
 for (const [topic, expected] of [
   ['Criar robô de atendimento', 'src/pages/Robots/index.tsx'],
@@ -47,7 +52,7 @@ for (const [topic, expected] of [
   assert.equal(result.matches[0]?.path, expected, `implementação causal para ${topic}`);
   assert.equal(result.matches[0]?.sha, sha);
   assert.ok(result.matches[0]?.line > 0);
-  assert.doesNotMatch(JSON.stringify(result), /fixture-credential|credential-file-marker|operational marker|external marker|\.env|Outside\.tsx/);
+  assert.doesNotMatch(JSON.stringify(result), /fixture-credential|credential-file-marker|token-file-marker|operational marker|external marker|\.env|Outside\.tsx/);
 }
 const wrongSha = await searchLocalProductContext('Criar robô de atendimento', '', { checkouts: [{ ...source, sha: '0'.repeat(40) }] });
 assert.equal(wrongSha.code[0].available, false);
