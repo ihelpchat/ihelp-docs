@@ -29,7 +29,7 @@ export const articleSchema = z.strictObject({
   assistantQuestion: z.string().optional(),
   assistantAliases: z.array(z.string().min(2).max(120)).max(20).optional(),
   assistantKeywords: z.array(z.string().min(2).max(80)).max(30).optional(),
-  assistantRouting: z.strictObject({ actions: z.array(z.string().min(2)).min(1), objects: z.array(z.string().min(2)).min(1) }).optional(),
+  assistantRouting: z.strictObject({ actions: z.array(z.string().min(2)).min(1), objects: z.array(z.string().min(2)).min(1), ownFeatures: z.array(z.string().min(2)).min(1).optional() }).optional(),
   assistantOverview: z.string().optional(),
   assistantInitialSteps: z.coerce.number().int().optional(),
   assistantSuggestions: z.union([z.array(z.string()), z.string().transform(parseAssistantSuggestions)]).optional(),

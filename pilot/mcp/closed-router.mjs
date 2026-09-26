@@ -12,6 +12,27 @@ const ignored = new Set(['a', 'ao', 'as', 'como', 'criar', 'fazer', 'configurar'
 const stem = (word) => word.replace(/s$/u, '').replace(/(?:ou|ar|er|ir)$/u, '');
 const meaningful = (value) => words(value).filter((word) => word.length >= 3 && !ignored.has(word))
   .map(stem).filter((word) => word.length >= 3);
+const actions = JSON.parse(await readFile(new URL('../architecture/product-actions.json', import.meta.url), 'utf8'));
+const extraFeatures = JSON.parse(await readFile(new URL('./competing-features.json', import.meta.url), 'utf8'));
+const featureTerms = new Set([
+  ...Object.values(actions).flatMap(({ label }) => words(label)
+    .filter((word) => !['abrir', 'a', 'o', 'tela', 'do', 'da', 'de'].includes(word))),
+  ...extraFeatures.terms.map(normalize),
+]);
+const hasTerm = (question, term) => {
+  const expression = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|\\b)${expression}s?(?:\\b|$)`, 'u').test(normalize(question));
+};
+const deniedElsewhere = (question, item) => {
+  const own = new Set([...(item.ownFeatures ?? []), ...words(item.title), ...words(item.guideId)]
+    .map((term) => normalize(term).replace(/s$/u, '')));
+  return [...featureTerms].some((term) => {
+    if (own.has(term.replace(/s$/u, '')) || !hasTerm(question, term)) return false;
+    // "Não é campanha, quero recado" excludes campaign rather than requesting it.
+    return !new RegExp(`\\b(?:nao|nem) (?:e |quero |sobre )?(?:uma? )?${term}s?\\b`, 'u')
+      .test(normalize(question));
+  });
+};
 const supportedByQuestion = (question, item) => {
   if (item.actions?.length && item.objects?.length) {
     const contains = (phrase) => new RegExp(`(?:^|\\b)${normalize(phrase).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\b|$)`, 'u').test(normalize(question));
@@ -48,7 +69,8 @@ export async function publishedGuideCatalog(root) {
         question: String(metadata.assistantQuestion ?? ''), description: String(metadata.description ?? ''),
         aliases: Array.isArray(metadata.assistantAliases) ? metadata.assistantAliases.filter((value) => typeof value === 'string') : [],
         keywords: Array.isArray(metadata.assistantKeywords) ? metadata.assistantKeywords.filter((value) => typeof value === 'string') : [],
-        actions: metadata.assistantRouting?.actions ?? [], objects: metadata.assistantRouting?.objects ?? [] });
+        actions: metadata.assistantRouting?.actions ?? [], objects: metadata.assistantRouting?.objects ?? [],
+        ownFeatures: metadata.assistantRouting?.ownFeatures ?? [] });
     }
   }
   await visit(directory);
@@ -65,7 +87,7 @@ function negated(question, item) {
 export function lexicalFallback(question, catalog) {
   const value = normalize(question).replace(/[?!.]/g, '').trim();
   const matches = catalog.filter((item) => {
-    if (negated(question, item)) return false;
+    if (negated(question, item) || deniedElsewhere(question, item)) return false;
     const title = normalize(item.title).trim().replace(/s$/u, '');
     const prompt = normalize(item.question).replace(/[?!.]/g, '').trim();
     return value === prompt || (title.length >= 5 && new RegExp(`\\b${title}s?\\b`).test(value));
@@ -119,6 +141,7 @@ export async function routeMessage(question, { catalog, client, budget, history 
     if (identifiers.has(parsed.choice)) {
       const explicit = lexicalFallback(safeQuestion, catalog);
       return negated(safeQuestion, catalog.find(({ guideId }) => guideId === parsed.choice))
+        || deniedElsewhere(safeQuestion, catalog.find(({ guideId }) => guideId === parsed.choice))
         || !supportedByQuestion(safeQuestion, catalog.find(({ guideId }) => guideId === parsed.choice))
         || (explicit.kind === 'guide' && explicit.guideId !== parsed.choice)
         ? NONE : { kind: 'guide', guideId: parsed.choice };
