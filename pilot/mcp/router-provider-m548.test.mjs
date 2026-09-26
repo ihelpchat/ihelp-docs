@@ -18,6 +18,10 @@ const budget = (name) => ({ file: join(dir, name), dailyLimitUsd: 1, reserveUsd:
 try {
   await test('todo payload da triagem usa o esforço configurado', async () => {
     assert.equal(typeof env.assistantRouterEffort, 'function', 'assistantRouterEffort deve existir');
+    assert.equal(env.assistantRouterEffort({}), 'none', 'padrão compatível com gpt-6-luna');
+    for (const effort of ['none', 'minimal', 'low', 'medium', 'high']) {
+      assert.equal(env.assistantRouterEffort({ ASSISTANT_ROUTER_EFFORT: effort }), effort);
+    }
     for (const effort of ['none', 'low']) {
       process.env.ASSISTANT_ROUTER_EFFORT = effort;
       let payload;
@@ -40,8 +44,8 @@ try {
     assert.match(result.stderr, /ASSISTANT_ROUTER_EFFORT.*foo/u, 'erro deve nomear configuração e valor');
   });
 
-  await test('400 libera reserva e não aumenta spent; 500 cobra', async () => {
-    for (const [status, spent] of [[400, 0], [500, 100_000]]) {
+  await test('4xx inválido libera reserva e não aumenta spent; 408, 429 e 500 cobram', async () => {
+    for (const [status, spent] of [[400, 0], [401, 0], [403, 0], [404, 0], [422, 0], [408, 100_000], [429, 100_000], [500, 100_000]]) {
       const file = join(dir, `status-${status}.json`);
       const client = { responses: { create: async () => { throw Object.assign(new Error('Unsupported value'), { status }); } } };
       await assert.rejects(createBudgetedResponse(client, { model: 'fixture', input: 'teste' }, { ...budget(`status-${status}.json`), file }), /Unsupported value/u);

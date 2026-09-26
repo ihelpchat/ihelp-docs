@@ -38,7 +38,10 @@ async function scenario(providerStatus, withKey = true) {
     response.writeHead(providerStatus, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify(providerStatus === 400
       ? { error: { message: "Unsupported value: 'low'", type: 'invalid_request_error' } }
-      : { id: 'resp_fixture', status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '{"choice":"perguntar"}' }] }], usage: { input_tokens: 1, output_tokens: 1 } }));
+      : { id: 'resp_fixture', object: 'response', created_at: 1, model: 'fixture-router', status: 'completed',
+        output: [{ type: 'message', id: 'msg_fixture', status: 'completed', role: 'assistant',
+          content: [{ type: 'output_text', text: '{"choice":"perguntar"}', annotations: [] }] }],
+        usage: { input_tokens: 1, output_tokens: 1 } }));
   });
   provider.listen(0, '127.0.0.1');
   await once(provider, 'listening');
@@ -83,7 +86,7 @@ try {
   });
   await test('provider aceita triagem e /health responde 200', async () => {
     const result = await scenario(200);
-    assert.equal(result.status, 200);
+    assert.equal(result.status, 200, JSON.stringify(result.body));
     assert.equal(result.body.codeSha, codeSha);
   });
   await test('sem OPENAI_API_KEY self-check é pulado', async () => {

@@ -9,17 +9,18 @@ import { answerQuestion } from './assistant-service.mjs';
 import { normalizeFeedback, saveFeedback, summarizeFeedback } from './feedback-service.mjs';
 import { sanitizeWidgetContext } from './real-state.mjs';
 import { saveSessionEvent, pruneSessionEvents } from './session-events.mjs';
-import { topicForQuestion } from './closed-router.mjs';
+import { topicForQuestion, routerSelfCheck } from './closed-router.mjs';
 import { actionForQuestion, issueForQuestion } from './gap-classification.mjs';
 import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { publishedPathOrNull } from './published-paths.mjs';
 import { opaqueId } from './opaque-id.mjs';
 import { authenticate, requestIdentity } from './access-control.mjs';
-import { assistantRouterModel, mcpCredentialsFromEnv } from './env-compat.mjs';
+import { assistantRouterModel, assistantRouterEffort, mcpCredentialsFromEnv } from './env-compat.mjs';
 
 const credentials = mcpCredentialsFromEnv();
 if (!credentials.length) throw new Error('Configure DOCS_MCP_CREDENTIALS ou DOCS_MCP_API_KEY antes de iniciar o MCP');
 assistantRouterModel();
+assistantRouterEffort();
 
 const mcpHandler = createMcpHandler(() => buildServer());
 const handler = toNodeHandler(mcpHandler);
@@ -118,6 +119,12 @@ export const httpServer = createServer(async (request, response) => {
       const release = JSON.parse(await readFile(join(root, 'public/release.json'), 'utf8'));
       const codeSha = release.codeSha;
       if (!/^[a-f0-9]{40}$/u.test(codeSha ?? '') || manifest.current !== catalog.contentSha256?.slice(0, 12)) throw new Error('versão indisponível');
+      const check = await routerSelfCheck();
+      if (!check.ok) {
+        response.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+          .end(JSON.stringify({ error: 'triagem rejeitada pelo provider', reason: check.reason }));
+        return;
+      }
       response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
         .end(JSON.stringify({ codeSha, contentSha256: catalog.contentSha256 }));
     } catch {

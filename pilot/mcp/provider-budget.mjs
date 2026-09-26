@@ -83,10 +83,13 @@ export async function createBudgetedResponse(client, payload, options = {}) {
     let response;
     try { response = await client.responses.create(payload, { signal: options.signal }); }
     catch (error) {
-      // A chamada pode ter sido cobrada mesmo quando a resposta se perdeu.
+      // 4xx de requisição inválida não foram processados; timeout, 408, 429 e 5xx podem ter sido cobrados.
+      const invalidRequest = Number.isInteger(error?.status) && error.status >= 400 && error.status < 500
+        && error.status !== 408 && error.status !== 429;
       await locked(config.file, (ledger) => {
         if (ledger.day === day && ledger.reservations[id] !== undefined) {
-          ledger.spent += ledger.reservations[id]; delete ledger.reservations[id];
+          if (!invalidRequest) ledger.spent += ledger.reservations[id];
+          delete ledger.reservations[id];
         }
         return { write: true };
       });

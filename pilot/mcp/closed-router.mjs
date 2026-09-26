@@ -1,10 +1,11 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseDocument } from 'yaml';
+import OpenAI from 'openai';
 import { parseGuide } from '../architecture/conversation-v1.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
 import { redactSensitiveData } from './sensitive-data.mjs';
-import { assistantRouterModel } from './env-compat.mjs';
+import { assistantRouterModel, assistantRouterEffort } from './env-compat.mjs';
 
 const normalize = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 const words = (value) => normalize(value).match(/[a-z0-9]+/g) ?? [];
@@ -139,23 +140,7 @@ export async function routeMessage(question, { catalog, client, budget, history 
   if (!catalog?.length) return NONE;
   if (!client) return { kind: 'provider_failed' };
   const identifiers = new Set(catalog.map(({ guideId }) => guideId));
-  const payload = {
-    model: assistantRouterModel(), store: false,
-    max_output_tokens: 80, reasoning: { effort: 'minimal' },
-    text: { format: { type: 'json_schema', name: 'triagem_fechada', strict: true,
-      schema: { type: 'object', additionalProperties: false, required: ['choice'],
-        properties: { choice: { type: 'string', enum: [...identifiers, ...choices] } } } } },
-    input: [{ role: 'developer', content: [
-      'Escolha apenas um valor da lista fechada. A mensagem atual vence o histórico e o contexto da tela.',
-      'Negação explícita veta o guia negado. Se houver ambiguidade, escolha perguntar.',
-      'Se pedir uma pessoa, escolha humano. Se não houver guia adequado, escolha sem guia.',
-      ...catalog.map(({ guideId, title, question: example, description, aliases = [], keywords = [] }) =>
-        `${guideId}: ${title}; ${example}; ${description}; ${aliases.join('; ')}; ${keywords.join('; ')}`),
-    ].join('\n') },
-    ...history.filter((item) => ['user', 'assistant'].includes(item?.role) && typeof item.content === 'string')
-      .slice(-2).map((item) => ({ role: item.role, content: redactSensitiveData(item.content.slice(0, 500)) })),
-    { role: 'user', content: safeQuestion }],
-  };
+  const payload = routerPayload(safeQuestion, catalog, history);
   let timer;
   const controller = new AbortController();
   const deadline = timeout ?? new Promise((resolve) => { timer = setTimeout(() => resolve('timeout'), 2_000); });
@@ -187,4 +172,46 @@ export async function routeMessage(question, { catalog, client, budget, history 
   } catch {
     return { kind: 'provider_failed' };
   } finally { clearTimeout(timer); }
+}
+
+function routerPayload(safeQuestion, catalog, history = []) {
+  const identifiers = new Set(catalog.map(({ guideId }) => guideId));
+  return {
+    model: assistantRouterModel(), store: false,
+    max_output_tokens: 80, reasoning: { effort: assistantRouterEffort() },
+    text: { format: { type: 'json_schema', name: 'triagem_fechada', strict: true,
+      schema: { type: 'object', additionalProperties: false, required: ['choice'],
+        properties: { choice: { type: 'string', enum: [...identifiers, ...choices] } } } } },
+    input: [{ role: 'developer', content: [
+      'Escolha apenas um valor da lista fechada. A mensagem atual vence o histórico e o contexto da tela.',
+      'Negação explícita veta o guia negado. Se houver ambiguidade, escolha perguntar.',
+      'Se pedir uma pessoa, escolha humano. Se não houver guia adequado, escolha sem guia.',
+      ...catalog.map(({ guideId, title, question: example, description, aliases = [], keywords = [] }) =>
+        `${guideId}: ${title}; ${example}; ${description}; ${aliases.join('; ')}; ${keywords.join('; ')}`),
+    ].join('\n') },
+    ...history.filter((item) => ['user', 'assistant'].includes(item?.role) && typeof item.content === 'string')
+      .slice(-2).map((item) => ({ role: item.role, content: redactSensitiveData(item.content.slice(0, 500)) })),
+    { role: 'user', content: safeQuestion }],
+  };
+}
+
+let selfCheck;
+export function routerSelfCheck() {
+  if (!process.env.OPENAI_API_KEY) return Promise.resolve({ ok: true, skipped: true });
+  selfCheck ??= (async () => {
+    try {
+      const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: 0, timeout: 5_000 });
+      const catalog = [
+        { guideId: 'verificar-um', title: 'Verificação um', question: 'Verificar um' },
+        { guideId: 'verificar-dois', title: 'Verificação dois', question: 'Verificar dois' },
+      ];
+      const result = await createBudgetedResponse(client, routerPayload('Verificar triagem', catalog));
+      return result.kind === 'ok' ? { ok: true } : { ok: false, reason: result.kind };
+    } catch (error) {
+      const status = error?.status;
+      const detail = typeof error?.message === 'string' ? error.message.match(/Unsupported value[^\n]*/u)?.[0] : undefined;
+      return { ok: false, reason: detail?.slice(0, 200) ?? (Number.isInteger(status) ? `Provider HTTP ${status}` : 'Provider indisponível') };
+    }
+  })();
+  return selfCheck;
 }
