@@ -1,12 +1,12 @@
-# O serviço Railway executa somente o MCP/assistente. Assets e build do frontend ficam na Vercel.
+# O MCP e o site staging usam Dockerfiles distintos; ambos precisam dos artefatos públicos.
 app
 components
 lib
-public
 scripts
+out
+release-dist
 .next
 .vercel
-out
 node_modules
 .drafts
 coverage
