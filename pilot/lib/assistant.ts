@@ -93,7 +93,8 @@ function stateSummary(state: Record<string, unknown>): string {
 }
 
 export function supportMessageFor(reply: AssistantReply): string {
-  if (!reply.escalation) return 'Olá! Consultei a Central de Ajuda do iHelp e preciso de atendimento.';
+  if (!reply.escalation) return ['Olá! Consultei a Central de Ajuda do iHelp e preciso de atendimento.',
+    ...(reply.guide ? [`Guia: ${reply.guide.guideId}; passo: ${reply.guide.stepId}.`] : [])].join('\n');
   const intentLabels: Record<AssistantEscalation['intent'], string> = {
     create_robot: 'criar robô', manage_users: 'gerenciar usuários', connect_channel: 'conectar canal',
     billing: 'cobrança ou plano', campaigns: 'campanhas', templates: 'templates',
@@ -113,7 +114,8 @@ export function supportMessageFor(reply: AssistantReply): string {
     'Olá! Preciso de atendimento no iHelp.',
     `Intenção: ${intentLabels[reply.escalation.intent]}.`,
     `Diagnóstico inicial: ${diagnosisLabels[reply.escalation.diagnosis]}.`,
-    ...(reply.escalation.guideId && reply.escalation.stepId ? [`Guia: ${reply.escalation.guideId}; passo: ${reply.escalation.stepId}.`] : []),
+    ...((reply.escalation.guideId && reply.escalation.stepId) || reply.guide
+      ? [`Guia: ${reply.escalation.guideId ?? reply.guide?.guideId}; passo: ${reply.escalation.stepId ?? reply.guide?.stepId}.`] : []),
     ...(state ? [`Estado informado pelo aplicativo, não confirmado pelo servidor: ${state}.`] : []),
     `Tentativas: ${reply.escalation.attempts.map((item) => attemptLabels[item]).join('; ') || 'nenhuma registrada'}.`,
   ].join('\n');
@@ -225,10 +227,39 @@ function safeGuide(value: unknown): AssistantGuideState | undefined {
 
 /** Mesmo montador usado pelo contexto da UI e pelas jornadas HTTP. */
 export function buildAssistantRequest(question: string, priorReply: AssistantReply | undefined, options: Omit<AssistantRequest, 'question'>): AssistantRequest {
-  const guide = options.guide ?? (priorReply?.resolution === 'in_progress' ? priorReply.guide : undefined);
+  const guide = options.guide ?? (priorReply?.resolution === 'in_progress' || priorReply?.resolution === 'not_found' ? priorReply.guide : undefined);
   const choice = guide?.pendingChoiceId && priorReply?.suggestions.includes(question)
     ? priorReply.guideChoices?.find((item) => item.label === question)?.id : undefined;
   return { ...options, question, ...(guide ? { guide: { ...guide, ...(choice ? { choiceId: choice } : {}) } } : {}) };
+}
+
+export type AssistantClickable =
+  | { kind: 'request'; slot: 'suggestion' | 'navigation'; label: string; request: AssistantRequest }
+  | { kind: 'link'; slot: 'action' | 'support'; label: string; href: string; stepIndex?: number };
+
+/** Os controles de guia que a tela mostra e que a jornada HTTP percorre. */
+export function clickablesFor(reply: AssistantReply, options: {
+  supportUrl: string;
+  productActionUrl: (action: AssistantProductAction) => string | null;
+  requestOptions?: Omit<AssistantRequest, 'question'>;
+}): AssistantClickable[] {
+  const result: AssistantClickable[] = [];
+  const request = (label: string, slot: 'suggestion' | 'navigation') => result.push({
+    kind: 'request', slot, label, request: buildAssistantRequest(label, reply, options.requestOptions ?? {}),
+  });
+  reply.steps.forEach((step, stepIndex) => {
+    if (!step.action) return;
+    const href = options.productActionUrl(step.action);
+    if (href) result.push({ kind: 'link', slot: 'action', label: step.action.label, href, stepIndex });
+  });
+  reply.suggestions.forEach((label) => request(label, 'suggestion'));
+  if (reply.guide && reply.resolution === 'in_progress') {
+    request('Voltar', 'navigation');
+    request('Recomeçar', 'navigation');
+  }
+  if (reply.resolution !== 'complete') result.push({ kind: 'link', slot: 'support', label: 'Falar com o atendimento',
+    href: `${options.supportUrl}?text=${encodeURIComponent(supportMessageFor(reply))}` });
+  return result;
 }
 
 /** Aceita o formato completo e o antigo ({ answer, sources: { title, path }[] }). */

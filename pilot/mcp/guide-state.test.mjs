@@ -57,7 +57,8 @@ Conteúdo de teste.
   assert.equal(branch.guide.stepId, 'android');
   assert.equal(branch.steps[0].text, 'Toque nos três pontos.');
   const replay = await run('Android', { ...branch.guide, choiceId: 'android' });
-  assert.equal(replay.guide, undefined);
+  assert.equal(replay.guide.stepId, 'android');
+  assert.equal(replay.guide.stateToken, undefined, 'estado seguro conserva contexto sem autorizar avanço');
   assert.deepEqual(replay.suggestions, ['Recomeçar', 'Falar com uma pessoa']);
   const help = await run('Preciso de ajuda', branch.guide);
   assert.equal(help.guide.stepId, 'android');
@@ -65,7 +66,8 @@ Conteúdo de teste.
   const back = await run('Voltar', branch.guide);
   assert.equal(back.guide.stepId, 'escolha');
   const invalid = await run('Avançar', state('android', { version: 2 }));
-  assert.equal(invalid.guide, undefined);
+  assert.equal(invalid.guide.stepId, 'android');
+  assert.equal(invalid.guide.stateToken, undefined, 'estado seguro conserva contexto sem autorizar avanço');
   assert.deepEqual(invalid.suggestions, ['Recomeçar', 'Falar com uma pessoa']);
   const no = await run('Deu certo? Não', branch.guide);
   assert.equal(no.resolution, 'partial');

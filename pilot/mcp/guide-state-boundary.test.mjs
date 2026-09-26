@@ -52,7 +52,10 @@ const post = async (question, guide) => {
 const safe = (reply) => {
   assert.equal(reply.resolution, 'not_found');
   assert.deepEqual(reply.suggestions, ['Recomeçar', 'Falar com uma pessoa']);
-  assert.equal(reply.guide, undefined);
+  if (reply.guide) {
+    assert.equal(reply.guide.guideId, 'reconectar-canal-qr');
+    assert.equal(reply.guide.stateToken, undefined, 'estado seguro não autoriza avançar');
+  }
 };
 try {
   const first = await post('Começar', state());

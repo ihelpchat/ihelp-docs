@@ -5,7 +5,7 @@ import { parseGuide } from '../architecture/conversation-v1.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import actions from '../architecture/product-actions.json' with { type: 'json' };
 import { diagnoseState, escalationFor, sanitizeWidgetContext } from './real-state.mjs';
-import { guideStateToken, validGuideStateToken } from './opaque-id.mjs';
+import { guideStateToken, guideStatePath } from './opaque-id.mjs';
 
 const plain = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 const human = (value) => /(?:falar com (?:uma )?pessoa|falar com (?:um )?humano|atendimento|suporte)/.test(value);
@@ -35,18 +35,13 @@ async function publishedGuide(root, guideId) {
   return visit(base);
 }
 
-function predecessor(guide, stepId) {
-  const direct = guide.steps.findIndex((step) => step.stepId === stepId);
-  const choice = guide.steps.find((step) => step.choices?.some((item) => item.nextStepId === stepId));
-  return choice ?? guide.steps[direct - 1];
-}
-
 function reply(source, step, answer, options = {}) {
+  const { path = [step.stepId], ...rest } = options;
   const state = {
     guideId: source.guide.guideId, stepId: step.stepId,
     version: source.guide.version, mode: source.guide.mode,
     ...(step.choices?.length ? { pendingChoiceId: step.stepId } : {}),
-    stateToken: guideStateToken(source.guide.guideId, source.guide.version, step.stepId),
+    stateToken: guideStateToken(source.guide, path),
   };
   return {
     answer,
@@ -56,7 +51,7 @@ function reply(source, step, answer, options = {}) {
       ?? (guideLastStep(source.guide, step) ? ['Deu certo? Sim', 'Deu certo? Não', 'Preciso de ajuda'] : ['Concluí este passo', 'Preciso de ajuda']),
     resolution: 'in_progress', found: true, guide: state,
     ...(step.choices?.length ? { guideChoices: step.choices.map(({ id, label }) => ({ id, label })) } : {}),
-    ...options,
+    ...rest,
   };
 }
 
@@ -103,10 +98,13 @@ export async function answerGuide(root, question, state, options = {}) {
       steps: [], suggestions: [], resolution: 'partial', diagnosis, escalation,
     });
   }
+  const safeStep = current ?? guide?.steps.find((step) => step.stepId === guide.initialStepId);
   const safe = { answer: 'Não consegui continuar este guia. Você pode recomeçar ou falar com uma pessoa.', steps: [],
-    suggestions: ['Recomeçar', 'Falar com uma pessoa'], resolution: 'not_found', found: false };
+    suggestions: ['Recomeçar', 'Falar com uma pessoa'], resolution: 'not_found', found: false,
+    ...(source && safeStep ? { guide: { guideId: guide.guideId, stepId: safeStep.stepId, version: guide.version, mode: guide.mode } } : {}) };
   if (!source || !current || state.version !== guide.version || state.mode !== guide.mode) return safe;
-  const tokenValid = validGuideStateToken(state.stateToken, guide.guideId, guide.version, current.stepId);
+  const path = guideStatePath(state.stateToken, guide, current.stepId);
+  const tokenValid = Boolean(path);
   if ((state.stateToken && !tokenValid) || (current.stepId !== guide.initialStepId && !tokenValid)) return safe;
   const advancing = /(?:avancar|proximo|conclui|feito)/.test(command);
   const concluding = /(?:deu certo\? sim|deu certo|finalizar|concluir guia)/.test(command);
@@ -118,29 +116,30 @@ export async function answerGuide(root, question, state, options = {}) {
     return safe;
   }
   if (command === 'preciso de ajuda' || /nao encontrei/.test(command)) {
-    return reply(source, current, 'Vamos conferir esta etapa. Veja a ação abaixo e me diga onde parou.');
+    return reply(source, current, 'Vamos conferir esta etapa. Veja a ação abaixo e me diga onde parou.', { path: path ?? [current.stepId] });
   }
   if (command === 'voltar' || command === 'passo anterior') {
-    const previous = predecessor(guide, current.stepId) ?? current;
+    const previousPath = path?.length > 1 ? path.slice(0, -1) : [current.stepId];
+    const previous = guide.steps.find((step) => step.stepId === previousPath.at(-1));
     options.onResolvedStep?.({ guideId: guide.guideId, stepId: previous.stepId });
-    return reply(source, previous, 'Voltamos ao passo anterior.');
+    return reply(source, previous, 'Voltamos ao passo anterior.', { path: previousPath });
   }
   if (current.choices?.length) {
     const choice = current.choices.find((item) => item.id === state.choiceId && state.pendingChoiceId === current.stepId);
-    if (!choice) return reply(source, current, 'Escolha uma das opções deste passo.');
+    if (!choice) return reply(source, current, 'Escolha uma das opções deste passo.', { path });
     const selected = guide.steps.find((step) => step.stepId === choice.nextStepId) ?? current;
     options.onResolvedStep?.({ guideId: guide.guideId, stepId: selected.stepId });
-    return reply(source, selected, 'Vamos seguir pela opção escolhida.');
+    return reply(source, selected, 'Vamos seguir pela opção escolhida.', { path: [...path, selected.stepId] });
   }
   if (state.choiceId) return safe;
   const next = nextStep(guide, current);
   if (concluding) {
     if (next) return safe;
-    return reply(source, current, 'Você concluiu o guia.', { steps: [], suggestions: [], resolution: 'complete' });
+    return reply(source, current, 'Você concluiu o guia.', { path, steps: [], suggestions: [], resolution: 'complete' });
   }
   if (!next || !advancing) {
-    return reply(source, current, next ? 'Este é o passo atual.' : 'Você chegou ao último passo. Deu certo?');
+    return reply(source, current, next ? 'Este é o passo atual.' : 'Você chegou ao último passo. Deu certo?', { path: path ?? [current.stepId] });
   }
   options.onResolvedStep?.({ guideId: guide.guideId, stepId: next.stepId });
-  return reply(source, next, 'Vamos para o próximo passo.');
+  return reply(source, next, 'Vamos para o próximo passo.', { path: [...path, next.stepId] });
 }
