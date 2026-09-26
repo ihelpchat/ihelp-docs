@@ -88,7 +88,7 @@ const sourceSchema = z.object({
 export const assistantRequestSchema = z.object({
   schemaVersion: z.literal(schemaVersion).optional(),
   question: z.string().trim().min(1).max(500),
-  sessionId: z.string().regex(/^[a-zA-Z0-9_-]{8,128}$/).optional(),
+  sessionId: z.string().min(1).max(128).optional(),
   origin: z.enum(['faq', 'app']).optional(),
   history: z.array(historySchema).max(6).optional(),
   scope: z.enum(['Tudo', 'Ajuda e FAQ', 'API', 'Tutoriais', 'Novidades']).optional(),

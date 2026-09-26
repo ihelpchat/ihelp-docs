@@ -57,7 +57,8 @@ try {
     assert.equal(event.result, reply.resolution, 'evento guarda o mesmo resultado da resposta');
     assert.equal(event.guideId, 'campanhas', 'guia vem da fonte resolvida pelo servidor');
     assert.equal(event.stepId, 'passo-1', 'passo vem da etapa resolvida pelo servidor');
-    assert.equal(event.sessionId, 'fixture-session');
+    assert.match(event.sessionId, /^session-[a-f0-9]{16}$/);
+    assert.notEqual(event.sessionId, 'fixture-session', 'ID do cliente não é gravado cru');
     assert.equal(event.path, null, 'caminho não publicado não entra no evento');
     assert.ok(providerInputs.length > 0, 'a pergunta deve chamar o provider');
     assert.doesNotMatch(providerInputs.join('\n'), /FAKESECRET012345678901234567890/, 'page.path não chega ao provider');

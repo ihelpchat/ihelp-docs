@@ -82,7 +82,6 @@ export function AssistantProvider({ counts, children }: { counts: ScopeCounts; c
   useEffect(() => {
     try {
       const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') as { messages?: ChatMessage[]; scope?: AssistantScope; sessionId?: string } | null;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (saved?.messages?.length) setMessages(saved.messages);
       if (saved?.scope) setScope(saved.scope);
       if (saved?.sessionId && /^[a-zA-Z0-9_-]{8,128}$/.test(saved.sessionId)) sessionId.current = saved.sessionId;

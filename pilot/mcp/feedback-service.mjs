@@ -1,9 +1,17 @@
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { isPublishedPath } from './published-paths.mjs';
+import { z } from 'zod/v4';
 
 const validTypes = new Set(['assistant', 'article']);
 const validValues = new Set(['up', 'down']);
+export const feedbackInputSchema = z.object({
+  eventId: z.string().regex(/^[a-z0-9-]{3,100}$/i).optional(),
+  type: z.enum(['assistant', 'article']),
+  value: z.enum(['up', 'down']),
+  path: z.string().nullable(),
+  sources: z.array(z.string()).optional(),
+});
 
 function clean(value, max) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -14,6 +22,7 @@ function localPath(value) {
 }
 
 export function normalizeFeedback(input) {
+  if (!feedbackInputSchema.safeParse(input).success) throw new Error('Feedback inválido.');
   const type = clean(input?.type, 20);
   const value = clean(input?.value, 10);
   const path = clean(input?.path, 300);

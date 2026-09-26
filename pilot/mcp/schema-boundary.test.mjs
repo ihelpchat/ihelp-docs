@@ -83,7 +83,12 @@ const post = (endpoint, body) => fetch(`http://127.0.0.1:${httpServer.address().
 
 try {
   const cases = [
-    ['/assistant', assistantRequestSchema, { question: 'Como criar campanha?', sessionId: 'fixture-session-1' }],
+    ['/assistant', assistantRequestSchema, {
+      question: 'Como criar campanha?', sessionId: 'fixture-session-1',
+      history: [{ role: 'user', content: 'campanha' }],
+      page: { path: '/assistente', title: 'Assistente' },
+      guide: { guideId: 'reconectar-canal-qr', stepId: 'passo-1', version: 1, mode: 'real' },
+    }],
     ['/feedback', feedbackInputSchema, { type: 'assistant', value: 'up', path: '/assistente' }],
     ['/assistant', sessionEventSchema, { question: 'Como criar campanha?', sessionId: 'fixture-session-2' }],
   ];
@@ -92,9 +97,13 @@ try {
     assert.ok(paths.length, `${endpoint} precisa expor campos de texto no schema`);
     for (const path of paths) {
       for (const marker of [secret, phone]) {
-        const body = setAt(base, path, marker);
+        const value = path.at(-1) === 'path' || path[0] === 'sources' ? `/docs/${marker}` : marker;
+        const body = setAt(base, path, value);
         const response = await post(endpoint, body);
         assert.ok([200, 201, 400].includes(response.status), `${endpoint} ${path.join('.')} recebeu ${response.status}`);
+        if (schema.safeParse(body).success && schema !== sessionEventSchema) {
+          assert.ok([200, 201].includes(response.status), `${endpoint} ${path.join('.')} aceito pelo schema precisa alcançar o HTTP`);
+        }
         const output = `${providerInputs.join('\n')}\n${await filesText(dir)}`;
         assert.ok(!output.includes(marker), `${endpoint} ${path.join('.')} vazou sentinela`);
       }

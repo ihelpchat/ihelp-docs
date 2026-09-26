@@ -2,14 +2,25 @@ import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises
 import { dirname } from 'node:path';
 import guideIds from '../architecture/guide-ids.json' with { type: 'json' };
 import { isPublishedPath } from './published-paths.mjs';
+import { z } from 'zod/v4';
 
 const DAY_MS = 24 * 60 * 60_000;
-const FIELDS = new Set(['sessionId', 'origin', 'guideId', 'stepId', 'durationMs', 'result', 'path', 'createdAt']);
 const ID = /^[a-z0-9][a-z0-9-]{2,63}$/iu;
 const PATH = /^\/(?!\/)[a-z0-9/_-]*$/iu;
 const ORIGINS = new Set(['faq', 'app']);
 const GUIDE_IDS = new Set(guideIds);
 const RESULTS = new Set(['complete', 'partial', 'not_found', 'escalated', 'abandoned']);
+export const sessionEventSchema = z.object({
+  sessionId: z.string().regex(ID),
+  origin: z.enum(['faq', 'app']),
+  guideId: z.string().optional(),
+  stepId: z.string().regex(ID).optional(),
+  durationMs: z.number().int().min(0).max(300_000),
+  result: z.enum([...RESULTS]),
+  path: z.string().regex(PATH),
+  createdAt: z.string().optional(),
+}).strict();
+const FIELDS = new Set(Object.keys(sessionEventSchema.shape));
 const pending = new Map();
 
 function invalid() { throw new Error('Evento inválido.'); }
@@ -23,7 +34,8 @@ function serialize(file, operation) {
 }
 
 export function normalizeSessionEvent(input, { now = Date.now() } = {}) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)
+  if (!sessionEventSchema.safeParse(input).success
+    || !input || typeof input !== 'object' || Array.isArray(input)
     || Object.keys(input).some((key) => !FIELDS.has(key))
     || !ID.test(input.sessionId ?? '') || !ORIGINS.has(input.origin)
     || (input.guideId !== undefined && !GUIDE_IDS.has(input.guideId))

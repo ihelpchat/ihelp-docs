@@ -9,6 +9,7 @@ import { sanitizeWidgetContext } from './real-state.mjs';
 import { saveSessionEvent, pruneSessionEvents } from './session-events.mjs';
 import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { publishedPathOrNull } from './published-paths.mjs';
+import { opaqueId } from './opaque-id.mjs';
 
 const apiKey = process.env.DOCS_MCP_API_KEY;
 if (apiKey && apiKey.length < 24) throw new Error('DOCS_MCP_API_KEY precisa ter ao menos 24 caracteres');
@@ -138,9 +139,8 @@ export const httpServer = createServer(async (request, response) => {
           await pruneSessionEvents(sessionEventsFile, { now });
           lastSessionPrune = now;
         }
-        const safeId = (value) => typeof value === 'string' && /^[a-z0-9][a-z0-9-]{2,63}$/iu.test(value) ? value : undefined;
         await saveSessionEvent(sessionEventsFile, {
-          sessionId: safeId(body.sessionId) ?? crypto.randomUUID(),
+          sessionId: opaqueId('session', body.sessionId ?? crypto.randomUUID()),
           origin: body.origin === 'app' ? 'app' : 'faq',
           ...resolvedStep,
           durationMs: Math.min(now - startedAt, 300_000),
@@ -170,12 +170,13 @@ export const httpServer = createServer(async (request, response) => {
       }
       const normalized = {
         ...body,
+        ...(body.eventId === undefined ? {} : { eventId: opaqueId('event', body.eventId) }),
         path: publishedPathOrNull(body.path),
         ...(body.sources === undefined ? {} : { sources: body.sources.map(publishedPathOrNull).filter(Boolean) }),
       };
+      normalizeFeedback(normalized);
       const ip = clientIp(request);
       if (rateLimit(response, [quota(feedbackIps, ip, feedbackIpLimit, Date.now())])) return;
-      normalizeFeedback(normalized);
       const event = await saveFeedback(feedbackFile, normalized, { userAgent: request.headers['user-agent'] });
       response.writeHead(201, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ saved: true, id: event.id }));
     } catch (error) {
