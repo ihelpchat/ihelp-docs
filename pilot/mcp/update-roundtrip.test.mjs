@@ -134,21 +134,29 @@ try {
   await writeFile(unknownFile, (await readFile(join(root, 'content/docs', `${paths[0]}.mdx`), 'utf8')).replace('\n---\n\n', '\ncampoDesconhecido: valor\n---\n\n'));
   await assert.rejects(readArticle(root, unknownPath), /campo desconhecido/i, 'leitor usa a mesma lista fechada');
 
+  const commentedPath = 'docs/principais-motivos-de-suporte/comentario-sensivel';
+  const commentedFile = join(root, 'content/docs', `${commentedPath}.mdx`);
+  await writeFile(commentedFile, (await readFile(join(root, 'content/docs', `${paths[0]}.mdx`), 'utf8')).replace('---\n', '---\n# senha: Ihelp2026!\n'));
+  await assert.rejects(readArticle(root, commentedPath), /credencial/i, 'comentário YAML sensível deve ser rejeitado antes do parse');
+  assert.equal(await readFile(join(root, 'writes.log'), 'utf8'), before, 'comentário YAML sensível deve causar zero writes');
+
   const canonical = { id: 'abrir-canais', label: 'Abrir a tela Canais', route: '/configuracoes/channel' };
   const inline = '<ProductAction id="abrir-canais" label="Abrir a tela Canais" route="/configuracoes/channel" />';
   const invalidPackages = [
-    ['metadado inválido', { icon: null }],
-    ['atributo desconhecido', { body: `${individual.body}\n<ProductAction id="abrir-canais" label="Abrir a tela Canais" route="/configuracoes/channel" onclick="x" />` }],
-    ['ação fora do catálogo', { body: `${individual.body}\n<ProductAction id="abrir-canais" label="Outro texto" route="/configuracoes/channel" />` }],
-    ['ação duplicada', { body: `${individual.body}\n${inline}` }],
-    ['ação divergente', { body: individual.body, productActions: [{ ...canonical, label: 'Outro texto' }] }],
-    ['ação ausente', { body: individual.body, productActions: [{ id: 'abrir-crm', label: 'Abrir a tela Pipeline do CRM', route: '/crm/pipeline' }] }],
+    ['metadata', 'Metadado inválido: icon', { icon: null }],
+    ['unknown-attribute', 'atributos desconhecidos', { body: individual.body.replace(inline, inline.replace(' />', ' onclick="x" />')) }],
+    ['catalog-route', 'fora do catálogo confiável', { body: individual.body.replace(inline, inline.replace('/configuracoes/channel', '/admin/excluir')) }],
+    ['catalog-label', 'fora do catálogo confiável', { body: individual.body.replace(inline, inline.replace('Abrir a tela Canais', 'Outro texto')) }],
+    ['duplicate', 'duplicado no body', { body: `${individual.body}\n${inline}` }],
+    ['divergent', 'difere do campo productActions', { productActions: [{ ...canonical, label: 'Outro texto' }] }],
+    ['missing', 'ausente de productActions', { productActions: [{ id: 'abrir-crm', label: 'Abrir a tela Pipeline do CRM', route: '/crm/pipeline' }] }],
   ];
-  for (const [reason, change] of invalidPackages) {
-    const article = { ...individual, path: `docs/principais-motivos-de-suporte/rejeitar-${reason.replaceAll(' ', '-')}`, ...change };
+  for (const [reason, message, change] of invalidPackages) {
+    const article = { ...individual, path: `docs/principais-motivos-de-suporte/rejeitar-${reason}`, ...change };
     for (const mode of ['dry_run', 'draft', 'pull_request']) {
       const response = await call('docs_submit_package', { articles: [article], mode, requestedBy: 'service:roundtrip' });
       assert.equal(response.isError, true, `${reason} deve ser rejeitado em ${mode}`);
+      assert.match(response.content[0].text, new RegExp(message, 'i'), `${reason} em ${mode} deve informar o motivo`);
       assert.equal(await readFile(join(root, 'writes.log'), 'utf8'), before, `${reason} em ${mode} deve causar zero writes`);
       if (mode === 'draft') await assert.rejects(readFile(join(root, '.drafts', `${article.path}.mdx`)), { code: 'ENOENT' }, `${reason} não deve criar draft`);
     }
