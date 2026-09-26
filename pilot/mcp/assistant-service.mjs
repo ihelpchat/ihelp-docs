@@ -9,6 +9,7 @@ import { sanitizeWidgetContext, diagnoseState, diagnosticQuestion, escalationFor
 import { redactSensitiveData } from './sensitive-data.mjs';
 import { answerGuide } from './guide-state.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
+import { publishedGuideCatalog, routeMessage } from './closed-router.mjs';
 
 const STOP_WORDS = new Set([
   'a', 'ao', 'aos', 'as', 'como', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'eu',
@@ -499,6 +500,29 @@ export async function answerQuestion(root, question, options = {}) {
   question = redactSensitiveData(question);
   if (options.guide) {
     return answerGuide(root, question, options.guide, options);
+  }
+  const published = await publishedGuideCatalog(root);
+  if (published.length) {
+    const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
+    const client = options.client ?? (apiKey ? new OpenAI({ apiKey, maxRetries: 0,
+      ...(options.baseURL ? { baseURL: options.baseURL } : {}) }) : null);
+    const route = await routeMessage(question, { catalog: published, client, budget: options.budget,
+      history: sanitizeHistory(options.history), timeout: options.routerTimeout });
+    if (route.kind === 'guide') {
+      const selected = published.find(({ guideId }) => guideId === route.guideId);
+      return answerGuide(root, question, { guideId: selected.guideId, stepId: selected.initialStepId,
+        version: selected.version, mode: selected.mode }, options);
+    }
+    if (route.kind === 'humano') return {
+      answer: 'Você pode falar com nosso time de atendimento pelo WhatsApp.',
+      sections: [], steps: [], code: null, sources: [], suggestions: [],
+      actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
+      resolution: 'partial', found: false,
+    };
+    if (route.kind === 'perguntar' || route.kind === 'none') return {
+      answer: 'Qual tarefa você quer fazer no iHelp?', sections: [], steps: [], code: null,
+      sources: [], suggestions: ['Falar com uma pessoa'], resolution: 'not_found', found: false,
+    };
   }
   if (/\b(?:falar|conversar) com (?:uma? )?(?:pessoa|atendente|humano)|\b(?:quero|preciso de) (?:um )?(?:atendente|humano|suporte)\b/i.test(normalize(question))) {
     return {

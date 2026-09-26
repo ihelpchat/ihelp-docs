@@ -1,3 +1,104 @@
-export async function routeMessage() {
-  throw new Error('não implementado');
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { parseDocument } from 'yaml';
+import { parseGuide } from '../architecture/conversation-v1.mjs';
+import { createBudgetedResponse } from './provider-budget.mjs';
+import { redactSensitiveData } from './sensitive-data.mjs';
+
+const normalize = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+const words = (value) => normalize(value).match(/[a-z0-9]+/g) ?? [];
+const ignored = new Set(['como', 'criar', 'fazer', 'quero', 'para', 'uma', 'com', 'pelo', 'meu', 'que', 'isso']);
+
+/** Only MDX containing a valid, published guide may enter the classifier's choices. */
+export async function publishedGuideCatalog(root) {
+  const directory = join(root, 'content/docs');
+  const catalog = [];
+  async function visit(folder) {
+    for (const entry of await readdir(folder, { withFileTypes: true })) {
+      const file = join(folder, entry.name);
+      if (entry.isDirectory()) { await visit(file); continue; }
+      if (!entry.isFile() || !entry.name.endsWith('.mdx')) continue;
+      const raw = await readFile(file, 'utf8');
+      const frontmatter = raw.match(/^---\n([\s\S]*?)\n---/);
+      if (!frontmatter) continue;
+      const parsed = parseDocument(frontmatter[1]);
+      if (parsed.errors.length) continue;
+      const metadata = parsed.toJS();
+      if (!metadata?.guide) continue;
+      let guide;
+      try { guide = parseGuide(metadata.guide); } catch { continue; }
+      catalog.push({ guideId: guide.guideId, initialStepId: guide.initialStepId, version: guide.version, mode: guide.mode,
+        title: String(metadata.title ?? ''),
+        question: String(metadata.assistantQuestion ?? ''), description: String(metadata.description ?? '') });
+    }
+  }
+  await visit(directory);
+  return catalog.toSorted((a, b) => a.guideId.localeCompare(b.guideId));
+}
+
+function negated(question, item) {
+  const terms = words(`${item.title} ${item.question}`).filter((word) => word.length > 4 && !ignored.has(word))
+    .map((word) => word.replace(/s$/u, ''));
+  return terms.some((term) => new RegExp(`\\b(?:nao|nem) (?:e |quero |sobre )?(?:uma? )?${term}s?\\b`).test(normalize(question)));
+}
+
+/** Lexical reserve: exact published phrasing or one unambiguous title only. */
+export function lexicalFallback(question, catalog) {
+  const value = normalize(question).replace(/[?!.]/g, '').trim();
+  const matches = catalog.filter((item) => {
+    if (negated(question, item)) return false;
+    const title = normalize(item.title).trim();
+    const prompt = normalize(item.question).replace(/[?!.]/g, '').trim();
+    return value === prompt || (title.length >= 5 && new RegExp(`\\b${title}s?\\b`).test(value));
+  });
+  return matches.length === 1 ? { kind: 'guide', guideId: matches[0].guideId } : { kind: 'none' };
+}
+
+const choices = ['perguntar', 'humano', 'sem guia'];
+const NONE = { kind: 'none' };
+
+export async function routeMessage(question, { catalog, client, budget, history = [], timeout } = {}) {
+  const safeQuestion = redactSensitiveData(question);
+  if (!catalog?.length || !client) return NONE;
+  const identifiers = new Set(catalog.map(({ guideId }) => guideId));
+  const payload = {
+    model: process.env.OPENAI_ROUTER_MODEL ?? 'gpt-6-luna', store: false,
+    max_output_tokens: 80, reasoning: { effort: 'minimal' },
+    text: { format: { type: 'json_schema', name: 'triagem_fechada', strict: true,
+      schema: { type: 'object', additionalProperties: false, required: ['choice'],
+        properties: { choice: { type: 'string', enum: [...identifiers, ...choices] } } } } },
+    input: [{ role: 'developer', content: [
+      'Escolha apenas um valor da lista fechada. A mensagem atual vence o histórico e o contexto da tela.',
+      'Negação explícita veta o guia negado. Se houver ambiguidade, escolha perguntar.',
+      'Se pedir uma pessoa, escolha humano. Se não houver guia adequado, escolha sem guia.',
+      ...catalog.map(({ guideId, title, question: example, description }) => `${guideId}: ${title}; ${example}; ${description}`),
+    ].join('\n') },
+    ...history.filter((item) => ['user', 'assistant'].includes(item?.role) && typeof item.content === 'string')
+      .slice(-2).map((item) => ({ role: item.role, content: redactSensitiveData(item.content.slice(0, 500)) })),
+    { role: 'user', content: safeQuestion }],
+  };
+  let timer;
+  const deadline = timeout ?? new Promise((resolve) => { timer = setTimeout(() => resolve('timeout'), 2_000); });
+  try {
+    if (timeout && await Promise.race([deadline, Promise.resolve('start')]) === 'timeout') {
+      return lexicalFallback(safeQuestion, catalog);
+    }
+    const pending = createBudgetedResponse(client, payload, budget ?? {});
+    const result = await Promise.race([pending, deadline]);
+    if (result === 'timeout') return lexicalFallback(safeQuestion, catalog);
+    if (result.kind !== 'ok') return NONE;
+    let parsed;
+    try { parsed = JSON.parse(result.response.output_text); } catch { return NONE; }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
+      || Object.keys(parsed).length !== 1 || typeof parsed.choice !== 'string') return NONE;
+    if (identifiers.has(parsed.choice)) {
+      const explicit = lexicalFallback(safeQuestion, catalog);
+      return negated(safeQuestion, catalog.find(({ guideId }) => guideId === parsed.choice))
+        || (explicit.kind === 'guide' && explicit.guideId !== parsed.choice)
+        ? NONE : { kind: 'guide', guideId: parsed.choice };
+    }
+    return choices.includes(parsed.choice) ? { kind: parsed.choice } : NONE;
+  } catch {
+    return NONE;
+  } finally { clearTimeout(timer); }
 }
