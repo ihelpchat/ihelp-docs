@@ -10,6 +10,8 @@ assert.throws(() => assertAllowedTarget('https://app.ihelpchat.com.evil.test'), 
 assert.throws(() => assertAllowedTarget('http://staging.ihelpchat.com'), /recusad|permitid/u);
 assert.throws(() => assertAllowedTarget('https://staging.ihelpchat.com@evil.test'), /recusad|permitid/u);
 assert.doesNotThrow(() => assertAllowedTarget('http://127.0.0.1:4173'));
+assert.doesNotThrow(() => assertAllowedTarget('https://staging.ihelpchat.com', { GUIDE_QA_ALLOWED_HOSTS: 'staging.ihelpchat.com' }));
+assert.throws(() => assertAllowedTarget('https://app.ihelpchat.com', { GUIDE_QA_ALLOWED_HOSTS: 'app.ihelpchat.com' }), /recusad|permitid/u);
 
 const root = await mkdtemp(join(tmpdir(), 'guide-proof-test-'));
 const evidence = join(root, 'evidence');
@@ -23,7 +25,8 @@ for (const [route, marker, label] of pages) {
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, 'index.html'), `<!doctype html><html><body>
     <main data-tour-id="${marker}"><button>${label}</button></main>
-    <script>window.fixtureWrites = 0; document.querySelector('button').onclick = () => { window.fixtureWrites++ }</script>
+    <script>window.fixtureWrites = 0; if (new URLSearchParams(location.search).get('role') === 'denied') document.querySelector('button').disabled = true;
+    document.querySelector('button').onclick = () => { window.fixtureWrites++ }</script>
   </body></html>`);
 }
 const site = await startQaSite(root, '');
