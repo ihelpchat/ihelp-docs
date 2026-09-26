@@ -16,7 +16,8 @@ const guides = [
   { guide: { guideId: 'user-guide', steps: [{ stepId: 'open', actionId: 'open-user' }] } },
 ];
 const sources = {
-  'connect-guide': [{ stepId: 'open', side: 'front', file: 'src/Channel.tsx', line: 12, target: 'Conectar' }],
+  'connect-guide': [{ stepId: 'open', side: 'front', file: 'src/Channel.tsx', line: 12, target: 'Conectar' },
+    { stepId: 'open', side: 'back', file: 'Controllers/ChannelsController.cs', line: 12, target: 'Read' }],
   'user-guide': [{ stepId: 'open', side: 'front', file: 'src/User.tsx', line: 20, target: 'Adicionar pessoa' }],
 };
 const actions = {
@@ -50,4 +51,17 @@ assert.deepEqual(noSnapshot.proposals, []);
 assert.ok(noSnapshot.pending.some((item) => item.includes('snapshot')));
 assert.deepEqual(run(changed('labels', manifest.labels)), run(changed('labels', manifest.labels)), 'mesmo par de SHAs reproduz resultado');
 assert.equal(JSON.stringify(labelChanged), JSON.stringify(run(changed('labels', [{ label: 'Reconectar', file: 'src/Channel.tsx' }, manifest.labels[1]]))), 'replay byte a byte');
+const noProof = run(changed('permissions', [{ ...endpoint, policy: 'Channels.Manage' }]), before);
+assert.ok(noProof.proposals.some((item) => item.guideId === 'connect-guide' && item.dependency === 'permission'));
+const unrelatedGuide = [{ guide: { guideId: 'user-guide', steps: [{ stepId: 'open', actionId: 'open-user' }] } }];
+const unrelated = calculateGuideImpact({ before, after: changed('permissions', [{ ...endpoint, policy: 'Channels.Manage' }]),
+  guides: unrelatedGuide, actions, sources });
+assert.ok(!unrelated.proposals.some((item) => item.dependency === 'permission'));
+assert.ok(unrelated.info.some((item) => item.includes('user-guide: permissão não mapeada')));
+
+const missingSource = { ...sources, 'user-guide': [{ stepId: 'open', side: 'front', file: 'src/User.tsx', line: 23, target: 'Rótulo ausente' }] };
+const missing = calculateGuideImpact({ before, after: changed('labels', manifest.labels), guides, actions, sources: missingSource });
+assert.ok(missing.pending.some((item) => item.includes('user-guide') && item.includes('open') &&
+  item.includes('src/User.tsx:23') && item.includes('rótulo da fonte não encontrado no manifest') && item.includes('anterior')));
+assert.ok(missing.pending.some((item) => item.includes('atual')));
 console.log('Guide impact test OK');
