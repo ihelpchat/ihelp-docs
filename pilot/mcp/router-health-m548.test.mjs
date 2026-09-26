@@ -25,7 +25,7 @@ async function freePort() {
   return port;
 }
 
-async function scenario(providerStatus, withKey = true, { spent = 0, retry = false } = {}) {
+async function scenario(providerStatus, withKey = true, { spent = 0, retry = false, providerMessage } = {}) {
   let calls = 0;
   let currentStatus = providerStatus;
   const provider = createServer(async (request, response) => {
@@ -38,7 +38,7 @@ async function scenario(providerStatus, withKey = true, { spent = 0, retry = fal
     assert.equal(payload.text.format.schema.properties.choice.enum.length, 5, 'catálogo mínimo de 2 guias e 3 escolhas');
     response.writeHead(currentStatus, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify(currentStatus !== 200
-      ? { error: { message: currentStatus === 400 ? "Unsupported value: 'low'" : 'Provider unavailable', type: 'invalid_request_error' } }
+      ? { error: { message: providerMessage ?? (currentStatus === 400 ? "Unsupported value: 'low'" : 'Provider unavailable'), type: 'invalid_request_error' } }
       : { id: 'resp_fixture', object: 'response', created_at: 1, model: 'fixture-router', status: 'completed',
         output: [{ type: 'message', id: 'msg_fixture', status: 'completed', role: 'assistant',
           content: [{ type: 'output_text', text: '{"choice":"perguntar"}', annotations: [] }] }],
@@ -78,7 +78,7 @@ async function scenario(providerStatus, withKey = true, { spent = 0, retry = fal
       final = { status: afterRetry.status, body: await afterRetry.json() };
       assert.equal(calls, 2, '500 deve permitir nova tentativa após 30 s');
     }
-    return { first, final, calls, ledger: JSON.parse(await readFile(ledgerFile, 'utf8')) };
+    return { first, final, calls, ledger: JSON.parse(await readFile(ledgerFile, 'utf8')), stderr };
   } finally {
     if (child.exitCode === null) {
       const exited = once(child, 'exit');
@@ -90,11 +90,28 @@ async function scenario(providerStatus, withKey = true, { spent = 0, retry = fal
 }
 
 try {
-  await test('provider 400 torna /health 503 com motivo', async () => {
+  await test('provider 400 torna /health 503 com código fixo', async () => {
     const { first: result } = await scenario(400);
     assert.equal(result.status, 503);
     assert.equal(result.body.error, 'triagem rejeitada pelo provider');
-    assert.match(result.body.reason, /Unsupported value: 'low'/u);
+    assert.equal(result.body.reason, 'unsupported_parameter');
+  });
+  await test('mensagem do provider com segredo não sai no /health', async () => {
+    const result = await scenario(400, true, { providerMessage: 'Unsupported value: sk-TESTSECRET-EXAMPLE' });
+    assert.equal(result.first.status, 503);
+    assert.equal(result.first.body.reason, 'unsupported_parameter');
+    assert.doesNotMatch(JSON.stringify(result.first.body), /sk-|TESTSECRET/u);
+    assert.doesNotMatch(result.stderr, /sk-TESTSECRET-EXAMPLE/u, 'log também deve redigir o segredo');
+  });
+  await test('401 usa código auth_failed', async () => {
+    const { first } = await scenario(401);
+    assert.equal(first.status, 503);
+    assert.equal(first.body.reason, 'auth_failed');
+  });
+  await test('mensagem desconhecida usa provider_rejected', async () => {
+    const { first } = await scenario(400, true, { providerMessage: 'Mensagem desconhecida' });
+    assert.equal(first.status, 503);
+    assert.equal(first.body.reason, 'provider_rejected');
   });
   await test('provider aceita triagem e /health responde 200', async () => {
     const { first: result } = await scenario(200);
@@ -113,7 +130,7 @@ try {
   await test('provider 500 não fica em cache; nova tentativa aceita dá 200', async () => {
     const result = await scenario(500, true, { retry: true });
     assert.equal(result.first.status, 503);
-    assert.match(result.first.body.reason, /Provider HTTP 500/u);
+    assert.equal(result.first.body.reason, 'provider_rejected');
     assert.equal(result.final.status, 200, JSON.stringify(result.final.body));
   });
   await test('orçamento esgotado é estado de uso no /health 200', async () => {
