@@ -32,6 +32,20 @@ try {
     writeFileSync(bad, changed);
     assert.notEqual(spawnSync(process.execPath, [checker, bad], { encoding: 'utf8' }).status, 0, label);
   }
+  const vercelMutations = [
+    ['rebuild no Vercel', (s) => s.replace('npx vercel@', 'npm run build\n          npx vercel@'), /Vercel não pode reconstruir artifact/],
+    ['Vercel sem environment', (s) => s.replace(/(  deploy-production-vercel:\n(?:.*\n)*?    environment:) production/, '$1 staging'), /Vercel exige environment production/],
+    ['token em outro job', (s) => s.replace('  deploy-service:\n', '  deploy-service:\n    env:\n      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}\n'), /VERCEL_TOKEN só no job Vercel/],
+  ];
+  for (const [label, mutate, reason] of vercelMutations) {
+    const changed = mutate(workflow);
+    assert.notEqual(changed, workflow, `${label}: fixture não mudou`);
+    const bad = join(temp, `${label.replaceAll(' ', '-')}.yml`);
+    writeFileSync(bad, changed);
+    const verdict = spawnSync(process.execPath, [checker, bad], { encoding: 'utf8' });
+    assert.notEqual(verdict.status, 0, label);
+    assert.match(verdict.stderr, reason, `${label}: motivo específico`);
+  }
   const releaseFile = join(temp, 'release.yml');
   const checkRelease = (source) => {
     writeFileSync(releaseFile, source);

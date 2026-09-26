@@ -74,6 +74,30 @@ assert.match(parsed.jobs['release-build'].if, /github\.event_name != 'pull_reque
 assert.equal(parsed.jobs['release-build'].environment, "${{ github.event_name == 'workflow_dispatch' && inputs.target || 'staging' }}");
 assert.equal(parsed.jobs.deploy.permissions?.pages, 'write');
 assert.equal(parsed.jobs.deploy.permissions?.['id-token'], 'write');
+const vercel = parsed.jobs['deploy-production-vercel'];
+assert.ok(vercel, 'deploy-production-vercel job obrigatório');
+assert.deepEqual(vercel.needs, ['release-build', 'deploy-service'], 'Vercel depende do artifact e serviço verificados');
+assert.match(vercel.if ?? '', /github\.event_name == 'workflow_dispatch'/, 'Vercel só no dispatch');
+assert.match(vercel.if ?? '', /inputs\.target == 'production'/, 'Vercel só em production');
+assert.match(vercel.if ?? '', /vars\.CLARICIA_DEPLOY_ENABLED == 'true'/, 'Vercel exige deploy habilitado');
+assert.equal(vercel.environment, 'production', 'Vercel exige environment production');
+const vercelSteps = vercel.steps ?? [];
+assert.ok(vercelSteps.some((step) => step.uses?.startsWith('actions/download-artifact@') && step.with?.name === 'docs-release' && step.with?.path === 'pilot/out'), 'Vercel deve baixar docs-release');
+assert.ok(vercelSteps.some((step) => /prepare-vercel-release\.mjs/.test(step.run ?? '')), 'Vercel deve empacotar artifact prebuilt');
+const vercelDeploy = vercelSteps.find((step) => /vercel@[^ ]+ deploy/.test(step.run ?? ''));
+assert.ok(vercelDeploy, 'Vercel deploy com versão fixa obrigatório');
+assert.match(vercelDeploy.run, /--prebuilt/, 'Vercel deve publicar sem rebuild');
+assert.match(vercelDeploy.run, /--prod --yes/, 'Vercel deve publicar production');
+assert.equal(vercelDeploy.env?.VERCEL_TOKEN, '${{ secrets.VERCEL_TOKEN }}', 'VERCEL_TOKEN só no passo de deploy');
+assert.equal(vercelDeploy.env?.VERCEL_PROJECT_ID, '${{ vars.VERCEL_PROJECT_ID }}', 'VERCEL_PROJECT_ID vem de vars');
+assert.equal(vercelDeploy.env?.VERCEL_SCOPE, '${{ vars.VERCEL_SCOPE }}', 'VERCEL_SCOPE vem de vars');
+assert.match(vercelDeploy.run, /pendente: VERCEL_TOKEN\/VERCEL_PROJECT_ID\/VERCEL_SCOPE não configurado/, 'configuração ausente é pendência explícita');
+assert.ok(vercelSteps.some((step) => /release\.mjs site out "\$CLARICIA_DOCS_URL"/.test(step.run ?? '')), 'Vercel deve conferir SHA no site');
+assert.doesNotMatch(JSON.stringify(vercel), /vercel build|npm run build/, 'Vercel não pode reconstruir artifact');
+assert.equal((workflow.match(/secrets\.VERCEL_TOKEN/g) ?? []).length, 1, 'VERCEL_TOKEN só no job Vercel');
+for (const [name, job] of Object.entries(parsed.jobs)) {
+  if (name !== 'deploy-production-vercel') assert.doesNotMatch(JSON.stringify(job), /VERCEL_TOKEN/, `VERCEL_TOKEN fora do job Vercel: ${name}`);
+}
 const serviceSmoke = parsed.jobs['deploy-service'].steps.find((step) => step.name === 'Deploy and wait for service verdict');
 assert.equal(serviceSmoke?.env?.NEXT_PUBLIC_ASSISTANT_URL, '${{ vars.NEXT_PUBLIC_ASSISTANT_URL }}');
 assert.equal(serviceSmoke?.env?.CLARICIA_DOCS_ORIGIN, '${{ vars.CLARICIA_DOCS_ORIGIN }}');
