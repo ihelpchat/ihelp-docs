@@ -224,21 +224,23 @@ export async function planContent(root, request, options = {}) {
     { role: 'user', content: requestText(request, existing, productContext) },
   ], options));
   const parsed = parseJson(response);
-  if (parsed.status === 'ready' && !validateGroundedOutput(parsed, productContext, ['guidance', 'risks'])) return evidencePending();
+  if (parsed.status === 'ready' && !validateGroundedOutput(parsed, productContext, ['guidance', 'risks'])) return { ...evidencePending(), pending: productContext.pending ?? [] };
   const { grounding: _grounding, ...safePlan } = parsed;
-  return { ...safePlan, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
+  return { ...safePlan, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, pending: productContext.pending ?? [], productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
 }
 
 export async function generateContentPackage(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  const withPending = (result) => productContext.pending?.length ? { ...result, pending: productContext.pending } : result;
   const pending = groundingPending(productContext);
   if (pending) return pending;
   const plan = options.plan ?? await planContent(root, request, { ...options, productContext });
   if (plan.status !== 'ready') {
-    return { status: plan.status, summary: plan.summary ?? plan.guidance, questions: plan.questions, articles: [], existing, model: plan.model };
+    return withPending({ status: plan.status, summary: plan.summary ?? plan.guidance, questions: plan.questions, articles: [], existing, model: plan.model });
   }
+  const { pending: _pending, ...planForPrompt } = plan;
   const response = await modelResponse(options, baseRequest('pacote_documentacao', PACKAGE_SCHEMA, [
     {
       role: 'developer',
@@ -255,13 +257,13 @@ export async function generateContentPackage(root, request, options = {}) {
         'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].join(' '),
     },
-    { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(plan)}`) },
+    { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`) },
   ], options));
   const parsed = parseJson(response);
   const { grounding: _grounding, ...safePackage } = parsed;
-  if (parsed.status !== 'ready') return { ...safePackage, articles: [], existing, model: response.model };
+  if (parsed.status !== 'ready') return withPending({ ...safePackage, articles: [], existing, model: response.model });
   if (!validateGroundedOutput(parsed, productContext, ['summary']) || parsed.articles.some((article) =>
-    !validateGroundedOutput(article, productContext, ['description', 'body', 'assistantOverview', 'assistantSuggestions']))) return evidencePending();
+    !validateGroundedOutput(article, productContext, ['description', 'body', 'assistantOverview', 'assistantSuggestions']))) return withPending(evidencePending());
   const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => ({
     ...article,
     productActions: article.productActions.map(normalizeCatalogLabel),
@@ -275,14 +277,14 @@ export async function generateContentPackage(root, request, options = {}) {
     return { path: article.path, valid: issues.length === 0, issues };
   }).filter(({ valid }) => !valid);
   if (invalid.length) {
-    return {
+    return withPending({
       status: 'needs_information',
       summary: 'A IA gerou conteúdo que não passou pela validação editorial.',
       questions: invalid.flatMap(({ path, issues }) => issues.map((issue) => `${path}: ${issue}`)),
       articles: [], existing, model: response.model,
-    };
+    });
   }
-  return { ...safePackage, articles, existing, model: response.model };
+  return withPending({ ...safePackage, articles, existing, model: response.model });
 }
 
 const GUIDE_SCHEMA = {

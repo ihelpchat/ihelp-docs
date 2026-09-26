@@ -138,6 +138,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
   let endpoints = [];
   let apiExamples = [];
   let contextCode = code;
+  let pending = [];
   if (normalize(module) === 'api' || /\bendpoint\b|\/api\/v\d/iu.test(topic)) {
     endpoints = code.flatMap((source) => source.endpoints ?? []);
     const docsRoot = join(provided.publicReferenceRoot ?? root, 'content/docs/api');
@@ -167,6 +168,9 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
       public: publicControllers.has(item.file)
       || (provided.explicitEndpoints ?? []).some((route) => route.toLowerCase() === item.route.toLowerCase()
         || route.toLowerCase() === item.route.replace(/^\/api\/v\d+/iu, '').toLowerCase()) }));
+    const endpointPending = endpoints.flatMap((item) => item.public
+      ? item.pending ?? []
+      : [`endpoint não público: confirmar (${item.verb} ${item.route})`]);
     const allowedBackendFiles = new Set(endpoints.filter((item) => item.public).map((item) => item.file));
     endpoints = endpoints.filter((item) => item.public);
     contextCode = code.map((source) => {
@@ -177,6 +181,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
       };
     });
     apiExamples = apiExamples.slice(0, 4);
+    pending = endpointPending;
   }
   return {
     code: contextCode,
@@ -189,7 +194,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     },
     coverage: relevantCoverage,
     endpoints,
-    pending: endpoints.flatMap((item) => item.pending ?? []),
+    pending,
     apiExamples,
     matches: [...contextCode.flatMap((source) => source.matches.map((match) => ({ ...match, repository: source.repository, ref: source.ref, role: source.role }))),
       ...endpoints.filter((item) => item.documented || item.explicit).flatMap((item) => [item, ...item.parameters, ...(item.responseFields ?? [])]
