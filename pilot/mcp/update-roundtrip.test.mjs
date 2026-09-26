@@ -118,6 +118,11 @@ try {
   assert.equal(draft.status, 'draft');
   const draftMdx = await readFile(join(root, '.drafts', `${draftArticle.path}.mdx`), 'utf8');
   assert.deepEqual(parseDocument(draftMdx.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '').toJS().guide, guided.guide);
+  for (const marker of ['IＮTERNO: uso restrito', 'CＯNFIDENCIAL: uso restrito', 'Veja\u200b isto']) {
+    const unsafeArticle = { ...guided, body: `${guided.body}\n\n${marker}` };
+    assert.equal(validateArticle(unsafeArticle).valid, false, `marcador público rejeitado: ${marker}`);
+    await assert.rejects(submitContentPackage(root, [unsafeArticle], 'dry_run', 'service:roundtrip'), /interno|invisível/i);
+  }
   const individual = await readArticle(root, paths[0]);
   individual.full = true;
   const newPath = 'docs/principais-motivos-de-suporte/novo-guia';
