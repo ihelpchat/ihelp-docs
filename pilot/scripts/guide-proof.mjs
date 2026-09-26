@@ -112,6 +112,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
           await page.goto(`${target.url}${initial}${fixture && role === 'denied' ? '?role=denied' : ''}`, { waitUntil: 'domcontentloaded' });
           const filled = new Map();
           const original = new Map();
+          const changed = new Map();
           let created = null;
           let deniedBlocked = false;
           try {
@@ -132,6 +133,14 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
             }
             const instruction = plan.control;
             if (role === 'denied' && deniedBlocked) continue;
+            if (instruction.enter) {
+              const entry = locator(page, instruction.enter);
+              if (await entry.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: entrada ambígua`);
+              await entry.click();
+              await page.waitForURL(new RegExp(instruction.enter.path));
+              const entered = new URL(page.url());
+              if (entered.origin !== target.url || !entered.pathname.startsWith(`${plan.route}/`)) throw new Error(`${guide.guideId}: detalhe fora da rota publicada`);
+            }
             const control = instruction.type === 'fields' ? null : locator(page, instruction);
             if (role === 'denied' && control && !(await control.isEnabled())) {
               deniedBlocked = true;
@@ -143,29 +152,31 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
               if (await control.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: controle ambíguo ${instruction.name}`);
             }
             if (instruction.type === 'fields') {
-              if (instruction.enter) {
-                const entry = locator(page, instruction.enter);
-                if (await entry.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: entrada ambígua`);
-                await entry.click();
-                await page.waitForURL(new RegExp(instruction.enter.path));
+              if (instruction.verifySelector && !original.has(step.stepId)) original.set(step.stepId, await page.locator(instruction.verifySelector).textContent() ?? '');
+              if (instruction.enable) {
+                const toggle = locator(page, instruction.enable);
+                if (await toggle.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: toggle ambíguo`);
+                if (!changed.has('toggle')) changed.set('toggle', await toggle.isChecked());
+                if (!(await page.locator(instruction.fields[0].selector).isVisible())) await toggle.click();
               }
-              if (instruction.enable && !(await page.locator(instruction.fields[0].selector).isVisible())) await locator(page, instruction.enable).click();
               const area = instruction.container ? page.locator(instruction.container) : page;
               if (instruction.container && await area.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: container ambíguo`);
               for (const field of instruction.fields) {
                 const value = field.value.replaceAll('${runId}', runId);
                 if (field.type === 'select') {
+                  const native = area.getByRole('combobox', { name: field.name, exact: true });
+                  if (!changed.has(field.name)) changed.set(field.name, await native.count() === 1 && await native.evaluate(el => el.tagName === 'SELECT') ? await native.inputValue() : await area.getByText(field.name, { exact: true }).locator('..').getByRole('combobox').textContent());
                   await selectField(page, area, field);
                 } else {
                   const input = field.selector ? area.locator(field.selector) : area.getByRole('textbox', { name: field.name, exact: true });
                   if (await input.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: campo ambíguo`);
-                  if (!original.has(step.stepId)) original.set(step.stepId, instruction.verifySelector ? (await page.locator(instruction.verifySelector).count() ? await page.locator(instruction.verifySelector).textContent() : '') : await input.inputValue());
+                  if (!changed.has(field.selector ?? field.name)) changed.set(field.selector ?? field.name, await input.inputValue());
+                  if (!original.has(step.stepId)) original.set(step.stepId, await input.inputValue());
                   await input.fill(value);
                 }
                 if (!filled.has(step.stepId)) filled.set(step.stepId, value);
               }
-              if (instruction.commit?.press) await area.locator(instruction.commit.selector).press(instruction.commit.press);
-              else if (instruction.commit) await locator(page, instruction.commit).click();
+              if (instruction.commit) await locator(page, instruction.commit).click();
             } else if (instruction.type === 'save') {
               const fieldStep = instruction.verifyField;
               const fieldIndex = guide.steps.findIndex(item => item.stepId === fieldStep);
@@ -193,19 +204,28 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
                 if (role === 'authorized' && after !== candidate) throw new Error(`${guide.guideId}/${step.stepId}: gravação não persistiu`);
                 if (role === 'denied' && after !== before) throw new Error(`${guide.guideId}/${step.stepId}: perfil negado alterou dados`);
                 if (role === 'authorized') {
-                  const earlier = guide.guideId === 'recado-fora-do-horario' ? plans.find(item => item.control?.fields?.[0]?.selector === 'input[name=horarioAtendimentoInicio]')?.control : null;
-                  const earlierField = earlier ? page.locator(earlier.fields[0].selector) : null;
-                  if (earlierField) await earlierField.fill(original.get('configurar-horario'));
-                  if (source.verifySelector) {
-                    if (source.enable && !(await page.locator(firstField.selector).isVisible())) await locator(page, source.enable).click();
-                    await page.locator(firstField.selector).fill(before);
-                    if (source.commit?.press) await page.locator(source.commit.selector).press(source.commit.press);
-                    else await locator(page, source.commit).click();
-                  } else await field.fill(before);
+                  const toggle = source.enable ? locator(page, source.enable) : null;
+                  if (toggle && await toggle.isChecked() !== changed.get('toggle')) await toggle.click();
+                  for (const prior of plans.filter(item => item.control?.type === 'fields')) {
+                    for (const changedField of prior.control.fields) {
+                      if (changedField.type === 'select') continue;
+                      const selector = changedField.selector;
+                      const input = page.locator(selector);
+                      if (await input.isVisible()) await input.fill(changed.get(selector));
+                    }
+                    if (prior.control.commit && await page.locator(prior.control.fields[0].selector).isVisible()) await locator(page, prior.control.commit).click();
+                  }
                   await locator(page, instruction).click();
                   await page.reload({ waitUntil: 'domcontentloaded' });
                   if (await readField() !== before) throw new Error(`${guide.guideId}/${step.stepId}: restauração não persistiu`);
-                  if (earlierField && await earlierField.inputValue() !== original.get('configurar-horario')) throw new Error(`${guide.guideId}/${step.stepId}: horário não restaurado`);
+                  if (toggle && await toggle.isChecked() !== changed.get('toggle')) throw new Error(`${guide.guideId}/${step.stepId}: toggle não restaurado`);
+                  for (const prior of plans.filter(item => item.control?.type === 'fields')) {
+                    for (const changedField of prior.control.fields) {
+                      if (changedField.type === 'select') continue;
+                      const input = page.locator(changedField.selector);
+                      if (await input.isVisible() && await input.inputValue() !== changed.get(changedField.selector)) throw new Error(`${guide.guideId}/${step.stepId}: campo não restaurado ${changedField.selector}`);
+                    }
+                  }
                   report.cleanup.push({ guideId: guide.guideId, status: 'restored' });
                 }
               }

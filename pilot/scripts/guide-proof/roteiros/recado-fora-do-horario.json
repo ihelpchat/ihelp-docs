@@ -54,8 +54,7 @@
       }
     ],
     "commit": {
-      "selector": "textarea[placeholder=\"Crie uma mensagem...\"]",
-      "press": "Enter"
+      "selector": "div:has(> div > div > textarea[placeholder=\"Crie uma mensagem...\"]) > button:has(svg.w-6)"
     },
     "verifySelector": "p.whitespace-pre-line",
     "source": {
