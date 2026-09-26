@@ -125,7 +125,7 @@ export type AssistantReplyV1 = {
   incidents?: Array<"channel_outage" | "message_delivery" | "billing" | "robot" | "app">;
 };
   attempts: Array<"documented_guide" | "reported_stuck">;
-  guideId?: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
+  guideId?: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
   stepId?: string;
 };
   guide?: {
