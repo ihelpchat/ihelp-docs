@@ -101,6 +101,28 @@ try {
     const meta = JSON.parse(await readFile(join(root, 'remote/pilot/content/docs', path.split('/').slice(0, -1).join('/'), 'meta.json')));
     assert.equal(meta.pages.filter((page) => page === path.split('/').at(-1)).length, 1, `${path}: menu incorreto`);
   }
+  const guidePath = paths[0];
+  const guided = await readArticle(root, guidePath);
+  guided.guide = {
+    schemaVersion: 1, guideId: 'reconectar-canal-qr', version: 1, mode: 'real', initialStepId: 'inicio',
+    steps: [{ stepId: 'inicio', text: 'Abra Canais.', actionId: 'abrir-canais' }],
+  };
+  const guidedUpdate = await call('docs_update_article', { ...guided, requestedBy: 'service:roundtrip' });
+  assert.equal(guidedUpdate.isError, false, `update com guide: ${guidedUpdate.content[0].text}`);
+  const guidedRemote = await readFile(join(root, 'remote/pilot/content/docs', `${guidePath}.mdx`), 'utf8');
+  assert.deepEqual(parseDocument(guidedRemote.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '').toJS().guide, guided.guide);
+  const dryRun = await submitContentPackage(root, [guided], 'dry_run', 'service:roundtrip');
+  assert.equal(dryRun.status, 'dry_run');
+  const draftArticle = { ...guided, path: 'docs/principais-motivos-de-suporte/guide-draft' };
+  const draft = await submitContentPackage(root, [draftArticle], 'draft', 'service:roundtrip');
+  assert.equal(draft.status, 'draft');
+  const draftMdx = await readFile(join(root, '.drafts', `${draftArticle.path}.mdx`), 'utf8');
+  assert.deepEqual(parseDocument(draftMdx.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '').toJS().guide, guided.guide);
+  for (const marker of ['IＮTERNO: uso restrito', 'CＯNFIDENCIAL: uso restrito', 'Veja\u200b isto']) {
+    const unsafeArticle = { ...guided, body: `${guided.body}\n\n${marker}` };
+    assert.equal(validateArticle(unsafeArticle).valid, false, `marcador público rejeitado: ${marker}`);
+    await assert.rejects(submitContentPackage(root, [unsafeArticle], 'dry_run', 'service:roundtrip'), /interno|invisível/i);
+  }
   const individual = await readArticle(root, paths[0]);
   individual.full = true;
   const newPath = 'docs/principais-motivos-de-suporte/novo-guia';
