@@ -101,7 +101,9 @@ public class InternalController {
     await mkdir(join(root, 'content/docs/api'), { recursive: true });
     process.env.BACKEND_LOCAL_CHECKOUT = backend;
     const productContext = await getIhelpContext(root, 'API internal', 'api', { requireLocal: true, repositoryIds: ['backend'] });
-    assert.doesNotMatch(JSON.stringify(productContext), /private\/\{id\}|InternalController/);
+    const { pending: requesterPending, ...generatorContext } = productContext;
+    assert.doesNotMatch(JSON.stringify(generatorContext), /private\/\{id\}|InternalController/);
+    assert.ok(requesterPending.includes('endpoint não público: confirmar (GET /api/v2/internal/private/{id})'));
     assert.equal(productContext.nonPublicEndpoints, true);
     const result = await generateContentPackage(root, { topic: 'API internal', module: 'api' }, {
       productContext, client: { responses: { create() { throw new Error('provider não deveria ser chamado'); } } },
