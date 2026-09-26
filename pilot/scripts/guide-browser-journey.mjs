@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launch } from './visual/measure.mjs';
+import { createSitePage } from './visual/serve-qa-build.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'guide-browser-'));
 await mkdir(join(root, 'content/docs'), { recursive: true });
@@ -82,13 +83,8 @@ try {
   const requests = [];
   const replies = [];
   async function pageWith(reply) {
-    const page = await browser.newPage();
+    const page = await createSitePage(browser, siteUrl, basePath);
     page.on('pageerror', (error) => console.error('browser pageerror', error.message));
-    if (basePath) await page.route(`${siteUrl}${basePath}/**`, async (route) => {
-      const url = new URL(route.request().url());
-      url.pathname = url.pathname.slice(basePath.length);
-      await route.fulfill({ response: await route.fetch({ url: url.href }) });
-    });
     await page.route(process.env.GUIDE_QA_ASSISTANT_URL ?? '**/assistant', async (route) => {
       if (route.request().method() === 'OPTIONS') {
         await route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } });
