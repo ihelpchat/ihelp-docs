@@ -50,9 +50,8 @@ const app = createServer((req, res) => {
     if (!req.url.includes('/demo')) {
       res.end(`<main data-tour-id="guide-department-open"><button onclick="/* source: src/store/slices/tab/tab.slice.ts:16 */ ${brokenClick ? '' : "this.dataset.done='yes'"}">Departamentos</button><table><tr><td onclick="/* source: src/components/ui/components/Tables/components/TableCommonDepartments/index.tsx:235 */ location.href='/configuracoes/department/demo'+location.search">Demo</td></tr></table></main>`);
     } else {
-      res.end(`<!doctype html><main><label>Inicio<input name="horarioAtendimentoInicio"></label><div><div><h3>Mensagem automática fora de horário de atendimento</h3></div><button role="switch" aria-checked="false" onclick="/* source: src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:356 */ this.setAttribute('aria-checked',this.getAttribute('aria-checked')==='true'?'false':'true');document.querySelector('#chat').hidden=this.getAttribute('aria-checked')!=='true';message.textContent=''">Ativar</button></div><div id="chat" hidden><textarea placeholder="Crie uma mensagem..."></textarea><button aria-label="Enviar" onclick="/* source: src/components/shared/Chat/components/ChatView/index.tsx:423 */ message.textContent=document.querySelector('textarea').value">Enviar</button></div><p class="whitespace-pre-line" id="message"></p><button>Salvar Alterações</button></main><script>
+      res.end(`<!doctype html><main><label>Inicio<input name="horarioAtendimentoInicio"></label><div><div><h3>Mensagem automática fora de horário de atendimento</h3></div><button role="switch" aria-checked="false" onclick="/* source: src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:356 */ this.setAttribute('aria-checked',this.getAttribute('aria-checked')==='true'?'false':'true');document.querySelector('#chat').hidden=this.getAttribute('aria-checked')!=='true';message.textContent=''">Ativar</button></div><div id="chat" hidden><div><div><textarea placeholder="Crie uma mensagem..."></textarea></div></div><button aria-label="Enviar" onclick="/* source: src/components/shared/Chat/components/ChatView/index.tsx:423 */ message.textContent=document.querySelector('textarea').value"><svg class="w-6"></svg>Enviar</button></div><p class="whitespace-pre-line" id="message"></p><button>Salvar Alterações</button></main><script>
         const denied=new URLSearchParams(location.search).has('role');const message=document.querySelector('#message');
-        document.querySelector('textarea').onkeydown=e=>{if(e.key==='Enter')e.preventDefault()}; // source: src/components/shared/Chat/components/ChatView/index.tsx:179
         document.querySelector('[name=horarioAtendimentoInicio]').value=localStorage.getItem('proof-hour')||'';
         message.textContent=localStorage.getItem('proof-recado')||'';
         document.querySelector('[role=switch]').setAttribute('aria-checked',localStorage.getItem('proof-toggle')||'false');
@@ -83,8 +82,24 @@ await once(app, 'listening');
 const baseUrl = `http://127.0.0.1:${app.address().port}`;
 const run = name => runGuideProof({ baseUrl, fixture: true, packageRoot, evidenceDir: join(root, name) });
 const fixtureSource = await readFile(fileURLToPath(import.meta.url), 'utf8');
-for (const line of fixtureSource.split('\n').filter(line => /\bonclick=|\.onclick\s*=|\.onkeydown\s*=/u.test(line))) {
+const fixtureHandlers = fixtureSource.slice(0, fixtureSource.indexOf('const fixtureSource'));
+for (const [, handler] of fixtureHandlers.matchAll(/onclick="([^"]*)"/gu)) {
+  assert.match(handler, /^\/\* source: src\/[\w/.-]+:\d+ \*\//u, 'handler inline sem citação do front');
+}
+for (const line of fixtureHandlers.split('\n').filter(line => /\.onclick\s*=|\.onkeydown\s*=/u.test(line))) {
   assert.match(line, /source: src\/[\w/.-]+:\d+/u, `handler sem citação do front: ${line.trim().slice(0, 80)}`);
+}
+const qrScriptPath = fileURLToPath(new URL('../scripts/guide-proof/roteiros/reconectar-canal-qr.json', import.meta.url));
+const recadoScriptPath = fileURLToPath(new URL('../scripts/guide-proof/roteiros/recado-fora-do-horario.json', import.meta.url));
+const runnerPath = fileURLToPath(new URL('../scripts/guide-proof.mjs', import.meta.url));
+const mutatedRunnerPath = fileURLToPath(new URL(`../scripts/.guide-proof-toggle-mutation-${process.pid}.mjs`, import.meta.url));
+async function mutateScript(path, edit, label, pattern) {
+  const original = await readFile(path, 'utf8');
+  try {
+    const mutated = edit(JSON.parse(original));
+    await writeFile(path, JSON.stringify(mutated));
+    await assert.rejects(run(label), pattern);
+  } finally { await writeFile(path, original); }
 }
 try {
   const report = await run('journey');
@@ -94,6 +109,16 @@ try {
   assert.ok(report.steps.some(x => x.stepId === 'salvar-usuario' && x.status === 'passed'));
   assert.ok(report.steps.some(x => x.stepId === 'ler-codigo' && x.status === 'manual_required'));
   assert.ok(report.cleanup.some(x => x.guideId === 'recado-fora-do-horario' && x.status === 'restored'));
+  await mutateScript(qrScriptPath, script => { delete script.conectar.enter; return script; }, 'connect-without-detail', /Conectar|Timeout/u);
+  await mutateScript(recadoScriptPath, script => { script['escrever-recado'].commit = { selector: 'textarea[placeholder="Crie uma mensagem..."]', press: 'Enter' }; return script; }, 'enter-instead-of-button', /gravação não persistiu|restaura/u);
+  const runnerSource = await readFile(runnerPath, 'utf8');
+  const restoreToggle = "if (toggle && await toggle.isChecked() !== changed.get('toggle')) await toggle.click();";
+  assert.ok(runnerSource.includes(restoreToggle), 'ponto da mutação do Toggle não encontrado');
+  try {
+    await writeFile(mutatedRunnerPath, runnerSource.replace(restoreToggle, 'if (false) await toggle.click();'));
+    const { runGuideProof: runMutated } = await import(new URL(`../scripts/.guide-proof-toggle-mutation-${process.pid}.mjs`, import.meta.url));
+    await assert.rejects(runMutated({ baseUrl, fixture: true, packageRoot, evidenceDir: join(root, 'toggle-without-restore') }), /toggle não restaurado/u);
+  } finally { await rm(mutatedRunnerPath, { force: true }); }
   channelDetailMissing = true;
   await assert.rejects(run('missing-channel-detail'), /Conectar|controle|visible|Timeout/u);
   channelDetailMissing = false;
