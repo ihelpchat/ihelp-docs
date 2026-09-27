@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { planContent, validateGroundedOutput } from './content-ai-service.mjs';
+import { planContent, generateContentPackage, validateGroundedOutput } from './content-ai-service.mjs';
 
 const reordered = 'São páginas NOVAS em api/contatos/ (a seção ainda não existe). Nomes: "Buscar contatos" (listagem), "Buscar detalhes do contato" e "Buscar tags do contato".';
 const details = 'Nomes: "Buscar contatos" (listagem), "Buscar detalhes do contato" e "Buscar tags do contato". São páginas NOVAS em api/contatos/ (a seção ainda não existe).';
@@ -55,8 +55,66 @@ test('uma citação inválida seguida de válida refaz o plano com a recusa no p
 
 test('duas respostas inválidas param após a segunda e informam o motivo', async () => {
   const bad = { ...citation, quote: reordered.replace('São páginas NOVAS', 'São páginas ANTIGAS') };
-  const { result, calls } = await runPlan([plan(bad), plan(bad)]);
+  const { result, calls } = await runPlan([plan(bad), plan(bad), plan(citation)]);
   assert.equal(result.status, 'needs_evidence');
   assert.equal(calls.length, 2);
   assert.match(JSON.stringify(result), /não é trecho literal/);
+});
+
+test('recusa de linha de código informa linha fora do índice no retry', async () => {
+  const code = { repository: 'ihelpchat/olah-ihelp', path: 'ContactsController.cs', lineStart: 999, lineEnd: 999, sha: 'a'.repeat(40) };
+  const { result, calls } = await runPlan([plan(code), plan(citation)]);
+  assert.equal(result.status, 'ready');
+  assert.equal(calls.length, 2);
+  assert.match(JSON.stringify(calls[1].input), /linha fora do índice/);
+});
+
+test('recusa de página fora do contexto informa página não listada no retry', async () => {
+  const page = { source: 'pagina', path: 'docs/ausente', quote: 'A página explica como encontrar contatos da equipe.' };
+  const { result, calls } = await runPlan([plan(page), plan(citation)]);
+  assert.equal(result.status, 'ready');
+  assert.equal(calls.length, 2);
+  assert.match(JSON.stringify(calls[1].input), /página não listada/);
+});
+
+const endpoint = { verb: 'GET', route: '/api/v2/contacts', public: true, documented: true,
+  policy: 'authenticated', parameters: [], responseFields: null };
+const prose = { path: 'api/contatos/buscar', title: 'Buscar contatos',
+  description: 'Consulte os contatos da sua equipe usando a referência pública.', intro: 'A lista mostra os contatos disponíveis.', notas: [],
+  grounding: [
+    { text: 'Consulte os contatos da sua equipe usando a referência pública.', citations: [citation] },
+    { text: 'A lista mostra os contatos disponíveis.', citations: [citation] },
+  ] };
+const packageResponse = (cite) => ({ status: 'ready', summary: 'Referência para consultar contatos.', questions: [],
+  articles: [{ ...prose, grounding: prose.grounding.map((item) => ({ ...item, citations: [cite] })) }],
+  grounding: [{ text: 'Referência para consultar contatos.', citations: [citation] }] });
+const packageContext = { ...context, endpoints: [endpoint], apiExamples: [{ sections: ['Parâmetros', 'Resposta'],
+  baseUrl: 'https://apiv3.ihelpchat.com', components: ['Params', 'Param'], languages: ['bash'] }] };
+
+test('prosa de API rejeitada é gerada uma segunda vez com a recusa no prompt', async () => {
+  const bad = { ...citation, quote: reordered.replace('São páginas NOVAS', 'São páginas ANTIGAS') };
+  const calls = [];
+  const result = await generateContentPackage(process.cwd(), request, { productContext: packageContext,
+    plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
+      calls.push(payload);
+      return { output_text: JSON.stringify(packageResponse(calls.length === 1 ? bad : citation)), model: 'simulado' };
+    } } } });
+  assert.equal(result.status, 'ready', result.summary);
+  assert.equal(calls.length, 2);
+  assert.match(JSON.stringify(calls[1].input), /não é trecho literal/);
+});
+
+test('summary do pacote rejeitado também aciona uma única nova geração', async () => {
+  const bad = { ...citation, quote: reordered.replace('São páginas NOVAS', 'São páginas ANTIGAS') };
+  const calls = [];
+  const result = await generateContentPackage(process.cwd(), request, { productContext: packageContext,
+    plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
+      calls.push(payload);
+      const value = packageResponse(citation);
+      value.grounding[0].citations = [bad];
+      return { output_text: JSON.stringify(value), model: 'simulado' };
+    } } } });
+  assert.equal(result.status, 'needs_evidence');
+  assert.equal(calls.length, 2);
+  assert.match(JSON.stringify(calls[1].input), /não é trecho literal/);
 });

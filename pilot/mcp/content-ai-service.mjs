@@ -93,41 +93,54 @@ function apiSchemaIssue(article) {
 }
 
 export function validateGroundedOutput(output, context, fields) {
-  if (!context.groundingRequired) return true;
+  return groundingIssues(output, context, fields).length === 0;
+}
+
+function groundingIssues(output, context, fields) {
+  if (!context.groundingRequired) return [];
   const claims = output.grounding;
-  if (!Array.isArray(claims)) return false;
+  if (!Array.isArray(claims)) return ['grounding ausente'];
   const lines = fields.flatMap((field) => {
     const value = output[field];
     return (Array.isArray(value) ? value : [value]).filter((item) => typeof item === 'string')
       .flatMap((item) => item.split(/(?<=[.!?])\s+|\n/u).map((line) => line.trim()).filter(Boolean));
   });
-  if (!lines.length || lines.some((line) => !claims.some((claim) => claim.text === line))) return false;
+  if (!lines.length) return ['frases sem grounding'];
+  const issues = lines.filter((line) => !claims.some((claim) => claim.text === line)).map((line) => `frase sem citação: ${line}`);
   const normalizeSpaces = (value) => value.replace(/\s+/gu, ' ').trim();
+  const segmentsOf = (quote) => String(quote).split(/(?<=[.!?;])\s+|\n/u).map(normalizeSpaces).filter((segment) => segment.length >= 12);
+  const literalSegments = (quote, sources) => {
+    const segments = segmentsOf(quote);
+    return segments.length > 0 && segments.every((segment) => sources.some((source) =>
+      typeof source === 'string' && normalizeSpaces(source).includes(segment)));
+  };
   const evidence = evidenceIndex(context);
-  return claims.length > 0 && claims.every((claim) => typeof claim.text === 'string'
-    && lines.includes(claim.text) && Array.isArray(claim.citations) && claim.citations.length > 0
-    && claim.citations.every((citation) => {
+  if (!claims.length) issues.push('grounding vazio');
+  for (const claim of claims) {
+    if (typeof claim.text !== 'string' || !lines.includes(claim.text)) issues.push('citação sem frase correspondente');
+    if (!Array.isArray(claim.citations) || !claim.citations.length) { issues.push(`frase sem citação: ${claim.text ?? ''}`); continue; }
+    for (const citation of claim.citations) {
       if (citation?.source === 'pedido') {
-        const quote = typeof citation.quote === 'string' ? normalizeSpaces(citation.quote) : '';
-        return context.module === 'api' && quote.length >= 12
-          && [context.request?.details, context.request?.description].some((value) =>
-            typeof value === 'string' && normalizeSpaces(value).includes(quote));
-      }
-      if (citation?.source === 'pagina') {
-        const quote = typeof citation.quote === 'string' ? normalizeSpaces(citation.quote) : '';
+        if (context.module !== 'api' || !literalSegments(citation.quote ?? '', [context.request?.details, context.request?.description]))
+          issues.push(`não é trecho literal do pedido: ${citation.quote ?? ''}`);
+      } else if (citation?.source === 'pagina') {
         const pages = [...context.existing ?? [], ...context.apiExamples ?? []];
-        return context.module === 'api' && quote.length >= 12 && pages.some((page) =>
-          page.path === citation.path && [page.title, page.description, page.body, page.content]
-            .some((value) => typeof value === 'string' && normalizeSpaces(value).includes(quote)));
-      }
-      return evidence.some((match) =>
+        const page = pages.find((item) => item.path === citation.path);
+        if (context.module !== 'api' || !page) issues.push(`página não listada: ${citation.path ?? ''}`);
+        else if (!literalSegments(citation.quote ?? '', [page.title, page.description, page.body, page.content]))
+          issues.push(`não é trecho literal da página ${citation.path}: ${citation.quote ?? ''}`);
+      } else if (!evidence.some((match) =>
         citation?.repository === match.repository && citation.path === match.path
         && citation.sha === match.sha && citation.sha === match.ref
         && Number.isInteger(citation.lineStart) && Number.isInteger(citation.lineEnd)
         && citation.lineStart > 0 && citation.lineEnd >= citation.lineStart
         && citation.lineEnd - citation.lineStart < 30
-        && citation.lineStart <= match.line && match.line <= citation.lineEnd);
-    }));
+        && citation.lineStart <= match.line && match.line <= citation.lineEnd)) {
+        issues.push(`linha fora do índice: ${citation?.path ?? ''}:${citation?.lineStart ?? '?'}`);
+      }
+    }
+  }
+  return [...new Set(issues)];
 }
 
 function evidenceIndex(context) {
@@ -151,9 +164,13 @@ function groundingContext(productContext, request, existing) {
   return { ...productContext, module: request.module, request, existing };
 }
 
-function evidencePending() {
-  return { status: 'needs_evidence', summary: 'A resposta não está vinculada às linhas do código recuperado.',
+function evidencePending(issues = []) {
+  return { status: 'needs_evidence', summary: `A resposta não está vinculada às linhas do código recuperado.${issues.length ? ` ${issues.join('; ')}` : ''}`,
     questions: ['Confirme a fonte e as citações de cada afirmação.'], articles: [] };
+}
+
+function retryPrompt(issues) {
+  return { role: 'developer', content: redactSensitiveData(`O validador recusou estas citações. Corrija cada uma usando apenas fontes listadas: ${issues.join('; ')}`) };
 }
 function apiPending(reason) {
   return { status: 'needs_information', summary: reason, questions: [reason], articles: [] };
@@ -372,11 +389,18 @@ export async function planContent(root, request, options = {}) {
       ].join(' '),
     },
     { role: 'user', content: requestText(request, existing, productContext) },
+    ...(options.groundingRetryIssues ? [retryPrompt(options.groundingRetryIssues)] : []),
   ], options));
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return { ...apiPending(modelJson.reason), pending: productContext.pending ?? [] };
   const parsed = modelJson.value;
-  if (parsed.status === 'ready' && !validateGroundedOutput(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks'])) return { ...evidencePending(), pending: productContext.pending ?? [] };
+  if (parsed.status === 'ready') {
+    const issues = groundingIssues(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks']);
+    if (issues.length) {
+      if (!options.groundingRetryIssues) return planContent(root, request, { ...options, productContext, groundingRetryIssues: issues });
+      return { ...evidencePending(issues), pending: productContext.pending ?? [] };
+    }
+  }
   const { grounding: _grounding, ...safePlan } = parsed;
   return { ...safePlan, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, pending: productContext.pending ?? [], productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
 }
@@ -413,6 +437,7 @@ export async function generateContentPackage(root, request, options = {}) {
       ].filter(Boolean).join(' '),
     },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`) },
+    ...(options.groundingRetryIssues ? [retryPrompt(options.groundingRetryIssues)] : []),
   ], options));
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return withPending(apiPending(modelJson.reason));
@@ -448,7 +473,11 @@ export async function generateContentPackage(root, request, options = {}) {
       usedEndpoints.add(endpoint);
       const issue = proseIssue(prose, endpoint);
       if (issue) return withPending(apiPending(issue));
-      if (!validateGroundedOutput(prose, groundingContext(productContext, request, existing), ['description', 'intro', 'notas'])) return withPending(evidencePending());
+      const issues = groundingIssues(prose, groundingContext(productContext, request, existing), ['description', 'intro', 'notas']);
+      if (issues.length) {
+        if (!options.groundingRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, groundingRetryIssues: issues });
+        return withPending(evidencePending(issues));
+      }
       const technical = renderApiReference(endpoint, productContext.apiExamples, page);
       const renderedParams = [...technical.body.matchAll(/<Param\s+[^>]*name="([^"]+)"/gu)].map((match) => match[1]);
       if (renderedParams.length !== endpoint.parameters.length) {
@@ -465,15 +494,23 @@ export async function generateContentPackage(root, request, options = {}) {
     }
     const summaryIssue = proseIssue({ title: parsed.summary, description: '', intro: '', notas: [] }, { parameters: [], responseFields: [] });
     if (summaryIssue) return withPending(apiPending(summaryIssue));
-    if (!validateGroundedOutput(parsed, groundingContext(productContext, request, existing), ['summary'])) return withPending(evidencePending());
+    const summaryIssues = groundingIssues(parsed, groundingContext(productContext, request, existing), ['summary']);
+    if (summaryIssues.length) {
+      if (!options.groundingRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, groundingRetryIssues: summaryIssues });
+      return withPending(evidencePending(summaryIssues));
+    }
     return withPending({ ...safePackage, articles, pending: [...new Set([...(productContext.pending ?? []), ...pending])], existing, model: response.model });
   }
   if (parsed.articles.some((article) => article.source === 'api' || /^api\//u.test(article.path ?? ''))) {
     return withPending(apiPending('página API exige fatos estruturados e módulo api'));
   }
-  if (!validateGroundedOutput(parsed, groundingContext(productContext, request, existing), ['summary']) || parsed.articles.some((article) =>
-    !validateGroundedOutput(article, groundingContext(productContext, request, existing), ['description', 'body', 'assistantOverview', 'assistantSuggestions']))) {
-    return withPending(evidencePending());
+  const articleIssues = [
+    ...groundingIssues(parsed, groundingContext(productContext, request, existing), ['summary']),
+    ...parsed.articles.flatMap((article) => groundingIssues(article, groundingContext(productContext, request, existing), ['description', 'body', 'assistantOverview', 'assistantSuggestions'])),
+  ];
+  if (articleIssues.length) {
+    if (!options.groundingRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, groundingRetryIssues: articleIssues });
+    return withPending(evidencePending(articleIssues));
   }
   const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => ({
     ...article,
