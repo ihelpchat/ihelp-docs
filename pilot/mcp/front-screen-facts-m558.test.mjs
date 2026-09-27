@@ -45,7 +45,7 @@ test('uma troca de linha conserva a linha real', async () => {
 
 test('só descarta pergunta com fato correspondente e registra', () => {
   const facts = [{ kind: 'action', text: 'Adicionar Contato', source: `${page}:2` },
-    { kind: 'upload', accept: '.csv,.xlsx', source: `${modal}:2` }];
+    { kind: 'upload', accept: '.csv,.xlsx', owner: 'ImportContactsModal', subject: 'importacao contato', source: `${modal}:2` }];
   const result = discardAnsweredScreenQuestions(['Qual o nome do botão para adicionar contato?', 'Quais formatos são aceitos na importação?', 'Qual o prazo para importar?'], facts);
   assert.deepEqual(result.questions, ['Qual o prazo para importar?']);
   assert.equal(result.discarded.length, 2);
@@ -105,7 +105,7 @@ test('ação só é respondida por rótulo com o mesmo verbo', () => {
 
 test('campo obrigatório de cadastro: uma alteração em required muda o descarte', () => {
   const question = 'Quais campos são obrigatórios no cadastro?';
-  const required = { kind: 'field', name: 'nome', required: true, source: `${modal}:2` };
+  const required = { kind: 'field', name: 'nome', required: true, owner: 'CreateContactModal', subject: 'cadastro contato', source: `${modal}:2` };
   assert.deepEqual(discardAnsweredScreenQuestions([question], [required]).questions, []);
   assert.deepEqual(discardAnsweredScreenQuestions([question], [{ ...required, required: false }]).questions, [question]);
 });
@@ -133,7 +133,9 @@ test('chamada e passagem de componente contam como uso; comentário e string nã
   const base = { ...sources, [page]: `import Forwarded from './Forwarded';\n${sources[page]}`,
     [component]: 'export default function Forwarded() { return <button onClick={save}>Salvar</button>; }' };
   for (const use of ['Forwarded()', 'component={Forwarded}', 'element: Forwarded']) {
-    const files = { ...base, [page]: `${base[page]}\n${use}` };
+    const reference = use === 'component={Forwarded}' ? `<Panel ${use} />`
+      : use === 'element: Forwarded' ? `{render({${use}})}` : `{${use}}`;
+    const files = { ...base, [page]: base[page].replace('<Modal />', `<Modal />${reference}`) };
     assert.equal((await run(files)).files.includes(component), true, use);
   }
   const fakeUse = { ...base, [page]: `${base[page]}\n// <Forwarded />\nconst text = 'Forwarded()';` };
@@ -157,7 +159,7 @@ test('fato de outro assunto na mesma cadeia não responde cadastro ou ação de 
 
 test('plural de categoria casa com a fonte; plural falso não interrompe o descarte', () => {
   const field = { kind: 'field', name: 'telefone', required: true,
-    source: 'src/components/pages/Contacts/CreateContact.tsx:10' };
+    owner: 'CreateContactModal', subject: 'cadastro contato', source: 'src/components/pages/Contacts/CreateContact.tsx:10' };
   const singular = 'Quais campos são obrigatórios no cadastro de contato?';
   const plural = singular.replace('contato?', 'contatos?');
   assert.deepEqual(discardAnsweredScreenQuestions([singular], [field]).questions, []);
@@ -217,4 +219,6 @@ test('required exige formulário do assunto do pedido quando pergunta é implíc
   assert.deepEqual(discardAnsweredScreenQuestions([question], [contact], request).questions, []);
   const company = { ...contact, owner: 'CreateCompanyModal', subject: 'cadastro empresa' };
   assert.deepEqual(discardAnsweredScreenQuestions([question], [company], request).questions, [question]);
+  const ownerless = { ...contact, owner: '' };
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [ownerless], request).questions, [question]);
 });

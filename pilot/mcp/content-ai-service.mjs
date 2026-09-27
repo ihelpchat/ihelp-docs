@@ -472,7 +472,7 @@ async function planContentCore(root, request, options = {}) {
     }
   }
   const { grounding: _grounding, ...safePlan } = parsed;
-  const filtered = discardAnsweredScreenQuestions(safePlan.questions, productContext.screenFacts);
+  const filtered = discardAnsweredScreenQuestions(safePlan.questions, productContext.screenFacts, request);
   const groundedAfterDiscard = validateGroundedOutput(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks']);
   return { ...safePlan, questions: filtered.questions, discardedQuestions: filtered.discarded,
     ...(safePlan.status === 'needs_information' && safePlan.questions.length && !filtered.questions.length && !safePlan.risks.length && groundedAfterDiscard ? { status: 'ready' } : {}),
