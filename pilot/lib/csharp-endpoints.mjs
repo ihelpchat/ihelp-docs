@@ -1,16 +1,19 @@
-// A narrow C# lexer: comments and string bodies cannot create attributes.
-export function tokens(source) {
+// One position-preserving C# scan for attributes and structural analysis.
+function scanCsharp(source) {
   const result = [];
+  const chars = source.split('');
+  const hide = (from, to) => { for (let at = from; at < to; at++) if (chars[at] !== '\n') chars[at] = ' '; };
   for (let i = 0; i < source.length;) {
     const rest = source.slice(i);
     if (/^\s/u.test(rest)) { i++; continue; }
-    if (rest.startsWith('//')) { i = source.indexOf('\n', i + 2); if (i < 0) break; continue; }
-    if (rest.startsWith('/*')) { const end = source.indexOf('*/', i + 2); i = end < 0 ? source.length : end + 2; continue; }
+    if (rest.startsWith('//')) { const start = i; i = source.indexOf('\n', i + 2); if (i < 0) i = source.length; hide(start, i); continue; }
+    if (rest.startsWith('/*')) { const start = i; const end = source.indexOf('*/', i + 2); i = end < 0 ? source.length : end + 2; hide(start, i); continue; }
     const prefix = rest.match(/^\$*@|^@\$|^\$|^@/u)?.[0] ?? '';
     const quoteAt = i + prefix.length;
     if (source[quoteAt] === '"') {
+      const start = i;
       const raw = source.slice(quoteAt).match(/^"{3,}/u)?.[0];
-      if (raw) { const end = source.indexOf(raw, quoteAt + raw.length); i = end < 0 ? source.length : end + raw.length; continue; }
+      if (raw) { const end = source.indexOf(raw, quoteAt + raw.length); i = end < 0 ? source.length : end + raw.length; hide(start, i); continue; }
       let j = quoteAt + 1;
       let value = '';
       const verbatim = prefix.includes('@');
@@ -30,20 +33,25 @@ export function tokens(source) {
         if (!verbatim && source[j] === '\\') { j += 2; continue; }
         value += source[j++];
       }
-      if (!prefix.includes('$')) result.push({ kind: 'string', value });
+      if (!prefix.includes('$')) result.push({ kind: 'string', value, at: start });
+      hide(start, j);
       i = j; continue;
     }
     if (rest[0] === "'") {
+      const start = i;
       let j = i + 1;
       while (j < source.length && source[j] !== "'") j += source[j] === '\\' ? 2 : 1;
+      hide(start, Math.min(j + 1, source.length));
       i = j + 1; continue;
     }
     const word = rest.match(/^[A-Za-z_][A-Za-z_0-9]*/u);
     if (word) { result.push({ kind: 'word', value: word[0], at: i }); i += word[0].length; continue; }
     result.push({ kind: 'punct', value: rest[0], at: i }); i++;
   }
-  return result;
+  return { tokens: result, neutralized: chars.join('') };
 }
+export const tokens = (source) => scanCsharp(source).tokens;
+export const neutralizeCsharp = (source) => scanCsharp(source).neutralized;
 
 const attr = (list, name) => list.find((item) => item.name === name);
 function attributes(items) {
@@ -78,12 +86,14 @@ const lineOf = (source, at) => source.slice(0, at).split('\n').length;
 const camel = (name) => name[0].toLowerCase() + name.slice(1);
 function dtoFields(dtoSources, type) {
   for (const { file, source } of dtoSources) {
-    const declaration = new RegExp(`\\b(?:class|record)\\s+${type}\\b`, 'u').exec(source);
+    const clean = neutralizeCsharp(source);
+    const declaration = new RegExp(`\\b(?:class|record)\\s+${type}\\b`, 'u').exec(clean);
     if (!declaration) continue;
-    const body = source.slice(declaration.index).split(/\n\s*\}\s*(?:;|$)/u)[0];
+    const body = clean.slice(declaration.index).split(/\n\s*\}\s*(?:;|$)/u)[0];
     return [...body.matchAll(/\bpublic\s+([\w<>?,\[\]]+)\s+(\w+)\s*\{\s*get\s*;[^}]*\}\s*(?:=\s*([^;]+);)?/gu)]
       .map((match) => {
-        const initializer = match[3]?.trim();
+        const original = source.slice(declaration.index + match.index, declaration.index + match.index + match[0].length);
+        const initializer = match[3] === undefined ? undefined : original.slice(match[0].indexOf('=') + 1, -1).trim();
         const value = initializer && (/^-?\d+(?:\.\d+)?$/u.test(initializer) ? Number(initializer)
           : /^(?:true|false)$/u.test(initializer) ? initializer === 'true'
             : /^"[^"\n]*"$/u.test(initializer) ? initializer.slice(1, -1)
@@ -157,7 +167,7 @@ function actionBodyOf(source, items, start) {
 }
 
 export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
-  const t = tokens(source);
+  const { tokens: t, neutralized: clean } = scanCsharp(source);
   const endpoints = [];
   let pending = [];
   let depth = 0;
@@ -216,15 +226,15 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
         ?? attr(pending, 'Authorize') ?? attr(controller.attrs, 'Authorize');
       const authorizationSource = authorizationAttribute ? `${file}:${lineOf(source, authorizationAttribute.at)}` : null;
       const rawParameters = reference ? signatureParameters(t.slice(i + 1, end - 1), route, dtoSources, file, source) : undefined;
-      const actionBody = actionBodyOf(source, t, end);
+      const actionBody = actionBodyOf(clean, t, end);
       const assigned = new Set([...actionBody.matchAll(/\b(\w+)\.(\w+)\s*=(?!=)/gu)]
         .filter((match) => t.slice(i + 1, end - 1).some((token) => token.value === match[1]))
         .map((match) => match[2].toLowerCase()));
       const serverAssigned = rawParameters?.filter((item) => assigned.has(item.name.toLowerCase()))
-        .map((item) => ({ name: item.name, serverAssigned: true, source: `${file}:${lineOf(source, source.indexOf(actionBody) + actionBody.search(new RegExp(`\\b\\w+\\.${item.name}\\s*=`, 'iu')))}` }));
+        .map((item) => ({ name: item.name, serverAssigned: true, source: `${file}:${lineOf(source, t[end].at + actionBody.search(new RegExp(`\\b\\w+\\.${item.name}\\s*=`, 'iu')))}` }));
       const parameters = rawParameters?.filter((item) => !assigned.has(item.name.toLowerCase()))
         .map(({ dtoType: _dtoType, ...item }) => ({ ...item, ...(item.in === 'route' ? { required: !optionalNames.has(item.name.toLowerCase()) } : {}), source: item.source ?? location }));
-      const declaration = source.slice(Math.max(0, source.lastIndexOf('public ', t[i - 1].at)), t[i - 1].at);
+      const declaration = clean.slice(Math.max(0, clean.lastIndexOf('public ', t[i - 1].at)), t[i - 1].at);
       const declaredResultType = responseTypeOf(declaration, pending);
       const resultType = declaredResultType === 'IActionResult' || !declaredResultType
         ? okResponseType(actionBody) : declaredResultType;

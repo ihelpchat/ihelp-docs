@@ -1,31 +1,7 @@
 // Static, bounded reader. It never executes product code.
-import { tokens } from './csharp-endpoints.mjs';
+import { tokens, neutralizeCsharp } from './csharp-endpoints.mjs';
 export const MAX_CALL_DEPTH = 3;
 export const MAX_CALL_METHODS = 12;
-
-function maskCsharp(source) {
-  const chars = [...source];
-  const hide = (from, to) => { for (let at = from; at < to; at++) if (chars[at] !== '\n') chars[at] = ' '; };
-  for (let i = 0; i < source.length;) {
-    const start = i;
-    if (source.startsWith('//', i)) { i = source.indexOf('\n', i + 2); if (i < 0) i = source.length; hide(start, i); continue; }
-    if (source.startsWith('/*', i)) { i = source.indexOf('*/', i + 2); i = i < 0 ? source.length : i + 2; hide(start, i); continue; }
-    const prefix = source.slice(i).match(/^(?:\$@|@\$|\$|@)?("{3,}|"|')/u);
-    if (!prefix) { i++; continue; }
-    const marker = prefix[1], verbatim = prefix[0].includes('@');
-    i += prefix[0].length;
-    while (i < source.length) {
-      if (source.startsWith(marker, i)) {
-        if (verbatim && marker === '"' && source[i + 1] === '"') { i += 2; continue; }
-        i += marker.length; break;
-      }
-      if (!verbatim && source[i] === '\\') i += 2;
-      else i++;
-    }
-    hide(start, i);
-  }
-  return chars.join('');
-}
 
 function blockEnd(source, start) {
   let depth = 0;
@@ -38,8 +14,8 @@ function blockEnd(source, start) {
 const lineOf = (source, at) => source.slice(0, at).split('\n').length;
 
 function declarations(source, path) {
-  const clean = maskCsharp(source);
-  const lex = tokens(source);
+  const clean = neutralizeCsharp(source);
+  const lex = tokens(clean);
   const classes = [];
   for (let i = 0; i < lex.length; i++) {
     if (lex[i].value !== 'class' || lex[i + 1]?.kind !== 'word') continue;
