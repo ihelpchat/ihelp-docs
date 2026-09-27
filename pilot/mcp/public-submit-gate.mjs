@@ -70,21 +70,64 @@ async function securityFacts(root, article) {
   return endpoint ?? null;
 }
 
-function citedEndpoints(article) {
-  const endpoints = [{ method: String(article.method ?? '').toUpperCase(), endpoint: String(article.endpoint ?? '') }];
-  for (const match of String(article.body ?? '').matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(https?:\/\/[^\s`<>]+|\/[A-Za-z0-9_{}./?=&%-]+)/gmu)) {
-    let route = match[2];
-    try { if (/^https?:\/\//u.test(route)) route = new URL(route).pathname; } catch { continue; }
-    route = route.replace(/[.,;:!?]+$/u, '');
-    route = route.split(/[?#]/u)[0];
-    const base = endpoints[0].endpoint.replace(/^\/api\/v\d+/iu, '');
-    const short = route.replace(/^\/api\/v\d+/iu, '');
-    if (match[1] === endpoints[0].method && (routeMatches(short, base)
-      || short.startsWith(`${base}/id-exemplo-`))) continue;
-    if (!endpoints.some((item) => item.method === match[1] && routeMatches(route, item.endpoint)))
-      endpoints.push({ method: match[1], endpoint: route });
+const API_HOSTS = new Set(['apiv3.ihelpchat.com']);
+const HTTP_METHOD = '(?:GET|POST|PUT|PATCH|DELETE)';
+
+function citedMethod(line, before, after) {
+  const explicit = before.match(new RegExp(`\\b(${HTTP_METHOD})\\s+$`, 'iu'));
+  if (explicit) return explicit[1].toUpperCase();
+  const command = line.match(/\bcurl\b[^\n]*/iu)?.[0];
+  const context = command ?? line;
+  const option = context.match(new RegExp(`(?:-X|--request)\\s+['"]?(${HTTP_METHOD})\\b`, 'iu'));
+  if (option) return option[1].toUpperCase();
+  const property = context.match(new RegExp(`(?:["']?method["']?)\\s*:\\s*['"]?(${HTTP_METHOD})\\b`, 'iu'));
+  if (property) return property[1].toUpperCase();
+  const leading = before.match(new RegExp(`\\b(${HTTP_METHOD})\\s+[^\\n]*$`, 'iu'));
+  if (leading) return leading[1].toUpperCase();
+  if (command) return /(?:^|\s)(?:-d|--data(?:-[\w-]+)?|-F)(?=\s|=|$)/iu.test(command) ? 'POST' : 'GET';
+  // Uma propriedade de fetch pode vir depois da URL no mesmo comando.
+  const following = after.match(new RegExp(`(?:["']?method["']?)\\s*:\\s*['"]?(${HTTP_METHOD})\\b`, 'iu'));
+  return following?.[1].toUpperCase();
+}
+
+export function extractCitedEndpoints(article) {
+  const primary = { method: String(article.method ?? '').toUpperCase(), endpoint: String(article.endpoint ?? '') };
+  const endpoints = [primary];
+  const unresolved = [];
+  const body = String(article.body ?? '').replace(/\\\r?\n\s*/gu, ' ');
+  let fenced = false;
+  for (const line of body.split(/\r?\n/u)) {
+    const fence = /^\s*```/u.test(line);
+    if (fence) { fenced = !fenced; continue; }
+    const matches = [];
+    for (const match of line.matchAll(/https?:\/\/[^\s`<>"')]+/giu)) {
+      let url;
+      try { url = new URL(match[0].replace(/[.,;:!?]+$/u, '')); } catch { continue; }
+      if (API_HOSTS.has(url.hostname)) matches.push({ index: match.index, length: match[0].length, route: url.pathname });
+    }
+    for (const match of line.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(\/[A-Za-z0-9_{}./?=&%-]+)/giu))
+      matches.push({ index: match.index + match[0].indexOf(match[2]), length: match[2].length, route: match[2], method: match[1].toUpperCase() });
+    const codeRanges = fenced ? [[0, line.length]] : [...line.matchAll(/`[^`\n]+`/gu)].map((match) => [match.index, match.index + match[0].length]);
+    for (const [start, end] of codeRanges) {
+      const code = line.slice(start, end);
+      for (const match of code.matchAll(/(?<![A-Za-z0-9/:])\/[A-Za-z0-9_{}.-]+(?:\/[A-Za-z0-9_{}.-]+)+(?:\?[^\s`"']+)?/gu)) {
+        const index = start + match.index;
+        if (!matches.some((item) => index >= item.index && index < item.index + item.length))
+          matches.push({ index, length: match[0].length, route: match[0] });
+      }
+    }
+    for (const candidate of matches.sort((a, b) => a.index - b.index)) {
+      const endpoint = candidate.route.replace(/[.,;:!?]+$/u, '').split(/[?#]/u)[0];
+      const method = candidate.method ?? citedMethod(line, line.slice(0, candidate.index), line.slice(candidate.index + candidate.length));
+      if (!method) { if (!unresolved.includes(endpoint)) unresolved.push(endpoint); continue; }
+      const base = primary.endpoint.replace(/^\/api\/v\d+/iu, '');
+      const short = endpoint.replace(/^\/api\/v\d+/iu, '');
+      if (method === primary.method && (routeMatches(short, base) || short.startsWith(`${base}/id-exemplo-`))) continue;
+      if (!endpoints.some((item) => item.method === method && routeMatches(endpoint, item.endpoint)))
+        endpoints.push({ method, endpoint });
+    }
   }
-  return endpoints;
+  return { endpoints, unresolved };
 }
 
 // Único preflight de segurança para páginas propostas ou gravadas pelo MCP.
@@ -94,7 +137,9 @@ export async function reviewBeforePageWrite(root, items, request = {}) {
   const missing = [];
   for (const { article } of items) {
     const api = article.path.startsWith('api/');
-    for (const endpoint of api ? citedEndpoints(article) : [{}]) {
+    const cited = api ? extractCitedEndpoints(article) : { endpoints: [{}], unresolved: [] };
+    missing.push(...cited.unresolved.map((endpoint) => `endpoint citado sem método: ${endpoint}`));
+    for (const endpoint of cited.endpoints) {
       const candidate = api ? { ...article, ...endpoint } : article;
       const facts = api ? await securityFacts(root, candidate) : {};
       if (api && !facts) {

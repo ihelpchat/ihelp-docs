@@ -10,6 +10,7 @@ import { renderApiReference } from './api-reference-render.mjs';
 import { McpServer } from '@modelcontextprotocol/server';
 import { buildServer } from './server.mjs';
 import { generateContentPackage } from './content-ai-service.mjs';
+import { extractCitedEndpoints } from './public-submit-gate.mjs';
 
 const article = { path: 'api/teste/contato', title: 'Consultar contato',
   description: 'Consulte os dados de um contato pelo identificador informado.',
@@ -177,6 +178,8 @@ test('curl com dados identifica POST; caminho sem método exige informação', a
     assert.equal((await run(base.body)).status, 'dry_run');
     const post = await run(`${base.body}\n\n\`\`\`bash\ncurl -d '{"id":"id-exemplo-1"}' https://apiv3.ihelpchat.com/api/v2/contacts\n\`\`\``);
     assert.equal(post.status, 'dry_run');
+    assert.deepEqual(extractCitedEndpoints({ ...base, body: `${base.body}\n\ncurl -d '{}' https://apiv3.ihelpchat.com/api/v2/contacts` }).endpoints.at(-1),
+      { method: 'POST', endpoint: '/api/v2/contacts' });
     const unknown = await run(`${base.body}\n\n\`/crm/card/{id}\``);
     assert.equal(unknown.status, 'needs_information');
     assert.match(unknown.questions.join(' '), /endpoint citado sem método: \/crm\/card\/\{id\}/iu);
@@ -186,6 +189,18 @@ test('curl com dados identifica POST; caminho sem método exige informação', a
     if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
     else process.env.BACKEND_LOCAL_CHECKOUT = previous;
   }
+});
+
+test('extrator reúne comando continuado e ignora URL fora da API', () => {
+  const candidate = { ...article, method: 'DELETE', endpoint: '/api/v2/contacts/delete-a',
+    body: `curl --request DELETE \\\n  "https://apiv3.ihelpchat.com/api/v2/contacts/delete-b"\n\n` +
+      'fetch("https://apiv3.ihelpchat.com/api/v2/contacts", { "method": "POST" })\n\n' +
+      'https://faq.ihelpchat.com/ihelp-docs/x' };
+  assert.deepEqual(extractCitedEndpoints(candidate), { endpoints: [
+    { method: 'DELETE', endpoint: '/api/v2/contacts/delete-a' },
+    { method: 'DELETE', endpoint: '/api/v2/contacts/delete-b' },
+    { method: 'POST', endpoint: '/api/v2/contacts' },
+  ], unresolved: [] });
 });
 
 test('positivo seguro e negativos de uma alteração explicam bloqueio', () => {
