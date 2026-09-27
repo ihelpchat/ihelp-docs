@@ -24,6 +24,14 @@ test('SQL do callEvidence ecoado no guidance é omitido e avisado', async () => 
   assert.equal(result.internalCodeEcho, 1);
 });
 
+test('JSON cercado por texto passa pelo mesmo guard usado pelo parser', async () => {
+  const output_text = `Resposta: ${JSON.stringify(plan(sql))}`;
+  const result = await planContent(root, request, { productContext: context,
+    client: { responses: { create: async () => ({ output_text, model: 'simulado' }) } } });
+  assert.doesNotMatch(result.guidance, /SELECT c\.EmpresaId/u);
+  assert.equal(result.internalCodeEcho, 1);
+});
+
 test('oito tokens de método de serviço são omitidos; sete são preservados', () => {
   const eight = 'if ( filters . Export ) return repository';
   const seven = 'if ( filters . Export ) return';
@@ -37,9 +45,19 @@ test('oito tokens de método de serviço são omitidos; sete são preservados', 
 
 test('rota e nomes públicos são preservados', () => {
   const guidance = 'Use /api/v2/contacts/{contactId} com contactId e limit.';
-  const result = guardModelOutput({ guidance }, context, 'internal');
+  const routeContext = { ...context, callEvidence: [...context.callEvidence,
+    { path: 'Comzada.Service/ServicesMySQL/RouteService.cs', excerpt: 'var route = "/api/v2/contacts/{contactId}";' }] };
+  const result = guardModelOutput({ guidance }, routeContext, 'internal');
   assert.equal(result.value.guidance, guidance);
   assert.equal(result.internalCodeEcho, 0);
+});
+
+test('código do controller fica fora da evidência privada', () => {
+  const controllerContext = { ...context, callEvidence: [], matches: [
+    { path: 'Controllers/V2/ContactsController.cs', excerpt: method },
+  ] };
+  const guidance = 'if ( filters . Export ) return repository';
+  assert.equal(guardModelOutput({ guidance }, controllerContext, 'internal').value.guidance, guidance);
 });
 
 test('SQL por forma é omitido mesmo fora da evidência', () => {

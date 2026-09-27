@@ -10,6 +10,7 @@ import { createBudgetedResponse } from './provider-budget.mjs';
 import { renderApiReference } from './api-reference-render.mjs';
 import { contentMaxOutputTokens } from './env-compat.mjs';
 import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
+import { guardModelOutput } from './model-output-guard.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
 contentMaxOutputTokens();
@@ -294,12 +295,22 @@ function clientOf(options) {
   return new OpenAI({ apiKey });
 }
 
-async function modelResponse(options, payload) {
+async function modelResponse(options, payload, productContext) {
   const client = clientOf(options);
-  if (options.client && !options.budget) return client.responses.create(payload);
-  const result = await createBudgetedResponse(client, payload, { ...options.budget, acceptIncomplete: true });
-  if (result.kind !== 'ok') throw new Error(result.kind === 'budget_exhausted' ? 'Orçamento da IA esgotado' : 'Resposta da IA indisponível');
-  return result.response;
+  let response;
+  if (options.client && !options.budget) response = await client.responses.create(payload);
+  else {
+    const result = await createBudgetedResponse(client, payload, { ...options.budget, acceptIncomplete: true });
+    if (result.kind !== 'ok') throw new Error(result.kind === 'budget_exhausted' ? 'Orçamento da IA esgotado' : 'Resposta da IA indisponível');
+    response = result.response;
+  }
+  if (response?.status === 'incomplete') return response;
+  const parsed = parseModelJson(response);
+  if (!parsed.ok) return response;
+  const mode = payload.text.format.name === 'pacote_documentacao' ? 'package'
+    : payload.text.format.name === 'guia_canonico' ? 'guide' : 'internal';
+  const guarded = guardModelOutput(parsed.value, productContext, mode);
+  return { ...response, output_text: JSON.stringify(guarded.value) };
 }
 
 function baseRequest(name, schema, input, options) {
@@ -427,7 +438,7 @@ async function planContentCore(root, request, options = {}) {
     },
     { role: 'user', content: requestText(request, existing, productContext, codeHygiene) },
     ...(options.groundingRetryIssues ? [retryPrompt(options.groundingRetryIssues)] : []),
-  ], options));
+  ], options), productContext);
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return { ...apiPending(modelJson.reason), pending: productContext.pending ?? [] };
   const parsed = modelJson.value;
@@ -482,7 +493,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`) },
     ...(options.groundingRetryIssues ? [retryPrompt(options.groundingRetryIssues)] : []),
-  ], options));
+  ], options), productContext);
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return withPending(apiPending(modelJson.reason));
   const parsed = modelJson.value;
@@ -631,11 +642,11 @@ export async function generateCanonicalGuide(root, request, options = {}) {
       'Cite cada frase de description, body, assistantOverview, assistantSuggestions e cada step.text no grounding do artigo com texto e citação exatos.',
     ].join(' ') },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing ? [existing] : [], productContext)}\nGuideId: ${request.guideId}\nPlano aprovado: ${JSON.stringify(options.plan)}\nGuia anterior: ${JSON.stringify(existing ?? null)}`) },
-  ], options));
+  ], options), productContext);
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return apiPending(modelJson.reason);
   const parsed = modelJson.value;
-  if (parsed.status !== 'ready') return { status: 'needs_information', questions: parsed.questions ?? [], articles: [] };
+  if (parsed.status !== 'ready') return { status: 'needs_information', questions: parsed.questions ?? [], articles: [], ...(parsed.internalCodeEcho ? { internalCodeEcho: parsed.internalCodeEcho } : {}) };
   const raw = parsed.article;
   const grounded = { grounding: raw.grounding, sentences: [raw.description, raw.body, raw.assistantOverview,
     ...raw.assistantSuggestions, ...raw.guide.steps.map((step) => step.text)] };
@@ -647,7 +658,7 @@ export async function generateCanonicalGuide(root, request, options = {}) {
   }));
   if (article.guide.guideId !== request.guideId || article.contentType !== 'guia'
     || article.productActions.some((action) => !confirmedAction(action, request, productContext))) return evidencePending();
-  return { status: 'ready', articles: [article] };
+  return { status: 'ready', articles: [article], ...(parsed.internalCodeEcho ? { internalCodeEcho: parsed.internalCodeEcho } : {}) };
 }
 
 export async function planContent(root, request, options = {}) {
