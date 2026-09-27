@@ -73,8 +73,7 @@ const replayRequest = { module: 'api', topic: 'Contatos',
   details: 'O idRef do detalhe e o contactId das tags vêm da listagem. Nenhum filtro é obrigatório. searchData é texto livre que casa com trecho do nome ou do número do contato. page começa em 1 e o padrão é 1. limit tem padrão 20.' };
 
 async function replayResult(lineEnd) {
-  const value = { status: 'ready', summary: replay.summary, questions: [],
-    grounding: [{ text: replay.summary, citations: replay.citations.summary }], articles: [{
+  const value = { status: 'ready', summary: [{ text: replay.summary, citations: replay.citations.summary }], questions: [], articles: [{
       path: replay.path, endpoint: replay.endpoint, title: replay.title,
       description: { text: replay.description, citations: replay.citations.description },
       intro: { text: replay.intro, citations: replay.citations.intro },

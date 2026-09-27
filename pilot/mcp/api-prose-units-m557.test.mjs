@@ -31,7 +31,11 @@ async function generate(change = () => {}) {
   const value = structuredClone(base);
   change(value);
   return generateContentPackage(process.cwd(), request, { productContext: context, plan: { status: 'ready' },
-    client: { responses: { create: async () => ({ output_text: JSON.stringify(value), model: 'replay-offline' }) } } });
+    client: { responses: { create: async (payload) => {
+      assert.equal(payload.text.format.schema.properties.summary.type, 'array');
+      assert.ok(!('grounding' in payload.text.format.schema.properties));
+      return { output_text: JSON.stringify(value), model: 'replay-offline' };
+    } } } });
 }
 
 test('resp-3 adaptado: unidades citadas rendem página sem letter', async () => {
@@ -56,6 +60,22 @@ test('summary API sem citação é rejeitado pelo motivo correto', async () => {
   const result = await generate((value) => { value.summary[0].citations = []; });
   assert.equal(result.status, 'needs_evidence');
   assert.match(result.summary, /frase sem citação: O pacote contém páginas novas/u);
+});
+
+test('summary API sem citação entra na única nova tentativa', async () => {
+  let calls = 0;
+  const result = await generateContentPackage(process.cwd(), request, { productContext: context, plan: { status: 'ready' },
+    client: { responses: { create: async (payload) => {
+      calls++;
+      if (calls === 2) assert.match(JSON.stringify(payload.input), /frase sem citação: O pacote contém páginas novas/u);
+      const value = structuredClone(base);
+      if (calls === 1) value.summary[0].citations = [];
+      return { output_text: JSON.stringify(value), model: 'replay-offline' };
+    } } },
+  });
+  assert.equal(calls, 2);
+  assert.equal(result.status, 'ready', result.summary);
+  assert.equal(result.summary, summaryText);
 });
 
 test('pacote não API mantém summary texto e grounding separado', async () => {

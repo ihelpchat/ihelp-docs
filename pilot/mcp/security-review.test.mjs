@@ -371,7 +371,7 @@ test('docs_generate_package mantém aviso e exige confirmação de DELETE', asyn
     { module: 'api', topic: 'Apagar contatos', confirmations }, {
       productContext: context, plan: { status: 'ready', guidance: 'Documente o endpoint.', questions: [] },
       client: { responses: { create: async () => ({ output_text: JSON.stringify({
-        status: 'ready', summary: 'Referência de contatos.', questions: [], articles: [prose], grounding: [],
+        status: 'ready', summary: [{ text: 'Referência de contatos.', citations: [] }], questions: [], articles: [prose],
       }), model: 'simulado' }) } },
     });
   const confirmed = await generate(['DELETE /contacts']);

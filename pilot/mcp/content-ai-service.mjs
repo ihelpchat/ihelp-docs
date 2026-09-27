@@ -340,8 +340,10 @@ const API_ARTICLE_SCHEMA = {
     responseDescriptions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: ['name', 'description'], properties: { name: { type: 'string' }, description: API_PROSE_UNIT_SCHEMA } } } },
 };
-const API_PACKAGE_SCHEMA = { ...PACKAGE_SCHEMA, properties: { ...PACKAGE_SCHEMA.properties,
-  articles: { type: 'array', items: API_ARTICLE_SCHEMA }, grounding: API_GROUNDING_SCHEMA } };
+const API_PACKAGE_SCHEMA = { ...PACKAGE_SCHEMA, required: ['status', 'summary', 'questions', 'articles'],
+  properties: { status: PACKAGE_SCHEMA.properties.status,
+    summary: { type: 'array', items: API_PROSE_UNIT_SCHEMA }, questions: PACKAGE_SCHEMA.properties.questions,
+    articles: { type: 'array', items: API_ARTICLE_SCHEMA } } };
 
 function checkRequest(request) {
   const value = Object.values(request).filter((item) => typeof item === 'string').join('\n');
@@ -562,13 +564,13 @@ async function generateContentPackageCore(root, request, options = {}) {
         'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.',
         request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
         request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
-        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. description, intro, cada nota e cada descrição de responseDescriptions são objetos {text,citations}; cada text contém uma frase (ponto e vírgula permitido), com suas próprias citações. Não crie grounding separado para esses campos. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver, e descreva apenas fatos do código, pedido ou página publicada; cite cada descrição. Sem fonte para um campo, omita-o da lista: o renderizador usará o nome simples e registrará pendência.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
+        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions são objetos {text,citations}, também com uma frase por text (ponto e vírgula permitido). Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver, e descreva apenas fatos do código, pedido ou página publicada; cite cada descrição. Sem fonte para um campo, omita-o da lista: o renderizador usará o nome simples e registrará pendência.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
         request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
         request.module === 'api' ? 'Se faltar método, rota, parâmetros ou autorização, use needs_information e deixe articles vazio. responseFields=null é permitido: a resposta terá nota fixa e pendência.' : 'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
         request.module === 'api' ? 'A prosa não pode conter método HTTP, caminho, bloco de código, componente JSX nem código inline, exceto nome exato de parâmetro ou campo dos fatos. Descreva cada campo pelo significado e pelo tipo PÚBLICO (texto, número, data e hora, verdadeiro ou falso, lista, objeto), nunca pelo tipo do código, DTO, entity, repository ou service.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
-        request.module === 'api' ? 'Cite summary no grounding do pacote; em description, intro, notas e descrições de campo, use citations da própria unidade. source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. Use os números reais mostrados ao lado do código e cite a faixa mais curta que contém o comportamento, com no máximo 30 linhas. O JSON interno de formato não é fonte. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
+        request.module === 'api' ? 'Cite cada unidade de summary, description, intro, notas e descrições de campo nas citations da própria unidade. source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. Use os números reais mostrados ao lado do código e cite a faixa mais curta que contém o comportamento, com no máximo 30 linhas. O JSON interno de formato não é fonte. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].filter(Boolean).join(' '),
     },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`) },
@@ -578,7 +580,16 @@ async function generateContentPackageCore(root, request, options = {}) {
   if (!modelJson.ok) return withPending(apiPending(modelJson.reason));
   const parsed = modelJson.value;
   const { grounding: _grounding, ...safePackage } = parsed;
+  if (request.module === 'api' && Array.isArray(parsed.summary))
+    safePackage.summary = parsed.summary.map((unit) => typeof unit?.text === 'string' ? unit.text.trim() : '').join(' ');
   if (parsed.status !== 'ready') return withPending({ ...safePackage, articles: [], existing, model: response.model });
+  if (request.module === 'api') {
+    if (!Array.isArray(parsed.summary) || !parsed.summary.length
+      || !parsed.summary.every((unit) => unit && typeof unit === 'object' && !Array.isArray(unit)
+        && typeof unit.text === 'string' && Array.isArray(unit.citations))) {
+      return withPending(apiPending('schema de summary inválido'));
+    }
+  }
   if (!Array.isArray(parsed.articles)) return withPending(apiPending('schema de artigos inválido'));
   if (request.module === 'api' && !parsed.articles.length) return withPending(apiPending('nenhuma página de API gerada'));
   if (request.module === 'api') {
@@ -598,8 +609,8 @@ async function generateContentPackageCore(root, request, options = {}) {
         groundingProblems.push(...apiUnitIssues([item.description], context));
       }
     }
-    proseProblems.push(...proseIssues({ title: parsed.summary, description: '', intro: '', notas: [] }, { parameters: [], responseFields: [] }));
-    groundingProblems.push(...groundingIssues(parsed, context, ['summary']));
+    proseProblems.push(...proseIssues({ title: safePackage.summary, description: '', intro: '', notas: [] }, { parameters: [], responseFields: [] }));
+    groundingProblems.push(...apiUnitIssues(parsed.summary, context));
     const retryIssues = [...new Set([...proseProblems, ...groundingProblems])];
     if (retryIssues.length) {
       if (!options.retryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, retryIssues });

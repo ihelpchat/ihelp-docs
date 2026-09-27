@@ -12,7 +12,7 @@ const endpoints = [endpoint('/api/v2/contacts', 'id'), endpoint('/api/v2/contact
 const article = (path, id, name, text) => ({ path, endpoint: id, title: 'Contatos',
   description: unit('Consulta os dados dos contatos disponíveis na referência pública da API.'), intro: unit('Use para consultar contatos.'), notas: [],
   responseDescriptions: [{ name, description: unit(text) }] });
-const original = { status: 'ready', summary: 'Contatos.', questions: [], grounding: [], articles: [
+const original = { status: 'ready', summary: [unit('Contatos.')], questions: [], articles: [
   article('api/contatos/buscar-contatos', 'GET /contacts', 'id', 'Identificador do contato.'),
   article('api/contatos/buscar-detalhes-do-contato', 'GET /contacts/details', 'lastActivity', badDescription),
 ] };
