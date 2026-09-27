@@ -4,6 +4,7 @@ import { envCompatibility } from './env-compat.mjs';
 export const codeRefreshWindowMs = 10 * 60_000;
 const missingCodeReasons = [
   /^endpoint citado não encontrado\b/iu,
+  /^endpoints estruturados ausentes\b/iu,
   /^código do produto indisponível\b/iu,
   /^nenhum trecho encontrado no código do produto\b/iu,
 ];
@@ -11,8 +12,8 @@ let refreshInProgress = false;
 let lastRefreshAt = 0;
 
 const codeMissing = (result) => {
-  const pending = [...(result.pending ?? []), ...(result.plan?.pending ?? [])];
-  return pending.some((reason) => typeof reason === 'string' && missingCodeReasons.some((pattern) => pattern.test(reason)));
+  const reasons = [result.summary, ...(result.questions ?? []), ...(result.pending ?? []), ...(result.plan?.pending ?? [])];
+  return reasons.some((reason) => typeof reason === 'string' && missingCodeReasons.some((pattern) => pattern.test(reason)));
 };
 
 export async function withCodeRefreshOffer(result, { stateDir = process.env.MCP_STATE_DIR ?? '/data', token = process.env[envCompatibility.githubReadToken.current] } = {}) {
