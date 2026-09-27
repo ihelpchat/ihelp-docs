@@ -50,7 +50,7 @@ function proseIssue(article, endpoint, { internalGuidance = false, editorialSour
     }
   }
   const token = '[\\p{L}\\p{N}_][\\p{L}\\p{N}_-]*';
-  const labelledNames = new RegExp(`\\b(campos?|parâmetros?|propriedades?|atributos?|chaves?|headers?|cabeçalhos?)\\s+(?:(?:o|a|os|as)\\s+)?(${token}(?:\\s*(?:,|\\be\\b)\\s*${token})*)`, 'giu');
+  const labelledNames = new RegExp(`\\b(campos?|parâmetros?|propriedades?|atributos?|chaves?|headers?|cabeçalhos?)\\s+(?:(?:o|a|os|as|um|uma|de|do|da|dos|das|no|na|em)\\s+)*((?:\\x60?${token}\\x60?)(?:\\s*(?:,|\\be\\b)\\s*\\x60?${token}\\x60?)*)`, 'giu');
   const tokens = new RegExp(token, 'gu');
   for (const value of [article.title, article.description, article.intro, ...article.notas]) {
     if (typeof value !== 'string') return 'prosa inválida';
@@ -62,16 +62,20 @@ function proseIssue(article, endpoint, { internalGuidance = false, editorialSour
     if (path && !internalGuidance) return `caminho proibido: ${path[0]}`;
     const method = value.match(/\b(?:GET|POST|PUT|PATCH|DELETE)\b/iu);
     if (method && !internalGuidance) return `método proibido na prosa: ${method[0]}`;
-    for (const code of value.matchAll(/`([^`\n]+)`/gu)) {
-      if (internalGuidance && code[1].includes('/') && editorialSource.includes(code[1])) continue;
-      if (!inlineNames.has(code[1])) return `código inline proibido: ${code[0]}`;
-    }
     for (const labelled of value.matchAll(labelledNames)) {
       const allowed = /^(?:campos?|propriedades?|atributos?|chaves?)$/iu.test(labelled[1])
         ? fieldNames : /^parâmetros?$/iu.test(labelled[1]) ? parameterNames : headerNames;
-      for (const name of labelled[2].match(tokens) ?? []) {
-        if (name !== 'e' && !allowed.has(name)) return `nome técnico sem fato: ${name}`;
+      for (const candidate of labelled[2].matchAll(new RegExp(`(\\x60?)(${token})\\x60?`, 'gu'))) {
+        const name = candidate[2];
+        const factual = [...allowed].some((fact) => fact.toLowerCase() === name.toLowerCase());
+        const technical = Boolean(candidate[1]) || /(?<=\p{L})\p{Lu}|\p{L}_\p{L}|(?=.*\p{L})(?=.*\p{N})/u.test(name)
+          || [...names].some((fact) => fact.toLowerCase() === name.toLowerCase());
+        if (technical && !factual) return `nome técnico sem fato: ${name}`;
       }
+    }
+    for (const code of value.matchAll(/`([^`\n]+)`/gu)) {
+      if (internalGuidance && code[1].includes('/') && editorialSource.includes(code[1])) continue;
+      if (!inlineNames.has(code[1])) return `código inline proibido: ${code[0]}`;
     }
     for (const [name] of value.matchAll(tokens)) {
       const identifier = /\p{Ll}\p{Lu}|\p{L}_\p{L}/u.test(name)
