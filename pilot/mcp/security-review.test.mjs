@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 const review = await import('./security-review.mjs').catch(() => ({}));
-import { submitContentPackage } from './content-service.mjs';
+import { submitArticle, submitContentPackage } from './content-service.mjs';
 import { renderApiReference } from './api-reference-render.mjs';
 import { McpServer } from '@modelcontextprotocol/server';
 import { buildServer } from './server.mjs';
@@ -18,6 +19,76 @@ const examine = (candidate = article, input = {}) => {
   assert.equal(typeof review.securityReview, 'function');
   return review.securityReview(candidate, { facts: input.facts ?? facts, request: input });
 };
+
+async function backendFixture() {
+  const root = await mkdtemp(join(tmpdir(), 'm556-back-'));
+  const backend = join(root, 'back');
+  const dir = join(backend, 'Comzada.Application/Controllers/V2');
+  await mkdir(dir, { recursive: true });
+  await mkdir(join(root, 'content/docs'), { recursive: true });
+  await mkdir(join(root, 'architecture'), { recursive: true });
+  await writeFile(join(root, 'architecture/support-signals.json'), JSON.stringify({ categories: [], rules: [] }));
+  await writeFile(join(root, 'architecture/coverage-matrix.json'), '[]');
+  await writeFile(join(dir, 'ContactsController.cs'), `[ApiVersion("2")][Route("api/v{version:apiVersion}/contacts")]
+public class ContactsController {
+  [HttpPost] public IActionResult Post([FromBody] ContactRequest body) { return null; }
+  [HttpDelete("delete-a")] public IActionResult DeleteA() { return null; }
+  [HttpDelete("delete-b")] public IActionResult DeleteB() { return null; }
+}
+public class ContactRequest { public string id { get; set; } }`);
+  execFileSync('git', ['init', '-q', backend]);
+  execFileSync('git', ['-C', backend, 'add', '.']);
+  execFileSync('git', ['-C', backend, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']);
+  return { root, backend };
+}
+
+test('API POST sem fatos para antes da revisão de campos; com fatos confere serverAssigned', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm556-no-facts-'));
+  await mkdir(join(root, 'content/docs'), { recursive: true });
+  const candidate = { ...article, method: 'POST', body: `${article.body}\n\n\`\`\`json\n{"id":"id-exemplo-1"}\n\`\`\`` };
+  const previous = process.env.BACKEND_LOCAL_CHECKOUT;
+  process.env.BACKEND_LOCAL_CHECKOUT = join(root, 'missing-back');
+  try {
+    const missing = await submitContentPackage(root, [candidate], 'dry_run', 'user:tester');
+    assert.equal(missing.status, 'needs_information');
+    assert.match(missing.questions.join(' '), /sem fatos do código para conferir os campos do endpoint POST \/contacts/iu);
+  } finally {
+    if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous;
+  }
+  assert.match(examine(candidate, { facts: { parameters: [{ name: 'id', in: 'body', serverAssigned: true }] } }).blocks.join(' '), /id.*serverAssigned/iu);
+});
+
+test('draft de submitArticle revisa host fora de api antes de escrever e aceita host público', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm556-draft-'));
+  await mkdir(join(root, 'content/docs'), { recursive: true });
+  const safe = { ...article, path: 'docs/teste/consulta', source: 'produto', contentType: 'guia',
+    body: `${article.body} ${'Esta orientação apresenta um exemplo seguro para consultar contatos no iHelp. '.repeat(9)}` };
+  const unsafe = { ...safe, body: safe.body.replace('https://apiv3.ihelpchat.com', 'https://10.0.0.5/internal') };
+  await assert.rejects(submitArticle(root, unsafe, 'draft', 'user:tester'), /URL ou host fora da API pública/iu);
+  const path = join(root, '.drafts/docs/teste/consulta.mdx');
+  await assert.rejects(access(path), { code: 'ENOENT' });
+  assert.equal((await submitArticle(root, safe, 'draft', 'user:tester')).status, 'draft');
+  await access(path);
+});
+
+test('pacote exige confirmação por DELETE e rejeita item alheio', async () => {
+  const { root, backend } = await backendFixture();
+  const previous = process.env.BACKEND_LOCAL_CHECKOUT;
+  process.env.BACKEND_LOCAL_CHECKOUT = backend;
+  const items = ['delete-a', 'delete-b'].map((suffix) => ({ ...article, path: `api/teste/${suffix}`, method: 'DELETE', endpoint: `/contacts/${suffix}` }));
+  const both = ['DELETE /contacts/delete-a', 'DELETE /contacts/delete-b'];
+  try {
+    assert.equal((await submitContentPackage(root, items, 'dry_run', 'user:tester', [], { confirmations: both })).status, 'dry_run');
+    const one = await submitContentPackage(root, items, 'dry_run', 'user:tester', [], { confirmations: both.slice(0, 1) });
+    assert.equal(one.status, 'needs_information');
+    assert.match(one.questions.join(' '), /DELETE \/contacts\/delete-b/iu);
+    await assert.rejects(submitContentPackage(root, items, 'dry_run', 'user:tester', [], { confirmations: [...both, 'DELETE /contacts/other'] }), /DELETE \/contacts\/other.*não corresponde|não corresponde.*DELETE \/contacts\/other/iu);
+  } finally {
+    if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous;
+  }
+});
 
 test('positivo seguro e negativos de uma alteração explicam bloqueio', () => {
   assert.deepEqual(examine(), { blocks: [], warnings: [] });
