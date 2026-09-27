@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { lstat, open, realpath } from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { lstat, realpath } from 'node:fs/promises';
+import { canReadBackFile, readBackFile, safeRead, statBackFile } from './back-file-reader.mjs';
 import { isAbsolute, join, relative, sep, dirname, parse } from 'node:path';
 import { containsSensitiveData, redactSensitiveData } from './sensitive-data.mjs';
 import { envCompatibility } from './env-compat.mjs';
@@ -181,13 +181,7 @@ function sensitiveSource(content) {
   return content.includes('\0') || containsSensitiveData(content, { detectOpaque: true }) || containsSensitiveData(normalized, { detectOpaque: true });
 }
 
-async function safeRead(path, { signal }) {
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-  try { return await handle.readFile({ encoding: 'utf8', signal }); }
-  finally { await handle.close(); }
-}
-
-async function scan(source, topic, module, deadline, { readFile: reader = safeRead, cache = true, explicitEndpoints = [] } = {}) {
+async function scan(source, topic, module, deadline, { readFile: reader = safeRead, stat = lstat, cache = true, explicitEndpoints = [] } = {}) {
   if (!source || !isAbsolute(source.root ?? '')) return pending(source ?? {}, 'Checkout autorizado ausente');
   try {
     if (await deadline.wait(hasSymlink(source.root))) return pending(source, 'Checkout por symlink não autorizado');
@@ -204,8 +198,16 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
       if (cache) listedCache.set(listKey, listed);
     }
     if (listed.length > MAX_LISTED) return pending(source, 'Limite de arquivos listados excedido');
-    const allowed = listed.filter((path) => isAllowedSourcePath(path, source.role, normalize(module) === 'api'));
+    const sourceAllowed = listed.filter((path) => isAllowedSourcePath(path, source.role, normalize(module) === 'api'));
+    const blockedBackPaths = source.role === 'backend' ? listed.filter((path) => path.endsWith('.cs')
+      && productSparseFolders('backend').some((folder) => path.startsWith(`${folder}/`))
+      && !canReadBackFile(path)) : [];
+    const allowed = sourceAllowed.filter((path) => source.role !== 'backend' || canReadBackFile(path));
     if (allowed.length > MAX_SEARCH_FILES) return pending(source, 'Limite de arquivos pesquisáveis excedido');
+    const fileStat = (path) => source.role === 'backend'
+      ? statBackFile(root, path, stat) : stat(join(root, path));
+    const fileRead = (path, options) => source.role === 'backend'
+      ? readBackFile(root, path, reader, options) : reader(join(root, path), options);
     let paths = cache ? eligibleCache.get(listKey) : undefined;
     if (!paths) {
       paths = [];
@@ -215,7 +217,7 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
         const batch = await deadline.wait(Promise.all(allowed.slice(index, index + 64).map(async (path) => {
           const full = join(root, path);
           if (await hasSymlink(full, root)) return null;
-          const size = (await lstat(full)).size;
+          const size = (await fileStat(path)).size;
           return size <= MAX_FILE_BYTES ? { path, size } : null;
         })));
         for (const item of batch) {
@@ -245,14 +247,14 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
       const actual = await deadline.wait(realpath(full));
       const rel = relative(root, actual);
       if (!rel || rel === '..' || rel.startsWith(`..${sep}`)) return null;
-      const size = (await deadline.wait(lstat(actual))).size;
+      const size = (await deadline.wait(fileStat(path))).size;
       if (size > MAX_FILE_BYTES) return null;
       totalBytes += size;
       if (totalBytes > MAX_TOTAL_BYTES) throw new Error('Limite de bytes pesquisados excedido');
       const fileKey = `${root}\0${sha}\0${path}`;
       let lines = cache ? fileCache.get(fileKey) : undefined;
       if (lines === undefined) {
-        const content = (await deadline.wait(reader(actual, { encoding: 'utf8', signal: deadline.signal }))).replace(/^\uFEFF/u, '');
+        const content = (await deadline.wait(fileRead(path, { encoding: 'utf8', signal: deadline.signal }))).replace(/^\uFEFF/u, '');
         lines = sensitiveSource(content) ? null : content.split('\n');
         if (cache) fileCache.set(fileKey, lines);
       }
@@ -294,13 +296,13 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
       async function controllerData(path) {
         if (scannedControllers.has(path)) return scannedControllers.get(path);
         const full = join(root, path);
-        const mtimeMs = (await deadline.wait(lstat(full))).mtimeMs;
+        const mtimeMs = (await deadline.wait(fileStat(path))).mtimeMs;
         const cached = cache ? controllerCache.get(full) : null;
         if (cached?.mtimeMs === mtimeMs) {
           scannedControllers.set(path, cached);
           return cached;
         }
-        const content = await deadline.wait(reader(full, { signal: deadline.signal }));
+        const content = await deadline.wait(fileRead(path, { signal: deadline.signal }));
         const data = { mtimeMs, content, shallow: readCsharpEndpoints(content, path, { dtoSources: [] }) };
         scannedControllers.set(path, data);
         if (cache) controllerCache.set(full, data);
@@ -325,7 +327,7 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
         const dtoSources = [];
         for (const dtoPath of paths.filter((candidate) => types.has(candidate.split('/').at(-1).replace(/\.cs$/u, ''))).slice(0, 16)) {
           if (await hasSymlink(join(root, dtoPath), root)) continue;
-          const dtoContent = await deadline.wait(reader(join(root, dtoPath), { signal: deadline.signal }));
+          const dtoContent = await deadline.wait(fileRead(dtoPath, { signal: deadline.signal }));
           dtoSources.push({ file: dtoPath, source: dtoContent });
         }
         const found = readCsharpEndpoints(content, path, { dtoSources }).map((endpoint) => ({ ...endpoint, file: path, sha }));
@@ -336,12 +338,18 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
           for (let depth = 0; depth < 3; depth++) {
             const trace = traceCsharpCalls(sources, Object.keys(sources), endpoint);
             const types = new Set(trace.neededTypes);
+            for (const blocked of blockedBackPaths) {
+              const type = blocked.split('/').at(-1).replace(/\.cs$/u, '');
+              const reason = `arquivo de configuração não lido: ${type}`;
+              if ((types.has(type) || types.has(`I${type}`)) && !endpoint.pending.includes(reason))
+                endpoint.pending.push(reason);
+            }
             const next = paths.filter((candidate) => types.has(candidate.split('/').at(-1).replace(/\.cs$/u, ''))
               || types.has(`I${candidate.split('/').at(-1).replace(/\.cs$/u, '')}`)).filter((candidate) => !(candidate in sources)).slice(0, 24);
             if (!next.length) break;
             for (const candidate of next) {
               if (await hasSymlink(join(root, candidate), root)) continue;
-              const raw = await deadline.wait(reader(join(root, candidate), { signal: deadline.signal }));
+              const raw = await deadline.wait(fileRead(candidate, { signal: deadline.signal }));
               if (raw.length <= MAX_FILE_BYTES) sources[candidate] = raw;
             }
           }
@@ -371,7 +379,7 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
   }
 }
 
-export async function searchLocalProductContext(topic, module, { repositoryIds = Object.keys(SOURCES), deadlineMs = DEFAULT_DEADLINE_MS, readFile, cache = true, explicitEndpoints = [] } = {}) {
+export async function searchLocalProductContext(topic, module, { repositoryIds = Object.keys(SOURCES), deadlineMs = DEFAULT_DEADLINE_MS, readFile, stat, cache = true, explicitEndpoints = [] } = {}) {
   const deadline = deadlineContext(Math.max(1, deadlineMs));
   const code = [];
   try {
@@ -386,7 +394,7 @@ export async function searchLocalProductContext(topic, module, { repositoryIds =
       const configured = SOURCES[id];
       if (!configured) { code.push(pending({ repository: id }, 'Repositório não autorizado')); continue; }
       const root = generation ? join(generation, id === 'frontend' ? 'front' : 'back') : process.env[configured.env];
-      code.push(await scan({ repository: configured.repository, role: configured.role, root }, topic, module, deadline, { readFile, cache, explicitEndpoints }));
+      code.push(await scan({ repository: configured.repository, role: configured.role, root }, topic, module, deadline, { readFile, stat, cache, explicitEndpoints }));
     }
   } finally {
     deadline.close();
