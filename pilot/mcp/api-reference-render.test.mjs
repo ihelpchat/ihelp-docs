@@ -51,7 +51,7 @@ test('renderizador produz rota pública, requisição concreta e pendência de r
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   const [article] = result.articles;
   assert.equal(article.method, 'GET');
-  assert.equal(article.endpoint, '/contacts/details/{IdRef}');
+  assert.equal(article.endpoint, '/contacts/details/{idRef}');
   assert.match(article.body, /curl[^\n]*\/api\/v2\/contacts\/details\/abc123/);
   assert.match(article.body, /<Param name="idRef" type="string" required>/);
   assert.match(article.body, /Campos de resposta ainda não documentados/);
@@ -186,8 +186,8 @@ test('rota opcional preserva a página pública sem o segmento opcional', async 
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   assert.equal(result.articles[0].endpoint, '/contacts');
   assert.match(result.articles[0].body, /\/api\/v2\/contacts\?page=1/);
-  assert.match(result.articles[0].body, /<Param name="letter" type="string">route \(string\), opcional<\/Param>/);
-  assert.ok(result.pending.includes('parâmetro no código ausente da página: letter'));
+  assert.doesNotMatch(result.articles[0].body, /<Param name="letter"/);
+  assert.ok(!result.pending.includes('parâmetro no código ausente da página: letter'));
 });
 
 test('parâmetros vêm dos fatos e divergências da página viram pendências nos dois sentidos', async () => {
@@ -201,11 +201,9 @@ test('parâmetros vêm dos fatos e divergências da página viram pendências no
     frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts' } };
   const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
-  assert.deepEqual([...result.articles[0].body.matchAll(/<Param name="([^"]+)"/gu)].map((match) => match[1]), ['letter', 'page', 'limit']);
-  assert.match(result.articles[0].body, /<Param name="letter" type="string">route \(string\), opcional<\/Param>/);
+  assert.deepEqual([...result.articles[0].body.matchAll(/<Param name="([^"]+)"/gu)].map((match) => match[1]), ['page', 'limit']);
   assert.deepEqual(result.pending, [
     'parâmetro na página sem fato no código: searchData',
-    'parâmetro no código ausente da página: letter',
   ]);
 });
 

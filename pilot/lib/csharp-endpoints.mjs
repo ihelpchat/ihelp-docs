@@ -208,7 +208,29 @@ function actionBodyOf(source, items, start) {
   return '';
 }
 
-export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
+function serviceResponse(body, controllerSource, serviceSources) {
+  const wrapped = body.match(/\breturn\s+Ok\s*\(\s*ResponseHttp\.ToReturn\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\)/u);
+  const direct = body.match(/\breturn\s+Ok\s*\(\s*([A-Za-z_]\w*)\s*\)/u);
+  if (!wrapped && !direct) return null;
+  const value = (wrapped ?? direct)[1];
+  const assignment = new RegExp(`\\b(?:var|[A-Za-z_]\\w*)\\s+${value}\\s*=\\s*await\\s+(_[A-Za-z_]\\w*)\\.([A-Za-z_]\\w*)\\s*\\(`, 'u').exec(body);
+  if (!assignment) return null;
+  const receiver = assignment[1], method = assignment[2];
+  const type = neutralizeCsharp(controllerSource).match(new RegExp(`\\b(?:private|protected|public)\\s+(?:readonly\\s+)?([A-Za-z_]\\w*)\\s+${receiver}\\s*;`, 'u'))?.[1];
+  if (!type) return null;
+  const allowedTypes = new Set([type, type.startsWith('I') ? type.slice(1) : `I${type}`]);
+  const declarations = serviceSources.filter(({ file }) => allowedTypes.has(file.split('/').at(-1).replace(/\.cs$/u, '')))
+    .flatMap(({ source, file }) => [...neutralizeCsharp(source).matchAll(new RegExp(`\\b(Task\\s*<\\s*(?:List\\s*<\\s*)?[A-Za-z_]\\w*\\s*>\\s*>|Task\\s*<\\s*[A-Za-z_]\\w*\\s*>|IEnumerable\\s*<\\s*[A-Za-z_]\\w*\\s*>)\\s+${method}\\s*\\(`, 'gu'))]
+    .map((match) => ({ type: match[1], source: `${file}:${lineOf(source, match.index)}` })));
+  const distinct = [...new Set(declarations.map((item) => item.type.replace(/\s+/gu, '')))];
+  if (distinct.length !== 1) return null;
+  const returnType = distinct[0];
+  const list = /^(?:Task<)?(?:List|IEnumerable)</u.test(returnType);
+  const inner = returnType.replace(/^(?:Task<)?(?:List|IEnumerable)</u, '').replace(/^Task</u, '').replace(/>+$/u, '');
+  return /^\w+$/u.test(inner) ? { type: inner, list, envelope: Boolean(wrapped) } : null;
+}
+
+export function readCsharpEndpoints(source, file, { dtoSources = [], serviceSources = [] } = {}) {
   const { tokens: t, neutralized: clean } = scanCsharp(source);
   const endpoints = [];
   let pending = [];
@@ -291,11 +313,15 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       const declaredResultType = responseTypeOf(declaration, pending);
       const resultType = declaredResultType === 'IActionResult' || !declaredResultType
         ? okResponseType(actionBody) : declaredResultType;
-      const fields = resultType ? dtoFields(dtoSources, resultType) : [];
+      const service = !resultType ? serviceResponse(actionBody, source, serviceSources) : null;
+      const resolvedType = resultType ?? service?.type ?? null;
+      const fields = resolvedType ? dtoFields(dtoSources, resolvedType) : [];
       const responseFields = fields.length ? fields : null;
       const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : [];
       endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
-        ...(reference ? { controllerRoute, parameters, serverAssigned, responseFields, responseType: resultType, pending: responsePending, optionalAlias, optionalAliases, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
+        ...(reference ? { controllerRoute, parameters, serverAssigned, responseFields, responseType: resolvedType,
+          responseEnvelope: service?.envelope ? 'dados' : null, responseList: service?.list ?? false,
+          pending: responsePending, optionalAlias, optionalAliases, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resolvedType].filter(Boolean))], source: verbSource,
           routeSource, actionRouteSource: verbSource, verbSource, authorizationSource, authorization: policy } : {}) });
       pending = [];
     }

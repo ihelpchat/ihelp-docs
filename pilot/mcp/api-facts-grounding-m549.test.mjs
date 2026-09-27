@@ -73,6 +73,6 @@ test('mesma citação do pedido é rejeitada no planejamento de guia', async () 
 test('todos os pontos de validação usam o contexto único', async () => {
   const source = await readFile(new URL('./content-ai-service.mjs', import.meta.url), 'utf8');
   const calls = [...source.matchAll(/groundingIssues\(/gu)].slice(2);
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 6);
   assert.equal([...source.matchAll(/groundingIssues\([^\n]*groundingContext\(/gu)].length, calls.length);
 });

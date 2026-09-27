@@ -355,6 +355,22 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
           }
           const trace = traceCsharpCalls(sources, Object.keys(sources), endpoint);
           endpoint.pending.push(...trace.pending);
+          if (endpoint.responseFields === null) {
+            const outputType = trace.methods.find((item) => /\b(?:Task|IEnumerable)\s*</u.test(item.excerpt));
+            if (outputType) {
+              const type = outputType.excerpt.match(/\b(?:Task\s*<\s*)?(?:List\s*<\s*)?([A-Za-z_]\w*)\s*>+/u)?.[1];
+              const dtoPath = paths.find((candidate) => candidate.split('/').at(-1) === `${type}.cs`);
+              if (dtoPath && !dtoSources.some((item) => item.file === dtoPath) && !await hasSymlink(join(root, dtoPath), root)) {
+                dtoSources.push({ file: dtoPath, source: await deadline.wait(fileRead(dtoPath, { signal: deadline.signal })) });
+              }
+              const resolved = readCsharpEndpoints(content, path, { dtoSources,
+                serviceSources: Object.entries(sources).map(([file, source]) => ({ file, source })) })
+                .find((item) => item.method === endpoint.method && item.route === endpoint.route);
+              if (resolved?.responseFields) Object.assign(endpoint, { responseFields: resolved.responseFields,
+                responseType: resolved.responseType, responseEnvelope: resolved.responseEnvelope,
+                responseList: resolved.responseList, pending: endpoint.pending.filter((item) => !item.startsWith('campos de resposta não verificáveis:')) });
+            }
+          }
           for (const method of trace.methods) {
             const excerpt = redactSensitiveData(method.excerpt);
             if (containsSensitiveData(excerpt, { detectOpaque: true })) {

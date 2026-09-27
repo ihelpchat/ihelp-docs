@@ -1,7 +1,9 @@
+import { syntheticResponseExample } from './api-synthetic-example.mjs';
 const safe = (value) => String(value ?? '').replace(/[<>{}"`]/gu, '');
 const valueFor = (parameter) => /^(?:int|long|double|decimal|float|short|number)$/iu.test(parameter.type) ? '1'
   : /^bool(?:ean)?$/iu.test(parameter.type) ? 'true' : 'abc123';
 const publicRoute = (route) => route.replace(/^\/api\/v\d+/iu, '');
+const simpleFieldName = (name) => name.replace(/([a-z])([A-Z])/gu, '$1 $2').replace(/[_-]+/gu, ' ').toLocaleLowerCase('pt-BR');
 
 // The endpoint and the observed page vocabulary are the only inputs to technical MDX.
 export function renderApiReference(endpoint, examples, page) {
@@ -11,13 +13,16 @@ export function renderApiReference(endpoint, examples, page) {
   const aliases = endpoint.optionalAliases ?? (endpoint.optionalAlias ? [endpoint.optionalAlias] : []);
   const sameShape = referenceRoute && [factRoute, ...aliases.map(publicRoute)]
     .filter(Boolean).some((route) => shape(route) === shape(referenceRoute));
-  const displayRoute = sameShape ? referenceRoute : factRoute;
+  const canonicalRoute = factRoute.replace(/\{([^}]+)\}/gu, (_, name) => `{${endpoint.parameters?.find((item) => item.in === 'route' && item.name.toLowerCase() === name.toLowerCase())?.name ?? name}}`);
+  const displayRoute = sameShape ? referenceRoute.replace(/\{([^}]+)\}/gu, (_, name) => `{${endpoint.parameters?.find((item) => item.in === 'route' && item.name.toLowerCase() === name.toLowerCase())?.name ?? name}}`) : canonicalRoute;
   const sampleRoute = aliases.find((route) => referenceRoute && shape(publicRoute(route)) === shape(referenceRoute)) ?? endpoint.route;
   const sample = sampleRoute.replace(/\{([^}]+)\}/gu, (_, name) =>
     valueFor(endpoint.parameters?.find((item) => item.name.toLowerCase() === name.toLowerCase()) ?? { type: 'string' }));
   const factParts = factRoute.split('/');
   const displayParts = displayRoute.split('/');
-  const parameters = (endpoint.parameters ?? []).map((item) => {
+  const omitted = new Set((endpoint.parameters ?? []).filter((item) => item.in === 'route' && item.required === false
+    && !displayRoute.toLowerCase().includes(`{${item.name.toLowerCase()}}`)).map((item) => item.name.toLowerCase()));
+  const parameters = (endpoint.parameters ?? []).filter((item) => !omitted.has(item.name.toLowerCase())).map((item) => {
     if (item.in !== 'route' || !sameShape) return item;
     const at = factParts.findIndex((part) => part.toLowerCase() === `{${item.name.toLowerCase()}}`);
     return at >= 0 && /^\{\w+\}$/u.test(displayParts[at])
@@ -69,19 +74,25 @@ export function renderApiReference(endpoint, examples, page) {
   if (blocks.length) add('exemplo', `## ${heading('exemplo', 'Exemplo')}\n\n${components.has('CodeTabs') ? `<CodeTabs labels={${JSON.stringify([...languages].map((language) => ({ bash: 'cURL', js: 'Node', python: 'Python', http: 'URL' })[language]))}}>\n\n` : ''}${blocks.join('\n\n')}${components.has('CodeTabs') ? '\n\n</CodeTabs>' : ''}`);
 
   if (endpoint.responseFields === null) add('resposta', `## ${heading('resposta', 'Resposta')}\n\nCampos de resposta ainda não documentados.`);
-  else if (fieldsTag) add('campos', `## ${heading('campos relevantes', 'Campos relevantes')}\n\n${components.has('Fields') ? '<Fields>\n' : ''}${endpoint.responseFields.map((field) => `<Field name="${safe(field.name)}">${safe(field.type)}</Field>`).join('\n')}${components.has('Fields') ? '\n</Fields>' : ''}`);
+  else {
+    const prefix = `${endpoint.responseEnvelope ? `${endpoint.responseEnvelope}${endpoint.responseList ? '[]' : ''}.` : endpoint.responseList ? '[].' : ''}`;
+    const synthetic = syntheticResponseExample(endpoint);
+    add('resposta', `## ${heading('resposta', 'Resposta')}\n\n${components.has('Fields') ? '<Fields>\n' : ''}${endpoint.responseFields.map((field) => `<Field name="${safe(prefix + field.name)}">${safe(field.type)} — ${safe(page?.responseDescriptions?.[field.name] ?? simpleFieldName(field.name))}</Field>`).join('\n')}${components.has('Fields') ? '\n</Fields>' : ''}${synthetic ? `\n\n\`\`\`json\n${JSON.stringify(synthetic, null, 2)}\n\`\`\`` : ''}`);
+  }
   const order = (kind) => kind === 'autorização' ? -1 : sections.findIndex((section) => section.toLowerCase().startsWith(kind === 'campos' ? 'campos relevantes' : kind));
   const rank = (kind) => kind === 'autorização' ? -1 : order(kind) < 0 ? 100 : order(kind);
   paragraphs.sort((left, right) => rank(left.kind) - rank(right.kind));
   const pageNames = new Set(page?.paramNames?.map((name) => name.toLowerCase()) ?? []);
   const factNames = new Set(parameters.map((item) => item.name.toLowerCase()));
   const parameterPending = Array.isArray(page?.paramNames) ? [
-    ...page.paramNames.filter((name) => !factNames.has(name.toLowerCase()))
+    ...page.paramNames.filter((name) => omitted.has(name.toLowerCase()))
+      .map((name) => `parâmetro opcional omitido da rota citada: ${name}`),
+    ...page.paramNames.filter((name) => !omitted.has(name.toLowerCase()) && !factNames.has(name.toLowerCase()))
       .map((name) => `parâmetro na página sem fato no código: ${name}`),
     ...parameters.filter((item) => !pageNames.has(item.name.toLowerCase()))
       .map((item) => `parâmetro no código ausente da página: ${item.name}`),
   ] : [];
   return { source: 'api', contentType: 'referencia', method: endpoint.verb,
     endpoint: displayRoute, body: paragraphs.map((item) => item.body).join('\n\n'),
-    pending: [...parameterPending, ...(endpoint.responseFields === null ? [`campos de resposta não verificáveis: ${endpoint.verb} ${endpoint.route}`] : [])] };
+    pending: [...parameterPending, ...(endpoint.responseFields === null ? [`campos de resposta não verificáveis: ${endpoint.verb} ${endpoint.route}`] : endpoint.responseFields.length && !syntheticResponseExample(endpoint) ? ['exemplo sintético aguardando a M5.56'] : [])] };
 }

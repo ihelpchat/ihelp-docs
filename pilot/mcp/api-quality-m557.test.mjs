@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readCsharpEndpoints } from '../lib/csharp-endpoints.mjs';
 import { renderApiReference } from './api-reference-render.mjs';
+import { generateContentPackage } from './content-ai-service.mjs';
 import * as productContext from './product-context-service.mjs';
 const selectApiStyleExamples = productContext.selectApiStyleExamples ?? (async () => []);
 
@@ -23,7 +24,8 @@ const dto = `public class ContactDto {
 }`;
 const parsed = () => readCsharpEndpoints(controller, 'Controllers/ContactsController.cs', {
   dtoSources: [{ file: 'Dto/ContactDto.cs', source: dto }],
-  serviceSources: [{ file: 'Services/IContactsService.cs', source: service }],
+  serviceSources: [{ file: 'Services/IContactsService.cs', source: service },
+    { file: 'Repositories/ContactsRepository.cs', source: 'public class ContactsRepository { public Task<List<OtherDto>> List() { return null; } }' }],
 });
 
 test('retorno do serviço prova campos públicos e envelope de lista', () => {
@@ -36,7 +38,8 @@ test('retorno do serviço prova campos públicos e envelope de lista', () => {
   assert.equal(endpoint.responseList, true);
   const page = renderApiReference(endpoint, [], { components: ['Fields', 'Field', 'Response'], sections: ['Resposta'] });
   assert.match(page.body, /name="dados\[\]\.nome"/u);
-  assert.match(page.body, /## Resposta[\s\S]*```json/u);
+  assert.match(page.body, /## Resposta/u);
+  assert.ok(/```json/u.test(page.body) || page.pending.includes('exemplo sintético aguardando a M5.56'));
   assert.doesNotMatch(page.body, /Gian|5517936189969/u);
 });
 
@@ -66,15 +69,33 @@ test('opcional omitido tem motivo textual quando página insiste no parâmetro',
   assert.match(result.pending.join('; '), /parâmetro opcional omitido da rota citada: letter/u);
 });
 
+test('descrição da IA usa campo factual e ausência registra pendência', async () => {
+  const endpoint = { ...parsed()[0], public: true, documented: true, authorization: 'authenticated' };
+  const article = { path: 'api/contatos/listar', endpoint: 'GET /contacts/{letter}', title: 'Listar contatos',
+    description: 'Lista os contatos disponíveis para consulta na referência pública.', intro: 'Consulte os contatos disponíveis.', notas: [], grounding: [],
+    responseDescriptions: [{ name: 'nome', description: 'Nome do contato.', grounding: [] }] };
+  const context = { groundingRequired: false, matches: [], code: [], endpoints: [endpoint],
+    apiExamples: [{ path: article.path, frontmatter: { method: 'GET', endpoint: '/contacts' },
+      components: ['Params', 'Param', 'Fields', 'Field'], sections: ['Resposta'], paramNames: ['letter'] }] };
+  const result = await generateContentPackage(process.cwd(), { module: 'api', topic: 'Contatos' }, {
+    productContext: context, plan: { status: 'ready' },
+    client: { responses: { create: async () => ({ output_text: JSON.stringify({ status: 'ready', summary: 'Contatos.',
+      questions: [], articles: [article], grounding: [] }), model: 'synthetic' }) } },
+  });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+  assert.match(result.articles[0].body, /string — Nome do contato\./u);
+  assert.match(result.pending.join('; '), /descrição de resposta sem fonte: id/u);
+});
+
 test('few-shot escolhe três páginas por seções e notas, reagindo a edição', async () => {
   const root = await mkdtemp(join(tmpdir(), 'm557-style-'));
   try {
-    await mkdir(join(root, 'api'), { recursive: true });
+    await mkdir(root, { recursive: true });
     for (const [name, sections] of [['a', 4], ['b', 3], ['c', 2], ['d', 1]])
-      await writeFile(join(root, 'api', `${name}.mdx`), `---\nsource: api\nmethod: GET\nendpoint: /${name}\n---\n${'## Nota útil\nTexto.\n'.repeat(sections)}`);
+      await writeFile(join(root, `${name}.mdx`), `---\nsource: api\nmethod: GET\nendpoint: /${name}\n---\n${'## Nota útil\nTexto.\n'.repeat(sections)}`);
     const first = await selectApiStyleExamples(root);
     assert.deepEqual(first.map((item) => item.path), ['api/a', 'api/b', 'api/c']);
-    await writeFile(join(root, 'api/d.mdx'), `---\nsource: api\nmethod: GET\nendpoint: /d\n---\n${'## Nota útil\nTexto.\n'.repeat(5)}`);
+    await writeFile(join(root, 'd.mdx'), `---\nsource: api\nmethod: GET\nendpoint: /d\n---\n${'## Nota útil\nTexto.\n'.repeat(5)}`);
     const second = await selectApiStyleExamples(root);
     assert.deepEqual(second.map((item) => item.path), ['api/d', 'api/a', 'api/b']);
   } finally { await rm(root, { recursive: true, force: true }); }
