@@ -3,10 +3,11 @@ import { mkdir, readFile, readdir, writeFile, rename, rm, lstat } from 'node:fs/
 import { join, relative } from 'node:path';
 import { guideSchema } from '../architecture/conversation-v1.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
-import { planContent, generateCanonicalGuide } from './content-ai-service.mjs';
+import { planContent, generateCanonicalGuide, explicitEndpointsFrom } from './content-ai-service.mjs';
 import { readArticle } from './editorial-standard.mjs';
 import { submitContentPackage, validateArticle, isSafeRequestedBy } from './content-service.mjs';
 import { containsSensitiveData, redactSensitiveData } from './sensitive-data.mjs';
+import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 
 const digest = (value) => createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex');
 const storeRoot = (root) => join(process.env.MCP_STATE_DIR ?? root, '.guide-plans');
@@ -82,13 +83,14 @@ async function locked(file, work) {
   finally { await rm(lock, { recursive: true, force: true }); }
 }
 
-export async function createGuide(root, input, options = {}) {
+async function createGuideCore(root, input, options = {}) {
   if (!isSafeRequestedBy(input.requestedBy)) throw new Error('ator inválido');
   const now = options.now?.() ?? Date.now();
   const ttl = options.planTtlMs ?? Number(process.env.MCP_GUIDE_PLAN_TTL_MS ?? 86_400_000);
   if (!Number.isSafeInteger(ttl) || ttl <= 0) throw new Error('TTL de plano inválido');
   const expired = await pruneExpired(root, now, ttl);
-  const getContext = options.getContext ?? ((request) => getIhelpContext(root, request.topic, request.module, { requireLocal: true }));
+  const getContext = options.getContext ?? ((request) => getIhelpContext(root, request.topic, request.module,
+    { requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'], explicitEndpoints: explicitEndpointsFrom(request) } : {}) }));
   const existing = options.existing ?? existingGuide;
   const plan = options.plan ?? planContent;
   const generate = options.generate ?? generateCanonicalGuide;
@@ -144,7 +146,7 @@ export async function createGuide(root, input, options = {}) {
     await save(file, stored);
     const generationRequest = { ...request, details: redactSensitiveData(`${request.details}\n${input.plan.questions.map((question, i) => `${question}: ${answers[i]}`).join('\n')}`) };
     const packageResult = await generate(root, generationRequest, { plan: { ...input.plan, status: 'ready' }, productContext: context, existingGuide: current });
-    if (packageResult.status !== 'ready' || packageResult.articles?.length !== 1) return { status: packageResult.status, questions: packageResult.questions ?? [] };
+    if (packageResult.status !== 'ready' || packageResult.articles?.length !== 1) return { status: packageResult.status, questions: packageResult.questions ?? [], pending: packageResult.pending ?? [] };
     const article = packageResult.articles[0];
     if (article.contentType !== 'guia' || article.guide?.guideId !== request.guideId) throw new Error('Gerador não devolveu guia canônico');
     article.path = current?.path ?? article.path;
@@ -171,4 +173,8 @@ export async function createGuide(root, input, options = {}) {
     await save(file, { ...stored, status: 'draft', result });
     return result;
   });
+}
+
+export async function createGuide(root, input, options = {}) {
+  return withCodeRefreshOffer(await createGuideCore(root, input, options));
 }

@@ -58,6 +58,7 @@ try {
     docs_delete_article: { path: article.path, mode: 'draft' },
     criar_guia: { guideId: 'usuario-acesso', topic: 'Adicionar pessoa', module: 'usuarios', description: 'Criar acesso para uma pessoa da equipe.' },
     atualizar_por_deploy: { before: {}, after: {} },
+    atualizar_codigo_produto: {},
   };
   for (const [name, config] of registered) {
     assert.equal(typeof config.mutates, 'boolean', `${name} deve declarar mutates explicitamente`);
