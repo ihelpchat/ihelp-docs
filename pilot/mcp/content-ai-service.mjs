@@ -13,6 +13,7 @@ import { extractCitedEndpoints } from './public-submit-gate.mjs';
 import { contentMaxOutputTokens } from './env-compat.mjs';
 import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 import { guardModelOutput } from './model-output-guard.mjs';
+import { PRODUCT_TERMS } from './product-terms.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
 contentMaxOutputTokens();
@@ -41,6 +42,9 @@ const API_GROUNDING_SCHEMA = { type: 'array', items: {
 } };
 const API_PROSE_UNIT_SCHEMA = { type: 'object', additionalProperties: false, required: ['text', 'citations'],
   properties: { text: { type: 'string' }, citations: API_GROUNDING_SCHEMA.items.properties.citations } };
+const publicNames = new Set(PRODUCT_TERMS.flatMap((term) => [term, ...term.split(/\s+/u)])
+  .map((term) => term.toLocaleLowerCase('pt-BR')));
+const isPublicName = (name) => publicNames.has(name.toLocaleLowerCase('pt-BR'));
 
 function proseIssue(article, endpoint, packageEndpoints = [endpoint]) {
   const parameters = packageEndpoints.flatMap((item) => item.parameters ?? []);
@@ -81,13 +85,13 @@ function proseIssue(article, endpoint, packageEndpoints = [endpoint]) {
         const factual = [...allowed].some((fact) => fact.toLowerCase() === name.toLowerCase());
         const technical = Boolean(candidate[1]) || /(?<=\p{L})\p{Lu}|\p{L}_\p{L}|(?=.*\p{L})(?=.*\p{N})/u.test(name)
           || [...names].some((fact) => fact.toLowerCase() === name.toLowerCase());
-        if (technical && !factual) return `nome técnico sem fato: ${name}`;
+        if (technical && !factual && !isPublicName(name)) return `nome técnico sem fato: ${name}`;
       }
     }
     for (const [name] of value.matchAll(tokens)) {
       const identifier = /\p{Ll}\p{Lu}|\p{L}_\p{L}/u.test(name)
         || (/\p{L}/u.test(name) && /\d/u.test(name));
-      if (identifier && !names.has(name)) return `nome técnico sem fato: ${name}`;
+      if (identifier && !names.has(name) && !isPublicName(name)) return `nome técnico sem fato: ${name}`;
     }
   }
   return null;
