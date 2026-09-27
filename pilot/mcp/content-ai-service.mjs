@@ -36,7 +36,7 @@ const API_GROUNDING_SCHEMA = { type: 'array', items: {
   ] } } },
 } };
 
-function proseIssue(article, endpoint, { internalGuidance = false, editorialSource = '' } = {}) {
+function proseIssue(article, endpoint) {
   const parameters = endpoint.parameters ?? [];
   const parameterNames = new Set(parameters.map((field) => field.name));
   const fieldNames = new Set([...parameters.filter((field) => field.in === 'body'), ...endpoint.responseFields ?? []]
@@ -55,13 +55,16 @@ function proseIssue(article, endpoint, { internalGuidance = false, editorialSour
   for (const value of [article.title, article.description, article.intro, ...article.notas]) {
     if (typeof value !== 'string') return 'prosa inválida';
     const block = value.includes('```') ? value.match(/```[^\n]*/u) : null;
-    if (block && !internalGuidance) return `bloco de código proibido: ${block[0].slice(0, 80)}`;
+    if (block) return `bloco de código proibido: ${block[0].slice(0, 80)}`;
     const component = value.match(/<\/?[A-Za-z][^>]*>/u);
-    if (component && !internalGuidance) return `componente proibido: ${component[0]}`;
+    if (component) return `componente proibido: ${component[0]}`;
     const path = value.match(/\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_{}-]+)*/u);
-    if (path && !internalGuidance) return `caminho proibido: ${path[0]}`;
+    if (path) return `caminho proibido: ${path[0]}`;
+    for (const code of value.matchAll(/`([^`\n]+)`/gu)) {
+      if (!inlineNames.has(code[1])) return `código inline proibido: ${code[0]}`;
+    }
     const method = value.match(/\b(?:GET|POST|PUT|PATCH|DELETE)\b/iu);
-    if (method && !internalGuidance) return `método proibido na prosa: ${method[0]}`;
+    if (method) return `método proibido na prosa: ${method[0]}`;
     for (const labelled of value.matchAll(labelledNames)) {
       const allowed = /^(?:campos?|propriedades?|atributos?|chaves?)$/iu.test(labelled[1])
         ? fieldNames : /^parâmetros?$/iu.test(labelled[1]) ? parameterNames : headerNames;
@@ -72,10 +75,6 @@ function proseIssue(article, endpoint, { internalGuidance = false, editorialSour
           || [...names].some((fact) => fact.toLowerCase() === name.toLowerCase());
         if (technical && !factual) return `nome técnico sem fato: ${name}`;
       }
-    }
-    for (const code of value.matchAll(/`([^`\n]+)`/gu)) {
-      if (internalGuidance && code[1].includes('/') && editorialSource.includes(code[1])) continue;
-      if (!inlineNames.has(code[1])) return `código inline proibido: ${code[0]}`;
     }
     for (const [name] of value.matchAll(tokens)) {
       const identifier = /\p{Ll}\p{Lu}|\p{L}_\p{L}/u.test(name)
@@ -409,7 +408,7 @@ async function planContentCore(root, request, options = {}) {
         'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
         'Sugira ações no produto somente com rota fornecida ou sustentada pelos detalhes. target é um identificador data-help-id estável, nunca um seletor CSS.',
         request.module === 'api' ? 'Planeje páginas de referência da API. Para tema amplo, foque nos endpoints documented=true. Não peça dados já presentes nos fatos estruturados. Endpoint sem public=true exige confirmação. responseFields=null não bloqueia: a resposta exibirá nota fixa e pendência.' : 'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
-        request.module === 'api' ? 'Guidance e risks são orientação interna e não precisam de grounding por frase. Nomes técnicos citados devem existir nos fatos estruturados. A prosa publicada será validada com grounding completo na geração.' : 'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
+        request.module === 'api' ? 'Guidance e risks são orientação interna e não precisam de grounding por frase. Nunca são publicados. Podem mencionar métodos e nomes técnicos para orientar a geração; o schema é a única validação desta resposta. A prosa publicada será validada com grounding completo na geração.' : 'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].join(' '),
     },
     { role: 'user', content: requestText(request, existing, productContext) },
@@ -419,16 +418,6 @@ async function planContentCore(root, request, options = {}) {
   if (!modelJson.ok) return { ...apiPending(modelJson.reason), pending: productContext.pending ?? [] };
   const parsed = modelJson.value;
   if (parsed.status === 'ready') {
-    if (request.module === 'api') {
-      const endpoints = productContext.endpoints.filter((item) => item.public);
-      const facts = { parameters: endpoints.flatMap((item) => item.parameters ?? []),
-        responseFields: endpoints.flatMap((item) => item.responseFields ?? []),
-        route: endpoints.map((item) => item.route).join('/'),
-        optionalAliases: endpoints.flatMap((item) => item.optionalAliases ?? []) };
-      const issue = proseIssue({ title: parsed.guidance, description: '', intro: '', notas: parsed.risks }, facts,
-        { internalGuidance: true, editorialSource: [request.description, request.details].filter(Boolean).join('\n') });
-      if (issue) return apiPending(issue);
-    }
     const issues = request.module === 'api' ? []
       : groundingIssues(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks']);
     if (issues.length) {
