@@ -136,6 +136,58 @@ test('uma página com dois endpoints citados exige fatos e confirmação de ambo
   }
 });
 
+test('formas de citação de endpoint passam pela mesma confirmação', async () => {
+  const { root, backend } = await backendFixture();
+  const previous = process.env.BACKEND_LOCAL_CHECKOUT;
+  process.env.BACKEND_LOCAL_CHECKOUT = backend;
+  const base = { ...article, method: 'DELETE', endpoint: '/api/v2/contacts/delete-a',
+    body: '## Exemplo\n\nDELETE /api/v2/contacts/delete-a\n\nExemplo fictício.' };
+  const confirmA = ['DELETE /api/v2/contacts/delete-a'];
+  const confirmBoth = [...confirmA, 'DELETE /api/v2/contacts/delete-b'];
+  const run = (body, confirmations = confirmA) => submitContentPackage(root,
+    [{ ...base, body }], 'dry_run', 'user:tester', [], { confirmations });
+  try {
+    assert.equal((await run(base.body)).status, 'dry_run');
+    for (const [name, citation] of [
+      ['curl -X', 'curl -X DELETE "https://apiv3.ihelpchat.com/api/v2/contacts/delete-b"'],
+      ['curl --request', 'curl --request DELETE "https://apiv3.ihelpchat.com/api/v2/contacts/delete-b"'],
+      ['fetch', "fetch('https://apiv3.ihelpchat.com/api/v2/contacts/delete-b', { method: 'DELETE' })"],
+    ]) {
+      const body = `${base.body}\n\n\`\`\`bash\n${citation}\n\`\`\``;
+      const missing = await run(body);
+      assert.equal(missing.status, 'needs_information', name);
+      assert.match(missing.questions.join(' '), /confirme o endpoint sensível: DELETE \/api\/v2\/contacts\/delete-b/iu, name);
+      assert.equal((await run(body, confirmBoth)).status, 'dry_run', name);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous;
+  }
+});
+
+test('curl com dados identifica POST; caminho sem método exige informação', async () => {
+  const { root, backend } = await backendFixture();
+  const previous = process.env.BACKEND_LOCAL_CHECKOUT;
+  process.env.BACKEND_LOCAL_CHECKOUT = backend;
+  const base = { ...article, method: 'DELETE', endpoint: '/api/v2/contacts/delete-a',
+    body: '## Exemplo\n\nDELETE /api/v2/contacts/delete-a\n\nExemplo fictício.' };
+  const run = (body) => submitContentPackage(root, [{ ...base, body }], 'dry_run', 'user:tester', [],
+    { confirmations: ['DELETE /api/v2/contacts/delete-a'] });
+  try {
+    assert.equal((await run(base.body)).status, 'dry_run');
+    const post = await run(`${base.body}\n\n\`\`\`bash\ncurl -d '{"id":"id-exemplo-1"}' https://apiv3.ihelpchat.com/api/v2/contacts\n\`\`\``);
+    assert.equal(post.status, 'dry_run');
+    const unknown = await run(`${base.body}\n\n\`/crm/card/{id}\``);
+    assert.equal(unknown.status, 'needs_information');
+    assert.match(unknown.questions.join(' '), /endpoint citado sem método: \/crm\/card\/\{id\}/iu);
+    const outside = await run(`${base.body}\n\nhttps://faq.ihelpchat.com/ihelp-docs/x`);
+    assert.equal(outside.status, 'dry_run');
+  } finally {
+    if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous;
+  }
+});
+
 test('positivo seguro e negativos de uma alteração explicam bloqueio', () => {
   assert.deepEqual(examine(), { blocks: [], warnings: [] });
   for (const [name, changed, reason] of [
