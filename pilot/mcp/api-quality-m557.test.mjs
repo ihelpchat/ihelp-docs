@@ -40,7 +40,8 @@ test('retorno do serviço prova campos públicos e envelope de lista', () => {
   const page = renderApiReference(endpoint, [], { components: ['Fields', 'Field', 'Response'], sections: ['Resposta'] });
   assert.match(page.body, /name="dados\[\]\.nome"/u);
   assert.match(page.body, /## Resposta/u);
-  assert.ok(/```json/u.test(page.body) || page.pending.includes('exemplo sintético aguardando a M5.56'));
+  assert.match(page.body, /```json/u);
+  assert.doesNotMatch(page.pending.join('; '), /exemplo sintético aguardando a M5.56/u);
   assert.doesNotMatch(page.body, /Gian|5517936189969/u);
 });
 
