@@ -41,11 +41,23 @@ function attr(node, name) {
 }
 function attrValue(node, name) { return literal(attr(node, name)?.initializer); }
 function jsxName(node) { return node.tagName?.getText() ?? ''; }
+function jsxBody(children, file) {
+  return children.map((child) => {
+    if (ts.isJsxText(child)) return child.getText(file);
+    if (ts.isJsxExpression(child)) return '…';
+    if (ts.isJsxElement(child)) return jsxBody(child.children, file);
+    return '';
+  }).join('').replace(/\s+/gu, ' ').trim();
+}
+function validActionLabel(value) {
+  const text = safeText(value);
+  return text && !/[('"“‘]\s*$/u.test(text) ? text : null;
+}
 function safeText(value) {
   const text = String(value ?? '').replace(/\s+/gu, ' ').trim();
   if (!text || text.length > 200 || !/[\p{L}\p{N}]/u.test(text)
     || containsSensitiveData(text, { detectOpaque: true })
-    || sanitizeCodeForModel(JSON.stringify(text)).literalsOmitted) return null;
+    || sanitizeCodeForModel(JSON.stringify(text.replaceAll('…', '1'))).literalsOmitted) return null;
   return text;
 }
 function lineOf(file, node) { return file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1; }
@@ -97,19 +109,17 @@ function collect(filePath, source, facts) {
       }
       const handler = attr(node, 'onClick')?.initializer;
       if (ACTION.test(tag) || /^button$/iu.test(tag)) {
-        const label = attrValue(node, 'labelText') ?? attrValue(node, 'label') ?? attrValue(node, 'aria-label');
         const children = ts.isJsxOpeningElement(node) && ts.isJsxElement(node.parent) ? node.parent.children : [];
-        const body = children.flatMap((child) => {
-          if (ts.isJsxText(child)) return [child.getText(file)];
-          if (ts.isJsxExpression(child) && child.expression && ts.isConditionalExpression(child.expression))
-            return [literal(child.expression.whenFalse), literal(child.expression.whenTrue)];
-          return [];
-        }).find((value) => safeText(value));
-        const text = body ?? label;
+        const body = validActionLabel(jsxBody(children, file));
+        const ariaLabel = validActionLabel(attrValue(node, 'aria-label'));
+        const title = validActionLabel(attrValue(node, 'title'));
+        const text = ariaLabel ?? body ?? validActionLabel(attrValue(node, 'labelText'))
+          ?? validActionLabel(attrValue(node, 'label')) ?? title;
         const expression = handler && ts.isJsxExpression(handler) ? handler.expression : null;
         const handlerName = expression && ts.isIdentifier(expression) ? expression.text
           : expression && ts.isArrowFunction(expression) ? expression.body.getText(file).match(/\b([A-Za-z]\w*)\s*\(/u)?.[1] : null;
-        if (text && handlerName) addFact(facts, filePath, file, node, 'action', { text, handler: handlerName });
+        if (text && handlerName) addFact(facts, filePath, file, node, 'action', { text, handler: handlerName,
+          ...(body ? { body } : {}), ...(ariaLabel ? { ariaLabel } : {}), ...(title ? { title } : {}) });
       }
       const accept = attrValue(node, 'accept');
       if (accept) addFact(facts, filePath, file, attr(node, 'accept'), 'upload', { accept });
@@ -269,10 +279,19 @@ const SYNONYMS = [
   ['contato', 'contact', 'contacts'],
 ];
 const ACTION_GROUPS = SYNONYMS.slice(0, 8);
-function words(value) { return normalized(value).match(/[a-z0-9]+/gu) ?? []; }
+function canonicalWord(value) {
+  const word = String(value ?? '').toLowerCase();
+  const singular = word.endsWith('ões') || word.endsWith('ães') ? `${word.slice(0, -3)}ão`
+    : word.endsWith('ais') ? `${word.slice(0, -3)}al`
+    : word.endsWith('éis') || word.endsWith('eis') ? `${word.slice(0, -3)}el`
+    : /(?:res|zes|ses)$/u.test(word) ? word.slice(0, -2)
+    : word.endsWith('s') ? word.slice(0, -1) : word;
+  return normalized(singular);
+}
+function words(value) { return (String(value ?? '').toLowerCase().match(/[\p{L}0-9]+/gu) ?? []).map(canonicalWord); }
 function groupsIn(value, groups = SYNONYMS) {
   const tokens = new Set(words(value));
-  return groups.filter((group) => group.some((word) => tokens.has(word)));
+  return groups.filter((group) => group.some((word) => words(word).some((token) => tokens.has(token))));
 }
 function sameGroup(left, right, groups = SYNONYMS) {
   return groupsIn(left, groups).some((group) => groupsIn(right, groups).includes(group));
@@ -283,8 +302,8 @@ function visibleNameFact(fact) {
 function matchesSubject(subject, value) {
   if (!subject) return true;
   const tokens = new Set(words(value));
-  const group = groupsIn(subject).find((entry) => entry.includes(subject));
-  return (group ?? [subject]).some((term) => tokens.has(term));
+  const group = groupsIn(subject).find((entry) => entry.some((term) => words(term).includes(canonicalWord(subject))));
+  return (group ?? [subject]).some((term) => words(term).some((token) => tokens.has(token)));
 }
 
 export function discardAnsweredScreenQuestions(questions, facts) {
