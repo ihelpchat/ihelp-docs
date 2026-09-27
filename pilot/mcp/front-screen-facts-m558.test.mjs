@@ -225,3 +225,13 @@ test('eventos inline e useCallback citam confirmação, toast e destino, sem JSX
   assert.equal(facts.find((fact) => fact.text === 'Excluir contato?')?.owner, 'Excluir');
   assert.equal(facts.find((fact) => fact.kind === 'destination')?.route, '/contact/detail');
 });
+
+test('onSubmit com wrapper de formulário segue callback local', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const save = () => addNotification({ title: 'Sucesso!', description: 'Contato criado' });
+    return <form onSubmit={handleSubmit(save)}><button>Salvar</button></form>;
+  }` };
+  const facts = (await run(files)).facts.filter((fact) => fact.kind === 'message');
+  assert.deepEqual(facts.map((fact) => [fact.text, fact.owner]),
+    [['Sucesso!', 'Salvar'], ['Contato criado', 'Salvar']]);
+});
