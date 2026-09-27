@@ -40,6 +40,19 @@ test('resp-2 aceita contactId de outro endpoint selecionado do pacote', async ()
   assert.match(result.articles[0].body, /usado como contactId na consulta de tags/u);
 });
 
+test('nome público WhatsApp é aceito na descrição de campo', async () => {
+  const result = await replay((value) => { value.articles[0].responseDescriptions[0].description.text =
+    'Campo textual de WhatsApp.'; });
+  assert.equal(result.status, 'ready', result.summary);
+});
+
+test('uma letra inventada em WhatsAppz mantém recusa por nome técnico sem fato', async () => {
+  const result = await replay((value) => { value.articles[0].responseDescriptions[0].description.text =
+    'Campo textual de WhatsAppz.'; });
+  assert.equal(result.status, 'needs_information');
+  assert.match(result.summary, /nome técnico sem fato: WhatsAppz/u);
+});
+
 test('resp-2 com um único nome inventado recusa por falta de fato', async () => {
   const result = await replay((value) => { value.articles[0].responseDescriptions[0].description.text =
     description.replace('contactId', 'contatoIdInventado'); });
