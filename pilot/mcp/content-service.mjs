@@ -196,14 +196,14 @@ async function githubRequest(path, init = {}, allowNotFound = false) {
   return response.json();
 }
 
-async function createPullRequest(article, rendered, actor, beforePull) {
+async function createPullRequest(article, rendered, actor, beforePull, securityWarnings = []) {
   const repository = process.env.GITHUB_REPOSITORY ?? 'ihelpchat/ihelp-docs';
   const base = process.env.GITHUB_BASE_BRANCH ?? 'main';
   const [owner, repo] = repository.split('/');
   if (!owner || !repo) throw new Error('GITHUB_REPOSITORY inválido');
   const submittedAt = new Date().toISOString();
   const title = `docs: ${article.title}`;
-  const body = `Conteúdo enviado pelo MCP de documentação. Revise precisão, permissões, privacidade e links antes do merge.\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_article; target=${article.path}; mode=pull_request.`;
+  const body = `Conteúdo enviado pelo MCP de documentação. Revise precisão, permissões, privacidade e links antes do merge.\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_article; target=${article.path}; mode=pull_request.${securityWarnings.length ? `\n\n## Atenção de segurança\n\n${securityWarnings.map((warning) => `- ${warning}`).join('\n')}` : ''}`;
   rejectSensitive(`${title}\n${body}`);
   const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(base)}`);
   const slug = basename(article.path);
@@ -344,7 +344,7 @@ async function submitValidatedArticle(root, article, mode, actor, beforePull, pr
   const [{ rendered }] = items;
   safeContentPath(root, article.path);
   if (mode === 'pull_request') {
-    return { ...await createPullRequest(article, rendered, actor, beforePull), ...gate };
+    return { ...await createPullRequest(article, rendered, actor, beforePull, gate.securityWarnings), ...gate };
   }
   if (mode !== 'draft') throw new Error('mode deve ser draft ou pull_request');
   return createDraft(root, article, rendered);
@@ -560,6 +560,7 @@ export async function deleteArticle(root, contentPath, mode = 'draft', requested
         source: 'produto', contentType: 'guia',
         body: `Esta solicitação registra a remoção do artigo ${contentPath}. Antes de aplicar, confira links internos, navegação e conteúdos que dependem dessa página. A remoção deve acontecer em pull request para preservar o histórico e permitir revisão. Depois da alteração, execute a auditoria completa da documentação e confirme que nenhuma rota interna ficou quebrada. O registro existe apenas para revisão e não remove conteúdo automaticamente neste modo.`,
       };
+      await assertPublicSubmit(root, [{ article: { ...article, body: JSON.stringify(manifest) }, rendered: JSON.stringify(manifest) }], [], { securityOnly: true });
       const draft = await createDraft(root, article, `${JSON.stringify(manifest, null, 2)}\n`);
       const result = { status: 'draft', ...draft };
       await auditOperation(root, { actor: requestedBy, operation: 'docs_delete_article', mode, target: contentPath, result: 'success' });

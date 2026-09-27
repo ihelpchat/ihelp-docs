@@ -526,7 +526,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       if (review.blocks.length) return withPending(apiPending(`${prose.path}: ${review.blocks.join('; ')}`));
       securityWarnings.push(...review.warnings);
       if (review.warnings.length && !review.confirmed) return withPending({ ...apiPending(`Confirme a revisão de segurança de ${prose.path}.`),
-        questions: [`Para seguir, responda exatamente: ${review.confirmation}`], securityWarnings });
+        questions: [`Para seguir, confirme o endpoint sensível: ${review.endpoint}`], securityWarnings });
       const validation = validateArticle(article);
       if (!validation.valid) return withPending(apiPending(`${prose.path}: ${validation.issues.join('; ')}`));
       articles.push(article);

@@ -67,9 +67,53 @@ async function securityFacts(root, article) {
   const endpoint = context?.endpoints?.find((item) => item.verb === verb &&
     [item.route, ...(item.optionalAliases ?? [])].some((candidate) =>
       routeMatches(route, candidate) || routeMatches(route, candidate.replace(/^\/api\/v\d+/iu, ''))));
-  if (!endpoint && (/\{[^}]+\}/u.test(route) || /<Param\b|\bparameters?\b/iu.test(article.body)))
-    reject('fatos do código indisponíveis para a revisão de segurança');
-  return endpoint ?? {};
+  return endpoint ?? null;
+}
+
+function citedEndpoints(article) {
+  const endpoints = [{ method: String(article.method ?? '').toUpperCase(), endpoint: String(article.endpoint ?? '') }];
+  for (const match of String(article.body ?? '').matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(https?:\/\/[^\s`<>]+|\/[A-Za-z0-9_{}./?=&%-]+)/gmu)) {
+    let route = match[2];
+    try { if (/^https?:\/\//u.test(route)) route = new URL(route).pathname; } catch { continue; }
+    route = route.replace(/[.,;:!?]+$/u, '');
+    route = route.split(/[?#]/u)[0];
+    const base = endpoints[0].endpoint.replace(/^\/api\/v\d+/iu, '');
+    const short = route.replace(/^\/api\/v\d+/iu, '');
+    if (match[1] === endpoints[0].method && (routeMatches(short, base)
+      || short.startsWith(`${base}/id-exemplo-`))) continue;
+    if (!endpoints.some((item) => item.method === match[1] && routeMatches(route, item.endpoint)))
+      endpoints.push({ method: match[1], endpoint: route });
+  }
+  return endpoints;
+}
+
+// Único preflight de segurança para páginas propostas ou gravadas pelo MCP.
+export async function reviewBeforePageWrite(root, items, request = {}) {
+  const warnings = [];
+  const required = new Set();
+  const missing = [];
+  for (const { article } of items) {
+    const api = article.path.startsWith('api/');
+    for (const endpoint of api ? citedEndpoints(article) : [{}]) {
+      const candidate = api ? { ...article, ...endpoint } : article;
+      const facts = api ? await securityFacts(root, candidate) : {};
+      if (api && !facts) {
+        missing.push(`sem fatos do código para conferir os campos do endpoint ${endpoint.method} ${endpoint.endpoint}`);
+      }
+      const review = securityReview(candidate, { facts: facts ?? {}, request });
+      if (review.blocks.length) reject(review.blocks[0]);
+      warnings.push(...review.warnings);
+      if (review.warnings.length) required.add(review.endpoint);
+    }
+  }
+  if (request.confirmations !== undefined && (!Array.isArray(request.confirmations)
+    || request.confirmations.some((item) => typeof item !== 'string')))
+    reject('confirmations deve ser uma lista de endpoints sensíveis');
+  const given = request.confirmations ?? [];
+  for (const item of given) if (!required.has(item)) reject(`confirmação ${item} não corresponde a endpoint sensível do pacote`);
+  const questions = [...missing, ...[...required].filter((item) => !given.includes(item))
+    .map((item) => `Para seguir, confirme o endpoint sensível: ${item}`)];
+  return { ...(questions.length ? { status: 'needs_information', questions } : {}), securityWarnings: [...new Set(warnings)] };
 }
 
 function checkJargon(text) {
@@ -85,29 +129,15 @@ function checkJargon(text) {
 }
 
 export async function assertPublicSubmit(root, items, deletes = [], { ignoreBaseline = false, request = {}, securityOnly = false } = {}) {
-  if (securityOnly) {
-    const reviews = await Promise.all(items.filter(({ article }) => article.path.startsWith('api/'))
-      .map(async ({ article }) => securityReview(article, { facts: await securityFacts(root, article), request })));
-    const blocked = reviews.flatMap(({ blocks }) => blocks);
-    if (blocked.length) reject(blocked[0]);
-    const confirmations = reviews.filter(({ warnings, confirmed }) => warnings.length && !confirmed).map(({ confirmation }) => confirmation);
-    return { ...(confirmations.length ? { status: 'needs_information', questions: [...new Set(confirmations)].map((value) => `Para seguir, responda exatamente: ${value}`) } : {}),
-      securityWarnings: [...new Set(reviews.flatMap(({ warnings }) => warnings))] };
-  }
+  const security = await reviewBeforePageWrite(root, items, request);
+  if (securityOnly || security.status === 'needs_information') return security;
   const published = await publishedContent(root);
   const after = new Map(published);
-  const securityWarnings = [];
-  const confirmations = [];
   for (const path of deletes) after.delete(path);
   for (const { article, rendered } of items) after.set(article.path, rendered);
   const routesAfter = contentRoutes(after.keys());
   for (const { article, rendered } of items) {
-    if (article.path.startsWith('api/')) {
-      const review = securityReview(article, { facts: await securityFacts(root, article), request });
-      if (review.blocks.length) reject(review.blocks[0]);
-      securityWarnings.push(...review.warnings);
-      if (review.warnings.length && !review.confirmed) confirmations.push(review.confirmation);
-    } else {
+    if (!article.path.startsWith('api/')) {
       const kinds = sensitiveKinds(rendered);
       if (kinds.credential || kinds.personal || kinds.internal || kinds.control) reject('fonte interna ou dado privado');
     }
@@ -179,7 +209,6 @@ export async function assertPublicSubmit(root, items, deletes = [], { ignoreBase
     if (incoming.length) reject(`links de entrada quebrados: ${incoming.join('; ')}`);
   }
   const reviewRequired = items.some(({ article }) => Boolean(article.guide));
-  return { ...(confirmations.length ? { status: 'needs_information', questions: [...new Set(confirmations)].map((value) => `Para seguir, responda exatamente: ${value}`) } : {}),
-    ...(items.some(({ article }) => article.path.startsWith('api/')) ? { securityWarnings: [...new Set(securityWarnings)] } : {}),
+  return { ...(items.some(({ article }) => article.path.startsWith('api/')) ? { securityWarnings: security.securityWarnings } : {}),
     ...(reviewRequired ? { reviewRequired: true, proofStatus: 'manual_required' } : {}) };
 }

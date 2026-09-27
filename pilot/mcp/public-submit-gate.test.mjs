@@ -78,7 +78,7 @@ try {
     ...actionVerbs.map(() => /rótulo fora do mapa/u),
     /rótulo fora do mapa/u, /rótulo fora do mapa/u,
     /link interno inexistente/u, /link interno inexistente/u, /link interno inexistente/u,
-    /link externo proibido/u, /link externo proibido/u,
+    /URL ou host fora da API pública/u, /URL ou host fora da API pública/u,
     /asset inexistente/u, /jargão sem explicação/u,
     /rótulo fora do mapa/u, /rótulo fora do mapa/u, /rótulo fora do mapa/u,
     /rótulo fora do mapa/u,
@@ -137,7 +137,8 @@ try {
   const validRelative = await submitContentPackage(root, [{ ...article, body: `${body}\n\n<Card href="contatos">Abra a página</Card>.` }], 'pull_request', 'user:tester');
   assert.equal(validRelative.status, 'pull_request', 'link relativo existente em JSX passa');
   const validApi = await submitContentPackage(root, [{ ...article, path: 'api/teste/contatos', body: `${body}\n\nUse \`contactId\` para identificar o contato.` }], 'pull_request', 'user:tester');
-  assert.equal(validApi.status, 'pull_request', 'código inline na referência de API não é rótulo');
+  assert.equal(validApi.status, 'needs_information', 'API sem fatos precisa parar antes de propor PR');
+  assert.match(validApi.questions.join(' '), /sem fatos do código para conferir os campos do endpoint/u);
 
   const removedPath = 'docs/sobre-o-sistema/atendimento';
   const beforeRemovedLink = calls.length;
@@ -173,7 +174,7 @@ try {
   const parsed = parseArticle(published, baselinePath);
   const renamed = { path: baselinePath, ...parsed.metadata, title: `${parsed.metadata.title} atualizado`, body: parsed.body };
   const beforeRenamed = calls.length;
-  await assert.rejects(submitContentPackage(root, [renamed], 'pull_request', 'user:tester'), /rótulo fora do mapa/u);
+  assert.equal((await submitContentPackage(root, [renamed], 'pull_request', 'user:tester')).status, 'needs_information');
   assert.equal(calls.length, beforeRenamed, 'título alterado em página legada exige revalidação antes de writes');
 
   const beforeIndividual = calls.length;

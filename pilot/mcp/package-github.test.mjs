@@ -1,11 +1,25 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, mkdir, writeFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { renderArticle, submitContentPackage, validateArticle } from './content-service.mjs';
 import { readArticle } from './editorial-standard.mjs';
 
-const root = await mkdtemp(join(tmpdir(), 'ihelp-package-github-'));
+const root = await mkdtemp(join(await realpath(tmpdir()), 'ihelp-package-github-'));
+const backend = join(root, 'back');
+await mkdir(join(backend, 'Comzada.Application/Controllers/V2'), { recursive: true });
+await mkdir(join(root, 'architecture'), { recursive: true });
+await mkdir(join(root, 'content/docs'), { recursive: true });
+await writeFile(join(root, 'architecture/support-signals.json'), JSON.stringify({ categories: [], rules: [] }));
+await writeFile(join(root, 'architecture/coverage-matrix.json'), '[]');
+await writeFile(join(backend, 'Comzada.Application/Controllers/V2/FunnelController.cs'), `[ApiVersion("2")][Route("api/v{version:apiVersion}/crm/funnel")]
+public class FunnelController { [HttpGet] public IActionResult Get() { return null; } }`);
+execFileSync('git', ['init', '-q', backend]);
+execFileSync('git', ['-C', backend, 'add', '.']);
+execFileSync('git', ['-C', backend, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']);
+const previousBackend = process.env.BACKEND_LOCAL_CHECKOUT;
+process.env.BACKEND_LOCAL_CHECKOUT = backend;
 const body = 'Abra Contatos no menu lateral. Confira a lista antes de continuar. Selecione a opção de importar. Revise o arquivo escolhido e confirme as colunas. Corrija as linhas inválidas antes de concluir. Aguarde o resultado aparecer na tela. Pesquise um contato recém cadastrado para confirmar o sucesso. Se o contato não aparecer, revise o número e repita apenas a linha corrigida. Este procedimento mantém os demais contatos já cadastrados na conta.';
 const article = (path, title) => ({ path, title, description: 'Procedimento completo para orientar a pessoa na documentação do iHelp.', source: 'produto', contentType: 'tutorial', body });
 const realArticle = await readArticle(new URL('../', import.meta.url).pathname, 'api/crm/funis/listar-funis');
@@ -41,7 +55,7 @@ for (const leaked of leakedAliases) {
 }
 const descriptiveArticle = { ...realArticle, body: `${realArticle.body}\n\nadmin_password_hint="Sup3rS3cret!"\nsecret_name="Sup3rS3cret!"\nversion2="Sup3rS3cret!"\nstep2="Sup3rS3cret!"\ntoken_count2="Sup3rS3cret!"\npassword_hint2="Sup3rS3cret!"\nprivate_key_description2="Sup3rS3cret!"` };
 assert.equal(validateArticle(descriptiveArticle).valid, true, 'campos descritivos não podem ser tratados como credenciais');
-assert.equal((await submitContentPackage(await mkdtemp(join(tmpdir(), 'ihelp-descriptive-')), [descriptiveArticle], 'dry_run', 'user:tester')).status, 'dry_run');
+assert.equal((await submitContentPackage(root, [descriptiveArticle], 'dry_run', 'user:tester')).status, 'dry_run');
 assert.equal(validateArticle({ ...article('docs/teste/rota', 'Rota segura'), productActions: [{ id: 'abrir-rota', label: 'Abrir rota', route: '//externo' }] }).valid, false);
 for (const [field, value] of [['title', 'Contato (11) 98765-4321'], ['description', 'Procedimento com CPF 123.456.789-09 que jamais pode ser publicado.'], ['body', `${body} Ligue para 11987654321.`]]) {
   const unsafe = { ...article('docs/teste/pii', 'Guia seguro'), [field]: value };
@@ -154,5 +168,7 @@ try {
   globalThis.fetch = originalFetch;
   if (originalToken === undefined) delete process.env.GITHUB_TOKEN;
   else process.env.GITHUB_TOKEN = originalToken;
+  if (previousBackend === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+  else process.env.BACKEND_LOCAL_CHECKOUT = previousBackend;
 }
 console.log('Pacote GitHub: create, update, delete, meta.json e dry-run passaram.');

@@ -3,7 +3,8 @@ import { join, relative } from 'node:path';
 import { parse } from 'yaml';
 import { sensitiveKinds } from './sensitive-data.mjs';
 
-const allowedHosts = new Set(['apiv3.ihelpchat.com', 'ihelpchat.com.br', 'www.ihelpchat.com.br']);
+const allowedHosts = new Set(['apiv3.ihelpchat.com', 'app.ihelpchat.com', 'app.tango.us', 'assets.ihelpchat.com',
+  'images.ihelpchat.com', 'faq.ihelpchat.com', 'ihelpchat.com.br', 'www.ihelpchat.com.br']);
 const unique = (values) => [...new Set(values)];
 const endpointName = (article) => `${String(article.method ?? 'GET').toUpperCase()} ${article.endpoint ?? ''}`.trim();
 const stringsOf = (value) => typeof value === 'string' ? [value]
@@ -33,7 +34,7 @@ export function securityReview(article, { facts = {}, request = {} } = {}) {
   }
   if (/\b(?:role|policy|papel|política)\s*(?:exigid[ao]|de autorização)?\s*[:=]\s*[A-Za-z][\w.-]+|\b(?:role|policy)\s+[A-Z][\w.-]+/iu.test(text))
     blocks.push('Detalhe de role ou policy de autorização: diga apenas “requer autenticação”.');
-  for (const parameter of facts.parameters ?? []) {
+  if (article.path?.startsWith('api/')) for (const parameter of facts.parameters ?? []) {
     if (parameter.serverAssigned === true) blocks.push(`Parâmetro ${parameter.name} é preenchido pelo servidor (serverAssigned).`);
   }
   const exampleValues = [...text.matchAll(/(?:"(?:name|nome|contactName|personName)"\s*:\s*"|(?:name|nome)=["'])([^"'\n]+)["']/giu)].map((match) => match[1]);
@@ -42,18 +43,20 @@ export function securityReview(article, { facts = {}, request = {} } = {}) {
 
   const method = String(article.method ?? '').toUpperCase();
   const route = String(article.endpoint ?? '');
-  if (method === 'DELETE' || /(?:massdelete|mass|import|export|sync|delete|showall)/iu.test(route))
-    warnings.push(`${endpointName(article)} pode apagar ou movimentar muitos dados. Confirme que deve ser documentado.`);
-  if (/\bshowAll\b|\bexport\b/iu.test(text))
-    warnings.push(`${endpointName(article)} pode devolver todos os dados sem paginação.`);
-  const confirmation = `confirmo documentar: ${endpointName(article)}`;
-  const confirmed = typeof request.confirmation === 'string' && request.confirmation.trim() === confirmation;
-  return { blocks: unique(blocks), warnings: unique(warnings), ...(warnings.length ? { confirmed, confirmation } : {}) };
+  if (article.path?.startsWith('api/')) {
+    if (method === 'DELETE' || /(?:massdelete|mass|import|export|sync|delete|showall)/iu.test(route))
+      warnings.push(`${endpointName(article)} pode apagar ou movimentar muitos dados. Confirme que deve ser documentado.`);
+    if (/\bshowAll\b|\bexport\b/iu.test(text))
+      warnings.push(`${endpointName(article)} pode devolver todos os dados sem paginação.`);
+  }
+  const confirmed = Array.isArray(request.confirmations) && request.confirmations.includes(endpointName(article));
+  return { blocks: unique(blocks), warnings: unique(warnings), ...(warnings.length ? { confirmed, endpoint: endpointName(article) } : {}) };
 }
 
-export async function auditApiPages(root) {
-  const base = join(root, 'content/docs/api');
+export async function auditPages(root, { apiOnly = false } = {}) {
+  const base = join(root, 'content/docs');
   const findings = [];
+  const counts = { api: 0, nonApi: 0 };
   const walk = async (dir) => {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       const file = join(dir, entry.name);
@@ -62,12 +65,18 @@ export async function auditApiPages(root) {
         const raw = await readFile(file, 'utf8');
         const frontmatter = raw.match(/^---\n([\s\S]*?)\n---/u);
         const meta = frontmatter ? parse(frontmatter[1]) : {};
-        const path = `api/${relative(base, file).replace(/\.mdx$/u, '')}`;
+        const path = relative(base, file).replace(/\.mdx$/u, '');
+        if (apiOnly && !path.startsWith('api/')) continue;
+        counts[path.startsWith('api/') ? 'api' : 'nonApi']++;
         const result = securityReview({ ...meta, path, body: raw });
         if (result.blocks.length || result.warnings.length) findings.push({ path, blocks: result.blocks, warnings: result.warnings });
       }
     }
   };
   await walk(base);
-  return findings.sort((a, b) => a.path.localeCompare(b.path));
+  return { findings: findings.sort((a, b) => a.path.localeCompare(b.path)), counts };
+}
+
+export async function auditApiPages(root) {
+  return (await auditPages(root, { apiOnly: true })).findings;
 }

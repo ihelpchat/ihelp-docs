@@ -31,13 +31,13 @@ for (const file of await walk(contentRoot)) {
     continue; // páginas legadas ficam na auditoria de segurança até a PR de correção
   }
   try {
-    await assertPublicSubmit(root, [{ article: { path, ...metadata, body }, rendered: raw }], [], { ignoreBaseline: true });
-    valid++;
-  } catch (error) {
-    if (path.startsWith('api/') && /fatos do código indisponíveis para a revisão de segurança/iu.test(error.message)) {
+    const result = await assertPublicSubmit(root, [{ article: { path, ...metadata, body }, rendered: raw }], [], { ignoreBaseline: true });
+    if (path.startsWith('api/') && result.status === 'needs_information') {
       securityFindings.add(path);
       continue;
     }
+    valid++;
+  } catch (error) {
     assert.equal(baseline[path], createHash('sha256').update(raw).digest('hex'), `${path}: falha nova no gate: ${error.message}`);
     stillFailing.add(path);
   }
