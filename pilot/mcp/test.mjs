@@ -118,7 +118,7 @@ try {
   const secretActor = await client.callTool({ name: 'docs_submit_article', arguments: { ...article, mode: 'draft', requestedBy: 'sk-test-secret' } });
   assert.equal(secretActor.isError, true);
   const submission = await client.callTool({ name: 'docs_submit_article', arguments: { ...article, mode: 'draft', requestedBy: 'service:docs-bot' } });
-  assert.deepEqual(JSON.parse(submission.content[0].text), { status: 'draft', path: '.drafts/docs/teste/como-validar-o-mcp.mdx' });
+  assert.deepEqual(JSON.parse(submission.content[0].text), { securityWarnings: [], status: 'draft', path: '.drafts/docs/teste/como-validar-o-mcp.mdx' });
   const written = await readFile(join(testRoot, '.drafts/docs/teste/como-validar-o-mcp.mdx'), 'utf8');
   assert.match(written, /contentType: faq/);
 
@@ -149,9 +149,9 @@ try {
     else process.env.GITHUB_TOKEN = originalToken;
   }
   const entries = [...await auditEvents(), ...(await readFile(join(pullRoot, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse)];
-  assert.deepEqual(entries.map(({ result }) => result), ['attempt', 'success', 'attempt', 'failure', 'attempt', 'failure', 'attempt', 'external_request', 'success']);
-  assert.deepEqual(entries.map(({ target }) => target), [article.path, article.path, null, null, article.path, article.path, article.path, article.path, article.path]);
-  assert.match(entries[7].reference, /^docs\/ia-como-validar-o-mcp-\d+$/);
+  assert.deepEqual(entries.map(({ result }) => result), ['attempt', 'success', 'attempt', 'failure', 'attempt', 'external_request', 'success']);
+  assert.deepEqual(entries.map(({ target }) => target), Array(7).fill(article.path));
+  assert.match(entries[5].reference, /^docs\/ia-como-validar-o-mcp-\d+$/);
   for (const entry of entries) {
     assert.equal(entry.actor, 'service:docs-bot');
     assert.equal(entry.operation, 'docs_submit_article');

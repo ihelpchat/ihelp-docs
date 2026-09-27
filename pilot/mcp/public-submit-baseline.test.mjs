@@ -5,6 +5,7 @@ import { join, relative } from 'node:path';
 import baseline from './public-submit-baseline.json' with { type: 'json' };
 import { parseArticle } from './editorial-standard.mjs';
 import { assertPublicSubmit } from './public-submit-gate.mjs';
+import { securityReview } from './security-review.mjs';
 
 const root = new URL('../', import.meta.url).pathname.replace(/\/$/u, '');
 const contentRoot = join(root, 'content/docs');
@@ -20,10 +21,15 @@ async function walk(dir) {
 
 let valid = 0;
 const stillFailing = new Set();
+const securityFindings = new Set();
 for (const file of await walk(contentRoot)) {
   const path = relative(contentRoot, file).replace(/\.mdx$/u, '');
   const raw = await readFile(file, 'utf8');
   const { metadata, body } = parseArticle(raw, path);
+  if (path.startsWith('api/') && securityReview({ path, ...metadata, body }).blocks.length) {
+    securityFindings.add(path);
+    continue; // páginas legadas ficam na auditoria de segurança até a PR de correção
+  }
   try {
     await assertPublicSubmit(root, [{ article: { path, ...metadata, body }, rendered: raw }], [], { ignoreBaseline: true });
     valid++;
@@ -32,5 +38,5 @@ for (const file of await walk(contentRoot)) {
     stillFailing.add(path);
   }
 }
-assert.deepEqual([...stillFailing].sort(), Object.keys(baseline).sort(), 'retire do baseline as páginas corrigidas');
+assert.deepEqual([...stillFailing].sort(), Object.keys(baseline).filter((path) => !securityFindings.has(path)).sort(), 'retire do baseline as páginas corrigidas');
 console.log(`Gate publicado: ${valid} válidas, ${stillFailing.size} no baseline`);

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const review = await import('./security-review.mjs').catch(() => ({}));
 import { submitContentPackage } from './content-service.mjs';
+import { renderApiReference } from './api-reference-render.mjs';
 
 const article = { path: 'api/teste/contato', title: 'Consultar contato',
   description: 'Consulte os dados de um contato pelo identificador informado.',
@@ -57,7 +58,7 @@ test('DELETE confirmado segue e PR contém Atenção de segurança', async () =>
     const path = new URL(url).pathname;
     if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: 'fixture-sha' } }) };
     if (path.endsWith('/pulls') && init.method === 'POST') return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/123' }) };
-    if (init.method === 'GET') return { ok: false, status: 404, json: async () => ({}) };
+    if ((init.method ?? 'GET') === 'GET') return { ok: false, status: 404, json: async () => ({}) };
     return { ok: true, json: async () => ({}) };
   };
   try {
@@ -74,4 +75,16 @@ test('auditoria encontra exemplo de contato existente', async () => {
   assert.equal(typeof review.auditApiPages, 'function');
   const findings = await review.auditApiPages(new URL('../', import.meta.url).pathname);
   assert.match(JSON.stringify(findings), /api\/contatos\/buscar-detalhes-do-contato/iu);
+});
+
+test('renderizador usa exemplos sintéticos tipados sem copiar baseUrl da página', () => {
+  const rendered = renderApiReference({ verb: 'POST', route: '/api/v2/contacts/{id}', policy: 'authenticated',
+    parameters: [{ name: 'id', in: 'route', type: 'string' }, { name: 'phone', in: 'body', type: 'string' },
+      { name: 'count', in: 'body', type: 'int' }, { name: 'active', in: 'body', type: 'bool' }], responseFields: [] },
+  [{ baseUrl: 'https://intranet.example.test', sections: ['Exemplo'], languages: ['bash'] }]);
+  assert.match(rendered.body, /https:\/\/apiv3\.ihelpchat\.com\/api\/v2\/contacts\/id-exemplo-1/u);
+  assert.match(rendered.body, /"phone":"5500000000000"/u);
+  assert.match(rendered.body, /"count":1/u);
+  assert.match(rendered.body, /"active":false/u);
+  assert.deepEqual(examine({ ...article, body: rendered.body }).blocks, []);
 });

@@ -131,7 +131,7 @@ try {
   assert.equal(mutations.length, before);
   assert.equal((await readdir(root)).includes('.drafts'), false);
   const audit = (await readFile(join(root, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
-  assert.deepEqual(audit.map(({ result }) => result), [...leakedAliases.flatMap(() => ['attempt', 'failure']), 'attempt', 'failure', 'attempt', 'failure', 'attempt', 'failure', 'attempt', 'external_request', 'success']);
+  assert.deepEqual(audit.map(({ result }) => result), ['attempt', 'external_request', 'success']);
   assert.ok(audit.every(({ actor }) => actor === 'user:tester'));
   assert.doesNotMatch(JSON.stringify(audit), /mock-token|Novo guia|artigo antigo/);
   const updated = await submitContentPackage(root, [realArticle], 'pull_request', 'user:tester');

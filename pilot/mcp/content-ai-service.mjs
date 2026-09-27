@@ -7,6 +7,7 @@ import { catalogActions, isCatalogAction } from './product-actions.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
 import { renderApiReference } from './api-reference-render.mjs';
+import { securityReview } from './security-review.mjs';
 import { contentMaxOutputTokens } from './env-compat.mjs';
 import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
@@ -433,7 +434,7 @@ async function generateContentPackageCore(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpointsFrom(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
-  const withPending = (result) => ({ ...result, pending: [...new Set([...(productContext.pending ?? []), ...(result.pending ?? [])])] });
+  const withPending = (result) => ({ securityWarnings: [], ...result, pending: [...new Set([...(productContext.pending ?? []), ...(result.pending ?? [])])] });
   if (productContext.pending?.some((item) => item.startsWith('endpoint citado não encontrado'))) return groundingPending(productContext);
   if (request.module === 'api' && !productContext.endpoints?.length) return withPending(apiPending(productContext.nonPublicEndpoints ? 'endpoint não público: confirmar' : 'endpoints estruturados ausentes'));
   if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return withPending(apiPending('endpoint não público: confirmar'));
@@ -481,6 +482,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     const articles = [];
     const usedEndpoints = new Set();
     const pending = [];
+    const securityWarnings = [];
     const requestedSection = [request.description, request.details].filter((value) => typeof value === 'string').join(' ').match(/(?<!\/)\bapi\/([a-z0-9-]+)\//iu)?.[1];
     for (const prose of parsed.articles) {
       const schemaIssue = apiSchemaIssue(prose);
@@ -520,6 +522,11 @@ async function generateContentPackageCore(root, request, options = {}) {
       const article = { path: prose.path, title: prose.title, description: prose.description,
         source: technical.source, contentType: technical.contentType, method: technical.method,
         endpoint: technical.endpoint, body, productActions: [] };
+      const review = securityReview(article, { facts: endpoint, request });
+      if (review.blocks.length) return withPending(apiPending(`${prose.path}: ${review.blocks.join('; ')}`));
+      securityWarnings.push(...review.warnings);
+      if (review.warnings.length && !review.confirmed) return withPending({ ...apiPending(`Confirme a revisão de segurança de ${prose.path}.`),
+        questions: [`Para seguir, responda exatamente: ${review.confirmation}`], securityWarnings });
       const validation = validateArticle(article);
       if (!validation.valid) return withPending(apiPending(`${prose.path}: ${validation.issues.join('; ')}`));
       articles.push(article);
@@ -533,7 +540,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       if (!options.groundingRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, groundingRetryIssues: summaryIssues });
       return withPending(evidencePending(summaryIssues));
     }
-    return withPending({ ...safePackage, articles, pending: [...new Set([...(productContext.pending ?? []), ...pending])], existing, model: response.model });
+    return withPending({ ...safePackage, articles, pending: [...new Set([...(productContext.pending ?? []), ...pending])], existing, model: response.model, securityWarnings: [...new Set(securityWarnings)] });
   }
   if (parsed.articles.some((article) => article.source === 'api' || /^api\//u.test(article.path ?? ''))) {
     return withPending(apiPending('página API exige fatos estruturados e módulo api'));

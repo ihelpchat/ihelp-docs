@@ -5,6 +5,7 @@ import { validateCanonicalGuide } from '../lib/canonical-guides.mjs';
 import { validatePublicArtifact } from '../lib/guide-package.mjs';
 import approvedMap from '../product-map/approved.json' with { type: 'json' };
 import { sensitiveKinds } from './sensitive-data.mjs';
+import { securityReview } from './security-review.mjs';
 import { contentRoutes, internalLinkIssues, parseArticle, parseMdx, plainText, publishedContent, visit } from './editorial-standard.mjs';
 import publishedBaseline from './public-submit-baseline.json' with { type: 'json' };
 
@@ -67,15 +68,33 @@ function checkJargon(text) {
   }
 }
 
-export async function assertPublicSubmit(root, items, deletes = [], { ignoreBaseline = false } = {}) {
+export async function assertPublicSubmit(root, items, deletes = [], { ignoreBaseline = false, request = {}, factsByPath = {}, securityOnly = false } = {}) {
+  if (securityOnly) {
+    const reviews = items.filter(({ article }) => article.path.startsWith('api/'))
+      .map(({ article }) => securityReview(article, { facts: factsByPath[article.path], request }));
+    const blocked = reviews.flatMap(({ blocks }) => blocks);
+    if (blocked.length) reject(blocked[0]);
+    const confirmations = reviews.filter(({ warnings, confirmed }) => warnings.length && !confirmed).map(({ confirmation }) => confirmation);
+    return { ...(confirmations.length ? { status: 'needs_information', questions: [...new Set(confirmations)].map((value) => `Para seguir, responda exatamente: ${value}`) } : {}),
+      securityWarnings: [...new Set(reviews.flatMap(({ warnings }) => warnings))] };
+  }
   const published = await publishedContent(root);
   const after = new Map(published);
+  const securityWarnings = [];
+  const confirmations = [];
   for (const path of deletes) after.delete(path);
   for (const { article, rendered } of items) after.set(article.path, rendered);
   const routesAfter = contentRoutes(after.keys());
   for (const { article, rendered } of items) {
-    const kinds = sensitiveKinds(rendered);
-    if (kinds.credential || kinds.personal || kinds.internal || kinds.control) reject('fonte interna ou dado privado');
+    if (article.path.startsWith('api/')) {
+      const review = securityReview(article, { facts: factsByPath[article.path], request });
+      if (review.blocks.length) reject(review.blocks[0]);
+      securityWarnings.push(...review.warnings);
+      if (review.warnings.length && !review.confirmed) confirmations.push(review.confirmation);
+    } else {
+      const kinds = sensitiveKinds(rendered);
+      if (kinds.credential || kinds.personal || kinds.internal || kinds.control) reject('fonte interna ou dado privado');
+    }
     if (/<(?:img|Image)\b/iu.test(article.body)) reject('print sem aprovação editorial');
 
     if (article.guide) {
@@ -144,5 +163,7 @@ export async function assertPublicSubmit(root, items, deletes = [], { ignoreBase
     if (incoming.length) reject(`links de entrada quebrados: ${incoming.join('; ')}`);
   }
   const reviewRequired = items.some(({ article }) => Boolean(article.guide));
-  return reviewRequired ? { reviewRequired: true, proofStatus: 'manual_required' } : {};
+  return { ...(confirmations.length ? { status: 'needs_information', questions: [...new Set(confirmations)].map((value) => `Para seguir, responda exatamente: ${value}`) } : {}),
+    ...(items.some(({ article }) => article.path.startsWith('api/')) ? { securityWarnings: [...new Set(securityWarnings)] } : {}),
+    ...(reviewRequired ? { reviewRequired: true, proofStatus: 'manual_required' } : {}) };
 }

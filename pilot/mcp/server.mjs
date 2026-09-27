@@ -23,11 +23,13 @@ const contentRequestSchema = z.object({
   audience: z.string().max(300).default('Cliente em trial sem treinamento'),
   productRoute: z.string().regex(/^\/(?!\/)[a-z0-9/_-]*$/).optional(),
   tangoUrl: z.string().url().optional(),
+  confirmation: z.string().max(300).optional(),
   requestedBy: requestedBySchema,
 });
 
 const textResult = (value, isError = false) => ({
-  content: [{ type: 'text', text: JSON.stringify(value, null, 2) }],
+  content: [{ type: 'text', text: JSON.stringify(value && typeof value === 'object' && !Array.isArray(value)
+    ? { securityWarnings: [], ...value } : value, null, 2) }],
   isError,
 });
 
@@ -198,11 +200,12 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       articles: z.array(articleSchema).max(8).default([]),
       deletes: z.array(z.string()).max(8).default([]),
       mode: z.enum(['dry_run', 'draft', 'pull_request']).default('dry_run'),
+      confirmation: z.string().max(300).optional(),
       requestedBy: requestedBySchema,
     }),
-  }, async ({ articles, deletes, mode, requestedBy }) => {
+  }, async ({ articles, deletes, mode, requestedBy, confirmation }) => {
     try {
-      return textResult(await submitContentPackage(root, articles, mode, requestedBy, deletes));
+      return textResult(await submitContentPackage(root, articles, mode, requestedBy, deletes, { confirmation }));
     } catch (error) {
       return textResult(error instanceof SubmitArticleError ? { error: error.message, code: error.code } : { error: 'Não foi possível enviar o pacote', code: 'SUBMIT_FAILED' }, true);
     }

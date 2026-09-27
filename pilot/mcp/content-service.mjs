@@ -276,11 +276,14 @@ async function submitArticleAudited(root, article, mode, requestedBy) {
   const actor = isSafeRequestedBy(requestedBy) ? requestedBy : null;
   const target = typeof article.path === 'string' && SAFE_PATH.test(article.path) && !article.path.endsWith('/') ? redactSensitiveData(article.path) : null;
   const safeMode = mode === 'draft' || mode === 'pull_request' ? mode : null;
+  if (!actor) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
+  const items = safeArticleList([article]);
+  const gate = await assertPublicSubmit(root, items, [], { securityOnly: mode === 'draft' });
+  if (gate.status === 'needs_information') return gate;
   await appendAudit(root, actor, safeMode, target, 'attempt');
   let result;
   try {
-    if (!actor) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
-    result = await submitValidatedArticle(root, article, mode, actor, (branch) => appendAudit(root, actor, safeMode, target, 'external_request', branch));
+    result = await submitValidatedArticle(root, article, mode, actor, (branch) => appendAudit(root, actor, safeMode, target, 'external_request', branch), { items, gate });
   } catch (error) {
     await appendAudit(root, actor, safeMode, target, 'failure');
     throw error;
@@ -336,12 +339,11 @@ async function createDraft(root, article, rendered, { allowExistingDraft = false
   return { status: 'draft', path: relative(stateRoot(root), target) };
 }
 
-async function submitValidatedArticle(root, article, mode, actor, beforePull) {
-  const items = safeArticleList([article]);
+async function submitValidatedArticle(root, article, mode, actor, beforePull, preflight) {
+  const { items, gate } = preflight;
   const [{ rendered }] = items;
   safeContentPath(root, article.path);
   if (mode === 'pull_request') {
-    const gate = await assertPublicSubmit(root, items);
     return { ...await createPullRequest(article, rendered, actor, beforePull), ...gate };
   }
   if (mode !== 'draft') throw new Error('mode deve ser draft ou pull_request');
@@ -397,7 +399,8 @@ async function createPackagePullRequest(items, deletes, actor, beforePull, optio
   const submittedAt = new Date().toISOString();
   const targets = [...items.map(({ article }) => article.path), ...deletes.map((path) => `-${path}`)].join(', ');
   const title = options.title ?? (items.length ? `docs: pacote ${items[0].article.title}` : `docs: remove ${deletes.length === 1 ? deletes[0] : `${deletes.length} artigos`}`);
-  const body = options.body ?? `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`;
+  const baseBody = options.body ?? `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`;
+  const body = options.securityWarnings?.length ? `${baseBody}\n\n## Atenção de segurança\n\n${options.securityWarnings.map((warning) => `- ${warning}`).join('\n')}` : baseBody;
   rejectSensitive(`${title}\n${body}`);
   const branch = options.branch ?? `docs/ia-pacote-${Date.now()}`;
   if (options.branch && !/^docs\/deploy-[a-z0-9-]+-[a-f0-9]{16}$/.test(branch)) throw new SubmitArticleError('INVALID_BRANCH', 'Branch determinística inválida');
@@ -500,13 +503,16 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
   const targets = [...(Array.isArray(articles) ? articles.map((article) => article?.path) : []), ...(Array.isArray(deletes) ? deletes : [])].filter((path) => typeof path === 'string' && SAFE_PATH.test(path)).map(redactSensitiveData);
   const operation = !articles?.length && deletes?.length ? 'docs_delete_article' : 'docs_submit_package';
   const auditMode = ['draft', 'pull_request'].includes(mode) ? mode : null;
-  if (mode === 'dry_run') {
-    safeArticleList(articles, deletes);
-    return { status: 'dry_run', articles: articles.map(({ path }) => path), deleted: deletes };
-  }
+  let items;
+  let gate;
+  try {
+    items = safeArticleList(articles, deletes);
+    gate = await assertPublicSubmit(root, items, deletes, { request: draftOptions, factsByPath: draftOptions.factsByPath, securityOnly: mode !== 'pull_request' });
+  } catch (error) { throw publicSubmitError(error); }
+  if (gate.status === 'needs_information') return gate;
+  if (mode === 'dry_run') return { status: 'dry_run', articles: articles.map(({ path }) => path), deleted: deletes, ...gate };
   await recordAudit(root, { actor, operation, mode: auditMode, target: targets, result: 'attempt' });
   try {
-    const items = safeArticleList(articles, deletes);
     let result;
     if (mode === 'draft') {
       const drafts = [];
@@ -515,10 +521,9 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
         const manifest = { operation: 'delete', path };
         drafts.push(await createDraft(root, { path: `docs/remocoes/${path.replaceAll('/', '-')}` }, `${JSON.stringify(manifest, null, 2)}\n`));
       }
-      result = { status: 'draft', articles: drafts };
+      result = { status: 'draft', articles: drafts, ...gate };
     } else if (mode === 'pull_request') {
-      const gate = await assertPublicSubmit(root, items, deletes);
-      result = { ...await createPackagePullRequest(items, deletes, actor, (branch) => auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'external_request', reference: branch }), draftOptions), ...gate };
+      result = { ...await createPackagePullRequest(items, deletes, actor, (branch) => auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'external_request', reference: branch }), { ...draftOptions, securityWarnings: gate.securityWarnings }), ...gate };
     } else {
       throw new SubmitArticleError('INVALID_MODE', 'mode deve ser draft ou pull_request');
     }
