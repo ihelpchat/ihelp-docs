@@ -105,6 +105,7 @@ export async function createBudgetedResponse(client, payload, options = {}) {
     if (response.status === 'completed' && typeof response.output_text === 'string' && response.output_text.trim()) {
       return { kind: 'ok', response };
     }
+    if (options.acceptIncomplete && response.status === 'incomplete') return { kind: 'ok', response };
     if (options.signal?.aborted || response.status !== 'incomplete') return { kind: 'provider_failed' };
   }
   return { kind: 'provider_failed' };
