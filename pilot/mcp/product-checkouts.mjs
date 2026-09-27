@@ -35,8 +35,12 @@ export async function readProductCheckoutState({ stateDir, paths } = {}) {
   const [frontSha, backSha] = await Promise.all([shaOf(front), shaOf(back)]);
   let updatedAt;
   if (generation) {
-    try { updatedAt = JSON.parse(await readFile(join(generation, 'status.json'), 'utf8')).updatedAt; }
-    catch { /* externally supplied checkouts have no sync timestamp */ }
+    const status = JSON.parse(await readFile(join(generation, 'status.json'), 'utf8'));
+    if (status.front?.sha !== frontSha || status.back?.sha !== backSha
+      || typeof status.updatedAt !== 'string' || !Number.isFinite(Date.parse(status.updatedAt))) {
+      throw new Error('status da geração inválido');
+    }
+    updatedAt = status.updatedAt;
   }
   return { front: { sha: frontSha }, back: { sha: backSha }, ...(updatedAt ? { updatedAt } : {}) };
 }
@@ -83,16 +87,18 @@ export async function syncProductCheckouts({ stateDir, token, now = () => new Da
   }
 }
 
+export async function restoreProductCheckouts(stateDir) {
+  const result = await readProductCheckoutState({ stateDir });
+  process.env.PRODUCT_LOCAL_CHECKOUT = join(stateDir, 'checkouts/current/front');
+  process.env.BACKEND_LOCAL_CHECKOUT = join(stateDir, 'checkouts/current/back');
+  return result;
+}
+
 export async function initializeProductCheckouts(options) {
   const { stateDir } = options;
-  const paths = { front: join(stateDir, 'checkouts/current/front'), back: join(stateDir, 'checkouts/current/back') };
-  try {
-    await readProductCheckoutState({ stateDir });
-    process.env.PRODUCT_LOCAL_CHECKOUT = paths.front;
-    process.env.BACKEND_LOCAL_CHECKOUT = paths.back;
-  } catch { /* first sync has no current generation */ }
+  try { await restoreProductCheckouts(stateDir); }
+  catch { /* first sync has no valid current generation */ }
   const result = await syncProductCheckouts(options);
-  process.env.PRODUCT_LOCAL_CHECKOUT = paths.front;
-  process.env.BACKEND_LOCAL_CHECKOUT = paths.back;
+  await restoreProductCheckouts(stateDir);
   return result;
 }

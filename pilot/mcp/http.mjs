@@ -20,7 +20,7 @@ import { publishedPathOrNull } from './published-paths.mjs';
 import { opaqueId } from './opaque-id.mjs';
 import { authenticate, requestIdentity } from './access-control.mjs';
 import { assistantRouterModel, assistantRouterEffort, conversationsRetentionDays, mcpCredentialsFromEnv, envCompatibility, productCheckoutRefreshHours } from './env-compat.mjs';
-import { readProductCheckoutState, initializeProductCheckouts } from './product-checkouts.mjs';
+import { readProductCheckoutState, restoreProductCheckouts, initializeProductCheckouts } from './product-checkouts.mjs';
 
 const credentials = mcpCredentialsFromEnv();
 if (!credentials.length) throw new Error('Configure DOCS_MCP_CREDENTIALS ou DOCS_MCP_API_KEY antes de iniciar o MCP');
@@ -52,10 +52,17 @@ if (hasExternalCheckouts) {
       back: process.env[envCompatibility.localCheckouts.backend],
     } });
   } catch { productContext = { status: 'unavailable', reason: 'checkout do produto indisponível' }; }
-} else if (checkoutToken) {
-  await refreshProductContext();
-  const refresh = setInterval(refreshProductContext, productCheckoutRefreshHours() * 60 * 60_000);
-  refresh.unref();
+} else {
+  try {
+    productContext = { ...await restoreProductCheckouts(stateDir), ...(!checkoutToken ? { stale: true } : {}) };
+  } catch {
+    productContext = { status: 'unavailable', reason: checkoutToken ? 'checkout do produto indisponível' : 'GITHUB_READ_TOKEN ausente' };
+  }
+  if (checkoutToken) {
+    await refreshProductContext();
+    const refresh = setInterval(refreshProductContext, productCheckoutRefreshHours() * 60 * 60_000);
+    refresh.unref();
+  }
 }
 const feedbackFile = process.env.FEEDBACK_FILE ?? '/tmp/ihelp-docs-feedback.jsonl';
 const sessionEventsFile = process.env.SESSION_EVENTS_FILE ?? '/tmp/ihelp-docs-session-events.jsonl';
