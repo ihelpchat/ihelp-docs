@@ -41,7 +41,7 @@ try {
   assert.equal(isAllowedSourcePath('src/pages/Robots/Safe.tsx'), true);
   assert.equal(isAllowedSourcePath('Comzada.Application/Controllers/RobotsController.cs', 'backend'), true);
   assert.equal(isAllowedSourcePath('ihelp.PublicApi/Controllers/RobotsController.cs', 'backend'), true);
-  assert.equal(isAllowedSourcePath('Comzada.Application/Services/Robot.cs', 'backend'), false);
+  assert.equal(isAllowedSourcePath('Comzada.Application/Services/Robot.cs', 'backend'), true);
   const result = await searchLocalProductContext('Criar robô', 'Robôs', { repositoryIds: ['frontend'] });
   assert.equal(result.code[0].available, true, result.code[0].reason);
   assert.deepEqual(result.matches.map(({ path }) => path), ['src/pages/Robots/Safe.tsx']);

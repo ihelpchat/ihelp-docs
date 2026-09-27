@@ -6,7 +6,7 @@ import { articleSchema } from './article-fields.mjs';
 import { auditOperation, deleteArticle, getInventory, isSafeRequestedBy, searchContent, SubmitArticleError, submitArticle, submitContentPackage, validateArticle } from './content-service.mjs';
 import { auditContent, readArticle } from './editorial-standard.mjs';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
-import { getIhelpContext } from './product-context-service.mjs';
+import { getIhelpContext, publicProductContext } from './product-context-service.mjs';
 import { authorizeTool, registerToolPolicy, requestIdentity } from './access-control.mjs';
 import { createGuide } from './create-guide.mjs';
 import { atualizarPorDeploy } from './update-by-deploy.mjs';
@@ -122,7 +122,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     try {
       const result = await getIhelpContext(root, topic, module);
       await auditOperation(root, { actor: requestedBy, operation: 'docs_product_context', target: auditTarget(module, topic), result: result.matches.length ? 'success' : 'unavailable' });
-      return textResult(result);
+      return textResult(publicProductContext(result));
     } catch (error) {
       await auditOperation(root, { actor: requestedBy, operation: 'docs_product_context', target: auditTarget(module, topic), result: 'failure' });
       return textResult({ error: error instanceof Error ? error.message : String(error) }, true);
