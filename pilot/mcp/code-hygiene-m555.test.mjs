@@ -49,12 +49,14 @@ test('literais verbatim e interpolados são filtrados por parte', () => {
   assert.equal(result.text.includes('postgres://'), false);
   assert.equal(result.text.includes('mongodb+srv://'), false);
   assert.equal(result.literalsOmitted, 2);
+  assert.equal(sanitizeCodeForModel('var safe = $"Contato {id} encontrado";').text, 'var safe = $"Contato {id} encontrado";');
 });
 
 test('fatos estruturados continuam iguais com higiene de evidência', async () => {
   const { payload } = await payloadFor('return "postgres://u:p@host/db";');
-  assert.match(payload, /"default":20/u);
-  assert.match(payload, /"serverAssigned":true/u);
+  const user = JSON.parse(payload).input.find((item) => item.role === 'user').content;
+  assert.match(user, /"default":20/u);
+  assert.match(user, /"serverAssigned":true/u);
   assert.equal(payload.includes('postgres://'), false);
 });
 
@@ -71,5 +73,6 @@ test('arquitetura: evidência entra no prompt somente pela higiene', () => {
   const requestText = source.slice(source.indexOf('function requestText('), source.indexOf('function pageMatchesEndpoint('));
   assert.match(requestText, /sanitizeCodeForModel/u);
   assert.doesNotMatch(requestText, /redactSensitiveData\(item\.excerpt\)/u);
-  assert.equal((source.match(/item\.excerpt/g) ?? []).filter((_, i) => i >= 0).length >= 1, true);
+  assert.equal((source.match(/item\.excerpt/gu) ?? []).length, 2);
+  assert.equal((requestText.match(/safeCode\(item\.excerpt\)/gu) ?? []).length, 2);
 });

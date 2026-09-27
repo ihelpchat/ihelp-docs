@@ -16,7 +16,7 @@ const CREDENTIAL_PAIR = /(?<![\p{L}\p{N}_])(["']?)([A-Za-z_][A-Za-z0-9_-]*)\1\s*
 const CONNECTION_STRING = /\b(?:[A-Za-z][A-Za-z0-9 _-]*=[^;\s"'`@]+;){1,}[A-Za-z][A-Za-z0-9 _-]*=[^;\s"'`@]+/gu;
 const CREDENTIAL_KEYS = new Set(['password', 'pwd', 'pass', 'passwd', 'secret', 'clientsecret', 'token', 'accesstoken', 'apikey', 'key', 'accesskey', 'sharedaccesskey', 'privatekey', 'credential', 'auth']);
 const GRAMMAR_PAIR = /\b([A-Za-z][A-Za-z0-9 _-]*)\s*([=:])\s*("[^"\n]*"|'[^'\n]*'|[^\s,;}\]]+)/gu;
-const URL_CREDENTIAL = /(https?:\/\/)[^\s/@:]+:[^\s/@]+@/giu;
+const URL_CREDENTIAL = /([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/giu;
 
 function redactCredentialGrammar(value) {
   return String(value ?? '')

@@ -119,7 +119,7 @@ test('prompt corta literal secreto antes de enviar ao provider', async () => {
       prompt = JSON.stringify(payload.input);
       return { output_text: JSON.stringify({ status: 'needs_information', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [] }) };
     } } } });
-  assert.match(prompt, /\[segredo removido\]/u);
+  assert.match(prompt, /<literal omitido>/u);
   assert.doesNotMatch(prompt, /synthetic-secret|Server=db\.fixture/u);
 });
 
