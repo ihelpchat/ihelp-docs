@@ -18,14 +18,6 @@ const claim = 'Documente os filtros da listagem.';
 const cite = (lineStart, lineEnd = lineStart) => ({ repository, path, sha, lineStart, lineEnd });
 const grounded = (citation) => ({ guidance: claim, grounding: [{ text: claim, citations: [citation] }] });
 const valid = (citation, changedContext = context) => validateGroundedOutput(grounded(citation), changedContext, ['guidance']);
-async function rejected(citation, changedContext = context) {
-  const output = { status: 'ready', guidance: claim, questions: [], risks: [], suggestedActions: [], grounding: grounded(citation).grounding };
-  const result = await planContent(process.cwd(), request, { productContext: { ...changedContext,
-    endpoints: [{ public: true, documented: true }] }, client: { responses: { create: async () => ({ output_text: JSON.stringify(output) }) } } });
-  assert.equal(result.status, 'needs_evidence');
-  assert.match(result.summary, /não está vinculada às linhas do código recuperado/u);
-}
-
 test('faixa 16-26 contendo a linha indexada é aceita', () => {
   assert.equal(valid(cite(16, 26)), true);
 });
@@ -34,24 +26,24 @@ for (const [name, change] of [
   ['faixa de 100 linhas', (citation) => { citation.lineEnd = 115; }],
   ['faixa sem linha indexada', (citation) => { citation.lineStart = 17; }],
   ['SHA diferente', (citation) => { citation.sha = 'b'.repeat(40); }],
-]) test(`${name} é rejeitada com motivo`, async () => {
+]) test(`${name} é rejeitada pelo validador`, () => {
   const citation = cite(16, 26);
   const changedContext = structuredClone(context);
   change(citation, changedContext);
-  await rejected(citation, changedContext);
+  assert.equal(valid(citation, changedContext), false);
 });
 
-test('faixa 30-70 é rejeitada', async () => {
+test('faixa 30-70 é rejeitada', () => {
   const citation = cite(16, 26);
   citation.lineStart = 30;
   citation.lineEnd = 70;
-  await rejected(citation);
+  assert.equal(valid(citation), false);
 });
 
-test('linha única 1 com só a linha 2 indexada é rejeitada', async () => {
+test('linha única 1 com só a linha 2 indexada é rejeitada', () => {
   const changedContext = structuredClone(context);
   changedContext.matches[0].line = 2;
-  await rejected(cite(1), changedContext);
+  assert.equal(valid(cite(1), changedContext), false);
 });
 
 test('faixa 1-2 contendo só a linha 2 é aceita, mas 3-5 não', () => {
@@ -69,15 +61,14 @@ test('página publicada no contexto pode sustentar quote literal', () => {
 for (const [name, change] of [
   ['path não listado', (citation) => { citation.path = 'api/outra-pagina'; }],
   ['JSON interno de formato', (citation) => { citation.quote = '"paramNames":["searchData","page","limit"]'; }],
-]) test(`citação de página rejeita ${name} com motivo`, async () => {
+]) test(`citação de página rejeita ${name}`, () => {
   const citation = { source: 'pagina', path: page.path, quote: 'Busca contatos por nome ou telefone' };
   change(citation);
   assert.equal(valid(citation), false);
-  await rejected(citation);
 });
 
-test('rótulo do prompt não é citação do pedido', async () => {
-  await rejected({ source: 'pedido', quote: `Objetivo: ${request.description}` });
+test('rótulo do prompt não é citação do pedido', () => {
+  assert.equal(valid({ source: 'pedido', quote: `Objetivo: ${request.description}` }), false);
   assert.equal(valid({ source: 'pedido', quote: request.description }), true);
 });
 
@@ -89,5 +80,5 @@ test('prompt delimita pedido cru e distingue fontes de página', async () => {
     return { output_text: JSON.stringify({ status: 'needs_information', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [] }) };
   } } } });
   assert.match(prompt[1].content, /<<PEDIDO>>\nCriar a seção Contatos da referência da API\.\nDocumentar os filtros da listagem de contatos\.\n<<FIM DO PEDIDO>>/u);
-  assert.match(prompt[0].content, /source: ?["']pedido["'].*bloco|source: ?["']pagina["']/iu);
+  assert.match(prompt[0].content, /Guidance e risks são orientação interna e não precisam de grounding por frase/u);
 });

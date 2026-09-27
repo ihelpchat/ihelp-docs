@@ -36,7 +36,7 @@ const API_GROUNDING_SCHEMA = { type: 'array', items: {
   ] } } },
 } };
 
-function proseIssue(article, endpoint) {
+function proseIssue(article, endpoint, { internalGuidance = false, editorialSource = '' } = {}) {
   const parameters = endpoint.parameters ?? [];
   const parameterNames = new Set(parameters.map((field) => field.name));
   const fieldNames = new Set([...parameters.filter((field) => field.in === 'body'), ...endpoint.responseFields ?? []]
@@ -55,14 +55,15 @@ function proseIssue(article, endpoint) {
   for (const value of [article.title, article.description, article.intro, ...article.notas]) {
     if (typeof value !== 'string') return 'prosa inválida';
     const block = value.includes('```') ? value.match(/```[^\n]*/u) : null;
-    if (block) return `bloco de código proibido: ${block[0].slice(0, 80)}`;
+    if (block && !internalGuidance) return `bloco de código proibido: ${block[0].slice(0, 80)}`;
     const component = value.match(/<\/?[A-Za-z][^>]*>/u);
-    if (component) return `componente proibido: ${component[0]}`;
+    if (component && !internalGuidance) return `componente proibido: ${component[0]}`;
     const path = value.match(/\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_{}-]+)*/u);
-    if (path) return `caminho proibido: ${path[0]}`;
+    if (path && !internalGuidance) return `caminho proibido: ${path[0]}`;
     const method = value.match(/\b(?:GET|POST|PUT|PATCH|DELETE)\b/iu);
-    if (method) return `método proibido na prosa: ${method[0]}`;
+    if (method && !internalGuidance) return `método proibido na prosa: ${method[0]}`;
     for (const code of value.matchAll(/`([^`\n]+)`/gu)) {
+      if (internalGuidance && code[1].includes('/') && editorialSource.includes(code[1])) continue;
       if (!inlineNames.has(code[1])) return `código inline proibido: ${code[0]}`;
     }
     for (const labelled of value.matchAll(labelledNames)) {
@@ -97,6 +98,12 @@ export function validateGroundedOutput(output, context, fields) {
   return groundingIssues(output, context, fields).length === 0;
 }
 
+function proseSegments(value, semicolons = false) {
+  const separator = semicolons ? /(?<=[.!?;])\s+|\n/u : /(?<=[.!?])\s+|\n/u;
+  return String(value).split(separator).map((part) => part.replace(/\s+/gu, ' ').trim())
+    .filter((part) => /\p{L}/u.test(part));
+}
+
 function groundingIssues(output, context, fields) {
   if (!context.groundingRequired) return [];
   const claims = output.grounding;
@@ -104,13 +111,12 @@ function groundingIssues(output, context, fields) {
   const lines = fields.flatMap((field) => {
     const value = output[field];
     return (Array.isArray(value) ? value : [value]).filter((item) => typeof item === 'string')
-      .flatMap((item) => item.split(/(?<=[.!?])\s+|\n/u).map((line) => line.trim()).filter(Boolean));
+      .flatMap((item) => proseSegments(item));
   });
   if (!lines.length) return ['frases sem grounding'];
   const issues = lines.filter((line) => !claims.some((claim) => claim.text === line)).map((line) => `frase sem citação: ${line}`);
   const normalizeSpaces = (value) => value.replace(/\s+/gu, ' ').trim();
-  const segmentsOf = (quote) => String(quote).split(/(?<=[.!?;])\s+|\n/u)
-    .map(normalizeSpaces).filter(Boolean);
+  const segmentsOf = (quote) => proseSegments(quote, true);
   const literalSegments = (quote, sources) => {
     const segments = segmentsOf(quote);
     return normalizeSpaces(String(quote)).length >= 12 && segments.some((segment) => segment.length >= 12)
@@ -399,7 +405,7 @@ async function planContentCore(root, request, options = {}) {
         'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
         'Sugira ações no produto somente com rota fornecida ou sustentada pelos detalhes. target é um identificador data-help-id estável, nunca um seletor CSS.',
         request.module === 'api' ? 'Planeje páginas de referência da API. Para tema amplo, foque nos endpoints documented=true. Não peça dados já presentes nos fatos estruturados. Endpoint sem public=true exige confirmação. responseFields=null não bloqueia: a resposta exibirá nota fixa e pendência.' : 'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
-        'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Na API, source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Fatos técnicos vêm apenas do código, nunca do JSON de formato. Sem evidência, use needs_information.',
+        request.module === 'api' ? 'Guidance e risks são orientação interna e não precisam de grounding por frase. Nomes técnicos citados devem existir nos fatos estruturados. A prosa publicada será validada com grounding completo na geração.' : 'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].join(' '),
     },
     { role: 'user', content: requestText(request, existing, productContext) },
@@ -409,7 +415,18 @@ async function planContentCore(root, request, options = {}) {
   if (!modelJson.ok) return { ...apiPending(modelJson.reason), pending: productContext.pending ?? [] };
   const parsed = modelJson.value;
   if (parsed.status === 'ready') {
-    const issues = groundingIssues(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks']);
+    if (request.module === 'api') {
+      const endpoints = productContext.endpoints.filter((item) => item.public);
+      const facts = { parameters: endpoints.flatMap((item) => item.parameters ?? []),
+        responseFields: endpoints.flatMap((item) => item.responseFields ?? []),
+        route: endpoints.map((item) => item.route).join('/'),
+        optionalAliases: endpoints.flatMap((item) => item.optionalAliases ?? []) };
+      const issue = proseIssue({ title: parsed.guidance, description: '', intro: '', notas: parsed.risks }, facts,
+        { internalGuidance: true, editorialSource: [request.description, request.details].filter(Boolean).join('\n') });
+      if (issue) return apiPending(issue);
+    }
+    const issues = request.module === 'api' ? []
+      : groundingIssues(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks']);
     if (issues.length) {
       if (!options.groundingRetryIssues) return planContent(root, request, { ...options, productContext, groundingRetryIssues: issues });
       return { ...evidencePending(issues), pending: productContext.pending ?? [] };

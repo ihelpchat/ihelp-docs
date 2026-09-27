@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { planContent } from './content-ai-service.mjs';
+import { planContent, validateGroundedOutput } from './content-ai-service.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const sha = 'a'.repeat(40);
@@ -38,24 +38,22 @@ test('planejamento aceita proveniência de rota fora dos matches', async () => {
   assert.equal(result.status, 'ready', result.summary ?? result.questions?.join('; '));
 });
 
-test('planejamento rejeita linha fora de matches e fatos com motivo', async () => {
+test('validador rejeita linha fora de matches e fatos', () => {
   const changed = structuredClone(output);
   changed.grounding[0].citations[0] = citation(path, 999);
-  const result = await plan(changed);
-  assert.equal(result.status, 'needs_evidence');
-  assert.match(result.summary, /não está vinculada às linhas do código recuperado/i);
+  assert.equal(validateGroundedOutput(changed, { ...context, module: 'api' }, ['guidance']), false);
 });
 
-test('índice inclui autorização, verbo, parâmetros e DTOs com SHA exato', async () => {
+test('índice inclui autorização, verbo, parâmetros e DTOs com SHA exato', () => {
   for (const [citedPath, line] of [[path, 1], [path, 5], [path, 6],
     ['Dto/Filters.cs', 16], ['Dto/ContactInput.cs', 8], ['Dto/ContactOutput.cs', 10]]) {
     const changed = structuredClone(output);
     changed.grounding[0].citations = [citation(citedPath, line)];
-    assert.equal((await plan(changed)).status, 'ready', `${citedPath}:${line}`);
+    assert.equal(validateGroundedOutput(changed, { ...context, module: 'api' }, ['guidance']), true, `${citedPath}:${line}`);
   }
   const changed = structuredClone(output);
   changed.grounding[0].citations[0].sha = 'b'.repeat(40);
-  assert.equal((await plan(changed)).status, 'needs_evidence');
+  assert.equal(validateGroundedOutput(changed, { ...context, module: 'api' }, ['guidance']), false);
 });
 
 test('planejamento de API aceita citação literal do pedido', async () => {
