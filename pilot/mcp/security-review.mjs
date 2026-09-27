@@ -1,5 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { STATUS_CODES } from 'node:http';
+import { isIP } from 'node:net';
 import { join, relative } from 'node:path';
 import { parse } from 'yaml';
 import { sensitiveKinds } from './sensitive-data.mjs';
@@ -8,6 +9,32 @@ import { valueFor } from './api-reference-render.mjs';
 
 const allowedHosts = new Set(['apiv3.ihelpchat.com', 'app.ihelpchat.com', 'app.tango.us', 'assets.ihelpchat.com',
   'images.ihelpchat.com', 'faq.ihelpchat.com', 'ihelpchat.com.br', 'www.ihelpchat.com.br']);
+const publicTlds = new Set(['com', 'net', 'org', 'io', 'app', 'dev', 'br', 'cloud', 'co', 'ai', 'info', 'biz', 'me', 'us', 'tech']);
+const internalSuffixes = new Set(['local', 'internal', 'lan', 'corp', 'intranet', 'localdomain']);
+const hostReason = (type) => `URL ou host fora da API pública e do site do FAQ (${type}).`;
+function hostBlocks(text) {
+  const blocks = [];
+  const domain = /(?<![\p{L}\p{N}_])([a-z\d](?:[a-z\d-]*[a-z\d])?(?:\.[a-z\d](?:[a-z\d-]*[a-z\d])?)+)(?::\d{1,5})?(?![\p{L}\p{N}_])/giu;
+  for (const match of text.matchAll(domain)) {
+    const host = match[1].toLowerCase();
+    const last = host.slice(host.lastIndexOf('.') + 1);
+    const prefix = text.slice(Math.max(0, match.index - 3), match.index);
+    if (/^(?:tsx?|jsx?|mjs|cjs|cs|mdx?|json|py|ya?ml|css|scss)$/u.test(last)
+      && match[0].length > match[1].length && prefix.endsWith('/') && !prefix.endsWith('://')) continue; // arquivo:linha
+    if (isIP(host)) blocks.push(hostReason('IP'));
+    else if (internalSuffixes.has(last)) blocks.push(hostReason('interno'));
+    else if (match[0].length > match[1].length) blocks.push(hostReason('porta'));
+    else if (publicTlds.has(last) && !allowedHosts.has(host)) blocks.push(hostReason('domínio'));
+  }
+  for (const match of text.matchAll(/(?<![\p{L}\p{N}_.-])localhost(?::\d{1,5})?(?![\p{L}\p{N}_.-])/giu))
+    blocks.push(hostReason('interno'));
+  for (const match of text.matchAll(/(?<![\p{L}\p{N}_.-])[a-z][a-z\d-]*:\d{1,5}(?![\p{L}\p{N}_.-])/giu))
+    blocks.push(hostReason('porta'));
+  for (const match of text.matchAll(/(?<![\p{L}\p{N}_])\[?([\da-f:.]+)\]?(?::\d{1,5})?(?![\p{L}\p{N}_])/giu)) {
+    if (match[1].includes(':') && isIP(match[1]) === 6) blocks.push(hostReason('IP'));
+  }
+  return unique(blocks);
+}
 const unique = (values) => [...new Set(values)];
 export const finalizeSecurityResponse = (result, warnings = result.securityWarnings ?? []) =>
   ({ ...result, securityWarnings: unique(warnings) });
@@ -80,13 +107,7 @@ export function securityReview(article, { facts = {}, request = {}, examples = [
     blocks.push('Exemplo contém id real (ObjectId ou UUID). Use id-exemplo-1.');
   const pathBlock = pathExampleBlock(facts, examples);
   if (pathBlock) blocks.push(pathBlock);
-  for (const match of text.matchAll(/https?:\/\/[^\s<>)"'`]+/giu)) {
-    try {
-      const url = new URL(match[0].replace(/[.,;:!?]+$/u, ''));
-      if (url.protocol !== 'https:' || !allowedHosts.has(url.hostname) || url.username || url.password)
-        blocks.push('URL ou host fora da API pública e do site do FAQ.');
-    } catch { blocks.push('URL inválida na página.'); }
-  }
+  blocks.push(...hostBlocks(text));
   if (/\b(?:role|policy|papel|política)\s*(?:exigid[ao]|de autorização)?\s*[:=]\s*[A-Za-z][\w.-]+|\b(?:role|policy)\s+[A-Z][\w.-]+/iu.test(text))
     blocks.push('Detalhe de role ou policy de autorização: diga apenas “requer autenticação”.');
   if (article.path?.startsWith('api/')) for (const parameter of facts.parameters ?? []) {

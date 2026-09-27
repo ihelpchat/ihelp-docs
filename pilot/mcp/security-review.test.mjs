@@ -113,14 +113,17 @@ test('host IPv4 isolado em prosa bloqueia draft antes de gravar', async () => {
 });
 
 test('gramática de host cobre prosa, código e esquemas sem confundir arquivos ou versões', () => {
-  const safe = { ...article, body: `${article.body}\n\nHost: apiv3.ihelpchat.com; faq.ihelpchat.com; arquivo.pdf; versão 2.3` };
+  const safe = { ...article, body: `${article.body}\n\nHost: apiv3.ihelpchat.com; faq.ihelpchat.com; arquivo.pdf; versão 2.3; fonte: src/index.tsx:111` };
   assert.deepEqual(examine(safe).blocks, []);
   for (const [name, token, reason] of [
     ['IP isolado', '10.0.0.5', /IP/iu],
+    ['IP com porta', '10.0.0.5:8080', /IP/iu],
     ['IPv6', '[fd00::5]:8080', /IP/iu],
+    ['IPv6 sem colchetes', '2001:db8::1', /IP/iu],
     ['host interno', 'db.internal', /interno/iu],
     ['localhost', 'localhost', /interno/iu],
     ['porta', 'api.exemplo.com:8080', /porta/iu],
+    ['porta em host permitido', 'apiv3.ihelpchat.com:8080', /porta/iu],
     ['esquema ftp', 'ftp://10.0.0.5', /IP/iu],
     ['domínio externo', 'servidor.railway.app', /domínio/iu],
   ]) {
@@ -247,7 +250,7 @@ test('positivo seguro e negativos de uma alteração explicam bloqueio', () => {
   for (const [name, changed, reason] of [
     ['telefone', article.body.replace('id-exemplo-1', '5511998765432'), /telefone|dado pessoal/iu],
     ['ObjectId', article.body.replace('id-exemplo-1', '507f1f77bcf86cd799439011'), /id|ObjectId/iu],
-    ['host interno', article.body.replace('apiv3.ihelpchat.com', 'intranet.example.test'), /host|URL/iu],
+    ['host interno', article.body.replace('apiv3.ihelpchat.com', 'db.internal'), /host|URL/iu],
     ['role', `${article.body}\n\nRequer role: SuperAdmin.`, /role|autorização/iu],
   ]) {
     assert.match(examine({ ...article, body: changed }).blocks.join(' '), reason, name);
