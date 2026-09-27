@@ -221,6 +221,8 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     }
     pending.push(`limite de caracteres de código: ${MAX_API_CODE_CHARS}`);
   }
+  const screenFacts = contextCode.flatMap((source) => source.screenFacts ?? []);
+  const screenCode = contextCode.flatMap((source) => source.screenCode ?? []);
   return {
     code: contextCode,
     groundingRequired: local,
@@ -233,6 +235,8 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     coverage: relevantCoverage,
     endpoints,
     callEvidence,
+    screenFacts,
+    screenCode,
     nonPublicEndpoints,
     pending,
     apiExamples,
@@ -247,6 +251,6 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
 }
 
 export function publicProductContext(context) {
-  const { callEvidence: _internal, code = [], ...facts } = context;
-  return { ...facts, code: code.map(({ callEvidence: _private, ...source }) => source) };
+  const { callEvidence: _internal, screenCode: _screenCode, code = [], ...facts } = context;
+  return { ...facts, code: code.map(({ callEvidence: _private, screenCode: _frontCode, ...source }) => source) };
 }
