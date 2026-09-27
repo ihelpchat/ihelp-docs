@@ -139,7 +139,8 @@ try {
   };
   try {
     const pull = await submitArticle(pullRoot, article, 'pull_request', 'service:docs-bot');
-    assert.deepEqual(Object.keys(pull).sort(), ['branch', 'filePath', 'status', 'url']);
+    assert.deepEqual(Object.keys(pull).sort(), ['branch', 'filePath', 'securityWarnings', 'status', 'url']);
+    assert.deepEqual(pull.securityWarnings, []);
     assert.equal(pull.status, 'pull_request');
     assert.equal(pull.url, 'https://github.com/ihelpchat/ihelp-docs/pull/123');
     assert.equal(requestCount, 4);
