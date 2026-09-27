@@ -123,6 +123,35 @@ test('prompt corta literal secreto antes de enviar ao provider', async () => {
   assert.doesNotMatch(prompt, /synthetic-secret|Server=db\.fixture/u);
 });
 
+test('payload do provider redige gramática de credenciais em toda evidência', async () => {
+  const sha = 'a'.repeat(40);
+  const base = { groundingRequired: false, code: [], support: { categories: [], rules: [] }, coverage: [],
+    endpoints: [{ ...endpoint, sha, public: true, documented: true, explicit: true }], apiExamples: [], pending: [] };
+  const values = [
+    ['Host=x;Username=y;Pwd=shortpw', 'shortpw'],
+    ['Server=x;User Id=y;Password=uniqueZ9', 'uniqueZ9'],
+    ['ApiKey: abc123def', 'abc123def'],
+    ['https://u:p@host', 'p@'],
+  ];
+  for (const [secret, forbidden] of values) {
+    for (const location of ['matches', 'callEvidence', 'endpoints']) {
+      const context = { ...base, matches: [], callEvidence: [] };
+      if (location === 'matches') context.matches = [{ repository: 'backend', path: 'safe.cs', line: 1, sha, ref: sha, role: 'backend', excerpt: secret }];
+      if (location === 'callEvidence') context.callEvidence = [{ repository: 'backend', path: 'safe.cs', start: 1, end: 1, sha, ref: sha, excerpt: secret }];
+      if (location === 'endpoints') context.endpoints = [{ ...base.endpoints[0], pending: [secret] }];
+      let payload;
+      await planContent(new URL('../', import.meta.url).pathname,
+        { topic: 'Contatos', module: 'api', description: 'GET /api/v2/contacts' },
+        { productContext: context, client: { responses: { create: async (input) => {
+          payload = JSON.stringify(input);
+          return { output_text: JSON.stringify({ status: 'needs_information', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [] }) };
+        } } } });
+      assert.ok(payload, location);
+      assert.equal(payload.includes(forbidden), false, `${location}: ${secret}`);
+    }
+  }
+});
+
 test('índice aceita SQL alcançado e rejeita arquivo externo', async () => {
   const trace = traceCsharpCalls(files, paths, endpoint);
   const sql = trace.methods.find((item) => item.method === 'Build');
@@ -163,6 +192,56 @@ test('checkout sintético alimenta contexto interno sem devolver SQL na ferramen
     const visible = JSON.stringify(publicProductContext(context));
     assert.doesNotMatch(visible, /without paging|limit 20|ContactsSqlBuilder/u);
     assert.doesNotMatch(visible, /BusinessId.*"in":"query"/u);
+  } finally {
+    if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous;
+    await rm(work, { recursive: true, force: true });
+  }
+});
+
+test('pedido explícito envia só a action pedida e corta evidência acima do teto', async () => {
+  const work = await mkdtemp(join(tmpdir(), 'm555-isolation-'));
+  const previous = process.env.BACKEND_LOCAL_CHECKOUT;
+  const changed = { ...files,
+    'Controllers/ContactsController.cs': controller.replace(' }\n}', ` }
+ [HttpGet("sister-a")]
+ public object SisterA([FromQuery] Filters filters) { return _service.SisterA(filters); }
+ [HttpGet("sister-b")]
+ public object SisterB([FromQuery] Filters filters) { return _service.SisterB(filters); }
+}`),
+    'Comzada.Application/Services/ContactsService.cs': files['Comzada.Application/Services/ContactsService.cs']
+      .replace(' } }', ' } public object SisterA(Filters filters) { return "SISTER_A_PRIVATE"; } public object SisterB(Filters filters) { return "SISTER_B_PRIVATE"; } }'),
+    'Comzada.Application/Data/ContactsSqlBuilder.cs': files['Comzada.Application/Data/ContactsSqlBuilder.cs']
+      .replace('return "limit 20";', `return "limit 20"; ${'// deep evidence padding\n'.repeat(1700)}`),
+  };
+  const git = (...args) => {
+    const result = spawnSync('git', args, { cwd: work, encoding: 'utf8', env: { ...process.env,
+      GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'fixture@example.test',
+      GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'fixture@example.test' } });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  try {
+    git('init');
+    for (const [path, source] of Object.entries(changed)) {
+      await mkdir(dirname(join(work, path)), { recursive: true });
+      await writeFile(join(work, path), source);
+    }
+    git('add', '.'); git('commit', '-m', 'synthetic');
+    process.env.BACKEND_LOCAL_CHECKOUT = await realpath(work);
+    const context = await getIhelpContext(new URL('../', import.meta.url).pathname, 'contacts', 'api',
+      { repositoryIds: ['backend'], cache: false, explicitEndpoints: [{ verb: 'GET', route: '/api/v2/contacts' }] });
+    assert.ok(context.callEvidence.some((item) => item.method === 'Build'), JSON.stringify(context.pending));
+    assert.equal(context.callEvidence.some((item) => /SisterA|SisterB/u.test(item.method)), false);
+    assert.ok(context.callEvidence.reduce((sum, item) => sum + item.excerpt.length, 0) <= 30_000);
+    assert.match(context.pending.join('; '), /limite de caracteres/u);
+    let payload;
+    await planContent(new URL('../', import.meta.url).pathname,
+      { topic: 'contacts', module: 'api', description: 'GET /api/v2/contacts' },
+      { productContext: context, client: { responses: { create: async (input) => {
+        payload = JSON.stringify(input);
+        return { output_text: JSON.stringify({ status: 'needs_information', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [] }) };
+      } } } });
+    assert.doesNotMatch(payload, /SISTER_A_PRIVATE|SISTER_B_PRIVATE/u);
   } finally {
     if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
     else process.env.BACKEND_LOCAL_CHECKOUT = previous;
