@@ -132,6 +132,13 @@ function collect(filePath, source, facts, entryName) {
     imports.set(statement.moduleSpecifier.text, names);
   }
   const { found, defaultExport } = declarations(file);
+  const aliases = new Map();
+  const findAliases = (node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer
+      && ts.isIdentifier(node.initializer)) aliases.set(node.name.text, node.initializer.text);
+    ts.forEachChild(node, findAliases);
+  };
+  findAliases(file);
   const root = entryName && (found.get(entryName) ?? (typeof defaultExport === 'string' ? found.get(defaultExport) : defaultExport));
   const visited = new Set();
   let owner = null, title = null;
@@ -140,11 +147,29 @@ function collect(filePath, source, facts, entryName) {
     { ...values, owner, ...(title ? { ownerTitle: title } : {}), subject: subjectOf(owner, title, filePath) });
   if (root) reachable.push([root, ts.isFunctionDeclaration(root) ? root.name?.text ?? entryName :
     ts.isVariableDeclaration(root) ? root.name.getText(file) : entryName]);
-  function visit(node) {
-    if (ts.isIdentifier(node)) {
-      for (const [specifier, names] of imports) if (names.includes(node.text)) usedImports.add(specifier);
-      if (found.has(node.text) && found.get(node.text) !== node.parent) reachable.push([found.get(node.text), node.text]);
+  const renderProps = new Set(['component', 'element', 'render', 'Component', 'as']);
+  function render(name) {
+    const seen = new Set();
+    while (aliases.has(name) && !seen.has(name)) {
+      seen.add(name);
+      name = aliases.get(name);
     }
+    for (const [specifier, names] of imports) if (names.includes(name)) usedImports.add(specifier);
+    if (found.has(name)) reachable.push([found.get(name), name]);
+  }
+  function renderExpression(node) {
+    if (!node) return;
+    if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return;
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) render(node.expression.text);
+    if (ts.isPropertyAssignment(node) && renderProps.has(node.name.getText(file))
+      && ts.isIdentifier(node.initializer)) render(node.initializer.text);
+    ts.forEachChild(node, renderExpression);
+  }
+  function visit(node) {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) render(jsxName(node).split('.')[0]);
+    if (ts.isJsxExpression(node)) renderExpression(node.expression);
+    if (ts.isJsxAttribute(node) && renderProps.has(node.name.text) && ts.isJsxExpression(node.initializer)
+      && ts.isIdentifier(node.initializer.expression)) render(node.initializer.expression.text);
     if (ts.isJsxText(node)) {
       const value = safeText(node.getText(file));
       if (value) emit(node, 'text', { text: value });
@@ -376,13 +401,16 @@ function factSubject(fact) {
   return fact.subject ?? subjectOf(fact.owner ?? fact.source?.split('/').at(-1)?.split(':')[0],
     fact.ownerTitle, fact.source ?? '');
 }
-function questionSubject(question, request, pool) {
-  const explicit = question.match(/\b(?:cadastro|cadastrar|importacao|importar|adicionar|criar|excluir|remover|editar)\s+(?:de|do|da|dos|das)\s+([\p{L}]+)/iu)?.[1];
-  if (explicit) return subjectNoun(explicit);
+function questionSubjects(question, request, pool) {
+  const explicit = question.match(/\b(?:cadastro|cadastrar|importacao|importar|adicionar|criar|excluir|remover|editar)\s+(?:de|do|da|dos|das|no|na|nos|nas)\s+([\p{L}]+(?:\s*(?:,|\be\b|\bou\b)\s*[\p{L}]+)*)/iu)?.[1];
+  if (explicit) {
+    const nouns = explicit.split(/\s*(?:,|\be\b|\bou\b)\s*/iu).map(subjectNoun);
+    return nouns.every(Boolean) ? [...new Set(nouns)] : [];
+  }
   const fromRequest = subjectNoun(`${request?.topic ?? ''} ${request?.module ?? ''}`);
-  if (fromRequest) return fromRequest;
+  if (fromRequest) return [fromRequest];
   const unique = [...new Set(pool.map((fact) => subjectNoun(factSubject(fact))).filter(Boolean))];
-  return unique.length === 1 ? unique[0] : null;
+  return unique.length === 1 ? unique : [];
 }
 function sameFactSubject(fact, subject) {
   return Boolean(subject && subjectNoun(factSubject(fact)) === subject);
@@ -393,35 +421,38 @@ export function discardAnsweredScreenQuestions(questions, facts, request = {}) {
   for (const question of questions ?? []) {
     const q = normalized(question);
     const pool = facts ?? [];
-    const subject = questionSubject(q, request, pool);
+    const subjects = questionSubjects(q, request, pool);
     let candidates = [];
     // Only a single, closed question can be answered by one category of screen facts.
     if ((q.match(/\?/gu) ?? []).length <= 1) {
       if (/\bcampos?\b/u.test(q) && /\bobrigatori[oa]s?\b/u.test(q)
         && /\b(?:cadastro|formulario|form|criar|cadastrar)\b/u.test(q)) {
         candidates = pool.filter((fact) => fact.kind === 'field' && fact.required === true && fact.owner
-          && sameFactSubject(fact, subject) && /(?:modal|form|create|criar|cadastro)/iu.test(`${fact.owner ?? ''} ${fact.source ?? ''}`));
+          && subjects.some((subject) => sameFactSubject(fact, subject))
+          && /(?:modal|form|create|criar|cadastro)/iu.test(`${fact.owner ?? ''} ${fact.source ?? ''}`));
       } else if (/\b(?:formatos?|extensoes?)\b/u.test(q) && /\b(?:arquivos?|importacao|importar|upload)\b/u.test(q)
         && !/\b(?:telefone|tamanho|limite|prazo|colunas|mapeamento|duplicatas|validacao|correcao|como)\b/u.test(q)) {
-        candidates = pool.filter((fact) => fact.kind === 'upload' && fact.accept && fact.owner && sameFactSubject(fact, subject));
+        candidates = pool.filter((fact) => fact.kind === 'upload' && fact.accept && fact.owner
+          && subjects.some((subject) => sameFactSubject(fact, subject)));
       } else if (/\b(?:nome|rotulo|texto)\b/u.test(q) && /\b(?:botao|opcao|menu|acao)\b/u.test(q)) {
         const verbGroups = groupsIn(q, ACTION_GROUPS);
         const verb = verbGroups[0]?.find((word) => words(q).includes(word));
         const actionSubject = verb && q.match(new RegExp(`\\b${verb}\\s+([a-z]+)`, 'u'))?.[1];
         if (verbGroups.length === 1) candidates = pool.filter((fact) => fact.kind === 'action'
           && sameGroup(q, fact.text, ACTION_GROUPS) && matchesSubject(actionSubject, fact.text)
-          && (!subject || sameFactSubject(fact, subject)));
+          && subjects.some((subject) => sameFactSubject(fact, subject)));
       } else if (/\b(?:nome|rotulo|chamado|interface|campo|conceito|visiveis?)\b/u.test(q)) {
         const quoted = [...question.matchAll(/[“"']([^”"']+)[”"']/gu)].map((match) => match[1]);
         const terms = quoted.length ? quoted : groupsIn(q).map((group) => group[0]);
         if (terms.length) {
           const matched = terms.map((term) => pool.find((fact) => visibleNameFact(fact)
-            && (!subject || sameFactSubject(fact, subject))
+            && subjects.some((subject) => sameFactSubject(fact, subject))
             && (words(fact.text).join(' ').includes(words(term).join(' ')) || sameGroup(term, fact.text))));
           if (matched.every(Boolean)) candidates = matched;
         }
       }
     }
+    if (!subjects.every((subject) => candidates.some((fact) => sameFactSubject(fact, subject)))) candidates = [];
     if (candidates.length) discarded.push({ question, source: candidates[0].source, fact: candidates[0].text ?? candidates[0].accept });
     else kept.push(question);
   }
