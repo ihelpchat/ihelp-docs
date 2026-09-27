@@ -124,3 +124,20 @@ test('renderizador põe crase somente nos nomes técnicos dos fatos', async () =
   assert.match(generated.result.articles[0].body, /os departamentos permanecem opcionais/u);
   assert.doesNotMatch(generated.result.articles[0].body, /`departamentos`/u);
 });
+
+test('palavra comum factual recebe crase apenas após marcador de campo', async () => {
+  const fact = { ...endpoint, responseFields: [{ name: 'contato', type: 'string' }] };
+  const prose = article();
+  prose.intro = unit('A resposta apresenta os dados do contato.');
+  prose.notas = [unit('O campo contato identifica o registro.'), unit('Informe departmentIds para filtrar.')];
+  prose.responseDescriptions = [{ name: 'contato', description: unit('Identifica o contato retornado.') }];
+  const generated = await generateContentPackage(process.cwd(), { module: 'api', topic: 'Contatos', confirmations: ['GET /contacts'] }, {
+    productContext: { groundingRequired: false, matches: [], code: [], endpoints: [fact],
+      apiExamples: [{ sections: ['Parâmetros', 'Resposta'], components: ['Params', 'Param', 'Fields', 'Field'] }] },
+    plan: { status: 'ready' }, client: { responses: { create: async () => ({ output_text: JSON.stringify(packageOf(prose)), model: 'fixture' }) } },
+  });
+  assert.equal(generated.status, 'ready', generated.summary);
+  assert.match(generated.articles[0].body, /dados do contato\./u);
+  assert.match(generated.articles[0].body, /O campo `contato` identifica/u);
+  assert.match(generated.articles[0].body, /Informe `departmentIds` para filtrar/u);
+});

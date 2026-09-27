@@ -288,3 +288,24 @@ test('seções técnicas seguem a ordem lida da página', () => {
 test('renderizador é determinístico byte a byte', () => {
   assert.equal(JSON.stringify(renderApiReference(endpoint, examples)), JSON.stringify(renderApiReference(endpoint, examples)));
 });
+
+test('tabela de erros publica apenas linguagem do contrato', () => {
+  const fact = { ...endpoint, responseFields: [], errors: [
+    { status: 400, message: 'Mensagem de erro', when: 'Exceção capturada pela action; corpo em ResponseHttp.ToReturn.' },
+  ] };
+  const table = renderApiReference(fact, examples).body.split('## Erros comuns\n\n')[1];
+  assert.match(table, /\| 400 \| Mensagem de erro \| Falha ao processar a requisição; a mensagem vem no campo `dados`\. \|/u);
+  assert.doesNotMatch(table, /\b(?:DTO|entity|repository|service|action|ToReturn)\b/iu);
+});
+
+test('Field usa tipos públicos para anulável e classes', () => {
+  const fact = { ...endpoint, responseFields: [
+    { name: 'page', type: 'int?' }, { name: 'contato', type: 'Contato' },
+    { name: 'contatos', type: 'List<Contato>' },
+  ] };
+  const body = renderApiReference(fact, examples).body;
+  assert.match(body, /<Field name="page">número \(opcional\) — /u);
+  assert.match(body, /<Field name="contato">objeto — /u);
+  assert.match(body, /<Field name="contatos">lista de objetos — /u);
+  assert.doesNotMatch(body, /<Field[^>]*>[^<]*(?:int\?|Contato)/u);
+});
