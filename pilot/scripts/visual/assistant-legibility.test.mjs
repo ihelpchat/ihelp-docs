@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { parseProbeTimeout } from './assistant-legibility-timeout.mjs';
+
+const probeTimeout = parseProbeTimeout(process.env);
 
 const probes = [
   {
@@ -19,7 +22,7 @@ for (const probe of probes) {
     cwd: new URL('../../', import.meta.url),
     env: { ...process.env, ASSISTANT_LEGIBILITY_PROBE_CSS: probe.css },
     encoding: 'utf8',
-    timeout: 120_000,
+    timeout: probeTimeout,
   });
   assert.ifError(run.error);
   const output = `${run.stdout}\n${run.stderr}`;
