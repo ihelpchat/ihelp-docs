@@ -80,7 +80,9 @@ function declarations(source, path) {
     methods.push({ method, path, start: lineOf(source, start), end: lineOf(source, end - 1),
       body: clean.slice(brace, end), excerpt: source.slice(start, end), fields, classes: owners,
       parameters: clean.slice(lex[open].at + 1, lex[close - 1].at),
-      returnType: clean.slice(start, lex[open - 1].at).trim().replace(/\s+/gu, '') });
+      returnType: clean.slice(start, lex[open - 1].at).trim()
+        .replace(/^(?:(?:public|protected|internal|private|static|async|virtual|override)\s+)*/u, '')
+        .replace(/\s+/gu, '') });
   }
   return { classes, methods };
 }
@@ -137,17 +139,25 @@ export function traceCsharpCalls(sources, paths, endpoint) {
       candidates = candidates.filter((item) => (item.parameters.trim() ? item.parameters.split(',').length : 0) === call.args.length);
       for (let i = 0; i < call.args.length; i++) {
         const arg = call.args[i];
+        const localCall = /^([A-Za-z_]\w*)\(\)$/u.exec(arg);
+        const localReturns = localCall ? index.filter((item) => item.path === parent.path
+          && item.method === localCall[1] && !item.parameters.trim()
+          && item.classes.some((cls) => parent.classes.some((owner) => owner.name === cls.name))) : [];
         const known = /^-?\d+(?:\.\d+)?$/u.test(arg) ? 'number' : /^(?:true|false)$/u.test(arg) ? 'boolean'
-          : /^[A-Za-z_]\w*$/u.test(arg) ? declaredType(parent.parameters + '; ' + parent.body, arg) : null;
+          : /^[A-Za-z_]\w*$/u.test(arg) ? declaredType(parent.parameters + '; ' + parent.body, arg)
+            : localReturns.length === 1 ? simpleType(localReturns[0].returnType) : null;
         if (known) candidates = candidates.filter((item) => {
           const parameter = item.parameters.split(',')[i]?.trim().replace(/\s+[A-Za-z_]\w*$/u, '');
           return simpleType(parameter) === known;
         });
       }
-      if (candidates.length > 1 && new Set(candidates.map((item) => item.returnType)).size === 1
-        && new Set(candidates.map((item) => item.classes.at(-1)?.name)).size === 1)
-        candidates = candidates.slice(0, 1);
-      if (candidates.length > 1) { pending.push(`chamada ambígua: ${call.name}`); continue; }
+      if (candidates.length > 1) {
+        const owner = candidates[0].classes.at(-1)?.name;
+        pending.push(candidates.every((item) => item.classes.at(-1)?.name === owner)
+          ? `sobrecarga ambígua: ${owner}.${call.name}: erros e cadeia não verificados`
+          : `chamada ambígua: ${call.name}`);
+        continue;
+      }
       const method = candidates[0];
       if (!method) { pending.push(`chamada não resolvida: ${call.name}`); continue; }
       if (seen.has(`${method.path}:${method.start}:${method.method}`)) continue;
