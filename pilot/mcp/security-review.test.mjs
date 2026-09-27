@@ -6,6 +6,8 @@ import { join } from 'node:path';
 const review = await import('./security-review.mjs').catch(() => ({}));
 import { submitContentPackage } from './content-service.mjs';
 import { renderApiReference } from './api-reference-render.mjs';
+import { McpServer } from '@modelcontextprotocol/server';
+import { buildServer } from './server.mjs';
 
 const article = { path: 'api/teste/contato', title: 'Consultar contato',
   description: 'Consulte os dados de um contato pelo identificador informado.',
@@ -87,4 +89,77 @@ test('renderizador usa exemplos sintéticos tipados sem copiar baseUrl da págin
   assert.match(rendered.body, /"count":1/u);
   assert.match(rendered.body, /"active":false/u);
   assert.deepEqual(examine({ ...article, body: rendered.body }).blocks, []);
+});
+
+test('normalização e artigo inteiro bloqueiam variantes de dados sensíveis', () => {
+  assert.deepEqual(examine(), { blocks: [], warnings: [] });
+  for (const [name, candidate, reason] of [
+    ['ObjectId separado', { ...article, body: article.body.replace('id-exemplo-1', '507F1F77-BCF8-6CD7-9943-9011') }, /id real|ObjectId/iu],
+    ['telefone com máscara', { ...article, body: article.body.replace('id-exemplo-1', '(11) 99876-5432') }, /telefone|dado pessoal/iu],
+    ['endpoint interno', { ...article, endpoint: 'http://10.0.0.5/internal' }, /host|URL/iu],
+    ['campo futuro', { ...article, foo: { nested: ['http://10.0.0.5/internal'] } }, /host|URL/iu],
+  ]) assert.match(examine(candidate).blocks.join(' '), reason, name);
+});
+
+test('GET com showAll no corpo avisa mesmo quando também menciona limit', () => {
+  const candidate = { ...article, body: `${article.body}\n\nGET /contacts?showAll=true&limit=50` };
+  assert.deepEqual(examine().warnings, []);
+  assert.match(examine(candidate).warnings.join(' '), /todos os dados|showAll|volume/iu);
+});
+
+test('ferramentas mutates herdam confirmation e DELETE confirmado segue via docs_submit_article', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm556-tool-'));
+  await mkdir(join(root, 'content/docs'), { recursive: true });
+  const registered = new Map();
+  const original = McpServer.prototype.registerTool;
+  McpServer.prototype.registerTool = function (name, config, callback) {
+    registered.set(name, { config, callback });
+    return original.call(this, name, config, callback);
+  };
+  try { buildServer(root); }
+  finally { McpServer.prototype.registerTool = original; }
+  for (const [name, { config }] of registered) if (config.mutates)
+    assert.equal(config.inputSchema.safeParse({ confirmation: 'confirmo documentar: DELETE /contacts/{id}' }).success
+      || Boolean(config.inputSchema.shape.confirmation), true, `${name} aceita confirmation`);
+  const tool = registered.get('docs_submit_article').callback;
+  const priorFetch = globalThis.fetch;
+  const priorToken = process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = 'fixture-token';
+  let writes = 0;
+  globalThis.fetch = async (url, init = {}) => {
+    if (init.method && init.method !== 'GET') writes++;
+    const path = new URL(url).pathname;
+    if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: 'fixture-sha' } }) };
+    if (path.endsWith('/pulls') && init.method === 'POST') return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/123' }) };
+    if ((init.method ?? 'GET') === 'GET') return { ok: false, status: 404, json: async () => ({}) };
+    return { ok: true, json: async () => ({}) };
+  };
+  try {
+    const result = await tool({ ...article, method: 'DELETE', mode: 'pull_request', requestedBy: 'user:tester', confirmation: 'confirmo documentar: DELETE /contacts/{id}' });
+    assert.equal(JSON.parse(result.content[0].text).status, 'pull_request');
+    assert.ok(writes > 0);
+  } finally {
+    globalThis.fetch = priorFetch;
+    if (priorToken === undefined) delete process.env.GITHUB_TOKEN; else process.env.GITHUB_TOKEN = priorToken;
+  }
+});
+
+test('docs_submit_package bloqueia API parametrizada sem fatos, sem factsByPath', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm556-facts-'));
+  await mkdir(join(root, 'content/docs'), { recursive: true });
+  const prior = process.env.BACKEND_LOCAL_CHECKOUT;
+  process.env.BACKEND_LOCAL_CHECKOUT = join(root, 'checkout-indisponivel');
+  const registered = new Map();
+  const original = McpServer.prototype.registerTool;
+  McpServer.prototype.registerTool = function (name, config, callback) {
+    registered.set(name, callback); return original.call(this, name, config, callback);
+  };
+  try {
+    buildServer(root);
+    const result = await registered.get('docs_submit_package')({ articles: [article], deletes: [], mode: 'dry_run', requestedBy: 'user:tester' });
+    assert.match(JSON.stringify(result.content), /fatos do código indisponíveis para a revisão de segurança/iu);
+  } finally {
+    McpServer.prototype.registerTool = original;
+    if (prior === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT; else process.env.BACKEND_LOCAL_CHECKOUT = prior;
+  }
 });
