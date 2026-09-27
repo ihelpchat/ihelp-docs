@@ -149,6 +149,7 @@ test('destinos de link aceitam apenas formas permitidas e explicam o bloqueio', 
   assert.deepEqual(examine(safe).blocks, []);
   for (const [name, destination, reason] of [
     ['sem esquema', '//www.tella.tv/x', /forma.*\/\/|domínio/iu],
+    ['sem esquema com host permitido', '//faq.ihelpchat.com/x', /forma.*\/\//iu],
     ['domínio solto', 'www.tella.tv', /forma.*domínio sem esquema/iu],
     ['esquema desconhecido', 'javascript:alert(1)', /forma.*esquema/iu],
   ]) {
