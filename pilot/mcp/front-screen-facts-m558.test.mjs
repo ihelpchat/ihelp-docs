@@ -214,3 +214,14 @@ test('handler segue chamadas locais até dois níveis, sem trazer JSX', async ()
   const messages = (await run(files)).facts.filter((item) => item.kind === 'message').map((item) => item.text);
   assert.deepEqual(messages.sort(), ['Dois', 'Um']);
 });
+
+test('eventos inline e useCallback citam confirmação, toast e destino, sem JSX do handler', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const save = useCallback(() => { toast.success('Salvo'); navigate('/contact/detail'); }, []);
+    return <><button onClick={save}>Salvar</button><button onConfirm={() => window.confirm('Excluir contato?')}>Excluir</button></>;
+  }` };
+  const facts = (await run(files)).facts;
+  assert.equal(facts.find((fact) => fact.text === 'Salvo')?.owner, 'Salvar');
+  assert.equal(facts.find((fact) => fact.text === 'Excluir contato?')?.owner, 'Excluir');
+  assert.equal(facts.find((fact) => fact.kind === 'destination')?.route, '/contact/detail');
+});
