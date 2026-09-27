@@ -7,7 +7,10 @@ import { catalogActions, isCatalogAction } from './product-actions.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
 import { renderApiReference } from './api-reference-render.mjs';
+import { contentMaxOutputTokens } from './env-compat.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
+
+contentMaxOutputTokens();
 
 const CITATION_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -223,7 +226,7 @@ function clientOf(options) {
 async function modelResponse(options, payload) {
   const client = clientOf(options);
   if (options.client && !options.budget) return client.responses.create(payload);
-  const result = await createBudgetedResponse(client, payload, options.budget);
+  const result = await createBudgetedResponse(client, payload, { ...options.budget, acceptIncomplete: true });
   if (result.kind !== 'ok') throw new Error(result.kind === 'budget_exhausted' ? 'Orçamento da IA esgotado' : 'Resposta da IA indisponível');
   return result.response;
 }
@@ -233,15 +236,22 @@ function baseRequest(name, schema, input, options) {
     model: options.model ?? process.env.OPENAI_MODEL ?? 'gpt-6-luna',
     store: false,
     reasoning: { effort: 'medium' },
-    max_output_tokens: 4_000,
+    max_output_tokens: contentMaxOutputTokens(),
     text: { format: { type: 'json_schema', name, strict: true, schema } },
     input,
   };
 }
 
-function parseJson(response) {
-  const text = String(response.output_text ?? '').trim();
-  return JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+function parseModelJson(response) {
+  if (response?.status === 'incomplete') return { ok: false, reason: 'resposta do modelo incompleta (limite de saída)' };
+  try {
+    const text = String(response?.output_text ?? '').trim();
+    const value = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('JSON não é objeto');
+    return { ok: true, value };
+  } catch {
+    return { ok: false, reason: 'resposta do modelo inválida' };
+  }
 }
 
 function requestText(request, existing, productContext) {
@@ -330,7 +340,9 @@ export async function planContent(root, request, options = {}) {
     },
     { role: 'user', content: requestText(request, existing, productContext) },
   ], options));
-  const parsed = parseJson(response);
+  const modelJson = parseModelJson(response);
+  if (!modelJson.ok) return { ...apiPending(modelJson.reason), pending: productContext.pending ?? [] };
+  const parsed = modelJson.value;
   if (parsed.status === 'ready' && !validateGroundedOutput(parsed, productContext, ['guidance', 'risks'])) return { ...evidencePending(), pending: productContext.pending ?? [] };
   const { grounding: _grounding, ...safePlan } = parsed;
   return { ...safePlan, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, pending: productContext.pending ?? [], productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
@@ -369,7 +381,9 @@ export async function generateContentPackage(root, request, options = {}) {
     },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`) },
   ], options));
-  const parsed = parseJson(response);
+  const modelJson = parseModelJson(response);
+  if (!modelJson.ok) return withPending(apiPending(modelJson.reason));
+  const parsed = modelJson.value;
   const { grounding: _grounding, ...safePackage } = parsed;
   if (parsed.status !== 'ready') return withPending({ ...safePackage, articles: [], existing, model: response.model });
   if (!Array.isArray(parsed.articles)) return withPending(apiPending('schema de artigos inválido'));
@@ -500,7 +514,9 @@ export async function generateCanonicalGuide(root, request, options = {}) {
     ].join(' ') },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing ? [existing] : [], productContext)}\nGuideId: ${request.guideId}\nPlano aprovado: ${JSON.stringify(options.plan)}\nGuia anterior: ${JSON.stringify(existing ?? null)}`) },
   ], options));
-  const parsed = parseJson(response);
+  const modelJson = parseModelJson(response);
+  if (!modelJson.ok) return apiPending(modelJson.reason);
+  const parsed = modelJson.value;
   if (parsed.status !== 'ready') return { status: 'needs_information', questions: parsed.questions ?? [], articles: [] };
   const raw = parsed.article;
   const grounded = { grounding: raw.grounding, sentences: [raw.description, raw.body, raw.assistantOverview,
