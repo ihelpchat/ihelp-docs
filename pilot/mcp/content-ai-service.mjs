@@ -13,7 +13,6 @@ import { extractCitedEndpoints } from './public-submit-gate.mjs';
 import { contentMaxOutputTokens } from './env-compat.mjs';
 import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 import { guardModelOutput } from './model-output-guard.mjs';
-import { discardAnsweredScreenQuestions } from './front-screen-facts.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
 contentMaxOutputTokens();
@@ -451,6 +450,7 @@ async function planContentCore(root, request, options = {}) {
         'Você é a editora de conteúdo do iHelp. Oriente quem está criando documentação antes de escrever.',
         'O público final acabou de acessar o produto há 30 segundos, está em trial e não recebeu treinamento.',
         'Identifique conflitos, informação ausente, duplicidade e nomes de telas ou botões que precisam ser confirmados.',
+        'Não pergunte o que os FATOS DA TELA já respondem; cite o fato.',
         'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
         'Sugira ações no produto somente com rota fornecida ou sustentada pelos detalhes. target é um identificador data-help-id estável, nunca um seletor CSS.',
         request.module === 'api' ? 'Planeje páginas de referência da API. Para tema amplo, foque nos endpoints documented=true. Não peça dados já presentes nos fatos estruturados. Endpoint sem public=true exige confirmação. responseFields=null não bloqueia: a resposta exibirá nota fixa e pendência.' : 'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
@@ -472,10 +472,7 @@ async function planContentCore(root, request, options = {}) {
     }
   }
   const { grounding: _grounding, ...safePlan } = parsed;
-  const filtered = discardAnsweredScreenQuestions(safePlan.questions, productContext.screenFacts, request);
-  const groundedAfterDiscard = validateGroundedOutput(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks']);
-  return { ...safePlan, questions: filtered.questions, discardedQuestions: filtered.discarded,
-    ...(safePlan.status === 'needs_information' && safePlan.questions.length && !filtered.questions.length && !safePlan.risks.length && groundedAfterDiscard ? { status: 'ready' } : {}),
+  return { ...safePlan,
     suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, pending: productContext.pending ?? [], codeHygiene, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
 }
 

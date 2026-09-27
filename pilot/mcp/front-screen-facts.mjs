@@ -133,12 +133,23 @@ function collect(filePath, source, facts, entryName) {
   }
   const { found, defaultExport } = declarations(file);
   const aliases = new Map();
-  const findAliases = (node) => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer
-      && ts.isIdentifier(node.initializer)) aliases.set(node.name.text, node.initializer.text);
-    ts.forEachChild(node, findAliases);
-  };
-  findAliases(file);
+  function registerLocals(body) {
+    const scan = (node) => {
+      if (ts.isFunctionDeclaration(node)) {
+        if (node.name) found.set(node.name.text, node);
+        return;
+      }
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+        found.set(node.name.text, node);
+        if (node.initializer && ts.isIdentifier(node.initializer)) aliases.set(node.name.text, node.initializer.text);
+        return;
+      }
+      if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return;
+      ts.forEachChild(node, scan);
+    };
+    scan(body);
+  }
+  registerLocals(file);
   const root = entryName && (found.get(entryName) ?? (typeof defaultExport === 'string' ? found.get(defaultExport) : defaultExport));
   const visited = new Set();
   let owner = null, title = null;
@@ -157,6 +168,33 @@ function collect(filePath, source, facts, entryName) {
     for (const [specifier, names] of imports) if (names.includes(name)) usedImports.add(specifier);
     if (found.has(name)) reachable.push([found.get(name), name]);
   }
+  function jsxValue(node) {
+    if (!node) return false;
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) return true;
+    if (ts.isParenthesizedExpression(node)) return jsxValue(node.expression);
+    if (ts.isConditionalExpression(node)) return jsxValue(node.whenTrue) || jsxValue(node.whenFalse);
+    if (ts.isBinaryExpression(node)) return jsxValue(node.right);
+    return false;
+  }
+  function returnedTrees(node) {
+    const value = ts.isVariableDeclaration(node) ? node.initializer : node;
+    const body = (ts.isFunctionDeclaration(value) || ts.isFunctionExpression(value) || ts.isArrowFunction(value))
+      ? value.body : value;
+    if (!body) return [];
+    if (!ts.isBlock(body)) return [body];
+    registerLocals(body);
+    const trees = [];
+    const scan = (child) => {
+      if (ts.isFunctionDeclaration(child) || ts.isFunctionExpression(child) || ts.isArrowFunction(child)) return;
+      if (ts.isReturnStatement(child)) {
+        if (child.expression) trees.push(child.expression);
+        return;
+      }
+      ts.forEachChild(child, scan);
+    };
+    scan(body);
+    return trees;
+  }
   function renderExpression(node) {
     if (!node) return;
     if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return;
@@ -168,6 +206,10 @@ function collect(filePath, source, facts, entryName) {
   function visit(node) {
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) render(jsxName(node).split('.')[0]);
     if (ts.isJsxExpression(node)) renderExpression(node.expression);
+    if (ts.isJsxExpression(node) && ts.isIdentifier(node.expression)) {
+      const local = found.get(node.expression.text);
+      if (local && ts.isVariableDeclaration(local) && jsxValue(local.initializer)) render(node.expression.text);
+    }
     if (ts.isJsxAttribute(node) && renderProps.has(node.name.text) && ts.isJsxExpression(node.initializer)
       && ts.isIdentifier(node.initializer.expression)) render(node.initializer.expression.text);
     if (ts.isJsxText(node)) {
@@ -265,8 +307,9 @@ function collect(filePath, source, facts, entryName) {
     if (visited.has(node)) continue;
     visited.add(node);
     owner = name;
-    title = ownerTitle(node, file);
-    visit(node);
+    const trees = returnedTrees(node);
+    title = trees.map((tree) => ownerTitle(tree, file)).find(Boolean) ?? null;
+    for (const tree of trees) visit(tree);
   }
   return { file, imports, usedImports, clean, translationKeys };
 }
@@ -355,7 +398,7 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
   return { route, sha, files, facts: [...new Map(facts.map((fact) => [JSON.stringify(fact), fact])).values()], code, pending };
 }
 
-// The same closed vocabulary drives both question classification and label matching.
+// Closed vocabulary used to assign a subject to screen facts.
 const SYNONYMS = [
   ['excluir', 'remover', 'apagar'], ['adicionar', 'cadastrar', 'criar', 'create'], ['importar', 'importacao', 'import'],
   ['exportar', 'exportacao'], ['editar', 'alterar', 'edicao'], ['buscar', 'pesquisar', 'busca', 'pesquisa'],
@@ -365,7 +408,6 @@ const SYNONYMS = [
   ['empresa', 'company', 'companies'], ['usuario', 'user'], ['departamento', 'department'],
   ['atendimento', 'attendance'], ['campanha', 'campaign'],
 ];
-const ACTION_GROUPS = SYNONYMS.slice(0, 8);
 function canonicalWord(value) {
   const word = String(value ?? '').toLowerCase();
   const singular = word.endsWith('ões') || word.endsWith('ães') ? `${word.slice(0, -3)}ão`
@@ -382,79 +424,4 @@ function groupsIn(value, groups = SYNONYMS) {
 }
 function sameGroup(left, right, groups = SYNONYMS) {
   return groupsIn(left, groups).some((group) => groupsIn(right, groups).includes(group));
-}
-function visibleNameFact(fact) {
-  return ['text', 'field', 'action', 'column'].includes(fact.kind) && Boolean(fact.text);
-}
-function matchesSubject(subject, value) {
-  if (!subject) return true;
-  const tokens = new Set(words(value));
-  const group = groupsIn(subject).find((entry) => entry.some((term) => words(term).includes(canonicalWord(subject))));
-  return (group ?? [subject]).some((term) => words(term).some((token) => tokens.has(token)));
-}
-
-const SUBJECT_NOUNS = ['contato', 'empresa', 'usuario', 'departamento', 'atendimento', 'campanha'];
-function subjectNoun(value) {
-  return SUBJECT_NOUNS.find((noun) => words(value).some((word) => word === noun || sameGroup(word, noun))) ?? null;
-}
-function factSubject(fact) {
-  return fact.subject ?? subjectOf(fact.owner ?? fact.source?.split('/').at(-1)?.split(':')[0],
-    fact.ownerTitle, fact.source ?? '');
-}
-function questionSubjects(question, request, pool) {
-  const explicit = question.match(/\b(?:cadastro|cadastrar|importacao|importar|adicionar|criar|excluir|remover|editar)\s+(?:de|do|da|dos|das|no|na|nos|nas)\s+([\p{L}]+(?:\s*(?:,|\be\b|\bou\b)\s*[\p{L}]+)*)/iu)?.[1];
-  if (explicit) {
-    const nouns = explicit.split(/\s*(?:,|\be\b|\bou\b)\s*/iu).map(subjectNoun);
-    return nouns.every(Boolean) ? [...new Set(nouns)] : [];
-  }
-  const fromRequest = subjectNoun(`${request?.topic ?? ''} ${request?.module ?? ''}`);
-  if (fromRequest) return [fromRequest];
-  const unique = [...new Set(pool.map((fact) => subjectNoun(factSubject(fact))).filter(Boolean))];
-  return unique.length === 1 ? unique : [];
-}
-function sameFactSubject(fact, subject) {
-  return Boolean(subject && subjectNoun(factSubject(fact)) === subject);
-}
-
-export function discardAnsweredScreenQuestions(questions, facts, request = {}) {
-  const kept = [], discarded = [];
-  for (const question of questions ?? []) {
-    const q = normalized(question);
-    const pool = facts ?? [];
-    const subjects = questionSubjects(q, request, pool);
-    let candidates = [];
-    // Only a single, closed question can be answered by one category of screen facts.
-    if ((q.match(/\?/gu) ?? []).length <= 1) {
-      if (/\bcampos?\b/u.test(q) && /\bobrigatori[oa]s?\b/u.test(q)
-        && /\b(?:cadastro|formulario|form|criar|cadastrar)\b/u.test(q)) {
-        candidates = pool.filter((fact) => fact.kind === 'field' && fact.required === true && fact.owner
-          && subjects.some((subject) => sameFactSubject(fact, subject))
-          && /(?:modal|form|create|criar|cadastro)/iu.test(`${fact.owner ?? ''} ${fact.source ?? ''}`));
-      } else if (/\b(?:formatos?|extensoes?)\b/u.test(q) && /\b(?:arquivos?|importacao|importar|upload)\b/u.test(q)
-        && !/\b(?:telefone|tamanho|limite|prazo|colunas|mapeamento|duplicatas|validacao|correcao|como)\b/u.test(q)) {
-        candidates = pool.filter((fact) => fact.kind === 'upload' && fact.accept && fact.owner
-          && subjects.some((subject) => sameFactSubject(fact, subject)));
-      } else if (/\b(?:nome|rotulo|texto)\b/u.test(q) && /\b(?:botao|opcao|menu|acao)\b/u.test(q)) {
-        const verbGroups = groupsIn(q, ACTION_GROUPS);
-        const verb = verbGroups[0]?.find((word) => words(q).includes(word));
-        const actionSubject = verb && q.match(new RegExp(`\\b${verb}\\s+([a-z]+)`, 'u'))?.[1];
-        if (verbGroups.length === 1) candidates = pool.filter((fact) => fact.kind === 'action'
-          && sameGroup(q, fact.text, ACTION_GROUPS) && matchesSubject(actionSubject, fact.text)
-          && subjects.some((subject) => sameFactSubject(fact, subject)));
-      } else if (/\b(?:nome|rotulo|chamado|interface|campo|conceito|visiveis?)\b/u.test(q)) {
-        const quoted = [...question.matchAll(/[“"']([^”"']+)[”"']/gu)].map((match) => match[1]);
-        const terms = quoted.length ? quoted : groupsIn(q).map((group) => group[0]);
-        if (terms.length) {
-          const matched = terms.map((term) => pool.find((fact) => visibleNameFact(fact)
-            && subjects.some((subject) => sameFactSubject(fact, subject))
-            && (words(fact.text).join(' ').includes(words(term).join(' ')) || sameGroup(term, fact.text))));
-          if (matched.every(Boolean)) candidates = matched;
-        }
-      }
-    }
-    if (!subjects.every((subject) => candidates.some((fact) => sameFactSubject(fact, subject)))) candidates = [];
-    if (candidates.length) discarded.push({ question, source: candidates[0].source, fact: candidates[0].text ?? candidates[0].accept });
-    else kept.push(question);
-  }
-  return { questions: kept, discarded };
 }
