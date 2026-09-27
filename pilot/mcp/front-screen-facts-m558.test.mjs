@@ -185,3 +185,36 @@ test('rótulo JSX cortado não publica ação', async () => {
     assert.equal((await run(files)).facts.some((fact) => fact.kind === 'action' && fact.handler === 'remove'), false);
   }
 });
+
+test('função do mesmo arquivo só contribui quando o componente a alcança', async () => {
+  const files = { ...sources, [page]: `${sources[page]}\nfunction Unused() { return <button onClick={remove}>Excluir Empresa</button>; }` };
+  assert.doesNotMatch(JSON.stringify((await run(files)).facts), /Excluir Empresa/u);
+  const rendered = { ...files, [page]: files[page].replace('<Modal />', '<Modal /><Unused />') };
+  assert.match(JSON.stringify((await run(rendered)).facts), /Excluir Empresa/u);
+});
+
+test('fatos trazem dono e assunto do componente que os renderiza', async () => {
+  const result = await run({ ...sources, [modal]: sources[modal].replace('function Modal()', 'function ImportContactsModal()')
+    .replace('export default function ImportContactsModal()', 'export default function ImportContactsModal()') });
+  const upload = result.facts.find((fact) => fact.kind === 'upload');
+  assert.equal(upload.owner, 'ImportContactsModal');
+  assert.match(upload.subject, /contato/u);
+  assert.match(upload.subject, /importacao/u);
+});
+
+test('formatos exigem o assunto do upload', () => {
+  const contact = { kind: 'upload', accept: '.csv', owner: 'ImportContactsModal', subject: 'importacao contato', source: `${modal}:2` };
+  const company = 'Quais formatos são aceitos na importação de empresas?';
+  assert.deepEqual(discardAnsweredScreenQuestions([company], [contact], { topic: 'Agenda de Contatos', module: 'Contatos' }).questions, [company]);
+  const question = 'Quais formatos são aceitos na importação de contatos?';
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [contact], { topic: 'Agenda de Contatos', module: 'Contatos' }).questions, []);
+});
+
+test('required exige formulário do assunto do pedido quando pergunta é implícita', () => {
+  const contact = { kind: 'field', name: 'nome', required: true, owner: 'CreateContactModal', subject: 'cadastro contato', source: `${modal}:2` };
+  const question = 'Quais campos são obrigatórios no cadastro?';
+  const request = { topic: 'Agenda de Contatos', module: 'Contatos' };
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [contact], request).questions, []);
+  const company = { ...contact, owner: 'CreateCompanyModal', subject: 'cadastro empresa' };
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [company], request).questions, [question]);
+});
