@@ -2,6 +2,9 @@
   "api/atendimentos/buscar-atendimento-por-telefone": [
     "readArticle: artigo de origem contém possível dado pessoal"
   ],
+  "api/atendimentos/buscar-chats-em-massa": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
   "api/atendimentos/buscar-historico-de-mensagens": [
     "readArticle: artigo de origem contém possível dado pessoal"
   ],
@@ -48,6 +51,12 @@
     "readArticle: artigo de origem contém possível dado pessoal"
   ],
   "api/crm/propostas/criar-proposta": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/crm/transportadoras/atualizar-transportadora": [
+    "readArticle: artigo de origem contém possível dado pessoal"
+  ],
+  "api/crm/transportadoras/criar-transportadora": [
     "readArticle: artigo de origem contém possível dado pessoal"
   ],
   "api/index": [
