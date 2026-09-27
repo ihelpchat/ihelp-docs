@@ -12,12 +12,52 @@ const allowedHosts = new Set(['apiv3.ihelpchat.com', 'app.ihelpchat.com', 'app.t
 const publicTlds = new Set(['com', 'net', 'org', 'io', 'app', 'dev', 'br', 'cloud', 'co', 'ai', 'info', 'biz', 'me', 'us', 'tech']);
 const internalSuffixes = new Set(['local', 'internal', 'lan', 'corp', 'intranet', 'localdomain']);
 const hostReason = (type) => `URL ou host fora da API pública e do site do FAQ (${type}).`;
+function linkDestinations(article) {
+  const destinations = [];
+  const visit = (value, key = '') => {
+    if (typeof value === 'string') {
+      if (/^(?:url|href|src)$/iu.test(key)) destinations.push(value);
+      if (key !== 'body') return;
+      for (const match of value.matchAll(/\[[^\]\n]*\]\(\s*(?:<([^<>\n]+)>|([^\s)]+(?:\([^\n)]*\))?))/gu))
+        destinations.push(match[1] ?? match[2]);
+      for (const match of value.matchAll(/\b(?:href|src|url)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/giu))
+        destinations.push(match[1] ?? match[2] ?? match[3]);
+      for (const match of value.matchAll(/<((?:[a-z][a-z\d+.-]*:|\/\/|www\.)[^\s<>]+)>/giu)) destinations.push(match[1]);
+      for (const match of value.matchAll(/^\s*(?:url|href)\s*:\s*['"]?([^\s'"\n]+)/gimu)) destinations.push(match[1]);
+    } else if (Array.isArray(value)) value.forEach((item) => visit(item));
+    else if (value && typeof value === 'object') for (const [childKey, child] of Object.entries(value)) visit(child, childKey);
+  };
+  visit(article);
+  return destinations;
+}
+
+function linkBlock(destination) {
+  const value = destination.trim();
+  if (/^(?:\/(?!\/)|\.\.?\/|#)/u.test(value)) return null;
+  if (/^mailto:/iu.test(value)) return null;
+  if (/^\/\//u.test(value)) return hostReason('forma // sem esquema');
+  if (/^https?:\/\//iu.test(value)) {
+    try {
+      const url = new URL(value);
+      return allowedHosts.has(url.hostname) && !url.username && !url.password && !url.port
+        ? null : hostReason('domínio');
+    } catch { return 'URL inválida na página.'; }
+  }
+  return hostReason(/^[a-z][a-z\d+.-]*:/iu.test(value) ? 'forma de esquema não permitido' : 'forma de domínio sem esquema');
+}
 function hostBlocks(text) {
   const blocks = [];
+  for (const match of text.matchAll(/(?<![\p{L}\p{N}_:])\/\/([^\s<>)"'`]+)/giu)) {
+    try {
+      const url = new URL(`https://${match[1].replace(/[.,;:!?]+$/u, '')}`);
+      if (!allowedHosts.has(url.hostname) || url.port || url.username || url.password)
+        blocks.push(hostReason(isIP(url.hostname) ? 'IP' : 'domínio'));
+    } catch { blocks.push('URL inválida na página.'); }
+  }
   for (const match of text.matchAll(/(?<![\p{L}\p{N}_])[a-z][a-z\d+.-]*:\/\/[^\s<>)"'`]+/giu)) {
     try {
       const url = new URL(match[0].replace(/[.,;:!?]+$/u, ''));
-      if (url.protocol !== 'https:' || !allowedHosts.has(url.hostname) || url.username || url.password)
+      if (!['http:', 'https:'].includes(url.protocol) || !allowedHosts.has(url.hostname) || url.username || url.password)
         blocks.push(hostReason('domínio'));
     } catch { blocks.push('URL inválida na página.'); }
   }
@@ -115,6 +155,7 @@ export function securityReview(article, { facts = {}, request = {}, examples = [
   const pathBlock = pathExampleBlock(facts, examples);
   if (pathBlock) blocks.push(pathBlock);
   blocks.push(...hostBlocks(text));
+  blocks.push(...linkDestinations(article).map(linkBlock).filter(Boolean));
   if (/\b(?:role|policy|papel|política)\s*(?:exigid[ao]|de autorização)?\s*[:=]\s*[A-Za-z][\w.-]+|\b(?:role|policy)\s+[A-Z][\w.-]+/iu.test(text))
     blocks.push('Detalhe de role ou policy de autorização: diga apenas “requer autenticação”.');
   if (article.path?.startsWith('api/')) for (const parameter of facts.parameters ?? []) {
