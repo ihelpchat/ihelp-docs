@@ -13,14 +13,20 @@ const normalized = (value) => String(value ?? '').normalize('NFD').replace(/\p{D
 
 // One TS/TSX lexer. Offsets and newlines stay fixed; values always come from the original AST.
 export function neutralizeTypescript(source) {
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.JSX, source);
+  const file = ts.createSourceFile('screen.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const chars = source.split('');
-  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
-    if (![ts.SyntaxKind.SingleLineCommentTrivia, ts.SyntaxKind.MultiLineCommentTrivia,
-      ts.SyntaxKind.StringLiteral, ts.SyntaxKind.NoSubstitutionTemplateLiteral,
-      ts.SyntaxKind.TemplateHead, ts.SyntaxKind.TemplateMiddle, ts.SyntaxKind.TemplateTail].includes(token)) continue;
-    for (let i = scanner.getTokenPos(); i < scanner.getTextPos(); i++) if (chars[i] !== '\n' && chars[i] !== '\r') chars[i] = ' ';
-  }
+  const mask = (start, end) => {
+    for (let i = start; i < end; i++) if (chars[i] !== '\n' && chars[i] !== '\r') chars[i] = ' ';
+  };
+  const visit = (node) => {
+    ts.forEachLeadingCommentRange(source, node.pos, mask);
+    ts.forEachTrailingCommentRange(source, node.end, mask);
+    if ([ts.SyntaxKind.StringLiteral, ts.SyntaxKind.NoSubstitutionTemplateLiteral,
+      ts.SyntaxKind.TemplateHead, ts.SyntaxKind.TemplateMiddle, ts.SyntaxKind.TemplateTail].includes(node.kind))
+      mask(node.getStart(file), node.getEnd());
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
   return chars.join('');
 }
 
@@ -224,11 +230,13 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
     }
     facts.push(...localFacts);
     if (depth >= 3) continue;
-    const content = parsed.file.getText();
-    const next = [...parsed.imports].sort((left, right) =>
-      Number(right[1].some((name) => new RegExp(`<${name}\\b`, 'u').test(content)))
-      - Number(left[1].some((name) => new RegExp(`<${name}\\b`, 'u').test(content))));
-    for (const [specifier] of next) {
+    const usage = parsed.clean.split('');
+    for (const statement of parsed.file.statements) if (ts.isImportDeclaration(statement)) {
+      for (let i = statement.getStart(parsed.file); i < statement.getEnd(); i++) usage[i] = ' ';
+    }
+    const content = usage.join('');
+    for (const [specifier, names] of parsed.imports) {
+      if (!names.some((name) => new RegExp(`(?:<\\s*${name}\\b|(?<![\\w.])${name}\\s*\\(|\\b(?:component\\s*=\\s*\\{\\s*|element\\s*:\\s*)${name}\\b)`, 'u').test(content))) continue;
       const target = resolveImport(path, specifier, allowed);
       if (target) queue.push([target, depth + 1, null]);
     }
@@ -252,25 +260,65 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
   return { route, sha, files, facts: [...new Map(facts.map((fact) => [JSON.stringify(fact), fact])).values()], code, pending };
 }
 
+// The same closed vocabulary drives both question classification and label matching.
+const SYNONYMS = [
+  ['excluir', 'remover', 'apagar'], ['adicionar', 'cadastrar', 'criar'], ['importar', 'importacao'],
+  ['exportar', 'exportacao'], ['editar', 'alterar', 'edicao'], ['buscar', 'pesquisar', 'busca', 'pesquisa'],
+  ['agendar', 'agendamento'], ['filtrar', 'filtro', 'filtros'],
+  ['carteirizar', 'responsavel', 'proprietario'],
+  ['contato', 'contact', 'contacts'],
+];
+const ACTION_GROUPS = SYNONYMS.slice(0, 8);
+function words(value) { return normalized(value).match(/[a-z0-9]+/gu) ?? []; }
+function groupsIn(value, groups = SYNONYMS) {
+  const tokens = new Set(words(value));
+  return groups.filter((group) => group.some((word) => tokens.has(word)));
+}
+function sameGroup(left, right, groups = SYNONYMS) {
+  return groupsIn(left, groups).some((group) => groupsIn(right, groups).includes(group));
+}
+function visibleNameFact(fact) {
+  return ['text', 'field', 'action', 'column'].includes(fact.kind) && Boolean(fact.text);
+}
+function matchesSubject(subject, value) {
+  if (!subject) return true;
+  const tokens = new Set(words(value));
+  const group = groupsIn(subject).find((entry) => entry.includes(subject));
+  return (group ?? [subject]).some((term) => tokens.has(term));
+}
+
 export function discardAnsweredScreenQuestions(questions, facts) {
   const kept = [], discarded = [];
   for (const question of questions ?? []) {
     const q = normalized(question);
-    const candidates = (facts ?? []).filter((fact) => {
-      const text = normalized(fact.text ?? fact.accept ?? '');
-      if (fact.kind === 'route') return /\b(?:nome|titulo)\b/u.test(q) && /\b(?:tela|interface)\b/u.test(q)
-        && q.includes(text) && !/\b(?:como|qual rota|identificador)\b/u.test(q);
-      if (fact.kind === 'action') return !q.includes(',') && !/\b(?:como|campos|formatos|opcoes)\b/u.test(q)
-        && /\b(?:botao|clique|opcao|menu|nome)\b/u.test(q)
-        && text.split(/\s+/u).some((word) => word.length >= 5 && q.includes(word));
-      if (fact.kind === 'upload') return /\b(?:formatos?|arquivos?|extensoes?)\b/u.test(q)
-        && /\b(?:import\w*|upload|enviar)\b/u.test(q)
-        && !/\b(?:tamanho|limite|prazo|colunas|mapeamento|telefones|duplicatas|validacao|correcao|como)\b/u.test(q);
-      if (fact.kind === 'field') return /\b(?:campos?|obrigatorios?)\b/u.test(q)
-        && normalized(fact.name).split(/\s+/u).some((word) => word.length >= 4 && q.includes(word));
-      if (fact.kind === 'column') return /\bcolunas?\b/u.test(q) && q.includes(text) && !/\bcomo\b/u.test(q);
-      return false;
-    });
+    const pool = facts ?? [];
+    let candidates = [];
+    // Only a single, closed question can be answered by one category of screen facts.
+    if ((q.match(/\?/gu) ?? []).length <= 1) {
+      if (/\bcampos?\b/u.test(q) && /\bobrigatori[oa]s?\b/u.test(q)
+        && /\b(?:cadastro|formulario|form|criar|cadastrar)\b/u.test(q)) {
+        const subject = q.match(/\b(?:cadastro|formulario)\s+d[eo]s?\s+([a-z]+)/u)?.[1];
+        candidates = pool.filter((fact) => fact.kind === 'field' && fact.required === true
+          && matchesSubject(subject, `${fact.source} ${fact.text ?? ''}`));
+      } else if (/\b(?:formatos?|extensoes?)\b/u.test(q) && /\b(?:arquivos?|importacao|importar|upload)\b/u.test(q)
+        && !/\b(?:telefone|tamanho|limite|prazo|colunas|mapeamento|duplicatas|validacao|correcao|como)\b/u.test(q)) {
+        candidates = pool.filter((fact) => fact.kind === 'upload' && fact.accept);
+      } else if (/\b(?:nome|rotulo|texto)\b/u.test(q) && /\b(?:botao|opcao|menu|acao)\b/u.test(q)) {
+        const verbGroups = groupsIn(q, ACTION_GROUPS);
+        const verb = verbGroups[0]?.find((word) => words(q).includes(word));
+        const subject = verb && q.match(new RegExp(`\\b${verb}\\s+([a-z]+)`, 'u'))?.[1];
+        if (verbGroups.length === 1) candidates = pool.filter((fact) => fact.kind === 'action'
+          && sameGroup(q, fact.text, ACTION_GROUPS) && matchesSubject(subject, fact.text));
+      } else if (/\b(?:nome|rotulo|chamado|interface|campo|conceito|visiveis?)\b/u.test(q)) {
+        const quoted = [...question.matchAll(/[“"']([^”"']+)[”"']/gu)].map((match) => match[1]);
+        const terms = quoted.length ? quoted : groupsIn(q).map((group) => group[0]);
+        if (terms.length) {
+          const matched = terms.map((term) => pool.find((fact) => visibleNameFact(fact)
+            && (words(fact.text).join(' ').includes(words(term).join(' ')) || sameGroup(term, fact.text))));
+          if (matched.every(Boolean)) candidates = matched;
+        }
+      }
+    }
     if (candidates.length) discarded.push({ question, source: candidates[0].source, fact: candidates[0].text ?? candidates[0].accept });
     else kept.push(question);
   }

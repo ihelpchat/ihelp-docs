@@ -127,3 +127,30 @@ test('import local não usado fica fora da cadeia; uso em JSX o inclui', async (
   const rendered = { ...files, [page]: files[page].replace('<Modal />', '<Modal /><Unused />') };
   assert.equal((await run(rendered)).files.includes(unused), true);
 });
+
+test('chamada e passagem de componente contam como uso; comentário e string não contam', async () => {
+  const component = 'src/components/pages/Contacts/Forwarded.tsx';
+  const base = { ...sources, [page]: `import Forwarded from './Forwarded';\n${sources[page]}`,
+    [component]: 'export default function Forwarded() { return <button onClick={save}>Salvar</button>; }' };
+  for (const use of ['Forwarded()', 'component={Forwarded}', 'element: Forwarded']) {
+    const files = { ...base, [page]: `${base[page]}\n${use}` };
+    assert.equal((await run(files)).files.includes(component), true, use);
+  }
+  const fakeUse = { ...base, [page]: `${base[page]}\n// <Forwarded />\nconst text = 'Forwarded()';` };
+  assert.equal((await run(fakeUse)).files.includes(component), false);
+});
+
+test('uso JSX após template interpolado continua visível ao lexer', async () => {
+  const files = { ...sources, [page]: sources[page].replace('<Modal />', '<div className={`${active ? "on" : "off"}`}><Modal /></div>') };
+  assert.equal((await run(files)).files.includes(modal), true);
+});
+
+test('fato de outro assunto na mesma cadeia não responde cadastro ou ação de contato', () => {
+  const attendance = { kind: 'field', name: 'phoneNumbers', required: true,
+    source: 'src/components/shared/Attendance/NewAttendance.tsx:10' };
+  const task = { kind: 'action', text: 'Excluir Tarefa', source: 'src/components/pages/Contacts/Tasks.tsx:20' };
+  assert.deepEqual(discardAnsweredScreenQuestions(['Quais campos são obrigatórios no cadastro de contato?'], [attendance]).questions,
+    ['Quais campos são obrigatórios no cadastro de contato?']);
+  assert.deepEqual(discardAnsweredScreenQuestions(['Qual o nome do botão para excluir contato?'], [task]).questions,
+    ['Qual o nome do botão para excluir contato?']);
+});
