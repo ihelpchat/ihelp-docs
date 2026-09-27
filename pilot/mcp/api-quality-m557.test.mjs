@@ -45,6 +45,24 @@ test('retorno do serviço prova campos públicos e envelope de lista', () => {
   assert.doesNotMatch(page.body, /Gian|5517936189969/u);
 });
 
+test('DTO extrai somente propriedades diretas da classe escolhida', () => {
+  const source = `public class ContactDto {
+ public int Id { get; set; }
+ public string Nome { get; set; }
+ public List<CustomDto> Campos { get; set; }
+ public class Nested { public int Hidden { get; set; } }
+}
+public class CustomDto { public int Id { get; set; } public string Valor { get; set; } }`;
+  const [endpoint] = readCsharpEndpoints(controller, 'Controllers/ContactsController.cs', {
+    dtoSources: [{ file: 'Dto/ContactDto.cs', source }],
+    serviceSources: [{ file: 'Services/IContactsService.cs', source: service }],
+  });
+  assert.deepEqual(endpoint.responseFields.map(({ name, type }) => [name, type]), [
+    ['id', 'int'], ['nome', 'string'], ['campos', 'List<CustomDto>'],
+  ]);
+  assert.equal(new Set(endpoint.responseFields.map((field) => field.path)).size, 3);
+});
+
 test('sem retorno declarado conserva pendência textual', () => {
   const [endpoint] = readCsharpEndpoints(controller, 'Controllers/ContactsController.cs', {
     dtoSources: [{ file: 'Dto/ContactDto.cs', source: dto }],
@@ -87,6 +105,26 @@ test('descrição da IA usa campo factual e ausência registra pendência', asyn
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   assert.match(result.articles[0].body, /string — Nome do contato\./u);
   assert.match(result.pending.join('; '), /descrição de resposta sem fonte: id/u);
+});
+
+test('duas descrições do mesmo caminho são recusadas', async () => {
+  const endpoint = { ...parsed()[0], public: true, documented: true, authorization: 'authenticated' };
+  const item = { name: 'dados[].id', description: { text: 'Identificador do contato.', citations: [] } };
+  const generate = async (responseDescriptions) => generateContentPackage(process.cwd(), { module: 'api', topic: 'Contatos' }, {
+    productContext: { groundingRequired: false, matches: [], code: [], endpoints: [endpoint],
+      apiExamples: [{ path: 'api/contatos/listar', frontmatter: { method: 'GET', endpoint: '/contacts' },
+        components: ['Fields', 'Field'], sections: ['Resposta'] }] },
+    plan: { status: 'ready' },
+    client: { responses: { create: async () => ({ output_text: JSON.stringify({ status: 'ready', summary: 'Contatos.', questions: [], grounding: [],
+      articles: [{ path: 'api/contatos/listar', endpoint: 'GET /contacts/{letter}', title: 'Listar contatos',
+        description: { text: 'Lista contatos.', citations: [] }, intro: { text: 'Consulte contatos.', citations: [] }, notas: [],
+        responseDescriptions }] }), model: 'synthetic' }) } },
+  });
+  const positive = await generate([item]);
+  assert.equal(positive.status, 'ready', positive.summary);
+  const result = await generate([item, item]);
+  assert.equal(result.status, 'needs_information');
+  assert.match(result.summary, /descrição de campo sem fato: dados\[\]\.id/u);
 });
 
 test('few-shot escolhe três páginas por seções e notas, reagindo a edição', async () => {
