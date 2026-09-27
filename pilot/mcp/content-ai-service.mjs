@@ -54,12 +54,14 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint]) {
     ...(endpoint.responseFields ?? [])]
     .map((field) => field.name));
   const headerNames = new Set(['Authorization', 'Content-Type']);
-  const names = new Set([...parameterNames, ...fieldNames, ...headerNames]);
-  const inlineNames = new Set([...parameterNames, ...fieldNames]);
+  const names = new Set([...parameterNames, ...fieldNames, ...headerNames]
+    .map((name) => name.toLocaleLowerCase('pt-BR')));
+  const inlineNames = new Set([...parameterNames, ...fieldNames]
+    .map((name) => name.toLocaleLowerCase('pt-BR')));
   for (const route of packageEndpoints.flatMap((item) =>
     [item.route, ...(item.optionalAliases ?? (item.optionalAlias ? [item.optionalAlias] : []))])) {
     for (const segment of (route ?? '').split('/')) {
-      if (segment) names.add(segment.replace(/^\{([^}]+)\}$/u, '$1'));
+      if (segment) names.add(segment.replace(/^\{([^}]+)\}$/u, '$1').toLocaleLowerCase('pt-BR'));
     }
   }
   const token = '[\\p{L}\\p{N}_][\\p{L}\\p{N}_-]*';
@@ -78,7 +80,7 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint]) {
     const path = value.match(/\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_{}-]+)*/u);
     if (path) issues.push(`caminho proibido: ${path[0]}`);
     for (const code of value.matchAll(/`([^`\n]+)`/gu)) {
-      if (!inlineNames.has(code[1])) issues.push(`código inline proibido: ${code[0]}`);
+      if (!inlineNames.has(code[1].toLocaleLowerCase('pt-BR'))) issues.push(`código inline proibido: ${code[0]}`);
     }
     const method = value.match(/\b(?:GET|POST|PUT|PATCH|DELETE)\b/iu);
     if (method) issues.push(`método proibido na prosa: ${method[0]}`);
@@ -96,7 +98,7 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint]) {
     for (const [name] of value.matchAll(tokens)) {
       const identifier = /\p{Ll}\p{Lu}|\p{L}_\p{L}/u.test(name)
         || (/\p{L}/u.test(name) && /\d/u.test(name));
-      if (identifier && !names.has(name) && !isPublicName(name)) issues.push(`nome técnico sem fato: ${name}`);
+      if (identifier && !names.has(name.toLocaleLowerCase('pt-BR')) && !isPublicName(name)) issues.push(`nome técnico sem fato: ${name}`);
     }
   }
   return [...new Set(issues)];
@@ -146,10 +148,11 @@ function groundingIssues(output, context, fields) {
     return normalizeSpaces(String(quote)).length >= 12 && segments.some((segment) => segment.length >= 12)
       && segments.every((segment, index) => sources.some((source) => {
         if (typeof source !== 'string') return false;
-        const literal = normalizeSpaces(source);
-        if (literal.includes(segment)) return true;
+        const literal = normalizeSpaces(source).toLocaleLowerCase('pt-BR');
+        const compared = segment.toLocaleLowerCase('pt-BR');
+        if (literal.includes(compared)) return true;
         return index === segments.length - 1 && !/[.!?;]$/u.test(segment)
-          && [...literal.matchAll(new RegExp(`${segment.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}[.!?;]`, 'gu'))].length > 0;
+          && [...literal.matchAll(new RegExp(`${compared.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}[.!?;]`, 'gu'))].length > 0;
       }));
   };
   const evidence = evidenceIndex(context);
@@ -174,7 +177,11 @@ function groundingIssues(output, context, fields) {
         && citation.lineStart > 0 && citation.lineEnd >= citation.lineStart
         && citation.lineEnd - citation.lineStart < 30
         && citation.lineStart <= match.line && match.line <= citation.lineEnd)) {
-        issues.push(`linha fora do índice: ${citation?.path ?? ''}:${citation?.lineStart ?? '?'}`);
+        const samePath = evidence.filter((match) => citation?.repository === match.repository && citation.path === match.path);
+        const reason = samePath.length && !samePath.some((match) => citation.sha === match.sha && citation.sha === match.ref)
+          ? `SHA fora do índice: ${citation?.path ?? ''}:${citation?.lineStart ?? '?'}`
+          : `linha fora do índice: ${citation?.path ?? ''}:${citation?.lineStart ?? '?'}`;
+        issues.push(reason);
       }
     }
   }
@@ -186,7 +193,9 @@ function apiUnitIssues(units, context) {
     const text = unit.text.trim();
     if (proseSegments(text).length !== 1) return [`uma frase por item: ${text.slice(0, 80)}`];
     const issues = groundingIssues({ text, grounding: [{ text, citations: unit.citations }] }, context, ['text']);
-    return issues.length ? [...new Set([...issues, `frase sem citação: ${text}`])] : [];
+    if (!issues.length) return [];
+    if (!unit.citations?.length) return issues;
+    return [`citações inválidas: ${text} (${[...new Set(issues)].join('; ')})`];
   });
 }
 
@@ -609,7 +618,8 @@ async function generateContentPackageCore(root, request, options = {}) {
         groundingProblems.push(...apiUnitIssues([item.description], context));
       }
     }
-    proseProblems.push(...proseIssues({ title: safePackage.summary, description: '', intro: '', notas: [] }, { parameters: [], responseFields: [] }));
+    proseProblems.push(...proseIssues({ title: safePackage.summary, description: '', intro: '', notas: [] },
+      { parameters: [], responseFields: selectable.flatMap((item) => item.responseFields ?? []) }, selectable));
     groundingProblems.push(...apiUnitIssues(parsed.summary, context));
     const retryIssues = [...new Set([...proseProblems, ...groundingProblems])];
     if (retryIssues.length) {
