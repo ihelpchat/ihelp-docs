@@ -7,6 +7,7 @@ import { routeMatches } from './api-route-match.mjs';
 import { envCompatibility, githubReadToken } from './env-compat.mjs';
 import { parse } from 'yaml';
 const CACHE_MS = 5 * 60_000;
+export const MAX_API_CODE_CHARS = 30_000;
 const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|cs)$/;
 const PINNED_PATHS = new Set([
   'src/components/core/components/Router/utils/pagesData.tsx',
@@ -142,6 +143,8 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
   let contextCode = code;
   let nonPublicEndpoints = false;
   let pending = [];
+  let allowedBackendFiles = new Set();
+  let allowedEndpointKeys = new Set();
   if (normalize(module) === 'api' || /\bendpoint\b|\/api\/v\d/iu.test(topic)) {
     endpoints = code.flatMap((source) => source.endpoints ?? []);
     const docsRoot = join(provided.publicReferenceRoot ?? root, 'content/docs/api');
@@ -182,19 +185,21 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
       explicit: requested.some((endpoint) => cited(item, endpoint)),
       public: publicControllers.has(item.file)
       || requested.some((endpoint) => cited(item, endpoint)) }));
-    const endpointPending = endpoints.flatMap((item) => item.public
+    const selected = (item) => requested.length ? item.explicit : item.documented;
+    const endpointPending = endpoints.filter((item) => !requested.length || selected(item)).flatMap((item) => item.public
       ? item.pending ?? []
       : [`endpoint não público: confirmar (${item.verb} ${item.route})`]);
     endpointPending.push(...requested.filter((endpoint) => !endpoints.some((item) => cited(item, endpoint)))
       .map((endpoint) => `endpoint citado não encontrado (${endpoint.verb} ${endpoint.route})`));
-    const allowedBackendFiles = new Set(endpoints.filter((item) => item.public).map((item) => item.file));
-    nonPublicEndpoints = endpoints.some((item) => !item.public);
-    endpoints = endpoints.filter((item) => item.public);
+    allowedBackendFiles = new Set(endpoints.filter((item) => item.public && selected(item)).map((item) => item.file));
+    allowedEndpointKeys = new Set(endpoints.filter((item) => item.public && selected(item)).map((item) => `${item.verb} ${item.route}`));
+    nonPublicEndpoints = endpoints.some((item) => (!requested.length || selected(item)) && !item.public);
+    endpoints = endpoints.filter((item) => item.public && selected(item));
     contextCode = code.map((source) => {
       const backend = source.role === 'backend' || source.repository === 'ihelpchat/olah-ihelp';
       return { ...source,
-        endpoints: backend ? (source.endpoints ?? []).filter((item) => allowedBackendFiles.has(item.file)) : (source.endpoints ?? []),
-        matches: backend ? source.matches.filter((match) => allowedBackendFiles.has(match.path)) : source.matches,
+        endpoints: backend ? (source.endpoints ?? []).filter((item) => allowedEndpointKeys.has(`${item.verb} ${item.route}`)) : (source.endpoints ?? []),
+        matches: backend ? [] : source.matches,
       };
     });
     const matchingExamples = apiExamples.filter((example) => endpoints.some((item) => item.documented
@@ -204,6 +209,17 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
           === example.frontmatter.endpoint.toLowerCase().replace(/\{[^}]+\}/gu, '{}'))));
     apiExamples = (matchingExamples.length ? matchingExamples : apiExamples).slice(0, 8);
     pending = endpointPending;
+  }
+  let callEvidence = contextCode.flatMap((source) => (source.callEvidence ?? [])
+    .filter((item) => allowedBackendFiles.has(item.controllerFile) && allowedEndpointKeys.has(item.endpointKey)));
+  if (callEvidence.reduce((total, item) => total + item.excerpt.length, 0) > MAX_API_CODE_CHARS) {
+    callEvidence = [...callEvidence];
+    while (callEvidence.reduce((total, item) => total + item.excerpt.length, 0) > MAX_API_CODE_CHARS) {
+      const deepest = Math.max(...callEvidence.map((item) => item.depth ?? 0));
+      const index = callEvidence.findLastIndex((item) => (item.depth ?? 0) === deepest);
+      callEvidence.splice(index, 1);
+    }
+    pending.push(`limite de caracteres de código: ${MAX_API_CODE_CHARS}`);
   }
   return {
     code: contextCode,
@@ -216,6 +232,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     },
     coverage: relevantCoverage,
     endpoints,
+    callEvidence,
     nonPublicEndpoints,
     pending,
     apiExamples,
@@ -227,4 +244,9 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     repository: code[0]?.repository ?? repositories[0].repository,
     ref: code[0]?.ref ?? repositories[0].ref,
   };
+}
+
+export function publicProductContext(context) {
+  const { callEvidence: _internal, code = [], ...facts } = context;
+  return { ...facts, code: code.map(({ callEvidence: _private, ...source }) => source) };
 }

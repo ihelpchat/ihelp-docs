@@ -45,7 +45,7 @@ export function renderApiReference(endpoint, examples, page) {
       const type = /^(?:int|long|double|decimal|float|short)$/iu.test(item.type) ? 'number'
         : /^bool(?:ean)?$/iu.test(item.type) ? 'boolean' : 'string';
       const required = item.required ?? (item.in === 'route' || (item.in === 'body' && !item.type.endsWith('?')));
-      return `<Param name="${safe(item.name)}" type="${type}"${required ? ' required' : ''}>${safe(item.in)} (${safe(item.type)})${required ? '' : ', opcional'}</Param>`;
+      return `<Param name="${safe(item.name)}" type="${type}"${required ? ' required' : ''}>${safe(item.in)} (${safe(item.type)})${required ? '' : ', opcional'}${Object.hasOwn(item, 'default') ? `; padrão: ${safe(JSON.stringify(item.default))}` : ''}</Param>`;
     }).join('\n')}\n</Params>`);
   }
 

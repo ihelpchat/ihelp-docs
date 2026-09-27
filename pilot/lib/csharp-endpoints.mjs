@@ -1,16 +1,19 @@
-// A narrow C# lexer: comments and string bodies cannot create attributes.
-function tokens(source) {
+// One position-preserving C# scan for attributes and structural analysis.
+function scanCsharp(source) {
   const result = [];
+  const chars = source.split('');
+  const hide = (from, to) => { for (let at = from; at < to; at++) if (chars[at] !== '\n') chars[at] = ' '; };
   for (let i = 0; i < source.length;) {
     const rest = source.slice(i);
     if (/^\s/u.test(rest)) { i++; continue; }
-    if (rest.startsWith('//')) { i = source.indexOf('\n', i + 2); if (i < 0) break; continue; }
-    if (rest.startsWith('/*')) { const end = source.indexOf('*/', i + 2); i = end < 0 ? source.length : end + 2; continue; }
+    if (rest.startsWith('//')) { const start = i; i = source.indexOf('\n', i + 2); if (i < 0) i = source.length; hide(start, i); continue; }
+    if (rest.startsWith('/*')) { const start = i; const end = source.indexOf('*/', i + 2); i = end < 0 ? source.length : end + 2; hide(start, i); continue; }
     const prefix = rest.match(/^\$*@|^@\$|^\$|^@/u)?.[0] ?? '';
     const quoteAt = i + prefix.length;
     if (source[quoteAt] === '"') {
+      const start = i;
       const raw = source.slice(quoteAt).match(/^"{3,}/u)?.[0];
-      if (raw) { const end = source.indexOf(raw, quoteAt + raw.length); i = end < 0 ? source.length : end + raw.length; continue; }
+      if (raw) { const end = source.indexOf(raw, quoteAt + raw.length); i = end < 0 ? source.length : end + raw.length; hide(start, i); continue; }
       let j = quoteAt + 1;
       let value = '';
       const verbatim = prefix.includes('@');
@@ -30,20 +33,25 @@ function tokens(source) {
         if (!verbatim && source[j] === '\\') { j += 2; continue; }
         value += source[j++];
       }
-      if (!prefix.includes('$')) result.push({ kind: 'string', value });
+      if (!prefix.includes('$')) result.push({ kind: 'string', value, at: start });
+      hide(start, j);
       i = j; continue;
     }
     if (rest[0] === "'") {
+      const start = i;
       let j = i + 1;
       while (j < source.length && source[j] !== "'") j += source[j] === '\\' ? 2 : 1;
+      hide(start, Math.min(j + 1, source.length));
       i = j + 1; continue;
     }
     const word = rest.match(/^[A-Za-z_][A-Za-z_0-9]*/u);
     if (word) { result.push({ kind: 'word', value: word[0], at: i }); i += word[0].length; continue; }
     result.push({ kind: 'punct', value: rest[0], at: i }); i++;
   }
-  return result;
+  return { tokens: result, neutralized: chars.join('') };
 }
+export const tokens = (source) => scanCsharp(source).tokens;
+export const neutralizeCsharp = (source) => scanCsharp(source).neutralized;
 
 const attr = (list, name) => list.find((item) => item.name === name);
 function attributes(items) {
@@ -78,11 +86,21 @@ const lineOf = (source, at) => source.slice(0, at).split('\n').length;
 const camel = (name) => name[0].toLowerCase() + name.slice(1);
 function dtoFields(dtoSources, type) {
   for (const { file, source } of dtoSources) {
-    const declaration = new RegExp(`\\b(?:class|record)\\s+${type}\\b`, 'u').exec(source);
+    const clean = neutralizeCsharp(source);
+    const declaration = new RegExp(`\\b(?:class|record)\\s+${type}\\b`, 'u').exec(clean);
     if (!declaration) continue;
-    const body = source.slice(declaration.index).split(/\n\s*\}\s*(?:;|$)/u)[0];
-    return [...body.matchAll(/\bpublic\s+([\w<>?,\[\]]+)\s+(\w+)\s*\{\s*get\s*;/gu)]
-      .map((match) => ({ name: camel(match[2]), type: match[1], source: `${file}:${lineOf(source, declaration.index + match.index)}` }));
+    const body = clean.slice(declaration.index).split(/\n\s*\}\s*(?:;|$)/u)[0];
+    return [...body.matchAll(/\bpublic\s+([\w<>?,\[\]]+)\s+(\w+)\s*\{\s*get\s*;[^}]*\}\s*(?:=\s*([^;]+);)?/gu)]
+      .map((match) => {
+        const original = source.slice(declaration.index + match.index, declaration.index + match.index + match[0].length);
+        const initializer = match[3] === undefined ? undefined : original.slice(match[0].indexOf('=') + 1, -1).trim();
+        const value = initializer && (/^-?\d+(?:\.\d+)?$/u.test(initializer) ? Number(initializer)
+          : /^(?:true|false)$/u.test(initializer) ? initializer === 'true'
+            : /^"[^"\n]*"$/u.test(initializer) ? initializer.slice(1, -1)
+              : /^new\s+List<\w+>\s*\(\s*\)$/u.test(initializer) ? [] : undefined);
+        return { name: camel(match[2]), type: match[1], source: `${file}:${lineOf(source, declaration.index + match.index)}`,
+          ...(value !== undefined ? { default: value } : {}) };
+      });
   }
   return [];
 }
@@ -104,9 +122,51 @@ function signatureParameters(items, route, dtoSources, file, source) {
       : words.some((item) => item.value === 'FromQuery') ? 'query'
         : words.some((item) => item.value === 'FromRoute') || new RegExp(`\\{${name}(?::[^{}]+)?\\??\\}`, 'iu').test(route) ? 'route' : 'query';
     const fields = dtoFields(dtoSources, type);
-    return fields.length ? fields.map((field) => ({ ...field, in: location, dtoType: type }))
-      : [{ name: camel(name), type, in: location, source: `${file}:${lineOf(source, words.at(-1).at)}` }];
+    return fields.length ? fields.map((field) => ({ ...field, in: location, dtoType: type, owner: name }))
+      : [{ name: camel(name), type, in: location, owner: name, source: `${file}:${lineOf(source, words.at(-1).at)}` }];
   });
+}
+
+function assignedPaths(body, parameterNames) {
+  const items = tokens(body);
+  const assigned = [];
+  const assignmentAt = (index) => items[index]?.value === '=' && items[index + 1]?.value !== '=' && items[index - 1]?.value !== '='
+    || items[index]?.value === '?' && items[index + 1]?.value === '?' && items[index + 2]?.value === '=';
+  for (let i = 0; i < items.length; i++) {
+    const root = items[i];
+    if (!parameterNames.has(root.value) || items[i - 1]?.value === '.') continue;
+    let cursor = i;
+    const path = [];
+    while (items[cursor + 1]?.value === '.' && items[cursor + 2]?.kind === 'word') {
+      path.push(items[cursor + 2].value);
+      cursor += 2;
+    }
+    if (path.length && assignmentAt(cursor + 1)) assigned.push({ owner: root.value, path, at: root.at });
+    if (path.length || items[i + 1]?.value !== '=' || items[i + 2]?.value === '=') continue;
+    let brace = -1;
+    if (items[i + 2]?.value === root.value && items[i + 3]?.value === 'with' && items[i + 4]?.value === '{') brace = i + 4;
+    if (items[i + 2]?.value === 'new' && items[i + 3]?.kind === 'word' && items[i + 4]?.value === '{') brace = i + 4;
+    if (brace < 0) continue;
+    let depth = 1;
+    for (let j = brace + 1; j < items.length && depth; j++) {
+      if (items[j].value === '{') depth++;
+      if (items[j].value === '}') depth--;
+      if (depth === 1 && items[j].kind === 'word' && assignmentAt(j + 1)
+        && (items[j - 1]?.value === '{' || items[j - 1]?.value === ','))
+        assigned.push({ owner: root.value, path: [items[j].value], at: items[j].at });
+    }
+  }
+  return assigned;
+}
+
+function nestedField(dtoSources, type, path) {
+  let field;
+  for (const part of path) {
+    field = dtoFields(dtoSources, type).find((item) => item.name.toLowerCase() === part.toLowerCase());
+    if (!field) return null;
+    type = field.type;
+  }
+  return field;
 }
 
 function responseTypeOf(declaration, attrs) {
@@ -149,7 +209,7 @@ function actionBodyOf(source, items, start) {
 }
 
 export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
-  const t = tokens(source);
+  const { tokens: t, neutralized: clean } = scanCsharp(source);
   const endpoints = [];
   let pending = [];
   let depth = 0;
@@ -208,11 +268,26 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
         ?? attr(pending, 'Authorize') ?? attr(controller.attrs, 'Authorize');
       const authorizationSource = authorizationAttribute ? `${file}:${lineOf(source, authorizationAttribute.at)}` : null;
       const rawParameters = reference ? signatureParameters(t.slice(i + 1, end - 1), route, dtoSources, file, source) : undefined;
-      const actionBody = actionBodyOf(source, t, end);
-      const assigned = new Set([...actionBody.matchAll(/\b(\w+)\.(\w+)\s*=(?!=)/gu)].map((match) => match[2].toLowerCase()));
-      const parameters = rawParameters?.filter((item) => item.in !== 'query' || !assigned.has(item.name.toLowerCase()))
-        .map(({ dtoType: _dtoType, ...item }) => ({ ...item, ...(item.in === 'route' ? { required: !optionalNames.has(item.name.toLowerCase()) } : {}), source: item.source ?? location }));
-      const declaration = source.slice(Math.max(0, source.lastIndexOf('public ', t[i - 1].at)), t[i - 1].at);
+      const actionBody = actionBodyOf(clean, t, end);
+      const owners = new Map();
+      for (const item of rawParameters ?? []) if (item.dtoType) owners.set(item.owner, item.dtoType);
+      const assignments = assignedPaths(actionBody, new Set((rawParameters ?? []).map((item) => item.owner)));
+      const direct = (item) => assignments.find((assignment) => assignment.owner === item.owner
+        && assignment.path.length === 1 && assignment.path[0].toLowerCase() === item.name.toLowerCase());
+      const serverAssigned = rawParameters?.flatMap((item) => {
+        const assignment = direct(item);
+        return assignment ? [{ name: item.name, serverAssigned: true,
+          source: `${file}:${lineOf(source, t[end].at + assignment.at)}` }] : [];
+      }) ?? [];
+      for (const assignment of assignments) {
+        if (assignment.path.length < 2 || !owners.has(assignment.owner)) continue;
+        if (!nestedField(dtoSources, owners.get(assignment.owner), assignment.path)) continue;
+        serverAssigned.push({ name: assignment.path.map(camel).join('.'), serverAssigned: true,
+          source: `${file}:${lineOf(source, t[end].at + assignment.at)}` });
+      }
+      const parameters = rawParameters?.filter((item) => !direct(item))
+        .map(({ dtoType: _dtoType, owner: _owner, ...item }) => ({ ...item, ...(item.in === 'route' ? { required: !optionalNames.has(item.name.toLowerCase()) } : {}), source: item.source ?? location }));
+      const declaration = clean.slice(Math.max(0, clean.lastIndexOf('public ', t[i - 1].at)), t[i - 1].at);
       const declaredResultType = responseTypeOf(declaration, pending);
       const resultType = declaredResultType === 'IActionResult' || !declaredResultType
         ? okResponseType(actionBody) : declaredResultType;
@@ -220,7 +295,7 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       const responseFields = fields.length ? fields : null;
       const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : [];
       endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
-        ...(reference ? { controllerRoute, parameters, responseFields, responseType: resultType, pending: responsePending, optionalAlias, optionalAliases, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
+        ...(reference ? { controllerRoute, parameters, serverAssigned, responseFields, responseType: resultType, pending: responsePending, optionalAlias, optionalAliases, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
           routeSource, actionRouteSource: verbSource, verbSource, authorizationSource, authorization: policy } : {}) });
       pending = [];
     }

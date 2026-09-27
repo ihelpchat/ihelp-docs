@@ -13,6 +13,19 @@ const CREDENTIALS = [
   /(?<![A-Za-z0-9])AIza[0-9A-Za-z_-]{30,}/u,
 ];
 const CREDENTIAL_PAIR = /(?<![\p{L}\p{N}_])(["']?)([A-Za-z_][A-Za-z0-9_-]*)\1\s*[:=]\s*("[^"\n]+"|'[^'\n]+'|[^\s,;}\]]+)/giu;
+const CONNECTION_STRING = /\b(?:[A-Za-z][A-Za-z0-9 _-]*=[^;\s"'`@]+;){1,}[A-Za-z][A-Za-z0-9 _-]*=[^;\s"'`@]+/gu;
+const CREDENTIAL_KEYS = new Set(['password', 'pwd', 'pass', 'passwd', 'secret', 'clientsecret', 'token', 'accesstoken', 'apikey', 'key', 'accesskey', 'sharedaccesskey', 'privatekey', 'credential', 'auth']);
+const GRAMMAR_PAIR = /\b([A-Za-z][A-Za-z0-9 _-]*)\s*([=:])\s*("[^"\n]*"|'[^'\n]*'|[^\s,;}\]]+)/gu;
+const URL_CREDENTIAL = /([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/giu;
+
+function redactCredentialGrammar(value) {
+  return String(value ?? '')
+    .replace(CONNECTION_STRING, '[segredo removido]')
+    .replace(URL_CREDENTIAL, '$1[segredo removido]@')
+    .replace(GRAMMAR_PAIR, (pair, key, separator, raw) =>
+      CREDENTIAL_KEYS.has(key.replace(/[_\s-]/gu, '').toLowerCase()) && !PLACEHOLDER.test(raw) && !raw.startsWith('${')
+        ? `${key}${separator} [segredo removido]` : pair);
+}
 const STRONG_KEY_SEGMENTS = new Set(['api', 'auth', 'access', 'secret', 'private', 'credential']);
 const CREDENTIAL_SEGMENTS = new Set(['token', 'secret', 'password', 'passwd', 'pwd', 'senha', 'pass', 'key', 'credential', 'credentials']);
 const DESCRIPTIVE_SUFFIXES = new Set(['hint', 'description', 'count', 'name', 'label', 'type', 'enabled', 'example']);
@@ -111,7 +124,7 @@ export function sensitiveKinds(value, { detectOpaque = false } = {}) {
     /\p{Script=Latin}/u.test(word) && /[\p{Script=Cyrillic}\p{Script=Greek}]/u.test(word));
   return {
     personal: matchesAny(text, PERSONAL),
-    credential: matchesAny(text, CREDENTIALS) || credentialPairs(text).length > 0 || (detectOpaque && opaqueSequences(text).length > 0),
+    credential: redactCredentialGrammar(text) !== text || matchesAny(text, CREDENTIALS) || credentialPairs(text).length > 0 || (detectOpaque && opaqueSequences(text).length > 0),
     internal: /🟡|🔴|\b(?:INTERNO|CONFIDENCIAL)\b|\b(?:interno|confidencial)\s*:/u.test(mapped),
     control: mixedAlphabet || /[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text),
   };
@@ -123,8 +136,9 @@ export function containsSensitiveData(value, options) {
 }
 
 export function redactSensitiveData(value) {
-  const withoutPairs = credentialPairs(value).toReversed().reduce((text, { start, end }) =>
-    `${text.slice(0, start)}[segredo removido]${text.slice(end)}`, String(value ?? ''));
+  const grammarRedacted = redactCredentialGrammar(value);
+  const withoutPairs = credentialPairs(grammarRedacted).toReversed().reduce((text, { start, end }) =>
+    `${text.slice(0, start)}[segredo removido]${text.slice(end)}`, grammarRedacted);
   return redact(redact(withoutPairs, CREDENTIALS, '[segredo removido]'), PERSONAL, '[dado removido]');
 }
 
