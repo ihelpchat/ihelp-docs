@@ -15,6 +15,7 @@ import { refreshCodeProduct } from './code-refresh-offer.mjs';
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
 const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto']);
 const requestedBySchema = z.string().optional().describe('Ator opcional; se informado, deve coincidir com o ator da credencial');
+const confirmationSchema = z.string().max(300).optional();
 const contentRequestSchema = z.object({
   topic: z.string().min(3).max(120),
   module: z.string().min(2).max(80),
@@ -39,6 +40,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     { instructions: 'Consulte a base antes de criar conteúdo. Envie sempre como draft ou pull request; nunca publique credenciais ou dados pessoais.' },
   );
   const registerTool = (name, config, callback) => {
+    if (config.mutates) config = { ...config, inputSchema: config.inputSchema.safeExtend({ confirmation: confirmationSchema }) };
     registerToolPolicy(name, config);
     return server.registerTool(name, config, async (args, extra) => {
     const identity = requestIdentity.getStore();
@@ -200,7 +202,6 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       articles: z.array(articleSchema).max(8).default([]),
       deletes: z.array(z.string()).max(8).default([]),
       mode: z.enum(['dry_run', 'draft', 'pull_request']).default('dry_run'),
-      confirmation: z.string().max(300).optional(),
       requestedBy: requestedBySchema,
     }),
   }, async ({ articles, deletes, mode, requestedBy, confirmation }) => {
@@ -231,9 +232,9 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     mutates: true,
     description: 'Atualiza artigo e meta.json em pull request, sem merge nem deploy.',
     inputSchema: articleSchema.extend({ requestedBy: requestedBySchema }),
-  }, async ({ requestedBy, ...article }) => {
+  }, async ({ requestedBy, confirmation, ...article }) => {
     try {
-      return textResult(await submitContentPackage(root, [article], 'pull_request', requestedBy));
+      return textResult(await submitContentPackage(root, [article], 'pull_request', requestedBy, [], { confirmation }));
     } catch (error) {
       return textResult(error instanceof SubmitArticleError ? { error: error.message, code: error.code } : { error: 'Não foi possível atualizar o artigo', code: 'SUBMIT_FAILED' }, true);
     }
@@ -246,10 +247,10 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       mode: z.enum(['draft', 'pull_request']).default('draft'),
       requestedBy: requestedBySchema,
     }),
-  }, async ({ mode, requestedBy, ...article }) => {
+  }, async ({ mode, requestedBy, confirmation, ...article }) => {
     try {
-      if (mode === 'pull_request') return textResult(await submitContentPackage(root, [article], mode, requestedBy));
-      return textResult(await submitArticle(root, article, mode, requestedBy));
+      if (mode === 'pull_request') return textResult(await submitContentPackage(root, [article], mode, requestedBy, [], { confirmation }));
+      return textResult(await submitArticle(root, article, mode, requestedBy, { confirmation }));
     } catch (error) {
       return textResult(error instanceof SubmitArticleError
         ? { error: error.message, code: error.code }

@@ -6,18 +6,24 @@ import { sensitiveKinds } from './sensitive-data.mjs';
 const allowedHosts = new Set(['apiv3.ihelpchat.com', 'ihelpchat.com.br', 'www.ihelpchat.com.br']);
 const unique = (values) => [...new Set(values)];
 const endpointName = (article) => `${String(article.method ?? 'GET').toUpperCase()} ${article.endpoint ?? ''}`.trim();
+const stringsOf = (value) => typeof value === 'string' ? [value]
+  : Array.isArray(value) ? value.flatMap(stringsOf)
+    : value && typeof value === 'object' ? Object.values(value).flatMap(stringsOf) : [];
+const normalizedIds = (text) => [...text.matchAll(/(?<![\da-f])[\da-f][\da-f_:\s-]{22,70}[\da-f](?![\da-f])/giu)]
+  .some(([candidate]) => [24, 32].includes(candidate.replace(/[-_\s:]/gu, '').length)
+    && /^[\da-f]+$/iu.test(candidate.replace(/[-_\s:]/gu, '')));
 
 export function securityReview(article, { facts = {}, request = {} } = {}) {
   const blocks = [];
   const warnings = [];
   const body = String(article.body ?? '');
-  const text = [article.title, article.description, body].filter(Boolean).join('\n');
+  const text = stringsOf(article).join('\n');
   const kinds = sensitiveKinds(text);
   if (kinds.personal) blocks.push('Exemplo contém possível dado pessoal (telefone, e-mail ou CPF/CNPJ). Use apenas valores sintéticos.');
   if (kinds.credential || kinds.internal || kinds.control) blocks.push('Conteúdo contém possível segredo ou informação interna.');
-  if (/(?<![\da-f])[\da-f]{24}(?![\da-f])|\b[\da-f]{8}-[\da-f]{4}-[1-8][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}\b/iu.test(body))
+  if (normalizedIds(text))
     blocks.push('Exemplo contém id real (ObjectId ou UUID). Use id-exemplo-1.');
-  if (/\/(?!5500000000000(?:[/?#\s"'`]|$))(?:\d{6,})(?:[/?#\s"'`]|$)/u.test(body)) blocks.push('Path de exemplo contém id numérico real. Use id-exemplo-1.');
+  if (/\/(?!5500000000000(?:[/?#\s"'`]|$))(?:\d{6,})(?:[/?#\s"'`]|$)/u.test(text)) blocks.push('Path de exemplo contém id numérico real. Use id-exemplo-1.');
   for (const match of text.matchAll(/https?:\/\/[^\s<>)"'`]+/giu)) {
     try {
       const url = new URL(match[0].replace(/[.,;:!?]+$/u, ''));
@@ -30,7 +36,7 @@ export function securityReview(article, { facts = {}, request = {} } = {}) {
   for (const parameter of facts.parameters ?? []) {
     if (parameter.serverAssigned === true) blocks.push(`Parâmetro ${parameter.name} é preenchido pelo servidor (serverAssigned).`);
   }
-  const exampleValues = [...body.matchAll(/(?:"(?:name|nome|contactName|personName)"\s*:\s*"|(?:name|nome)=["'])([^"'\n]+)["']/giu)].map((match) => match[1]);
+  const exampleValues = [...text.matchAll(/(?:"(?:name|nome|contactName|personName)"\s*:\s*"|(?:name|nome)=["'])([^"'\n]+)["']/giu)].map((match) => match[1]);
   if (exampleValues.some((value) => /\b\p{Lu}\p{Ll}{2,}(?:\s+-\s+\w+|\s+\p{Lu}\p{Ll}{2,})/u.test(value)))
     blocks.push('Exemplo contém nome de pessoa. Use “Pessoa Exemplo”.');
 
@@ -38,7 +44,7 @@ export function securityReview(article, { facts = {}, request = {} } = {}) {
   const route = String(article.endpoint ?? '');
   if (method === 'DELETE' || /(?:massdelete|mass|import|export|sync|delete|showall)/iu.test(route))
     warnings.push(`${endpointName(article)} pode apagar ou movimentar muitos dados. Confirme que deve ser documentado.`);
-  if (/\bshowAll\b|\bexport\b/iu.test(body) && !/\b(?:page|pagina|página|limit|limite)\b/iu.test(body))
+  if (/\bshowAll\b|\bexport\b/iu.test(text))
     warnings.push(`${endpointName(article)} pode devolver todos os dados sem paginação.`);
   const confirmation = `confirmo documentar: ${endpointName(article)}`;
   const confirmed = typeof request.confirmation === 'string' && request.confirmation.trim() === confirmation;

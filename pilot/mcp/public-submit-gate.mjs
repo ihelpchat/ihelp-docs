@@ -6,6 +6,8 @@ import { validatePublicArtifact } from '../lib/guide-package.mjs';
 import approvedMap from '../product-map/approved.json' with { type: 'json' };
 import { sensitiveKinds } from './sensitive-data.mjs';
 import { securityReview } from './security-review.mjs';
+import { getIhelpContext } from './product-context-service.mjs';
+import { routeMatches } from './api-route-match.mjs';
 import { contentRoutes, internalLinkIssues, parseArticle, parseMdx, plainText, publishedContent, visit } from './editorial-standard.mjs';
 import publishedBaseline from './public-submit-baseline.json' with { type: 'json' };
 
@@ -56,6 +58,20 @@ function checkInterfaceLabels(body, path) {
 
 function reject(message) { throw Object.assign(new Error(`gate público: ${message}`), { code: 'PUBLIC_GATE' }); }
 
+async function securityFacts(root, article) {
+  const route = String(article.endpoint ?? '');
+  const verb = String(article.method ?? '').toUpperCase();
+  const context = await getIhelpContext(root, `${verb} ${route}`, 'api', {
+    requireLocal: true, repositoryIds: ['backend'], explicitEndpoints: [{ verb, route }],
+  }).catch(() => null);
+  const endpoint = context?.endpoints?.find((item) => item.verb === verb &&
+    [item.route, ...(item.optionalAliases ?? [])].some((candidate) =>
+      routeMatches(route, candidate) || routeMatches(route, candidate.replace(/^\/api\/v\d+/iu, ''))));
+  if (!endpoint && (/\{[^}]+\}/u.test(route) || /<Param\b|\bparameters?\b/iu.test(article.body)))
+    reject('fatos do código indisponíveis para a revisão de segurança');
+  return endpoint ?? {};
+}
+
 function checkJargon(text) {
   for (const term of jargon) {
     const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -68,10 +84,10 @@ function checkJargon(text) {
   }
 }
 
-export async function assertPublicSubmit(root, items, deletes = [], { ignoreBaseline = false, request = {}, factsByPath = {}, securityOnly = false } = {}) {
+export async function assertPublicSubmit(root, items, deletes = [], { ignoreBaseline = false, request = {}, securityOnly = false } = {}) {
   if (securityOnly) {
-    const reviews = items.filter(({ article }) => article.path.startsWith('api/'))
-      .map(({ article }) => securityReview(article, { facts: factsByPath[article.path], request }));
+    const reviews = await Promise.all(items.filter(({ article }) => article.path.startsWith('api/'))
+      .map(async ({ article }) => securityReview(article, { facts: await securityFacts(root, article), request })));
     const blocked = reviews.flatMap(({ blocks }) => blocks);
     if (blocked.length) reject(blocked[0]);
     const confirmations = reviews.filter(({ warnings, confirmed }) => warnings.length && !confirmed).map(({ confirmation }) => confirmation);
@@ -87,7 +103,7 @@ export async function assertPublicSubmit(root, items, deletes = [], { ignoreBase
   const routesAfter = contentRoutes(after.keys());
   for (const { article, rendered } of items) {
     if (article.path.startsWith('api/')) {
-      const review = securityReview(article, { facts: factsByPath[article.path], request });
+      const review = securityReview(article, { facts: await securityFacts(root, article), request });
       if (review.blocks.length) reject(review.blocks[0]);
       securityWarnings.push(...review.warnings);
       if (review.warnings.length && !review.confirmed) confirmations.push(review.confirmation);

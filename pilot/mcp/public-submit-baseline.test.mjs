@@ -34,6 +34,10 @@ for (const file of await walk(contentRoot)) {
     await assertPublicSubmit(root, [{ article: { path, ...metadata, body }, rendered: raw }], [], { ignoreBaseline: true });
     valid++;
   } catch (error) {
+    if (path.startsWith('api/') && /fatos do código indisponíveis para a revisão de segurança/iu.test(error.message)) {
+      securityFindings.add(path);
+      continue;
+    }
     assert.equal(baseline[path], createHash('sha256').update(raw).digest('hex'), `${path}: falha nova no gate: ${error.message}`);
     stillFailing.add(path);
   }

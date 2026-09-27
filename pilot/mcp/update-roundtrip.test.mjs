@@ -90,6 +90,11 @@ try {
       originalYaml.assistantSuggestions = original.assistantSuggestions;
     }
     const result = await call('docs_update_article', { ...original, requestedBy: 'service:roundtrip' });
+    if (path.startsWith('api/')) {
+      assert.equal(result.isError, true, 'API parametrizada sem cópia do código deve bloquear update');
+      assert.match(result.content[0].text, /fatos do código indisponíveis para a revisão de segurança/iu);
+      continue;
+    }
     assert.equal(result.isError, false, `${path}: ${result.content[0].text}`);
     const remote = join(root, 'remote/pilot/content/docs', `${path}.mdx`);
     const rendered = await readFile(remote, 'utf8');

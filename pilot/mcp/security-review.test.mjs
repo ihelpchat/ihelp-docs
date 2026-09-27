@@ -11,7 +11,7 @@ import { buildServer } from './server.mjs';
 
 const article = { path: 'api/teste/contato', title: 'Consultar contato',
   description: 'Consulte os dados de um contato pelo identificador informado.',
-  source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts/{id}',
+  source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts',
   body: '## Exemplo\n\n```http\nGET https://apiv3.ihelpchat.com/api/v2/contacts/id-exemplo-1\n```\n\nExemplo fictício.' };
 const facts = { parameters: [{ name: 'id', in: 'route', type: 'string' }] };
 const examine = (candidate = article, input = {}) => {
@@ -43,7 +43,7 @@ test('DELETE sem confirmação retorna needs_information e não escreve no GitHu
     const result = await submitContentPackage(root, [destructive], 'pull_request', 'user:tester');
     assert.equal(result.status, 'needs_information');
     assert.match(result.securityWarnings.join(' '), /DELETE/iu);
-    assert.match(result.questions.join(' '), /confirmo documentar: DELETE \/contacts\/\{id\}/iu);
+    assert.match(result.questions.join(' '), /confirmo documentar: DELETE \/contacts/iu);
     assert.equal(writes.length, 0);
   } finally { globalThis.fetch = before; }
 });
@@ -65,7 +65,7 @@ test('DELETE confirmado segue e PR contém Atenção de segurança', async () =>
   };
   try {
     const result = await submitContentPackage(root, [{ ...article, method: 'DELETE' }], 'pull_request', 'user:tester', [],
-      { confirmation: 'confirmo documentar: DELETE /contacts/{id}' });
+      { confirmation: 'confirmo documentar: DELETE /contacts' });
     assert.equal(result.status, 'pull_request');
     assert.match(result.securityWarnings.join(' '), /DELETE/iu);
     const pull = calls.find(({ url, init }) => url.endsWith('/pulls') && init.method === 'POST');
@@ -119,8 +119,8 @@ test('ferramentas mutates herdam confirmation e DELETE confirmado segue via docs
   try { buildServer(root); }
   finally { McpServer.prototype.registerTool = original; }
   for (const [name, { config }] of registered) if (config.mutates)
-    assert.equal(config.inputSchema.safeParse({ confirmation: 'confirmo documentar: DELETE /contacts/{id}' }).success
-      || Boolean(config.inputSchema.shape.confirmation), true, `${name} aceita confirmation`);
+    assert.equal(config.inputSchema.shape.confirmation?.safeParse('confirmo documentar: DELETE /contacts').success, true,
+      `${name} aceita confirmation`);
   const tool = registered.get('docs_submit_article').callback;
   const priorFetch = globalThis.fetch;
   const priorToken = process.env.GITHUB_TOKEN;
@@ -135,7 +135,7 @@ test('ferramentas mutates herdam confirmation e DELETE confirmado segue via docs
     return { ok: true, json: async () => ({}) };
   };
   try {
-    const result = await tool({ ...article, method: 'DELETE', mode: 'pull_request', requestedBy: 'user:tester', confirmation: 'confirmo documentar: DELETE /contacts/{id}' });
+    const result = await tool({ ...article, method: 'DELETE', mode: 'pull_request', requestedBy: 'user:tester', confirmation: 'confirmo documentar: DELETE /contacts' });
     assert.equal(JSON.parse(result.content[0].text).status, 'pull_request');
     assert.ok(writes > 0);
   } finally {
@@ -156,7 +156,7 @@ test('docs_submit_package bloqueia API parametrizada sem fatos, sem factsByPath'
   };
   try {
     buildServer(root);
-    const result = await registered.get('docs_submit_package')({ articles: [article], deletes: [], mode: 'dry_run', requestedBy: 'user:tester' });
+    const result = await registered.get('docs_submit_package')({ articles: [{ ...article, endpoint: '/contacts/{id}' }], deletes: [], mode: 'dry_run', requestedBy: 'user:tester' });
     assert.match(JSON.stringify(result.content), /fatos do código indisponíveis para a revisão de segurança/iu);
   } finally {
     McpServer.prototype.registerTool = original;

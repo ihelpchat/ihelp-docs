@@ -264,21 +264,21 @@ export async function auditOperation(root, { actor, operation, mode = null, targ
   }
 }
 
-export async function submitArticle(root, article, mode = 'draft', requestedBy) {
+export async function submitArticle(root, article, mode = 'draft', requestedBy, options = {}) {
   try {
-    return await submitArticleAudited(root, article, mode, requestedBy);
+    return await submitArticleAudited(root, article, mode, requestedBy, options);
   } catch (error) {
     throw publicSubmitError(error);
   }
 }
 
-async function submitArticleAudited(root, article, mode, requestedBy) {
+async function submitArticleAudited(root, article, mode, requestedBy, options = {}) {
   const actor = isSafeRequestedBy(requestedBy) ? requestedBy : null;
   const target = typeof article.path === 'string' && SAFE_PATH.test(article.path) && !article.path.endsWith('/') ? redactSensitiveData(article.path) : null;
   const safeMode = mode === 'draft' || mode === 'pull_request' ? mode : null;
   if (!actor) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
   const items = safeArticleList([article]);
-  const gate = await assertPublicSubmit(root, items, [], { securityOnly: mode === 'draft' });
+  const gate = await assertPublicSubmit(root, items, [], { securityOnly: mode === 'draft', request: options });
   if (gate.status === 'needs_information') return gate;
   await appendAudit(root, actor, safeMode, target, 'attempt');
   let result;
@@ -507,7 +507,7 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
   let gate;
   try {
     items = safeArticleList(articles, deletes);
-    gate = await assertPublicSubmit(root, items, deletes, { request: draftOptions, factsByPath: draftOptions.factsByPath, securityOnly: mode !== 'pull_request' });
+    gate = await assertPublicSubmit(root, items, deletes, { request: draftOptions, securityOnly: mode !== 'pull_request' });
   } catch (error) { throw publicSubmitError(error); }
   if (gate.status === 'needs_information') return gate;
   if (mode === 'dry_run') return { status: 'dry_run', articles: articles.map(({ path }) => path), deleted: deletes, ...gate };
