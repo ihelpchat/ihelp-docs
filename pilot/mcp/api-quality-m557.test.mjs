@@ -119,7 +119,7 @@ test('descrição da IA usa campo factual e ausência registra pendência', asyn
       questions: [], articles: [article], grounding: [] })), model: 'synthetic' }) } },
   });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
-  assert.match(result.articles[0].body, /string — Nome do contato\./u);
+  assert.match(result.articles[0].body, /texto — Nome do contato\./u);
   assert.match(result.pending.join('; '), /descrição de resposta sem fonte: dados\[\]\.id/u);
 });
 

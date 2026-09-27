@@ -110,10 +110,20 @@ function markFactNames(text, endpoints) {
   ]))].filter(Boolean);
   if (!names.length) return text;
   const facts = new Set(names);
+  const commonWords = new Set(['contato', 'contatos', 'nome', 'numero', 'número', 'dados', 'data', 'hora',
+    'usuario', 'usuário', 'usuarios', 'usuários', 'mensagem', 'mensagens', 'resposta', 'respostas',
+    'erro', 'erros', 'canal', 'canais', 'campo', 'campos', 'lista', 'listas', 'tipo', 'tipos',
+    'valor', 'valores', 'total', 'pagina', 'página', 'paginas', 'páginas', 'ativo', 'ativa',
+    'estado', 'status', 'departamento', 'departamentos', 'telefone', 'email', 'endereco', 'endereço']);
   return String(text).split(/(`[^`]*`)/u).map((segment) => {
     if (segment.startsWith('`')) return segment;
     return segment.replace(/(?<![\p{L}\p{N}_])([\p{L}_][\p{L}\p{N}_]*)(?![\p{L}\p{N}_])/gu,
-      (name) => facts.has(name) ? '`' + name + '`' : name);
+      (match, name, offset) => {
+        if (!facts.has(name)) return name;
+        const shape = /\p{Ll}\p{Lu}|_|\d/u.test(name);
+        const labelled = /\b(?:campo|parâmetro|propriedade|cabeçalho)\s+$/iu.test(segment.slice(0, offset));
+        return shape || labelled || !commonWords.has(name) ? '`' + name + '`' : name;
+      });
   }).join('');
 }
 function apiSchemaIssue(article) {

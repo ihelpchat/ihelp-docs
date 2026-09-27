@@ -5,6 +5,18 @@ const publicTypes = new Map([
   ['DateTime', 'data e hora'], ['int', 'número'], ['long', 'número'], ['decimal', 'número'],
   ['bool', 'verdadeiro ou falso'], ['string', 'texto'], ['Guid', 'texto'],
 ]);
+const publicType = (raw) => {
+  const type = String(raw ?? '').trim();
+  const optional = type.endsWith('?');
+  const base = optional ? type.slice(0, -1) : type;
+  const collection = base.match(/^(?:List|IEnumerable|ICollection|IList)<\s*(.+)\s*>$|^(.+)\[\]$/u);
+  let label;
+  if (collection) {
+    const item = publicType(collection[1] ?? collection[2]).replace(/ \(opcional\)$/u, '');
+    label = `lista de ${item === 'objeto' ? 'objetos' : item === 'número' ? 'números' : item}`;
+  } else label = publicTypes.get(base) ?? (['double', 'float', 'short', 'number'].includes(base) ? 'número' : 'objeto');
+  return `${label}${optional ? ' (opcional)' : ''}`;
+};
 export function internalTypeIssue(text) {
   const type = String(text).match(/\b(?:List|IEnumerable)\s*<\s*[A-Za-z_]\w*\??\s*>\??|\b(?:DateTime|int|long|decimal|bool|string|Guid)\??(?=$|[^\p{L}\p{N}_])/gu)?.[0];
   if (!type) return null;
@@ -93,11 +105,15 @@ export function renderApiReference(endpoint, examples, page) {
   if (endpoint.responseFields === null) add('resposta', `## ${heading('resposta', 'Resposta')}\n\nCampos de resposta ainda não documentados.`);
   else {
     const synthetic = syntheticResponseExample(endpoint);
-    add('resposta', `## ${heading('resposta', 'Resposta')}\n\n${components.has('Fields') ? '<Fields>\n' : ''}${endpoint.responseFields.map((field) => `<Field name="${safe(responseFieldPath(endpoint, field))}">${safe(field.type)} — ${safe(page?.responseDescriptions?.[responseFieldPath(endpoint, field)] ?? simpleFieldName(field.name))}</Field>`).join('\n')}${components.has('Fields') ? '\n</Fields>' : ''}${synthetic ? `\n\n\`\`\`json\n${JSON.stringify(synthetic, null, 2)}\n\`\`\`` : ''}`);
+    add('resposta', `## ${heading('resposta', 'Resposta')}\n\n${components.has('Fields') ? '<Fields>\n' : ''}${endpoint.responseFields.map((field) => `<Field name="${safe(responseFieldPath(endpoint, field))}">${publicType(field.type)} — ${safe(page?.responseDescriptions?.[responseFieldPath(endpoint, field)] ?? simpleFieldName(field.name))}</Field>`).join('\n')}${components.has('Fields') ? '\n</Fields>' : ''}${synthetic ? `\n\n\`\`\`json\n${JSON.stringify(synthetic, null, 2)}\n\`\`\`` : ''}`);
   }
   if (endpoint.errors?.length) {
     const cell = (value) => safe(value).replace(/\|/gu, '\\|').replace(/\s+/gu, ' ');
-    add('erros', `## Erros comuns\n\n| HTTP | Mensagem | Quando |\n|---|---|---|\n${endpoint.errors.map((error) => `| ${error.status} | ${cell(error.message)} | ${cell(error.when)} |`).join('\n')}`);
+    const internal = /\b(?:DTO|entity|repository|service|action|ToReturn)\b|\b[A-Z]\w*\.[A-Z]\w*\b|\b[A-Z]\w*(?:Controller|Service|Repository|DTO)\b/iu;
+    const message = (value) => internal.test(String(value)) ? 'Mensagem de erro' : cell(value);
+    const when = (value) => internal.test(String(value))
+      ? 'Falha ao processar a requisição; a mensagem vem no campo `dados`.' : cell(value);
+    add('erros', `## Erros comuns\n\n| HTTP | Mensagem | Quando |\n|---|---|---|\n${endpoint.errors.map((error) => `| ${error.status} | ${message(error.message)} | ${when(error.when)} |`).join('\n')}`);
   }
   const order = (kind) => kind === 'autorização' ? -1 : sections.findIndex((section) => section.toLowerCase().startsWith(kind === 'campos' ? 'campos relevantes' : kind));
   const rank = (kind) => kind === 'autorização' ? -1 : order(kind) < 0 ? 100 : order(kind);
