@@ -20,8 +20,10 @@ function linkDestinations(article) {
       if (key !== 'body') return;
       for (const match of value.matchAll(/\[[^\]\n]*\]\(\s*(?:<([^<>\n]+)>|([^\s)]+(?:\([^\n)]*\))?))/gu))
         destinations.push(match[1] ?? match[2]);
-      for (const match of value.matchAll(/\b(?:href|src|url)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/giu))
-        destinations.push(match[1] ?? match[2] ?? match[3]);
+      for (const match of value.matchAll(/\b(?:href|src|url)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/giu)) {
+        const destination = match[1] ?? match[2] ?? match[3];
+        if (!destination.startsWith('{')) destinations.push(destination); // JSX expressions are checked by the public gate.
+      }
       for (const match of value.matchAll(/<((?:[a-z][a-z\d+.-]*:|\/\/|www\.)[^\s<>]+)>/giu)) destinations.push(match[1]);
       for (const match of value.matchAll(/^\s*(?:url|href)\s*:\s*['"]?([^\s'"\n]+)/gimu)) destinations.push(match[1]);
     } else if (Array.isArray(value)) value.forEach((item) => visit(item));
