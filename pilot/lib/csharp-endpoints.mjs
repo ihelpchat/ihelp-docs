@@ -1,5 +1,5 @@
 // A narrow C# lexer: comments and string bodies cannot create attributes.
-function tokens(source) {
+export function tokens(source) {
   const result = [];
   for (let i = 0; i < source.length;) {
     const rest = source.slice(i);

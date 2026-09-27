@@ -1,4 +1,5 @@
 // Static, bounded reader. It never executes product code.
+import { tokens } from './csharp-endpoints.mjs';
 export const MAX_CALL_DEPTH = 3;
 export const MAX_CALL_METHODS = 12;
 
@@ -38,9 +39,27 @@ const lineOf = (source, at) => source.slice(0, at).split('\n').length;
 
 function declarations(source, path) {
   const clean = maskCsharp(source);
-  const classes = [...clean.matchAll(/\bclass\s+(\w+)\s*(?::\s*([\w,\s]+))?\s*\{/gu)]
-    .map((match) => ({ name: match[1], interfaces: (match[2] ?? '').split(',').map((name) => name.trim()), path,
-      start: match.index, end: blockEnd(clean, match.index + match[0].lastIndexOf('{')) }));
+  const lex = tokens(source);
+  const classes = [];
+  for (let i = 0; i < lex.length; i++) {
+    if (lex[i].value !== 'class' || lex[i + 1]?.kind !== 'word') continue;
+    const name = lex[i + 1].value, bases = [];
+    let j = i + 2, angle = 0, base = null, inBases = false;
+    while (j < lex.length && lex[j].value !== '{' && lex[j].value !== ';') {
+      const item = lex[j];
+      if (item.value === 'where' && angle === 0) break;
+      if (item.value === ':' && !inBases) inBases = true;
+      else if (inBases && item.value === '<') angle++;
+      else if (inBases && item.value === '>') angle--;
+      else if (inBases && item.value === ',' && angle === 0) { if (base) bases.push(base); base = null; }
+      else if (inBases && item.kind === 'word' && angle === 0 && !base) base = item.value;
+      j++;
+    }
+    if (base) bases.push(base);
+    while (j < lex.length && lex[j].value !== '{' && lex[j].value !== ';') j++;
+    if (lex[j]?.value === '{') classes.push({ name, interfaces: bases, path, start: lex[i].at,
+      end: blockEnd(clean, lex[j].at) });
+  }
   const fields = new Map([...clean.matchAll(/\b(?:private|protected|public)\s+(?:readonly\s+)?(\w+)\s+(_\w+)\s*;/gu)]
     .map((match) => [match[2], match[1]]));
   for (const match of clean.matchAll(/\b(?:public|internal)\s+\w+\s*\(([^)]*)\)\s*\{([^{}]*)\}/gu)) {
@@ -49,12 +68,29 @@ function declarations(source, path) {
       if (args.has(assignment[2])) fields.set(assignment[1], args.get(assignment[2]));
   }
   const methods = [];
-  for (const match of clean.matchAll(/\b(?:public|protected|internal)\s+(?:async\s+)?[\w<>?,\[\]\s]+?\s+(\w+)\s*\([^)]*\)\s*\{/gu)) {
-    const brace = match.index + match[0].lastIndexOf('{');
-    const end = blockEnd(clean, brace);
-    methods.push({ method: match[1], path, start: lineOf(source, match.index), end: lineOf(source, end - 1),
-      body: clean.slice(brace, end), excerpt: source.slice(match.index, end), fields,
-      classes: classes.filter((cls) => cls.start < match.index && end <= cls.end) });
+  for (let i = 0; i < lex.length; i++) {
+    if (!['public', 'protected', 'internal', 'private'].includes(lex[i].value)) continue;
+    let open = i + 1, close;
+    while (open < lex.length && ![';', '{', '='].includes(lex[open].value)) {
+      if (lex[open].value === '(' && lex[open - 1]?.kind === 'word') {
+        close = open + 1;
+        let depth = 1;
+        while (close < lex.length && depth) {
+          if (lex[close].value === '(') depth++;
+          if (lex[close].value === ')') depth--;
+          close++;
+        }
+        if (lex[close]?.value === '{') break;
+        open = close;
+      } else open++;
+    }
+    if (lex[open]?.value !== '(' || lex[close]?.value !== '{') continue;
+    const method = lex[open - 1].value;
+    const brace = lex[close].at, end = blockEnd(clean, brace), start = lex[i].at;
+    const owners = classes.filter((cls) => cls.start < start && end <= cls.end);
+    if (!owners.length) continue;
+    methods.push({ method, path, start: lineOf(source, start), end: lineOf(source, end - 1),
+      body: clean.slice(brace, end), excerpt: source.slice(start, end), fields, classes: owners });
   }
   return { classes, methods };
 }
@@ -62,25 +98,40 @@ function declarations(source, path) {
 export function traceCsharpCalls(sources, paths, endpoint) {
   const allowed = paths.filter((path) => /\.cs$/u.test(path) && !/(?:^|\/)(?:Migrations?|appsettings[^/]*)(?:\/|$)/iu.test(path)
     && !/(?:connection|credential|secret|config)/iu.test(path));
-  const index = allowed.flatMap((path) => declarations(sources[path] ?? '', path).methods);
+  const declarationsByPath = allowed.map((path) => declarations(sources[path] ?? '', path));
+  const index = declarationsByPath.flatMap((item) => item.methods);
+  const declaredClasses = new Set(declarationsByPath.flatMap((item) => item.classes.map((cls) => cls.name)));
   const controller = index.find((item) => item.path === endpoint.file && item.method === endpoint.method);
   const methods = [], pending = [], seen = new Set(), neededTypes = new Set();
+  function calls(body) {
+    const lex = tokens(body), result = [];
+    for (let i = 0; i < lex.length - 3; i++) {
+      if (lex[i].kind === 'word' && lex[i + 1].value === '.' && lex[i + 2].kind === 'word'
+        && lex[i + 3].value === '(' && lex[i - 1]?.value !== '.')
+        result.push({ receiver: lex[i].value, name: lex[i + 2].value });
+    }
+    return result;
+  }
   function visit(parent, depth) {
     if (!parent) return;
     if (depth >= MAX_CALL_DEPTH) {
-      if (/\b_\w+\.\w+\s*\(/u.test(parent.body)) pending.push(`limite de profundidade: ${MAX_CALL_DEPTH}`);
+      if (calls(parent.body).some(({ receiver }) => receiver.startsWith('_') || declaredClasses.has(receiver)))
+        pending.push(`limite de profundidade: ${MAX_CALL_DEPTH}`);
       return;
     }
     if (methods.length >= MAX_CALL_METHODS) return;
-    for (const call of parent.body.matchAll(/\b(_\w+)\.(\w+)\s*\(/gu)) {
-      const fieldType = parent.fields.get(call[1]);
-      if (!fieldType) continue;
-      neededTypes.add(fieldType);
-      const candidates = index.filter((item) => item.method === call[2] && item.classes.some((cls) =>
-        cls.name === fieldType || cls.interfaces.includes(fieldType)));
-      if (candidates.length > 1) { pending.push(`chamada ambígua: ${call[2]}`); continue; }
+    for (const call of calls(parent.body)) {
+      const fieldType = parent.fields.get(call.receiver);
+      const staticType = declaredClasses.has(call.receiver) || /^[A-Z]/u.test(call.receiver) ? call.receiver : null;
+      if (!fieldType && !staticType) continue;
+      if (fieldType) neededTypes.add(fieldType);
+      if (staticType) neededTypes.add(staticType);
+      const candidates = index.filter((item) => item.method === call.name && item.classes.some((cls) =>
+        cls.name === (fieldType ?? staticType) || (fieldType && cls.interfaces.includes(fieldType))));
+      if (candidates.length > 1) { pending.push(`chamada ambígua: ${call.name}`); continue; }
       const method = candidates[0];
-      if (!method || seen.has(`${method.path}:${method.start}:${method.method}`)) continue;
+      if (!method) { pending.push(`chamada não resolvida: ${call.name}`); continue; }
+      if (seen.has(`${method.path}:${method.start}:${method.method}`)) continue;
       seen.add(`${method.path}:${method.start}:${method.method}`);
       if (methods.length >= MAX_CALL_METHODS) { pending.push(`limite de métodos: ${MAX_CALL_METHODS}`); break; }
       methods.push({ method: method.method, path: method.path, start: method.start, end: method.end,
