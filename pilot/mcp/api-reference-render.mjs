@@ -1,6 +1,16 @@
 import { syntheticResponseExample, valueFor } from './api-synthetic-example.mjs';
 const safe = (value) => String(value ?? '').replace(/[<>{}"`]/gu, '');
 export { valueFor } from './api-synthetic-example.mjs';
+const publicTypes = new Map([
+  ['DateTime', 'data e hora'], ['int', 'número'], ['long', 'número'], ['decimal', 'número'],
+  ['bool', 'verdadeiro ou falso'], ['string', 'texto'], ['Guid', 'texto'],
+]);
+export function internalTypeIssue(text) {
+  const type = String(text).match(/\b(?:List|IEnumerable)\s*<\s*[A-Za-z_]\w*\??\s*>\??|\b(?:DateTime|int|long|decimal|bool|string|Guid)\??(?=$|[^\p{L}\p{N}_])/gu)?.[0];
+  if (!type) return null;
+  const kind = /^(?:List|IEnumerable)\s*</u.test(type) ? 'lista' : publicTypes.get(type.replace(/\?$/u, ''));
+  return `tipo interno na prosa: ${type}; use a descrição pública (${kind ?? 'data e hora, número, texto, verdadeiro ou falso, lista'})`;
+}
 export const isSyntheticNumericExample = (value) => value === valueFor({ name: 'phone', type: 'string' });
 const publicRoute = (route) => route.replace(/^\/api\/v\d+/iu, '');
 const simpleFieldName = (name) => name.replace(/([a-z])([A-Z])/gu, '$1 $2').replace(/[_-]+/gu, ' ').toLocaleLowerCase('pt-BR');
@@ -48,8 +58,9 @@ export function renderApiReference(endpoint, examples, page) {
   if (parameters.length && paramTag) {
     const title = parameters.every((item) => item.in === 'route') ? heading('parâmetros de rota', 'Parâmetros de rota') : heading('parâmetros', 'Parâmetros');
     add('parâmetros', `## ${title}\n\n<Params>\n${parameters.map((item) => {
-      const type = /^(?:int|long|double|decimal|float|short)$/iu.test(item.type) ? 'number'
-        : /^bool(?:ean)?$/iu.test(item.type) ? 'boolean' : 'string';
+      const publicType = publicTypes.get(String(item.type).replace(/\?$/u, ''));
+      const type = publicType === 'número' || /^(?:double|float|short)$/iu.test(item.type) ? 'number'
+        : publicType === 'verdadeiro ou falso' || /^boolean$/iu.test(item.type) ? 'boolean' : 'string';
       const required = item.required ?? (item.in === 'route' || (item.in === 'body' && !item.type.endsWith('?')));
       return `<Param name="${safe(item.name)}" type="${type}"${required ? ' required' : ''}>${safe(item.in)} (${safe(item.type)})${required ? '' : ', opcional'}${Object.hasOwn(item, 'default') ? `; padrão: ${safe(JSON.stringify(item.default))}` : ''}</Param>`;
     }).join('\n')}\n</Params>`);

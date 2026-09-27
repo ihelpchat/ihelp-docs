@@ -7,7 +7,7 @@ import { sanitizeCodeForModel } from './code-hygiene.mjs';
 import { catalogActions, isCatalogAction } from './product-actions.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
-import { renderApiReference, responseFieldPath } from './api-reference-render.mjs';
+import { internalTypeIssue, renderApiReference, responseFieldPath } from './api-reference-render.mjs';
 import { finalizeSecurityResponse, securityReview } from './security-review.mjs';
 import { extractCitedEndpoints } from './public-submit-gate.mjs';
 import { contentMaxOutputTokens } from './env-compat.mjs';
@@ -46,7 +46,8 @@ const publicNames = new Set(PRODUCT_TERMS.flatMap((term) => [term, ...term.split
   .map((term) => term.toLocaleLowerCase('pt-BR')));
 const isPublicName = (name) => publicNames.has(name.toLocaleLowerCase('pt-BR'));
 
-function proseIssue(article, endpoint, packageEndpoints = [endpoint]) {
+function proseIssues(article, endpoint, packageEndpoints = [endpoint]) {
+  const issues = [];
   const parameters = packageEndpoints.flatMap((item) => item.parameters ?? []);
   const parameterNames = new Set(parameters.map((field) => field.name));
   const fieldNames = new Set([...parameters.filter((field) => field.in === 'body'),
@@ -65,18 +66,22 @@ function proseIssue(article, endpoint, packageEndpoints = [endpoint]) {
   const labelledNames = new RegExp(`\\b(campos?|parâmetros?|propriedades?|atributos?|chaves?|headers?|cabeçalhos?)\\s+(?:(?:o|a|os|as|um|uma|de|do|da|dos|das|no|na|em)\\s+)*((?:\\x60?${token}\\x60?)(?:\\s*(?:,|\\be\\b)\\s*\\x60?${token}\\x60?)*)`, 'giu');
   const tokens = new RegExp(token, 'gu');
   for (const value of [article.title, article.description, article.intro, ...article.notas]) {
-    if (typeof value !== 'string') return 'prosa inválida';
+    if (typeof value !== 'string') { issues.push('prosa inválida'); continue; }
+    const typeIssue = internalTypeIssue(value);
+    if (typeIssue) issues.push(typeIssue);
+    for (const term of value.matchAll(/\b(?:DTO|entity|repository|service)\b/giu))
+      issues.push(`termo interno na prosa: ${term[0]}`);
     const block = value.includes('```') ? value.match(/```[^\n]*/u) : null;
-    if (block) return `bloco de código proibido: ${block[0].slice(0, 80)}`;
+    if (block) issues.push(`bloco de código proibido: ${block[0].slice(0, 80)}`);
     const component = value.match(/<\/?[A-Za-z][^>]*>/u);
-    if (component) return `componente proibido: ${component[0]}`;
+    if (component) issues.push(`componente proibido: ${component[0]}`);
     const path = value.match(/\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_{}-]+)*/u);
-    if (path) return `caminho proibido: ${path[0]}`;
+    if (path) issues.push(`caminho proibido: ${path[0]}`);
     for (const code of value.matchAll(/`([^`\n]+)`/gu)) {
-      if (!inlineNames.has(code[1])) return `código inline proibido: ${code[0]}`;
+      if (!inlineNames.has(code[1])) issues.push(`código inline proibido: ${code[0]}`);
     }
     const method = value.match(/\b(?:GET|POST|PUT|PATCH|DELETE)\b/iu);
-    if (method) return `método proibido na prosa: ${method[0]}`;
+    if (method) issues.push(`método proibido na prosa: ${method[0]}`);
     for (const labelled of value.matchAll(labelledNames)) {
       const allowed = /^(?:campos?|propriedades?|atributos?|chaves?)$/iu.test(labelled[1])
         ? fieldNames : /^parâmetros?$/iu.test(labelled[1]) ? parameterNames : headerNames;
@@ -85,16 +90,16 @@ function proseIssue(article, endpoint, packageEndpoints = [endpoint]) {
         const factual = [...allowed].some((fact) => fact.toLowerCase() === name.toLowerCase());
         const technical = Boolean(candidate[1]) || /(?<=\p{L})\p{Lu}|\p{L}_\p{L}|(?=.*\p{L})(?=.*\p{N})/u.test(name)
           || [...names].some((fact) => fact.toLowerCase() === name.toLowerCase());
-        if (technical && !factual && !isPublicName(name)) return `nome técnico sem fato: ${name}`;
+        if (technical && !factual && !isPublicName(name)) issues.push(`nome técnico sem fato: ${name}`);
       }
     }
     for (const [name] of value.matchAll(tokens)) {
       const identifier = /\p{Ll}\p{Lu}|\p{L}_\p{L}/u.test(name)
         || (/\p{L}/u.test(name) && /\d/u.test(name));
-      if (identifier && !names.has(name) && !isPublicName(name)) return `nome técnico sem fato: ${name}`;
+      if (identifier && !names.has(name) && !isPublicName(name)) issues.push(`nome técnico sem fato: ${name}`);
     }
   }
-  return null;
+  return [...new Set(issues)];
 }
 function apiSchemaIssue(article) {
   if (!article || typeof article !== 'object' || Array.isArray(article)) return 'schema de prosa inválido';
@@ -236,7 +241,7 @@ function evidencePending(issues = []) {
 }
 
 function retryPrompt(issues) {
-  return { role: 'developer', content: redactSensitiveData(`O validador recusou estas citações. Corrija cada uma usando apenas fontes listadas: ${issues.join('; ')}`) };
+  return { role: 'developer', content: redactSensitiveData(`O validador recusou estes problemas de redação ou grounding. Corrija cada um usando apenas fontes listadas: ${issues.join('; ')}`) };
 }
 function apiPending(reason) {
   return { status: 'needs_information', summary: reason, questions: [reason], articles: [] };
@@ -562,12 +567,12 @@ async function generateContentPackageCore(root, request, options = {}) {
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
         request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
         request.module === 'api' ? 'Se faltar método, rota, parâmetros ou autorização, use needs_information e deixe articles vazio. responseFields=null é permitido: a resposta terá nota fixa e pendência.' : 'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
-        request.module === 'api' ? 'A prosa não pode conter método HTTP, caminho, bloco de código, componente JSX nem código inline, exceto nome exato de parâmetro ou campo dos fatos.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
+        request.module === 'api' ? 'A prosa não pode conter método HTTP, caminho, bloco de código, componente JSX nem código inline, exceto nome exato de parâmetro ou campo dos fatos. Descreva cada campo pelo significado e pelo tipo PÚBLICO (texto, número, data e hora, verdadeiro ou falso, lista, objeto), nunca pelo tipo do código, DTO, entity, repository ou service.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
         request.module === 'api' ? 'Cite summary no grounding do pacote; em description, intro, notas e descrições de campo, use citations da própria unidade. source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. Use os números reais mostrados ao lado do código e cite a faixa mais curta que contém o comportamento, com no máximo 30 linhas. O JSON interno de formato não é fonte. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].filter(Boolean).join(' '),
     },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`) },
-    ...(options.groundingRetryIssues ? [retryPrompt(options.groundingRetryIssues)] : []),
+    ...(options.retryIssues ? [retryPrompt(options.retryIssues)] : []),
   ], options), productContext);
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return withPending(apiPending(modelJson.reason));
@@ -578,6 +583,28 @@ async function generateContentPackageCore(root, request, options = {}) {
   if (request.module === 'api' && !parsed.articles.length) return withPending(apiPending('nenhuma página de API gerada'));
   if (request.module === 'api') {
     if (!productContext.apiExamples?.length) return withPending(apiPending('formato da referência API indisponível'));
+    const context = groundingContext(productContext, request, existing);
+    const proseProblems = [];
+    const groundingProblems = [];
+    for (const prose of parsed.articles) {
+      const endpoint = selectable.find((item) => publicEndpointId(item) === prose.endpoint);
+      if (!endpoint || apiSchemaIssue(prose)) continue;
+      const units = [prose.description, prose.intro, ...prose.notas];
+      proseProblems.push(...proseIssues({ title: prose.title, description: prose.description.text,
+        intro: prose.intro.text, notas: prose.notas.map((item) => item.text) }, endpoint, selectable));
+      groundingProblems.push(...apiUnitIssues(units, context));
+      for (const item of prose.responseDescriptions ?? []) {
+        proseProblems.push(...proseIssues({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable));
+        groundingProblems.push(...apiUnitIssues([item.description], context));
+      }
+    }
+    proseProblems.push(...proseIssues({ title: parsed.summary, description: '', intro: '', notas: [] }, { parameters: [], responseFields: [] }));
+    groundingProblems.push(...groundingIssues(parsed, context, ['summary']));
+    const retryIssues = [...new Set([...proseProblems, ...groundingProblems])];
+    if (retryIssues.length) {
+      if (!options.retryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, retryIssues });
+      return withPending(proseProblems.length ? apiPending(retryIssues.join('; ')) : evidencePending(retryIssues));
+    }
     const articles = [];
     const usedEndpoints = new Set();
     const pending = [];
@@ -604,22 +631,10 @@ async function generateContentPackageCore(root, request, options = {}) {
         return withPending(apiPending(`fatos técnicos incompletos: ${prose.path}`));
       }
       usedEndpoints.add(prose.endpoint);
-      const issue = proseIssue({ title: prose.title, description: prose.description.text,
-        intro: prose.intro.text, notas: prose.notas.map((item) => item.text) }, endpoint, selectable);
-      if (issue) return withPending(apiPending(issue));
-      const issues = apiUnitIssues([prose.description, prose.intro, ...prose.notas], groundingContext(productContext, request, existing));
-      if (issues.length) {
-        if (!options.groundingRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, groundingRetryIssues: issues });
-        return withPending(evidencePending(issues));
-      }
       const described = new Map();
       for (const item of prose.responseDescriptions ?? []) {
         if (!endpoint.responseFields?.some((field) => responseFieldPath(endpoint, field) === item.name) || described.has(item.name))
           return withPending(apiPending(`descrição de campo sem fato: ${item.name}`));
-        const descriptionIssue = proseIssue({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable);
-        if (descriptionIssue) return withPending(apiPending(descriptionIssue));
-        const descriptionGrounding = apiUnitIssues([item.description], groundingContext(productContext, request, existing));
-        if (descriptionGrounding.length) return withPending(evidencePending(descriptionGrounding));
         described.set(item.name, item.description.text);
       }
       const requestedRoute = explicitEndpointsFrom(request).find((item) => item.verb === endpoint.verb
@@ -649,13 +664,6 @@ async function generateContentPackageCore(root, request, options = {}) {
     }
     const withoutPage = selectable.map(publicEndpointId).find((id) => !usedEndpoints.has(id));
     if (withoutPage) return withPending(apiPending(`endpoint sem página: ${withoutPage}`));
-    const summaryIssue = proseIssue({ title: parsed.summary, description: '', intro: '', notas: [] }, { parameters: [], responseFields: [] });
-    if (summaryIssue) return withPending(apiPending(summaryIssue));
-    const summaryIssues = groundingIssues(parsed, groundingContext(productContext, request, existing), ['summary']);
-    if (summaryIssues.length) {
-      if (!options.groundingRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, groundingRetryIssues: summaryIssues });
-      return withPending(evidencePending(summaryIssues));
-    }
     return finalizeGeneratedPages(withPending({ ...safePackage, articles, discardedQuestions: plan.discardedQuestions ?? [],
       pending: [...new Set([...(productContext.pending ?? []), ...pending])], existing, model: response.model }), request, factsByPath);
   }

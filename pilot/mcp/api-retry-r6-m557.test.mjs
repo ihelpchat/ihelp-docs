@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateContentPackage } from './content-ai-service.mjs';
+import { internalTypeIssue } from './api-reference-render.mjs';
 
 // Exact offending field prose from the real m557g resp-2 replay.
 const badDescription = 'Campo lastActivity do contato, tipado como DateTime anulável no DTO.';
@@ -9,21 +10,23 @@ const endpoint = (route, field) => ({ verb: 'GET', route, public: true, document
   authorization: 'authenticated', parameters: [], responseFields: [{ name: field, type: 'string' }] });
 const endpoints = [endpoint('/api/v2/contacts', 'id'), endpoint('/api/v2/contacts/details', 'lastActivity')];
 const article = (path, id, name, text) => ({ path, endpoint: id, title: 'Contatos',
-  description: unit('Consulta contatos.'), intro: unit('Use para consultar contatos.'), notas: [],
+  description: unit('Consulta os dados dos contatos disponíveis na referência pública da API.'), intro: unit('Use para consultar contatos.'), notas: [],
   responseDescriptions: [{ name, description: unit(text) }] });
 const original = { status: 'ready', summary: 'Contatos.', questions: [], grounding: [], articles: [
   article('api/contatos/buscar-contatos', 'GET /contacts', 'id', 'Identificador do contato.'),
   article('api/contatos/buscar-detalhes-do-contato', 'GET /contacts/details', 'lastActivity', badDescription),
 ] };
 
-async function run(first = original, second = structuredClone(original)) {
+async function run(first = original, second = structuredClone(original), groundingRequired = false) {
   let calls = 0;
   let retryText = '';
   const result = await generateContentPackage(process.cwd(), { module: 'api', topic: 'Contatos' }, {
-    productContext: { groundingRequired: false, matches: [], code: [], endpoints,
+    productContext: { groundingRequired, matches: groundingRequired ? [{ repository: 'ihelpchat/olah-ihelp', path: 'Contacts.cs', line: 1, sha: 'test', ref: 'test' }] : [],
+      code: groundingRequired ? [{ available: true }] : [], endpoints,
       apiExamples: [{ sections: ['Resposta'], components: ['Fields', 'Field'] }] },
     plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
       calls++;
+      if (calls > 2) throw new Error('terceira geração proibida');
       if (calls === 2) retryText = payload.input.at(-1).content;
       return { output_text: JSON.stringify(calls === 1 ? first : second), model: 'replay' };
     } } },
@@ -58,4 +61,18 @@ test('problemas em páginas distintas entram juntos no retry', async () => {
   assert.match(retryText, /termo interno na prosa: DTO/u);
   assert.match(retryText, /tipo interno na prosa: DateTime/u);
   assert.equal(result.status, 'ready', result.summary);
+});
+
+test('redação e grounding de páginas distintas entram no mesmo retry', async () => {
+  const { calls, retryText } = await run(original, original, true);
+  assert.equal(calls, 2);
+  assert.match(retryText, /tipo interno na prosa: DateTime/u);
+  assert.match(retryText, /frase sem citação: Use para consultar contatos/u);
+});
+
+test('tipos anuláveis e coleções usam a tabela pública do renderizador', () => {
+  assert.match(internalTypeIssue('Campo DateTime?'), /DateTime\?; use a descrição pública \(data e hora\)/u);
+  assert.match(internalTypeIssue('Campo int?'), /int\?; use a descrição pública \(número\)/u);
+  assert.match(internalTypeIssue('Campo List<string>'), /List<string>; use a descrição pública \(lista\)/u);
+  assert.match(internalTypeIssue('Campo IEnumerable<Guid?>'), /IEnumerable<Guid\?>; use a descrição pública \(lista\)/u);
 });
