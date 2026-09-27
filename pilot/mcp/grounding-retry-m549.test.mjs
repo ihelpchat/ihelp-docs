@@ -159,13 +159,13 @@ test('plano de guia sem citação continua bloqueado com motivo', async () => {
   assert.match(result.summary, /frase sem citação: Crie as três páginas de contatos/);
 });
 
-for (const module of ['api', 'guia']) {
-  test(`${module}: marcador [1] em linha isolada não é afirmação`, () => {
+for (const moduleName of ['api', 'guia']) {
+  test(`${moduleName}: marcador [1] em linha isolada não é afirmação`, () => {
     const grounded = { guidance: `${claim}\n[1]`, grounding: [{ text: claim, citations: [
-      module === 'api' ? citation : { repository: context.matches[0].repository, path: context.matches[0].path,
+      moduleName === 'api' ? citation : { repository: context.matches[0].repository, path: context.matches[0].path,
         lineStart: 12, lineEnd: 12, sha: context.matches[0].sha },
     ] }] };
-    assert.equal(validateGroundedOutput(grounded, { ...context, module }, ['guidance']), true);
+    assert.equal(validateGroundedOutput(grounded, { ...context, module: moduleName }, ['guidance']), true);
   });
 }
 
