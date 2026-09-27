@@ -242,6 +242,16 @@ test('gramática numérica e nomes em zonas de exemplo bloqueiam com motivo', ()
   ]) assert.deepEqual(examine({ ...base, body }).blocks, [], name);
 });
 
+test('status HTTP e siglas em exemplos passam; nomes de pessoa equivalentes bloqueiam', () => {
+  const jsonStatus = { ...article, body: '## Exemplo\n\n```json\n{"message":"Not Found"}\n```' };
+  assert.deepEqual(examine(jsonStatus).blocks, []);
+  assert.match(examine({ ...jsonStatus, body: jsonStatus.body.replace('Not Found', 'João Silva') }).blocks.join(' '), /nome de pessoa/iu);
+
+  const acronym = { ...article, body: 'Exemplo: "ID DO GRUPO"' };
+  assert.deepEqual(examine(acronym).blocks, []);
+  assert.match(examine({ ...acronym, body: acronym.body.replace('"ID DO GRUPO"', 'pessoa João Silva') }).blocks.join(' '), /nome de pessoa/iu);
+});
+
 test('CNPJ em draft bloqueia antes de qualquer escrita no disco', async () => {
   const root = await mkdtemp(join(tmpdir(), 'm556-cnpj-'));
   await mkdir(join(root, 'content/docs'), { recursive: true });
