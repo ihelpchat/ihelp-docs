@@ -203,6 +203,13 @@ test('extrator reúne comando continuado e ignora URL fora da API', () => {
   ], unresolved: [] });
 });
 
+test('clientes HTTP com GET implícito preservam artigo publicado', async () => {
+  const published = await (await import('./editorial-standard.mjs')).readArticle(new URL('../', import.meta.url).pathname,
+    'api/crm/funis/listar-funis');
+  assert.deepEqual(extractCitedEndpoints(published).unresolved, []);
+  assert.deepEqual(extractCitedEndpoints({ ...article, body: "fetch('https://apiv3.ihelpchat.com/api/v2/contacts')" }).unresolved, []);
+});
+
 test('positivo seguro e negativos de uma alteração explicam bloqueio', () => {
   assert.deepEqual(examine(), { blocks: [], warnings: [] });
   for (const [name, changed, reason] of [

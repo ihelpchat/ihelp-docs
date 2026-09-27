@@ -87,14 +87,19 @@ function citedMethod(line, before, after) {
   if (command) return /(?:^|\s)(?:-d|--data(?:-[\w-]+)?|-F)(?=\s|=|$)/iu.test(command) ? 'POST' : 'GET';
   // Uma propriedade de fetch pode vir depois da URL no mesmo comando.
   const following = after.match(new RegExp(`(?:["']?method["']?)\\s*:\\s*['"]?(${HTTP_METHOD})\\b`, 'iu'));
-  return following?.[1].toUpperCase();
+  if (following) return following[1].toUpperCase();
+  const client = before.match(/\b(?:fetch|requests\.(get|post|put|patch|delete))\s*\([^\n]*$/iu);
+  if (client) return client[1]?.toUpperCase() ?? 'GET';
+  return undefined;
 }
 
 export function extractCitedEndpoints(article) {
   const primary = { method: String(article.method ?? '').toUpperCase(), endpoint: String(article.endpoint ?? '') };
   const endpoints = [primary];
   const unresolved = [];
-  const body = String(article.body ?? '').replace(/\\\r?\n\s*/gu, ' ');
+  const body = String(article.body ?? '').replace(/\\\r?\n\s*/gu, ' ')
+    .replace(/\b(?:fetch|requests\.(?:get|post|put|patch|delete))\s*\([\s\S]*?\)/giu,
+      (call) => call.replace(/\r?\n\s*/gu, ' '));
   let fenced = false;
   for (const line of body.split(/\r?\n/u)) {
     const fence = /^\s*```/u.test(line);
