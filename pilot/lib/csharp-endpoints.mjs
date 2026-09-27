@@ -122,9 +122,51 @@ function signatureParameters(items, route, dtoSources, file, source) {
       : words.some((item) => item.value === 'FromQuery') ? 'query'
         : words.some((item) => item.value === 'FromRoute') || new RegExp(`\\{${name}(?::[^{}]+)?\\??\\}`, 'iu').test(route) ? 'route' : 'query';
     const fields = dtoFields(dtoSources, type);
-    return fields.length ? fields.map((field) => ({ ...field, in: location, dtoType: type }))
-      : [{ name: camel(name), type, in: location, source: `${file}:${lineOf(source, words.at(-1).at)}` }];
+    return fields.length ? fields.map((field) => ({ ...field, in: location, dtoType: type, owner: name }))
+      : [{ name: camel(name), type, in: location, owner: name, source: `${file}:${lineOf(source, words.at(-1).at)}` }];
   });
+}
+
+function assignedPaths(body, parameterNames) {
+  const items = tokens(body);
+  const assigned = [];
+  const assignmentAt = (index) => items[index]?.value === '=' && items[index + 1]?.value !== '=' && items[index - 1]?.value !== '='
+    || items[index]?.value === '?' && items[index + 1]?.value === '?' && items[index + 2]?.value === '=';
+  for (let i = 0; i < items.length; i++) {
+    const root = items[i];
+    if (!parameterNames.has(root.value) || items[i - 1]?.value === '.') continue;
+    let cursor = i;
+    const path = [];
+    while (items[cursor + 1]?.value === '.' && items[cursor + 2]?.kind === 'word') {
+      path.push(items[cursor + 2].value);
+      cursor += 2;
+    }
+    if (path.length && assignmentAt(cursor + 1)) assigned.push({ owner: root.value, path, at: root.at });
+    if (path.length || items[i + 1]?.value !== '=' || items[i + 2]?.value === '=') continue;
+    let brace = -1;
+    if (items[i + 2]?.value === root.value && items[i + 3]?.value === 'with' && items[i + 4]?.value === '{') brace = i + 4;
+    if (items[i + 2]?.value === 'new' && items[i + 3]?.kind === 'word' && items[i + 4]?.value === '{') brace = i + 4;
+    if (brace < 0) continue;
+    let depth = 1;
+    for (let j = brace + 1; j < items.length && depth; j++) {
+      if (items[j].value === '{') depth++;
+      if (items[j].value === '}') depth--;
+      if (depth === 1 && items[j].kind === 'word' && assignmentAt(j + 1)
+        && (items[j - 1]?.value === '{' || items[j - 1]?.value === ','))
+        assigned.push({ owner: root.value, path: [items[j].value], at: items[j].at });
+    }
+  }
+  return assigned;
+}
+
+function nestedField(dtoSources, type, path) {
+  let field;
+  for (const part of path) {
+    field = dtoFields(dtoSources, type).find((item) => item.name.toLowerCase() === part.toLowerCase());
+    if (!field) return null;
+    type = field.type;
+  }
+  return field;
 }
 
 function responseTypeOf(declaration, attrs) {
@@ -227,13 +269,24 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       const authorizationSource = authorizationAttribute ? `${file}:${lineOf(source, authorizationAttribute.at)}` : null;
       const rawParameters = reference ? signatureParameters(t.slice(i + 1, end - 1), route, dtoSources, file, source) : undefined;
       const actionBody = actionBodyOf(clean, t, end);
-      const assigned = new Set([...actionBody.matchAll(/\b(\w+)\.(\w+)\s*=(?!=)/gu)]
-        .filter((match) => t.slice(i + 1, end - 1).some((token) => token.value === match[1]))
-        .map((match) => match[2].toLowerCase()));
-      const serverAssigned = rawParameters?.filter((item) => assigned.has(item.name.toLowerCase()))
-        .map((item) => ({ name: item.name, serverAssigned: true, source: `${file}:${lineOf(source, t[end].at + actionBody.search(new RegExp(`\\b\\w+\\.${item.name}\\s*=`, 'iu')))}` }));
-      const parameters = rawParameters?.filter((item) => !assigned.has(item.name.toLowerCase()))
-        .map(({ dtoType: _dtoType, ...item }) => ({ ...item, ...(item.in === 'route' ? { required: !optionalNames.has(item.name.toLowerCase()) } : {}), source: item.source ?? location }));
+      const owners = new Map();
+      for (const item of rawParameters ?? []) if (item.dtoType) owners.set(item.owner, item.dtoType);
+      const assignments = assignedPaths(actionBody, new Set((rawParameters ?? []).map((item) => item.owner)));
+      const direct = (item) => assignments.find((assignment) => assignment.owner === item.owner
+        && assignment.path.length === 1 && assignment.path[0].toLowerCase() === item.name.toLowerCase());
+      const serverAssigned = rawParameters?.flatMap((item) => {
+        const assignment = direct(item);
+        return assignment ? [{ name: item.name, serverAssigned: true,
+          source: `${file}:${lineOf(source, t[end].at + assignment.at)}` }] : [];
+      }) ?? [];
+      for (const assignment of assignments) {
+        if (assignment.path.length < 2 || !owners.has(assignment.owner)) continue;
+        if (!nestedField(dtoSources, owners.get(assignment.owner), assignment.path)) continue;
+        serverAssigned.push({ name: assignment.path.map(camel).join('.'), serverAssigned: true,
+          source: `${file}:${lineOf(source, t[end].at + assignment.at)}` });
+      }
+      const parameters = rawParameters?.filter((item) => !direct(item))
+        .map(({ dtoType: _dtoType, owner: _owner, ...item }) => ({ ...item, ...(item.in === 'route' ? { required: !optionalNames.has(item.name.toLowerCase()) } : {}), source: item.source ?? location }));
       const declaration = clean.slice(Math.max(0, clean.lastIndexOf('public ', t[i - 1].at)), t[i - 1].at);
       const declaredResultType = responseTypeOf(declaration, pending);
       const resultType = declaredResultType === 'IActionResult' || !declaredResultType
