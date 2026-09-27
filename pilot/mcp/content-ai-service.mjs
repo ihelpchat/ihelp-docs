@@ -101,6 +101,7 @@ export function validateGroundedOutput(output, context, fields) {
   });
   if (!lines.length || lines.some((line) => !claims.some((claim) => claim.text === line))) return false;
   const normalizeSpaces = (value) => value.replace(/\s+/gu, ' ').trim();
+  const evidence = evidenceIndex(context);
   return claims.length > 0 && claims.every((claim) => typeof claim.text === 'string'
     && lines.includes(claim.text) && Array.isArray(claim.citations) && claim.citations.length > 0
     && claim.citations.every((citation) => {
@@ -110,12 +111,33 @@ export function validateGroundedOutput(output, context, fields) {
           && [context.request?.details, context.request?.description].some((value) =>
             typeof value === 'string' && normalizeSpaces(value).includes(quote));
       }
-      return context.matches.some((match) =>
+      return evidence.some((match) =>
         citation?.repository === match.repository && citation.path === match.path
         && citation.sha === match.sha && citation.sha === match.ref
         && Number.isInteger(citation.lineStart) && citation.lineStart === match.line
         && citation.lineEnd === match.line);
     }));
+}
+
+function evidenceIndex(context) {
+  const provenance = (endpoint, source) => {
+    if (typeof source !== 'string' || typeof endpoint.sha !== 'string') return null;
+    const separator = source.lastIndexOf(':');
+    const path = source.slice(0, separator);
+    const line = Number(source.slice(separator + 1));
+    if (separator < 1 || !Number.isSafeInteger(line) || line < 1) return null;
+    return { repository: endpoint.repository ?? 'ihelpchat/olah-ihelp', path, line,
+      sha: endpoint.sha, ref: endpoint.sha };
+  };
+  return [...context.matches ?? [], ...(context.endpoints ?? []).flatMap((endpoint) => [
+    endpoint.source, endpoint.routeSource, endpoint.actionRouteSource, endpoint.verbSource,
+    endpoint.authorizationSource, ...(endpoint.parameters ?? []).map((item) => item.source),
+    ...(endpoint.responseFields ?? []).map((item) => item.source),
+  ].map((source) => provenance(endpoint, source)).filter(Boolean))];
+}
+
+function groundingContext(productContext, request) {
+  return { ...productContext, module: request.module, request };
 }
 
 function evidencePending() {
@@ -325,7 +347,8 @@ export async function planContent(root, request, options = {}) {
   if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return apiPending('endpoint não público: confirmar');
   const pending = groundingPending(productContext);
   if (pending) return pending;
-  const response = await modelResponse(options, baseRequest('plano_documentacao', PLAN_SCHEMA, [
+  const response = await modelResponse(options, baseRequest('plano_documentacao', request.module === 'api'
+    ? { ...PLAN_SCHEMA, properties: { ...PLAN_SCHEMA.properties, grounding: API_GROUNDING_SCHEMA } } : PLAN_SCHEMA, [
     {
       role: 'developer',
       content: [
@@ -335,7 +358,7 @@ export async function planContent(root, request, options = {}) {
         'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
         'Sugira ações no produto somente com rota fornecida ou sustentada pelos detalhes. target é um identificador data-help-id estável, nunca um seletor CSS.',
         request.module === 'api' ? 'Planeje páginas de referência da API. Para tema amplo, foque nos endpoints documented=true. Não peça dados já presentes nos fatos estruturados. Endpoint sem public=true exige confirmação. responseFields=null não bloqueia: a resposta exibirá nota fixa e pendência.' : 'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
-        'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
+        'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Na API, uma afirmação vinda do pedido pode citar um trecho literal de details ou description com {source: "pedido", quote: "trecho literal"} de pelo menos 12 caracteres. Sem evidência, use needs_information.',
       ].join(' '),
     },
     { role: 'user', content: requestText(request, existing, productContext) },
@@ -343,7 +366,7 @@ export async function planContent(root, request, options = {}) {
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return { ...apiPending(modelJson.reason), pending: productContext.pending ?? [] };
   const parsed = modelJson.value;
-  if (parsed.status === 'ready' && !validateGroundedOutput(parsed, productContext, ['guidance', 'risks'])) return { ...evidencePending(), pending: productContext.pending ?? [] };
+  if (parsed.status === 'ready' && !validateGroundedOutput(parsed, groundingContext(productContext, request), ['guidance', 'risks'])) return { ...evidencePending(), pending: productContext.pending ?? [] };
   const { grounding: _grounding, ...safePlan } = parsed;
   return { ...safePlan, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, pending: productContext.pending ?? [], productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
 }
@@ -415,7 +438,7 @@ export async function generateContentPackage(root, request, options = {}) {
       usedEndpoints.add(endpoint);
       const issue = proseIssue(prose, endpoint);
       if (issue) return withPending(apiPending(issue));
-      if (!validateGroundedOutput(prose, { ...productContext, module: 'api', request }, ['description', 'intro', 'notas'])) return withPending(evidencePending());
+      if (!validateGroundedOutput(prose, groundingContext(productContext, request), ['description', 'intro', 'notas'])) return withPending(evidencePending());
       const technical = renderApiReference(endpoint, productContext.apiExamples, page);
       const renderedParams = [...technical.body.matchAll(/<Param\s+[^>]*name="([^"]+)"/gu)].map((match) => match[1]);
       if (renderedParams.length !== endpoint.parameters.length) {
@@ -432,14 +455,14 @@ export async function generateContentPackage(root, request, options = {}) {
     }
     const summaryIssue = proseIssue({ title: parsed.summary, description: '', intro: '', notas: [] }, { parameters: [], responseFields: [] });
     if (summaryIssue) return withPending(apiPending(summaryIssue));
-    if (!validateGroundedOutput(parsed, { ...productContext, module: 'api', request }, ['summary'])) return withPending(evidencePending());
+    if (!validateGroundedOutput(parsed, groundingContext(productContext, request), ['summary'])) return withPending(evidencePending());
     return withPending({ ...safePackage, articles, pending: [...new Set([...(productContext.pending ?? []), ...pending])], existing, model: response.model });
   }
   if (parsed.articles.some((article) => article.source === 'api' || /^api\//u.test(article.path ?? ''))) {
     return withPending(apiPending('página API exige fatos estruturados e módulo api'));
   }
-  if (!validateGroundedOutput(parsed, productContext, ['summary']) || parsed.articles.some((article) =>
-    !validateGroundedOutput(article, { ...productContext, module: request.module }, ['description', 'body', 'assistantOverview', 'assistantSuggestions']))) {
+  if (!validateGroundedOutput(parsed, groundingContext(productContext, request), ['summary']) || parsed.articles.some((article) =>
+    !validateGroundedOutput(article, groundingContext(productContext, request), ['description', 'body', 'assistantOverview', 'assistantSuggestions']))) {
     return withPending(evidencePending());
   }
   const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => ({
@@ -521,7 +544,7 @@ export async function generateCanonicalGuide(root, request, options = {}) {
   const raw = parsed.article;
   const grounded = { grounding: raw.grounding, sentences: [raw.description, raw.body, raw.assistantOverview,
     ...raw.assistantSuggestions, ...raw.guide.steps.map((step) => step.text)] };
-  if (!validateGroundedOutput(grounded, productContext, ['sentences'])) return evidencePending();
+  if (!validateGroundedOutput(grounded, groundingContext(productContext, request), ['sentences'])) return evidencePending();
   const { grounding: _grounding, ...article } = raw;
   article.guide.steps = article.guide.steps.map((step) => ({ ...step,
     ...(step.actionId === null ? { actionId: undefined } : {}),
