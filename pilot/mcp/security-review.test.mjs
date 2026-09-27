@@ -144,6 +144,43 @@ test('URL com esquema valida host mesmo quando TLD não está na lista de domín
   assert.deepEqual(examine(bareDomain).blocks, []);
 });
 
+test('destinos de link aceitam apenas formas permitidas e explicam o bloqueio', () => {
+  const safe = { ...article, body: `${article.body}\n\n[x](https://faq.ihelpchat.com/x)` };
+  assert.deepEqual(examine(safe).blocks, []);
+  for (const [name, destination, reason] of [
+    ['sem esquema', '//www.tella.tv/x', /forma.*\/\/|domínio/iu],
+    ['domínio solto', 'www.tella.tv', /forma.*domínio sem esquema/iu],
+    ['esquema desconhecido', 'javascript:alert(1)', /forma.*esquema/iu],
+  ]) {
+    const changed = { ...safe, body: safe.body.replace('https://faq.ihelpchat.com/x', destination) };
+    assert.match(examine(changed).blocks.join(' '), reason, name);
+  }
+  for (const destination of ['/docs/algo', '#secao']) {
+    const changed = { ...safe, body: safe.body.replace('https://faq.ihelpchat.com/x', destination) };
+    assert.deepEqual(examine(changed).blocks, [], destination);
+  }
+  for (const body of [
+    safe.body.replace('[x](https://faq.ihelpchat.com/x)', '<a href="//10.0.0.5/">'),
+    safe.body.replace('[x](https://faq.ihelpchat.com/x)', '<https://www.tella.tv/x>'),
+    safe.body.replace('[x](https://faq.ihelpchat.com/x)', '<VideoEmbed url="//www.tella.tv/x" />'),
+    safe.body.replace('[x](https://faq.ihelpchat.com/x)', '---\nurl: //www.tella.tv/x\n---'),
+  ]) assert.match(examine({ ...safe, body }).blocks.join(' '), /URL ou host fora da API pública/iu);
+  assert.match(examine({ ...safe, body: safe.body.replace('[x](https://faq.ihelpchat.com/x)', '//www.tella.tv/x') }).blocks.join(' '), /URL ou host fora da API pública.*domínio/iu);
+});
+
+test('submitArticle bloqueia link sem esquema antes de escrever draft', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm556-link-'));
+  await mkdir(join(root, 'content/docs'), { recursive: true });
+  const safe = { ...article, path: 'docs/teste/consulta', source: 'produto', contentType: 'guia',
+    body: `${article.body}\n\n[x](https://faq.ihelpchat.com/x) ${'Consulte contatos no iHelp. '.repeat(14)}` };
+  const unsafe = { ...safe, body: safe.body.replace('https://faq.ihelpchat.com/x', '//www.tella.tv/x') };
+  await assert.rejects(submitArticle(root, unsafe, 'draft', 'user:tester'), /URL ou host fora da API pública/iu);
+  const path = join(root, '.drafts/docs/teste/consulta.mdx');
+  await assert.rejects(access(path), { code: 'ENOENT' });
+  assert.equal((await submitArticle(root, safe, 'draft', 'user:tester')).status, 'draft');
+  await access(path);
+});
+
 test('pacote exige confirmação por DELETE e rejeita item alheio', async () => {
   const { root, backend } = await backendFixture();
   const previous = process.env.BACKEND_LOCAL_CHECKOUT;
