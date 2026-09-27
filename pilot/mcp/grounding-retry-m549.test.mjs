@@ -65,9 +65,9 @@ test('página docs publicada no contexto é citável na API; fora do contexto n�
 
 const plan = (cite) => ({ status: 'ready', guidance: claim, questions: [], risks: [], suggestedActions: [],
   grounding: [{ text: claim, citations: [cite] }] });
-async function runPlan(responses) {
+async function runPlan(responses, changedRequest = request) {
   const calls = [];
-  const result = await planContent(process.cwd(), request, { productContext: context, client: { responses: {
+  const result = await planContent(process.cwd(), changedRequest, { productContext: context, client: { responses: {
     create: async (payload) => {
       calls.push(payload);
       return { output_text: JSON.stringify(responses[Math.min(calls.length - 1, responses.length - 1)]), model: 'simulado' };
@@ -76,37 +76,11 @@ async function runPlan(responses) {
   return { result, calls };
 }
 
-test('uma citação inválida seguida de válida refaz o plano com a recusa no prompt', async () => {
+test('citação inválida na orientação interna de API não refaz o plano', async () => {
   const bad = { ...citation, quote: reordered.replace('São páginas NOVAS', 'São páginas ANTIGAS') };
   const { result, calls } = await runPlan([plan(bad), plan(citation)]);
   assert.equal(result.status, 'ready');
-  assert.equal(calls.length, 2);
-  assert.match(JSON.stringify(calls[1].input), /São páginas ANTIGAS/);
-  assert.match(JSON.stringify(calls[1].input), /não é trecho literal/);
-});
-
-test('duas respostas inválidas param após a segunda e informam o motivo', async () => {
-  const bad = { ...citation, quote: reordered.replace('São páginas NOVAS', 'São páginas ANTIGAS') };
-  const { result, calls } = await runPlan([plan(bad), plan(bad), plan(citation)]);
-  assert.equal(result.status, 'needs_evidence');
-  assert.equal(calls.length, 2);
-  assert.match(JSON.stringify(result), /não é trecho literal/);
-});
-
-test('recusa de linha de código informa linha fora do índice no retry', async () => {
-  const code = { repository: 'ihelpchat/olah-ihelp', path: 'ContactsController.cs', lineStart: 999, lineEnd: 999, sha: 'a'.repeat(40) };
-  const { result, calls } = await runPlan([plan(code), plan(citation)]);
-  assert.equal(result.status, 'ready');
-  assert.equal(calls.length, 2);
-  assert.match(JSON.stringify(calls[1].input), /linha fora do índice/);
-});
-
-test('recusa de página fora do contexto informa página não listada no retry', async () => {
-  const page = { source: 'pagina', path: 'docs/ausente', quote: 'A página explica como encontrar contatos da equipe.' };
-  const { result, calls } = await runPlan([plan(page), plan(citation)]);
-  assert.equal(result.status, 'ready');
-  assert.equal(calls.length, 2);
-  assert.match(JSON.stringify(calls[1].input), /página não listada/);
+  assert.equal(calls.length, 1);
 });
 
 const endpoint = { verb: 'GET', route: '/api/v2/contacts', public: true, documented: true,
@@ -169,6 +143,12 @@ test('plano de API rejeita nome técnico ausente dos fatos, mesmo sem exigir cit
   const { result } = await runPlan([{ ...plan(citation), grounding: [], guidance: 'O campo segredo identifica o contato.' }]);
   assert.equal(result.status, 'needs_information');
   assert.match(result.summary, /nome técnico sem fato: segredo/i);
+});
+
+test('plano de API aceita path editorial do pedido na guidance', async () => {
+  const { result } = await runPlan([{ ...plan(citation), guidance: 'Crie páginas novas em `api/contatos/`.' }],
+    { ...request, details: `${details} Páginas novas em api/contatos/.` });
+  assert.equal(result.status, 'ready', result.summary);
 });
 
 test('plano de guia sem citação continua bloqueado com motivo', async () => {
