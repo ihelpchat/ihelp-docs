@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readlink, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const { productSparseFolders } = await import('./local-product-context.mjs');
 const { productCheckoutRefreshHours } = await import('./env-compat.mjs');
-const { syncProductCheckouts } = await import('./product-checkouts.mjs').catch(() => ({}));
+const { syncProductCheckouts, initializeProductCheckouts } = await import('./product-checkouts.mjs').catch(() => ({}));
+const { searchLocalProductContext } = await import('./local-product-context.mjs');
+const { planContent } = await import('./content-ai-service.mjs');
 
 function git(cwd, ...args) {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env,
@@ -50,8 +52,9 @@ await test('sync esparso, token fora do config/log e SHA preservado na falha', a
     assert.match(first.front.sha, /^[a-f0-9]{40}$/u);
     assert.match(first.back.sha, /^[a-f0-9]{40}$/u);
     assert.equal(first.updatedAt, '2026-09-26T12:00:00.000Z');
+    assert.match(await readlink(join(stateDir, 'checkouts/current')), /^gen-/u, 'par publicado por um único symlink');
     for (const [id, role] of [['front', 'frontend'], ['back', 'backend']]) {
-      const checkout = join(stateDir, 'checkouts', id);
+      const checkout = join(stateDir, 'checkouts/current', id);
       assert.deepEqual(git(checkout, 'sparse-checkout', 'list').split('\n').sort(), [...productSparseFolders(role)].sort());
       assert.equal(git(checkout, 'rev-parse', 'HEAD'), first[id].sha);
       assert.doesNotMatch(await readFile(join(checkout, '.git/config'), 'utf8'), /M553_TOKEN_FIXTURE_123/u);
@@ -65,6 +68,8 @@ await test('sync esparso, token fora do config/log e SHA preservado na falha', a
     const second = await syncProductCheckouts({ stateDir, token, repositories });
     assert.notEqual(second.front.sha, first.front.sha, 'fetch traz o ref novo');
     assert.equal(second.back.sha, first.back.sha);
+    assert.equal(git(join(stateDir, 'checkouts/current/front'), 'rev-parse', 'HEAD'), second.front.sha);
+    assert.equal(git(join(stateDir, 'checkouts/current/back'), 'rev-parse', 'HEAD'), second.back.sha);
     await writeFile(join(root, 'front-source/src/pages/new.tsx'), 'third upstream version');
     git(join(root, 'front-source'), 'add', '.');
     git(join(root, 'front-source'), 'commit', '-m', 'third version');
@@ -72,10 +77,78 @@ await test('sync esparso, token fora do config/log e SHA preservado na falha', a
     await rm(repositories.back.url, { recursive: true });
     await assert.rejects(syncProductCheckouts({ stateDir, token, repositories, log: (line) => logs.push(line) }),
       /Sync do produto falhou: back/u);
-    assert.equal(git(join(stateDir, 'checkouts/front'), 'rev-parse', 'HEAD'), second.front.sha);
-    assert.equal(git(join(stateDir, 'checkouts/back'), 'rev-parse', 'HEAD'), second.back.sha);
+    assert.equal(git(join(stateDir, 'checkouts/current/front'), 'rev-parse', 'HEAD'), second.front.sha);
+    assert.equal(git(join(stateDir, 'checkouts/current/back'), 'rev-parse', 'HEAD'), second.back.sha);
     assert.doesNotMatch(logs.join('\n'), /M553_TOKEN_FIXTURE_123/u);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+await test('boot publica checkout para planContent e leitura fixa o par durante sync', async () => {
+  assert.equal(typeof initializeProductCheckouts, 'function', 'boot deve usar inicialização testável');
+  const root = await mkdtemp(join(tmpdir(), 'm553-generation-'));
+  const previous = { front: process.env.PRODUCT_LOCAL_CHECKOUT, back: process.env.BACKEND_LOCAL_CHECKOUT };
+  try {
+    const repositories = {};
+    for (const [id, role, ref, file, word] of [
+      ['front', 'frontend', 'master', 'src/pages/Widget.tsx', 'widget'],
+      ['back', 'backend', 'release/validation', 'Controllers/ChannelController.cs', 'canal'],
+    ]) {
+      const bare = join(root, `${id}.git`);
+      const work = join(root, `${id}-source`);
+      await mkdir(work);
+      git(root, 'init', '--bare', bare);
+      git(work, 'init');
+      git(work, 'checkout', '-b', ref);
+      await mkdir(join(work, file.split('/').slice(0, -1).join('/')), { recursive: true });
+      await writeFile(join(work, file), `export const ${word} = '${word} old';`);
+      git(work, 'add', '.'); git(work, 'commit', '-m', 'old');
+      git(work, 'remote', 'add', 'origin', bare); git(work, 'push', 'origin', ref);
+      repositories[id] = { url: bare, ref, role, work, file, word };
+    }
+    const stateDir = join(root, 'state');
+    const boot = await initializeProductCheckouts({ stateDir, token: 'fixture-token', repositories });
+    assert.equal(boot.front.sha, git(join(stateDir, 'checkouts/current/front'), 'rev-parse', 'HEAD'));
+    assert.equal(process.env.PRODUCT_LOCAL_CHECKOUT, join(stateDir, 'checkouts/current/front'));
+    assert.equal(process.env.BACKEND_LOCAL_CHECKOUT, join(stateDir, 'checkouts/current/back'));
+    const client = { responses: { create: async () => ({ model: 'fixture', output_text: JSON.stringify({
+      status: 'ready', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [],
+    }) }) } };
+    for (const [topic, expected] of [['widget', 'src/pages/Widget.tsx'], ['canal', 'Controllers/ChannelController.cs']]) {
+      const plan = await planContent(new URL('../', import.meta.url).pathname,
+        { topic, module: 'produto', description: `Documentar ${topic}` }, { client, contextOptions: { cache: false } });
+      assert.notEqual(plan.status, 'needs_information', `planContent precisa acessar ${expected}`);
+      assert.ok(plan.productContext.files.some((file) => file.includes(expected)), `match ausente: ${expected}`);
+    }
+    const oldRoot = await realpath(join(stateDir, 'checkouts/current'));
+    for (const id of ['front', 'back']) {
+      const { work, file, word, ref } = repositories[id];
+      await writeFile(join(work, file), `export const ${word} = '${word} new';`);
+      git(work, 'add', '.'); git(work, 'commit', '-m', 'new'); git(work, 'push', 'origin', ref);
+    }
+    let changed = false;
+    const old = await searchLocalProductContext('widget canal', 'produto', { cache: false, readFile: async (path, options) => {
+      if (!changed) {
+        changed = true;
+        await syncProductCheckouts({ stateDir, token: 'fixture-token', repositories });
+      }
+      return readFile(path, options);
+    } });
+    assert.equal(changed, true, 'leitor deve atravessar o ponto de troca');
+    assert.equal(old.code[0].ref, boot.front.sha);
+    assert.equal(old.code[1].ref, boot.back.sha);
+    assert.ok(old.matches.some((match) => match.path === repositories.front.file));
+    assert.ok(old.matches.some((match) => match.path === repositories.back.file));
+    assert.notEqual(await realpath(join(stateDir, 'checkouts/current')), oldRoot);
+    const next = await searchLocalProductContext('widget canal', 'produto', { cache: false });
+    assert.notEqual(next.code[0].ref, old.code[0].ref);
+    assert.notEqual(next.code[1].ref, old.code[1].ref);
+  } finally {
+    if (previous.front === undefined) delete process.env.PRODUCT_LOCAL_CHECKOUT;
+    else process.env.PRODUCT_LOCAL_CHECKOUT = previous.front;
+    if (previous.back === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous.back;
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 await test('intervalo de refresh usa 36 h e rejeita valor inválido', () => {
