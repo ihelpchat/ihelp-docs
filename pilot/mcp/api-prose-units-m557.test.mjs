@@ -151,8 +151,9 @@ test('pergunta documented=false é descartada e registrada quando caminho novo f
   assert.deepEqual(result.questions, []);
   assert.match(result.discardedQuestions.join(' '), /documented=false/u);
 });
-test('pergunta documented=false permanece sem caminho novo no pedido', async () => {
+test('pergunta documented=false sem caminho novo vira pendência não bloqueante', async () => {
   const result = await plan({ ...request, description: 'Criar GET /api/v2/contacts.' });
-  assert.equal(result.status, 'needs_information');
-  assert.match(result.questions.join(' '), /documented=false/u);
+  assert.equal(result.status, 'ready');
+  assert.deepEqual(result.questions, []);
+  assert.match(result.pending.join(' '), /pergunta pendente:.*documented=false/u);
 });

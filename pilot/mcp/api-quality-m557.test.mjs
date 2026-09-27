@@ -46,7 +46,7 @@ test('retorno do serviço prova campos públicos e envelope de lista', () => {
   assert.doesNotMatch(page.body, /Gian|5517936189969/u);
 });
 
-test('DTO extrai somente propriedades diretas da classe escolhida', () => {
+test('DTO extrai propriedades diretas e um nível do DTO aninhado', () => {
   const source = `public class ContactDto {
  public int Id { get; set; }
  public string Nome { get; set; }
@@ -60,8 +60,12 @@ public class CustomDto { public int Id { get; set; } public string Valor { get; 
   });
   assert.deepEqual(endpoint.responseFields.map(({ name, type }) => [name, type]), [
     ['id', 'int'], ['nome', 'string'], ['campos', 'List<CustomDto>'],
+    ['id', 'int'], ['valor', 'string'],
   ]);
-  assert.equal(new Set(endpoint.responseFields.map((field) => field.path)).size, 3);
+  assert.deepEqual(endpoint.responseFields.map((field) => field.path), [
+    'dados[].id', 'dados[].nome', 'dados[].campos', 'dados[].campos[].id', 'dados[].campos[].valor',
+  ]);
+  assert.doesNotMatch(JSON.stringify(endpoint.responseFields), /hidden/u);
 });
 
 test('DTO com BOM conserva linha real da primeira propriedade e das seguintes', () => {
