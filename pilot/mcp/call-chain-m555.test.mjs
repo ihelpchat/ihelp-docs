@@ -79,6 +79,34 @@ test('limite de 12 métodos e ambiguidade explícita', () => {
   assert.match(ambiguous.pending.join('; '), /chamada ambígua: GetContacts/u);
 });
 
+test('base genérica aninhada e modificadores preservam a implementação da interface', () => {
+  const generic = { ...files, 'Comzada.Application/Services/ContactsService.cs': files['Comzada.Application/Services/ContactsService.cs']
+    .replace('public class ContactsService : IContactsService', '[Audit] public sealed partial class ContactsService : Base<List<Contato>>, IContactsService') };
+  const positive = traceCsharpCalls(generic, paths, endpoint);
+  assert.ok(positive.methods.some((item) => item.path.endsWith('ContactsService.cs') && item.method === 'GetContacts'));
+  const constrained = { ...generic, 'Comzada.Application/Services/ContactsService.cs': generic['Comzada.Application/Services/ContactsService.cs']
+    .replace('sealed partial class ContactsService : Base<List<Contato>>, IContactsService {',
+      'abstract partial class ContactsService<T> : Base<Map<T, List<Contato>>>, IContactsService where T : class {') };
+  assert.ok(traceCsharpCalls(constrained, paths, endpoint).methods.some((item) => item.method === 'GetContacts'));
+  const negative = { ...generic, 'Comzada.Application/Services/ContactsService.cs': generic['Comzada.Application/Services/ContactsService.cs'].replace('IContactsService {', 'IOtherService {') };
+  const missed = traceCsharpCalls(negative, paths, endpoint);
+  assert.equal(missed.methods.some((item) => item.method === 'GetContacts'), false);
+  assert.match(missed.pending.join('; '), /chamada não resolvida: GetContacts/u);
+});
+
+test('chamada estática alcança SQL builder e nome ausente gera motivo', () => {
+  const staticFiles = { ...files,
+    'Comzada.Application/Data/ContactsSqlBuilder.cs': files['Comzada.Application/Data/ContactsSqlBuilder.cs'].replace('public object Build', 'public static (string Sql, object Args) Build'),
+    'Comzada.Application/Repositories/ContactsRepository.cs': files['Comzada.Application/Repositories/ContactsRepository.cs']
+      .replace('return _sql.Build(filters);', 'return ContactsSqlBuilder.Build(filters);') };
+  const reached = traceCsharpCalls(staticFiles, paths, endpoint);
+  assert.ok(reached.methods.some((item) => item.path.endsWith('ContactsSqlBuilder.cs') && item.method === 'Build'));
+  const missing = { ...staticFiles, 'Comzada.Application/Repositories/ContactsRepository.cs': staticFiles['Comzada.Application/Repositories/ContactsRepository.cs'].replace('ContactsSqlBuilder.Build(filters)', 'MissingSqlBuilder.Build(filters)') };
+  const trace = traceCsharpCalls(missing, paths, endpoint);
+  assert.equal(trace.methods.some((item) => item.path.endsWith('ContactsSqlBuilder.cs')), false);
+  assert.match(trace.pending.join('; '), /chamada não resolvida: Build/u);
+});
+
 test('prompt corta literal secreto antes de enviar ao provider', async () => {
   const sha = 'a'.repeat(40);
   const context = { groundingRequired: false, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [],
