@@ -230,12 +230,15 @@ test('gramática numérica e nomes em zonas de exemplo bloqueiam com motivo', ()
     ['CPF', `${base.body}\n\nCPF 123.456.789-09`, /dado pessoal/iu],
     ['telefone', `${base.body}\n\n(17) 99261-0896`, /dado pessoal/iu],
     ['nome em prosa de exemplo', base.body.replace('Maria Exemplo', 'João Silva'), /nome de pessoa/iu],
+    ['nome em Ex.:', base.body.replace('Exemplo: pessoa Maria Exemplo', 'Ex.: pessoa João Silva'), /nome de pessoa/iu],
+    ['nome em Por exemplo', base.body.replace('Exemplo: pessoa Maria Exemplo', 'Por exemplo, pessoa João Silva'), /nome de pessoa/iu],
     ['nome em JSON', `${base.body}\n\n` + '```json\n{"name":"João Silva"}\n```', /nome de pessoa/iu],
+    ['nome em código inline', `${base.body}\n\n` + '`João Silva`', /nome de pessoa/iu],
   ]) assert.match(examine({ ...base, body }).blocks.join(' '), reason, name);
   for (const [name, body] of [
     ['sintético', `${base.body}\n\n5500000000000`],
     ['data ISO', `${base.body}\n\n2026-09-27T10:00:00Z`],
-    ['termo do produto', base.body.replace('Maria Exemplo', 'Central de Ajuda')],
+    ['termo do produto', base.body.replace('Maria Exemplo', 'WhatsApp Business')],
   ]) assert.deepEqual(examine({ ...base, body }).blocks, [], name);
 });
 

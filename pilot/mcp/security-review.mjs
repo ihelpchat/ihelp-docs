@@ -2,6 +2,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { parse } from 'yaml';
 import { sensitiveKinds } from './sensitive-data.mjs';
+import { PRODUCT_TERMS } from './product-terms.mjs';
 
 const allowedHosts = new Set(['apiv3.ihelpchat.com', 'app.ihelpchat.com', 'app.tango.us', 'assets.ihelpchat.com',
   'images.ihelpchat.com', 'faq.ihelpchat.com', 'ihelpchat.com.br', 'www.ihelpchat.com.br']);
@@ -13,6 +14,29 @@ const stringsOf = (value) => typeof value === 'string' ? [value]
 const normalizedIds = (text) => [...text.matchAll(/(?<![\da-f])[\da-f][\da-f_:\s-]{22,70}[\da-f](?![\da-f])/giu)]
   .some(([candidate]) => [24, 32].includes(candidate.replace(/[-_\s:]/gu, '').length)
     && /^[\da-f]+$/iu.test(candidate.replace(/[-_\s:]/gu, '')));
+
+const PERSON_NAME = /\b\p{Lu}[\p{L}\p{M}]+(?:[ \t]+\p{Lu}[\p{L}\p{M}]+)+\b/gu;
+const permittedName = (name) => /\b(?:Exemplo|Teste)\b/iu.test(name)
+  || PRODUCT_TERMS.some((term) => term.toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'));
+
+function exampleZones(text) {
+  const zones = [];
+  const prose = text.replace(/```[\s\S]*?```/gu, (block) => { zones.push(block); return '\n'; })
+    .replace(/`[^`\n]+`/gu, (block) => { zones.push(block); return ''; });
+  for (const paragraph of prose.split(/\n\s*\n/u)) {
+    if (/^\s*(?:Exemplo\b|Ex\.:|Por exemplo\b)/iu.test(paragraph)) zones.push(paragraph);
+    else for (const line of paragraph.split('\n')) {
+      if (/^\s*(?:Exemplo\b|Ex\.:|Por exemplo\b)/iu.test(line)
+        || /^\s*[{[]\s*["']|["']\w+["']\s*:/u.test(line)) zones.push(line);
+    }
+  }
+  return zones;
+}
+
+function hasExamplePersonName(text) {
+  return exampleZones(text).some((zone) => [...zone.matchAll(PERSON_NAME)]
+    .some(([name]) => !permittedName(name)));
+}
 
 export function securityReview(article, { facts = {}, request = {} } = {}) {
   const blocks = [];
@@ -37,8 +61,7 @@ export function securityReview(article, { facts = {}, request = {} } = {}) {
   if (article.path?.startsWith('api/')) for (const parameter of facts.parameters ?? []) {
     if (parameter.serverAssigned === true) blocks.push(`Parâmetro ${parameter.name} é preenchido pelo servidor (serverAssigned).`);
   }
-  const exampleValues = [...text.matchAll(/(?:"(?:name|nome|contactName|personName)"\s*:\s*"|(?:name|nome)=["'])([^"'\n]+)["']/giu)].map((match) => match[1]);
-  if (exampleValues.some((value) => /\b\p{Lu}\p{Ll}{2,}(?:\s+-\s+\w+|\s+\p{Lu}\p{Ll}{2,})/u.test(value)))
+  if (hasExamplePersonName(text))
     blocks.push('Exemplo contém nome de pessoa. Use “Pessoa Exemplo”.');
 
   const method = String(article.method ?? '').toUpperCase();

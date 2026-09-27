@@ -1,8 +1,9 @@
 const safe = (value) => String(value ?? '').replace(/[<>{}"`]/gu, '');
-const valueFor = (parameter) => /^(?:int|long|double|decimal|float|short|number)$/iu.test(parameter.type) ? '1'
+export const valueFor = (parameter) => /^(?:int|long|double|decimal|float|short|number)$/iu.test(parameter.type) ? '1'
   : /^bool(?:ean)?$/iu.test(parameter.type) ? 'false'
     : /(?:^|_)(?:id|idref|uuid|contactid)(?:$|_)/iu.test(parameter.name) || /id$/iu.test(parameter.name) ? 'id-exemplo-1'
       : /(?:phone|telefone|celular|whatsapp)/iu.test(parameter.name) ? '5500000000000' : 'exemplo';
+export const isSyntheticNumericExample = (value) => value === valueFor({ name: 'phone', type: 'string' });
 const publicRoute = (route) => route.replace(/^\/api\/v\d+/iu, '');
 
 // The endpoint and the observed page vocabulary are the only inputs to technical MDX.
