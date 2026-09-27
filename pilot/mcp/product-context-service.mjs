@@ -142,6 +142,8 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
   let contextCode = code;
   let nonPublicEndpoints = false;
   let pending = [];
+  let allowedBackendFiles = new Set();
+  let allowedEndpointKeys = new Set();
   if (normalize(module) === 'api' || /\bendpoint\b|\/api\/v\d/iu.test(topic)) {
     endpoints = code.flatMap((source) => source.endpoints ?? []);
     const docsRoot = join(provided.publicReferenceRoot ?? root, 'content/docs/api');
@@ -187,7 +189,8 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
       : [`endpoint não público: confirmar (${item.verb} ${item.route})`]);
     endpointPending.push(...requested.filter((endpoint) => !endpoints.some((item) => cited(item, endpoint)))
       .map((endpoint) => `endpoint citado não encontrado (${endpoint.verb} ${endpoint.route})`));
-    const allowedBackendFiles = new Set(endpoints.filter((item) => item.public).map((item) => item.file));
+    allowedBackendFiles = new Set(endpoints.filter((item) => item.public).map((item) => item.file));
+    allowedEndpointKeys = new Set(endpoints.filter((item) => item.public).map((item) => `${item.verb} ${item.route}`));
     nonPublicEndpoints = endpoints.some((item) => !item.public);
     endpoints = endpoints.filter((item) => item.public);
     contextCode = code.map((source) => {
@@ -216,6 +219,8 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     },
     coverage: relevantCoverage,
     endpoints,
+    callEvidence: contextCode.flatMap((source) => (source.callEvidence ?? [])
+      .filter((item) => allowedBackendFiles.has(item.controllerFile) && allowedEndpointKeys.has(item.endpointKey))),
     nonPublicEndpoints,
     pending,
     apiExamples,
@@ -227,4 +232,9 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     repository: code[0]?.repository ?? repositories[0].repository,
     ref: code[0]?.ref ?? repositories[0].ref,
   };
+}
+
+export function publicProductContext(context) {
+  const { callEvidence: _internal, code = [], ...facts } = context;
+  return { ...facts, code: code.map(({ callEvidence: _private, ...source }) => source) };
 }

@@ -8,11 +8,12 @@ import { envCompatibility } from './env-compat.mjs';
 import ts from 'typescript';
 import uiSynonyms from './ui-synonyms.json' with { type: 'json' };
 import { readCsharpEndpoints } from '../lib/csharp-endpoints.mjs';
+import { traceCsharpCalls } from '../lib/csharp-call-chain.mjs';
 import { routeMatches } from './api-route-match.mjs';
 
 const run = promisify(execFile);
 const SOURCE = /\.(?:ts|tsx|js|jsx|cs)$/iu;
-const BLOCKED = /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.git|node_modules|dist|build|out|bin|obj|data|logs?|backups?|coverage|migrations?|secrets?|credentials?|fixtures?|__tests__|tests?|public)(?:\/|$)/iu;
+const BLOCKED = /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.git|node_modules|dist|build|out|bin|obj|logs?|backups?|coverage|migrations?|secrets?|credentials?|fixtures?|__tests__|tests?|public)(?:\/|$)/iu;
 const BLOCKED_FILE = /(?:^|\/)(?:[^/]*(?:key|secret|token|credential|password|env|config)[^/]*|[^/]*\.(?:min|designer|generated|spec|test)|styles?)\.(?:ts|tsx|js|jsx|cs)$/iu;
 const SHA = /^[a-f0-9]{40}$/u;
 const MAX_LISTED = 10_000;
@@ -29,7 +30,9 @@ const SOURCES = Object.freeze({
   frontend: { repository: 'ihelpchat/front-react', role: 'frontend', env: envCompatibility.localCheckouts.frontend,
     folders: ['src/components', 'src/pages', 'src/features', 'src/routes'] },
   backend: { repository: 'ihelpchat/olah-ihelp', role: 'backend', env: envCompatibility.localCheckouts.backend,
-    folders: ['Controllers', 'Comzada.Application/Controllers', 'ihelp.PublicApi'] },
+    folders: ['Controllers', 'Comzada.Application/Controllers', 'ihelp.PublicApi',
+      'Comzada.Application/Services', 'Comzada.Application/Repositories', 'Comzada.Application/Data',
+      'Comzada.Service/ServicesMySQL', 'Comzada.Infra.Data/Repository', 'Comzada.Domain/Interfaces'] },
 });
 const API_DTO_FOLDERS = Object.freeze(['Comzada.Domain/EntitiesV2', 'Comzada.Domain/Entities_v2']);
 export function productSparseFolders(role) {
@@ -76,7 +79,9 @@ export function isAllowedSourcePath(path, role = 'frontend', includeApiDto = fal
     path.startsWith(`${folder}/`) && /^[\w/]+\.cs$/u.test(path.slice(folder.length + 1)));
   const publicConfigurationController = role === 'backend' && /^Comzada\.Application\/Controllers\/V2\/Configurations(?:Users|Departments)Controller\.cs$/u.test(path);
   return (dto || folders.some((folder) => path.startsWith(`${folder}/`)))
-    && SOURCE.test(path) && !BLOCKED.test(path) && (publicConfigurationController || !BLOCKED_FILE.test(path))
+    && SOURCE.test(path) && !BLOCKED.test(path)
+    && (!/(?:^|\/)data(?:\/|$)/iu.test(path) || (role === 'backend' && path.startsWith('Comzada.Application/Data/')))
+    && (publicConfigurationController || !BLOCKED_FILE.test(path))
     && !path.startsWith('/') && !path.split('/').includes('..');
 }
 
@@ -227,8 +232,9 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
     const phrase = normalize(topic).trim();
     if (!terms.length) return pending(source, 'Tema sem termos pesquisáveis');
     const rawTerms = [...new Set([...terms, ...`${topic} ${module}`.split(/[^\p{L}\p{N}]+/u).map((word) => word.toLowerCase())])];
-    const textual = await candidatePaths(root, paths, terms, topic, deadline);
-    const pathFallback = paths.filter((path) => moduleTerms.some((term) => normalize(path).includes(term)));
+    const searchPaths = source.role === 'backend' ? paths.filter((path) => /Controller\.cs$/u.test(path)) : paths;
+    const textual = await candidatePaths(root, searchPaths, terms, topic, deadline);
+    const pathFallback = searchPaths.filter((path) => moduleTerms.some((term) => normalize(path).includes(term)));
     const candidates = [...new Set([...textual, ...pathFallback])]
       .sort((a, b) => pathRelevance(b, terms, moduleTerms) - pathRelevance(a, terms, moduleTerms)).slice(0, 64);
     let totalBytes = 0;
@@ -279,6 +285,7 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
     }
     if ((await git(root, deadline, 'rev-parse', 'HEAD')).toString().trim() !== sha || (await git(root, deadline, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Fonte alterada durante a leitura');
     let endpoints = [];
+    const callEvidence = [];
     if (source.role === 'backend' && (normalize(module) === 'api' || /\b(?:endpoint|\/api\/v\d)\b/iu.test(topic))) {
       const apiTerms = terms.filter((term) => term !== 'api');
       const controllerPaths = paths.filter((path) => /Controller\.cs$/u.test(path));
@@ -321,11 +328,44 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
           const dtoContent = await deadline.wait(reader(join(root, dtoPath), { signal: deadline.signal }));
           dtoSources.push({ file: dtoPath, source: dtoContent });
         }
-        endpoints.push(...readCsharpEndpoints(content, path, { dtoSources }).map((endpoint) => ({ ...endpoint, file: path, sha })));
+        const found = readCsharpEndpoints(content, path, { dtoSources }).map((endpoint) => ({ ...endpoint, file: path, sha }));
+        endpoints.push(...found);
+        for (const endpoint of found) {
+          const sources = { [path]: content };
+          // Filename resolution bounds reads to types named by reached methods.
+          for (let depth = 0; depth < 3; depth++) {
+            const trace = traceCsharpCalls(sources, Object.keys(sources), endpoint);
+            const types = new Set(trace.neededTypes);
+            const next = paths.filter((candidate) => types.has(candidate.split('/').at(-1).replace(/\.cs$/u, ''))
+              || types.has(`I${candidate.split('/').at(-1).replace(/\.cs$/u, '')}`)).filter((candidate) => !(candidate in sources)).slice(0, 24);
+            if (!next.length) break;
+            for (const candidate of next) {
+              if (await hasSymlink(join(root, candidate), root)) continue;
+              const raw = await deadline.wait(reader(join(root, candidate), { signal: deadline.signal }));
+              if (/\b(?:ConnectionString|Server\s*=|Password\s*=|Data Source\s*=|Initial Catalog\s*=)/iu.test(raw)) {
+                endpoint.pending.push(`arquivo com connection string bloqueado: ${candidate}`);
+                continue;
+              }
+              if (raw.length <= MAX_FILE_BYTES) sources[candidate] = raw;
+            }
+          }
+          const trace = traceCsharpCalls(sources, Object.keys(sources), endpoint);
+          endpoint.pending.push(...trace.pending);
+          for (const method of trace.methods) {
+            const cut = method.excerpt.replace(/"(?:[^"\\]|\\.)*"/gu, (literal) =>
+              /(?:Server\s*=|Password\s*=|token|secret|credential|https?:\/\/[^\s]*@)/iu.test(literal) ? '"[REDACTED]"' : literal);
+            const excerpt = redactSensitiveData(cut);
+            if (containsSensitiveData(excerpt, { detectOpaque: true })) {
+              endpoint.pending.push(`trecho sensível: ${method.path}:${method.start}`);
+              continue;
+            }
+            callEvidence.push({ ...method, excerpt, controllerFile: path, endpointKey: `${endpoint.verb} ${endpoint.route}`, repository: source.repository, ref: sha, sha });
+          }
+        }
       }
     }
     if ((await git(root, deadline, 'rev-parse', 'HEAD')).toString().trim() !== sha || (await git(root, deadline, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Fonte alterada durante a leitura');
-    return { available: true, repository: source.repository, ref: source.sha, role: source.role, endpoints, matches: matches
+    return { available: true, repository: source.repository, ref: source.sha, role: source.role, endpoints, callEvidence, matches: matches
       .filter(({ path }) => redactSensitiveData(path) === path)
       .sort((a, b) => b.score - a.score).slice(0, 8)
       .map(({ score: _score, path, excerpt, ...match }) => ({ ...match, path, excerpt: redactSensitiveData(excerpt) })) };

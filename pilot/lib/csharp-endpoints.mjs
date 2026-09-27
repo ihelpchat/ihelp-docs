@@ -81,8 +81,16 @@ function dtoFields(dtoSources, type) {
     const declaration = new RegExp(`\\b(?:class|record)\\s+${type}\\b`, 'u').exec(source);
     if (!declaration) continue;
     const body = source.slice(declaration.index).split(/\n\s*\}\s*(?:;|$)/u)[0];
-    return [...body.matchAll(/\bpublic\s+([\w<>?,\[\]]+)\s+(\w+)\s*\{\s*get\s*;/gu)]
-      .map((match) => ({ name: camel(match[2]), type: match[1], source: `${file}:${lineOf(source, declaration.index + match.index)}` }));
+    return [...body.matchAll(/\bpublic\s+([\w<>?,\[\]]+)\s+(\w+)\s*\{\s*get\s*;[^}]*\}\s*(?:=\s*([^;]+);)?/gu)]
+      .map((match) => {
+        const initializer = match[3]?.trim();
+        const value = initializer && (/^-?\d+(?:\.\d+)?$/u.test(initializer) ? Number(initializer)
+          : /^(?:true|false)$/u.test(initializer) ? initializer === 'true'
+            : /^"[^"\n]*"$/u.test(initializer) ? initializer.slice(1, -1)
+              : /^new\s+List<\w+>\s*\(\s*\)$/u.test(initializer) ? [] : undefined);
+        return { name: camel(match[2]), type: match[1], source: `${file}:${lineOf(source, declaration.index + match.index)}`,
+          ...(value !== undefined ? { default: value } : {}) };
+      });
   }
   return [];
 }
@@ -209,8 +217,12 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       const authorizationSource = authorizationAttribute ? `${file}:${lineOf(source, authorizationAttribute.at)}` : null;
       const rawParameters = reference ? signatureParameters(t.slice(i + 1, end - 1), route, dtoSources, file, source) : undefined;
       const actionBody = actionBodyOf(source, t, end);
-      const assigned = new Set([...actionBody.matchAll(/\b(\w+)\.(\w+)\s*=(?!=)/gu)].map((match) => match[2].toLowerCase()));
-      const parameters = rawParameters?.filter((item) => item.in !== 'query' || !assigned.has(item.name.toLowerCase()))
+      const assigned = new Set([...actionBody.matchAll(/\b(\w+)\.(\w+)\s*=(?!=)/gu)]
+        .filter((match) => t.slice(i + 1, end - 1).some((token) => token.value === match[1]))
+        .map((match) => match[2].toLowerCase()));
+      const serverAssigned = rawParameters?.filter((item) => assigned.has(item.name.toLowerCase()))
+        .map((item) => ({ name: item.name, serverAssigned: true, source: `${file}:${lineOf(source, source.indexOf(actionBody) + actionBody.search(new RegExp(`\\b\\w+\\.${item.name}\\s*=`, 'iu')))}` }));
+      const parameters = rawParameters?.filter((item) => !assigned.has(item.name.toLowerCase()))
         .map(({ dtoType: _dtoType, ...item }) => ({ ...item, ...(item.in === 'route' ? { required: !optionalNames.has(item.name.toLowerCase()) } : {}), source: item.source ?? location }));
       const declaration = source.slice(Math.max(0, source.lastIndexOf('public ', t[i - 1].at)), t[i - 1].at);
       const declaredResultType = responseTypeOf(declaration, pending);
@@ -220,7 +232,7 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       const responseFields = fields.length ? fields : null;
       const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : [];
       endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
-        ...(reference ? { controllerRoute, parameters, responseFields, responseType: resultType, pending: responsePending, optionalAlias, optionalAliases, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
+        ...(reference ? { controllerRoute, parameters, serverAssigned, responseFields, responseType: resultType, pending: responsePending, optionalAlias, optionalAliases, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
           routeSource, actionRouteSource: verbSource, verbSource, authorizationSource, authorization: policy } : {}) });
       pending = [];
     }

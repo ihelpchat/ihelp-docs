@@ -4,6 +4,13 @@ import { readCsharpEndpoints } from '../lib/csharp-endpoints.mjs';
 const { traceCsharpCalls = () => ({ methods: [], pending: [] }) } = await import('../lib/csharp-call-chain.mjs').catch(() => ({}));
 import { isAllowedSourcePath, productSparseFolders } from './local-product-context.mjs';
 import { validateGroundedOutput, planContent } from './content-ai-service.mjs';
+import { publicProductContext } from './product-context-service.mjs';
+import { getIhelpContext } from './product-context-service.mjs';
+import { renderApiReference } from './api-reference-render.mjs';
+import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const controller = `
 [Route("api/v2/contacts")]
@@ -35,6 +42,7 @@ const files = {
 };
 const paths = Object.keys(files).filter((path) => path.endsWith('.cs'));
 const endpoint = readCsharpEndpoints(controller, 'Controllers/ContactsController.cs', { dtoSources: [{ file: 'Comzada.Domain/EntitiesV2/Filters.cs', source: dto }] })[0];
+endpoint.file = 'Controllers/ContactsController.cs';
 
 test('padrões DTO e campo atribuído no servidor', () => {
   assert.deepEqual(endpoint.parameters.find((item) => item.name === 'limit')?.default, 20);
@@ -42,6 +50,8 @@ test('padrões DTO e campo atribuído no servidor', () => {
   assert.deepEqual(endpoint.parameters.find((item) => item.name === 'departmentIds')?.default, []);
   assert.equal(endpoint.parameters.some((item) => item.name === 'businessId'), false);
   assert.equal(endpoint.serverAssigned?.some((item) => item.name === 'businessId' && item.serverAssigned === true), true);
+  const rendered = renderApiReference({ ...endpoint, parameters: endpoint.parameters, public: true }, [], { title: 'Contatos', components: ['Params', 'Param'] });
+  assert.match(JSON.stringify(rendered), /padrão: 20/u);
 });
 
 test('cadeia alcança SQL, respeita profundidade e arquivos bloqueados', () => {
@@ -51,28 +61,83 @@ test('cadeia alcança SQL, respeita profundidade e arquivos bloqueados', () => {
   assert.equal(trace.methods.some((item) => item.path.endsWith('appsettings.json')), false);
   assert.equal(isAllowedSourcePath('Comzada.Application/Data/appsettings.json', 'backend'), false);
   assert.ok(productSparseFolders('backend').includes('Comzada.Application/Data'));
-  const fourth = traceCsharpCalls({ ...files, 'Comzada.Application/Data/ContactsSqlBuilder.cs': files['Comzada.Application/Data/ContactsSqlBuilder.cs'].replace('return "limit 20";', 'return _fourth.Read();') }, paths, endpoint);
+  const fourthPath = 'Comzada.Application/Data/FourthService.cs';
+  const fourth = traceCsharpCalls({ ...files, 'Comzada.Application/Data/ContactsSqlBuilder.cs': files['Comzada.Application/Data/ContactsSqlBuilder.cs'].replace('public object Build', 'private readonly FourthService _fourth; public object Build').replace('return "limit 20";', 'return _fourth.Read();'),
+    [fourthPath]: 'public class FourthService { public object Read() { return null; } }' }, [...paths, fourthPath], endpoint);
   assert.equal(fourth.methods.some((item) => item.method === 'Read'), false);
+  assert.match(fourth.pending.join('; '), /limite de profundidade: 3/u);
 });
 
 test('limite de 12 métodos e ambiguidade explícita', () => {
-  const many = { ...files, 'Comzada.Application/Services/ContactsService.cs': files['Comzada.Application/Services/ContactsService.cs'].replace('return _repo.Query(filters);', Array.from({ length: 13 }, (_, i) => `_repo.Query${i}(filters);`).join(' ') ) };
+  const many = { ...files, 'Controllers/ContactsController.cs': controller.replace('return _service.GetContacts(filters);', Array.from({ length: 13 }, (_, i) => `_service.M${i}(filters);`).join(' ')),
+    'Comzada.Application/Services/ContactsService.cs': `public class ContactsService : IContactsService { ${Array.from({ length: 13 }, (_, i) => `public object M${i}(Filters filters) { return filters; }`).join(' ')} }` };
   const trace = traceCsharpCalls(many, paths, endpoint);
-  assert.ok(trace.methods.length <= 12);
+  assert.equal(trace.methods.length, 12);
+  assert.equal(trace.methods.some((item) => item.method === 'M12'), false);
+  assert.match(trace.pending.join('; '), /limite de métodos: 12/u);
   const ambiguous = traceCsharpCalls({ ...files, 'Comzada.Application/Services/OtherContactsService.cs': files['Comzada.Application/Services/ContactsService.cs'].replace('class ContactsService', 'class OtherContactsService') }, [...paths, 'Comzada.Application/Services/OtherContactsService.cs'], endpoint);
   assert.match(ambiguous.pending.join('; '), /chamada ambígua: GetContacts/u);
+});
+
+test('prompt corta literal secreto antes de enviar ao provider', async () => {
+  const sha = 'a'.repeat(40);
+  const context = { groundingRequired: false, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [],
+    endpoints: [{ ...endpoint, sha, public: true, documented: true }],
+    callEvidence: [{ repository: 'ihelpchat/olah-ihelp', path: 'Comzada.Infra.Data/Repository/ContactsSqlBuilder.cs', start: 5, end: 5,
+      sha, ref: sha, excerpt: 'return "Server=db.fixture;Password=synthetic-secret";' }] };
+  let prompt;
+  await planContent(new URL('../', import.meta.url).pathname, { topic: 'Contatos', module: 'api', description: 'Documentar contatos.' },
+    { productContext: context, client: { responses: { create: async (payload) => {
+      prompt = JSON.stringify(payload.input);
+      return { output_text: JSON.stringify({ status: 'needs_information', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [] }) };
+    } } } });
+  assert.match(prompt, /\[REDACTED\]/u);
+  assert.doesNotMatch(prompt, /synthetic-secret|Server=db\.fixture/u);
 });
 
 test('índice aceita SQL alcançado e rejeita arquivo externo', async () => {
   const trace = traceCsharpCalls(files, paths, endpoint);
   const sql = trace.methods.find((item) => item.method === 'Build');
   const sha = 'a'.repeat(40), repository = 'ihelpchat/olah-ihelp';
-  const context = { groundingRequired: true, matches: [], endpoints: [{ ...endpoint, sha, public: true, documented: true }], callEvidence: trace.methods.map((item) => ({ ...item, repository, sha, ref: sha })) };
+  const context = { groundingRequired: true, matches: [], code: [{ available: true, callEvidence: trace.methods }], support: { categories: [], rules: [] }, coverage: [], apiExamples: [], endpoints: [{ ...endpoint, sha, public: true, documented: true }], callEvidence: trace.methods.map((item) => ({ ...item, repository, sha, ref: sha })) };
   const claim = 'O SQL aplica os filtros.';
   const output = (path, line) => ({ guidance: claim, grounding: [{ text: claim, citations: [{ repository, path, sha, lineStart: line, lineEnd: line }] }] });
   assert.equal(validateGroundedOutput(output(sql.path, sql.start), context, ['guidance']), true);
   assert.equal(validateGroundedOutput(output('Comzada.Application/Data/Other.cs', sql.start), context, ['guidance']), false);
+  assert.doesNotMatch(JSON.stringify(publicProductContext(context)), /without paging|limit 20/u);
   const request = { topic: 'Contatos', module: 'api', description: claim };
   const result = await planContent(new URL('../', import.meta.url).pathname, request, { productContext: context, client: { responses: { create: async () => ({ output_text: JSON.stringify({ status: 'ready', ...output(sql.path, sql.start), questions: [], risks: [], suggestedActions: [] }) }) } } });
   assert.equal(result.status, 'ready');
+});
+
+test('checkout sintético alimenta contexto interno sem devolver SQL na ferramenta', async () => {
+  const work = await mkdtemp(join(tmpdir(), 'm555-'));
+  const previous = process.env.BACKEND_LOCAL_CHECKOUT;
+  const git = (...args) => {
+    const result = spawnSync('git', args, { cwd: work, encoding: 'utf8', env: { ...process.env,
+      GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'fixture@example.test',
+      GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'fixture@example.test' } });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  try {
+    git('init');
+    for (const [path, source] of Object.entries(files)) {
+      await mkdir(dirname(join(work, path)), { recursive: true });
+      await writeFile(join(work, path), source);
+    }
+    git('add', '.'); git('commit', '-m', 'synthetic');
+    process.env.BACKEND_LOCAL_CHECKOUT = await realpath(work);
+    const context = await getIhelpContext(new URL('../', import.meta.url).pathname, 'contacts', 'api',
+      { repositoryIds: ['backend'], cache: false, explicitEndpoints: [{ verb: 'GET', route: '/api/v2/contacts' }] });
+    assert.equal(context.endpoints[0]?.parameters.find((item) => item.name === 'limit')?.default, 20, JSON.stringify({ code: context.code.map((item) => ({ reason: item.reason, endpoints: item.endpoints })), pending: context.pending }));
+    assert.ok(context.callEvidence.some((item) => item.path.endsWith('ContactsSqlBuilder.cs')),
+      JSON.stringify({ evidence: context.callEvidence.map((item) => item.path), code: context.code.map((item) => ({ reason: item.reason, paths: item.callEvidence?.map((entry) => entry.path) })), pending: context.pending }));
+    const visible = JSON.stringify(publicProductContext(context));
+    assert.doesNotMatch(visible, /without paging|limit 20|ContactsSqlBuilder/u);
+    assert.doesNotMatch(visible, /BusinessId.*"in":"query"/u);
+  } finally {
+    if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous;
+    await rm(work, { recursive: true, force: true });
+  }
 });

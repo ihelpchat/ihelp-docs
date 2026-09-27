@@ -170,7 +170,10 @@ function evidenceIndex(context) {
     return { repository: endpoint.repository ?? 'ihelpchat/olah-ihelp', path, line,
       sha: endpoint.sha, ref: endpoint.sha };
   };
-  return [...context.matches ?? [], ...(context.endpoints ?? []).flatMap((endpoint) => [
+  return [...context.matches ?? [], ...(context.callEvidence ?? []).flatMap((item) =>
+    Array.from({ length: Math.max(0, item.end - item.start + 1) }, (_, offset) => ({
+      repository: item.repository, path: item.path, line: item.start + offset, sha: item.sha, ref: item.ref }))),
+  ...(context.endpoints ?? []).flatMap((endpoint) => [
     endpoint.source, endpoint.routeSource, endpoint.actionRouteSource, endpoint.verbSource,
     endpoint.authorizationSource, ...(endpoint.parameters ?? []).map((item) => item.source),
     ...(endpoint.responseFields ?? []).map((item) => item.source),
@@ -333,6 +336,7 @@ function requestText(request, existing, productContext) {
     request.tangoUrl ? `Tango já existente: ${request.tangoUrl}` : '',
     `Documentação publicada semelhante (fonte editorial):\n${existing.length ? existing.map((item) => `- ${item.title} (${item.path}): ${item.description}${item.body ? `\n${item.body}` : ''}`).join('\n') : '- Nenhum'}`,
     `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${redactSensitiveData(item.path)} LINHA ${item.line ?? 'não informada'} SHA ${item.sha ?? item.ref}\n${redactSensitiveData(item.excerpt)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
+    request.module === 'api' && productContext.callEvidence?.length ? `TRECHOS INTERNOS ALCANÇADOS (cite arquivo:linha; não publique código):\n${productContext.callEvidence.map((item) => `${item.path}:${item.start}-${item.end}\n${redactSensitiveData(item.excerpt.replace(/"(?:[^"\\]|\\.)*"/gu, (literal) => /(?:Server\s*=|Password\s*=|token|secret|credential|https?:\/\/[^\s]*@)/iu.test(literal) ? '"[REDACTED]"' : literal))}`).join('\n\n')}` : '',
     request.module === 'api' ? `FATOS ESTRUTURADOS DE ENDPOINTS (somente public=true é gerável):\n${JSON.stringify(selectedEndpoints.length ? selectedEndpoints : productContext.endpoints ?? [])}\nFORMATO REAL DAS PÁGINAS API:\n${JSON.stringify(productContext.apiExamples ?? [])}` : '',
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
     `Regras do suporte:\n${productContext.support?.rules?.map((item) => `- ${item}`).join('\n') ?? '- Nenhuma'}`,
@@ -355,7 +359,7 @@ function groundingPending(context) {
   const missingCitation = context.pending?.filter((item) => item.startsWith('endpoint citado não encontrado')) ?? [];
   if (missingCitation.length) return { status: 'needs_information', summary: missingCitation.join('; '),
     questions: missingCitation, articles: [], pending: context.pending };
-  if (!context.groundingRequired || (context.code.length && context.code.every(({ available }) => available) && context.matches.length)) return null;
+  if (!context.groundingRequired || (context.code.length && context.code.every(({ available }) => available) && (context.matches.length || context.callEvidence?.length))) return null;
   return {
     status: 'needs_information',
     summary: 'Código do produto indisponível ou sem evidência para este tema.',
