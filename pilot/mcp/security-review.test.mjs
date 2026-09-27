@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, access, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, access, realpath, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -39,6 +39,7 @@ test('docs_generate_package revisa página docs antes de devolvê-la', async () 
   });
   const allowed = await generate(safe);
   assert.equal(allowed.status, 'ready', allowed.questions?.join('; '));
+  assert.deepEqual(allowed.securityWarnings, []);
   assert.equal(allowed.articles.length, 1);
   const blocked = await generate({ ...safe, body: `${body} https://10.0.0.5/internal` });
   assert.notEqual(blocked.status, 'ready');
@@ -61,6 +62,7 @@ public class ContactsController {
   [HttpDelete] public IActionResult Delete() { return null; }
   [HttpDelete("delete-a")] public IActionResult DeleteA() { return null; }
   [HttpDelete("delete-b")] public IActionResult DeleteB() { return null; }
+  [HttpGet("{contactId}")] public IActionResult Get(string contactId) { return null; }
 }
 public class ContactRequest { public string id { get; set; } }`);
   execFileSync('git', ['init', '-q', backend]);
@@ -196,7 +198,8 @@ test('extrator reúne comando continuado e ignora URL fora da API', () => {
     body: `curl --request DELETE \\\n  "https://apiv3.ihelpchat.com/api/v2/contacts/delete-b"\n\n` +
       'fetch("https://apiv3.ihelpchat.com/api/v2/contacts", { "method": "POST" })\n\n' +
       'https://faq.ihelpchat.com/ihelp-docs/x' };
-  assert.deepEqual(extractCitedEndpoints(candidate), { endpoints: [
+  const { examples: _examples, ...extracted } = extractCitedEndpoints(candidate);
+  assert.deepEqual(extracted, { endpoints: [
     { method: 'DELETE', endpoint: '/api/v2/contacts/delete-a' },
     { method: 'DELETE', endpoint: '/api/v2/contacts/delete-b' },
     { method: 'POST', endpoint: '/api/v2/contacts' },
@@ -221,6 +224,82 @@ test('positivo seguro e negativos de uma alteração explicam bloqueio', () => {
     assert.match(examine({ ...article, body: changed }).blocks.join(' '), reason, name);
   }
   assert.match(examine(article, { facts: { parameters: [{ name: 'id', in: 'route', serverAssigned: true }] } }).blocks.join(' '), /id|serverAssigned|servidor/iu);
+});
+
+test('path do exemplo respeita cada segmento do template e o valor sintético', async () => {
+  const { root, backend } = await backendFixture();
+  const previous = process.env.BACKEND_LOCAL_CHECKOUT;
+  process.env.BACKEND_LOCAL_CHECKOUT = backend;
+  const base = { ...article, endpoint: '/contacts/{contactId}',
+    body: article.body.replace('/contacts/id-exemplo-1', '/contacts/{contactId}') };
+  try {
+    for (const [segment, status, reason] of [
+      ['{contactId}', 'dry_run'], ['id-exemplo-1', 'dry_run'],
+      ['12345', 'rejected', /path de exemplo com valor real em contactId; use o valor sintético/iu],
+      ['1', 'rejected', /path de exemplo com valor real em contactId; use o valor sintético/iu],
+    ]) {
+      const changed = { ...base, body: base.body.replace('{contactId}', segment) };
+      if (status === 'rejected') await assert.rejects(
+        submitContentPackage(root, [changed], 'dry_run', 'user:tester'), reason);
+      else assert.equal((await submitContentPackage(root, [changed], 'dry_run', 'user:tester')).status, status);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous;
+  }
+});
+
+test('segmento literal de exemplo precisa coincidir com o template factual', () => {
+  const facts = { route: '/api/v2/contacts/{contactId}',
+    parameters: [{ name: 'contactId', type: 'string' }] };
+  assert.deepEqual(review.securityReview(article, { facts,
+    examples: [{ method: 'GET', endpoint: '/api/v2/contacts/{contactId}' }] }).blocks, []);
+  assert.match(review.securityReview(article, { facts,
+    examples: [{ method: 'GET', endpoint: '/api/v2/people/{contactId}' }] }).blocks.join(' '),
+  /path de exemplo diverge do template em contacts/iu);
+});
+
+test('submitArticle em draft mantém o aviso de DELETE confirmado', async () => {
+  const { root, backend } = await backendFixture();
+  const previous = process.env.BACKEND_LOCAL_CHECKOUT;
+  process.env.BACKEND_LOCAL_CHECKOUT = backend;
+  const destructive = { ...article, method: 'DELETE', endpoint: '/api/v2/contacts',
+    body: article.body.replace('GET https://apiv3.ihelpchat.com/api/v2/contacts/id-exemplo-1',
+      'DELETE https://apiv3.ihelpchat.com/api/v2/contacts') };
+  try {
+    const result = await submitArticle(root, destructive, 'draft', 'user:tester',
+      { confirmations: ['DELETE /api/v2/contacts'] });
+    await readFile(join(root, result.path), 'utf8');
+    assert.match(result.securityWarnings.join(' '), /DELETE/iu);
+  } finally {
+    if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+    else process.env.BACKEND_LOCAL_CHECKOUT = previous;
+  }
+});
+
+test('docs_generate_package mantém aviso e exige confirmação de DELETE', async () => {
+  const endpoint = { verb: 'DELETE', route: '/api/v2/contacts', public: true, documented: true,
+    policy: 'authenticated',
+    parameters: [], responseFields: [] };
+  const context = { groundingRequired: false, matches: [], code: [], endpoints: [endpoint],
+    apiExamples: [{ sections: ['Exemplo'], languages: ['bash'] }] };
+  const prose = { path: 'api/teste/apagar-contatos', endpoint: 'DELETE /contacts', title: 'Apagar contatos',
+    description: 'Apaga contatos cadastrados após a confirmação da operação.',
+    intro: 'Confira os contatos antes de apagar.', notas: [], grounding: [] };
+  const generate = (confirmations) => generateContentPackage(process.cwd(),
+    { module: 'api', topic: 'Apagar contatos', confirmations }, {
+      productContext: context, plan: { status: 'ready', guidance: 'Documente o endpoint.', questions: [] },
+      client: { responses: { create: async () => ({ output_text: JSON.stringify({
+        status: 'ready', summary: 'Referência de contatos.', questions: [], articles: [prose], grounding: [],
+      }), model: 'simulado' }) } },
+    });
+  const confirmed = await generate(['DELETE /contacts']);
+  assert.equal(confirmed.status, 'ready', confirmed.questions?.join('; '));
+  assert.match(confirmed.securityWarnings.join(' '), /DELETE/iu);
+  const pending = await generate([]);
+  assert.equal(pending.status, 'needs_information');
+  assert.match(pending.questions.join(' '), /DELETE \/contacts/iu);
+  assert.match(pending.securityWarnings.join(' '), /DELETE/iu);
 });
 
 test('DELETE sem confirmação retorna needs_information e não escreve no GitHub', async () => {
