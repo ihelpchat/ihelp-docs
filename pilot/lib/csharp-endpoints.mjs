@@ -227,7 +227,43 @@ function actionBodyOf(source, items, start) {
   return '';
 }
 
-function serviceResponse(body, controllerSource, serviceSources) {
+function simpleType(type) {
+  const value = String(type ?? '').replace(/\s|\?/gu, '');
+  if (/^(?:List|IEnumerable)<|\[\]$/u.test(value)) return 'list';
+  if (/^string$/iu.test(value)) return 'string';
+  if (/^(?:int|long|short|double|decimal|float)$/iu.test(value)) return 'number';
+  if (/^bool$/iu.test(value)) return 'boolean';
+  return null;
+}
+
+function callArguments(body, open) {
+  const parts = [];
+  let start = open + 1, depth = 1;
+  for (let i = start; i < body.length; i++) {
+    if (body[i] === '(') depth++;
+    else if (body[i] === ')' && --depth === 0) {
+      if (body.slice(start, i).trim()) parts.push(body.slice(start, i).trim());
+      return parts;
+    } else if (body[i] === ',' && depth === 1) {
+      parts.push(body.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  return null;
+}
+
+function argumentType(argument, actionBody, signature) {
+  if (/^@?"/u.test(argument)) return 'string';
+  if (/^-?\d+(?:\.\d+)?$/u.test(argument)) return 'number';
+  if (/^(?:true|false)$/u.test(argument)) return 'boolean';
+  if (/^new\s+(?:List|IEnumerable)<|^new\s*\[|^\[\s*\]/u.test(argument)) return 'list';
+  if (!/^[A-Za-z_]\w*$/u.test(argument)) return null;
+  const declared = /\b((?:List|IEnumerable)\s*<[^>]+>|[A-Za-z_]\w*(?:\[\])?)\s+([A-Za-z_]\w*)\s*(?:[,)=;]|$)/gu;
+  const declarations = [...signature.matchAll(declared), ...actionBody.matchAll(declared)];
+  return simpleType(declarations.filter((match) => match[2] === argument).at(-1)?.[1]);
+}
+
+function serviceResponse(body, controllerSource, serviceSources, signature = '') {
   const wrapped = body.match(/\breturn\s+Ok\s*\(\s*ResponseHttp\.ToReturn\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\)/u);
   const direct = body.match(/\breturn\s+Ok\s*\(\s*([A-Za-z_]\w*)\s*\)/u);
   if (!wrapped && !direct) return null;
@@ -235,17 +271,24 @@ function serviceResponse(body, controllerSource, serviceSources) {
   const assignment = new RegExp(`\\b(?:var|[A-Za-z_]\\w*)\\s+${value}\\s*=\\s*await\\s+(_[A-Za-z_]\\w*)\\.([A-Za-z_]\\w*)\\s*\\(`, 'u').exec(body);
   if (!assignment) return null;
   const receiver = assignment[1], method = assignment[2];
+  const args = callArguments(body, assignment.index + assignment[0].length - 1);
+  if (!args) return null;
   const type = neutralizeCsharp(controllerSource).match(new RegExp(`\\b(?:private|protected|public)\\s+(?:readonly\\s+)?([A-Za-z_]\\w*)\\s+${receiver}\\s*;`, 'u'))?.[1];
   if (!type) return null;
   const allowedTypes = new Set([type, type.startsWith('I') ? type.slice(1) : `I${type}`]);
   const declarations = serviceSources.filter(({ file }) => allowedTypes.has(file.split('/').at(-1).replace(/\.cs$/u, '')))
     .flatMap(({ source, file }) => [...neutralizeCsharp(source).matchAll(new RegExp(`\\b(Task\\s*<\\s*(?:(?:List|IEnumerable)\\s*<\\s*)?[A-Za-z_]\\w*\\s*>\\s*>|Task\\s*<\\s*[A-Za-z_]\\w*\\s*>|IEnumerable\\s*<\\s*[A-Za-z_]\\w*\\s*>)\\s+${method}\\s*\\(`, 'gu'))]
-    .map((match) => ({ type: match[1], source: `${file}:${lineOf(source, match.index)}` })));
-  const distinct = [...new Set(declarations.map((item) => item.type.replace(/\s+/gu, '')))];
+    .map((match) => ({ type: match[1].replace(/\s+/gu, ''), args: callArguments(neutralizeCsharp(source), match.index + match[0].length - 1),
+      source: `${file}:${lineOf(source, match.index)}` })));
+  let candidates = declarations.filter((item) => item.args?.length === args.length);
+  const known = args.map((argument) => argumentType(argument, body, signature));
+  for (let i = 0; i < known.length; i++) if (known[i])
+    candidates = candidates.filter((item) => simpleType(item.args[i].replace(/\s+[A-Za-z_]\w*$/u, '')) === known[i]);
+  const distinct = [...new Set(candidates.map((item) => item.type.replace(/^Task</u, '').replace(/>$/u, '')))];
   if (distinct.length !== 1) return null;
   const returnType = distinct[0];
-  const list = /^(?:Task<)?(?:List|IEnumerable)</u.test(returnType);
-  const inner = returnType.replace(/^(?:Task<)?(?:List|IEnumerable)</u, '').replace(/^Task</u, '').replace(/>+$/u, '');
+  const list = /^(?:List|IEnumerable)</u.test(returnType);
+  const inner = returnType.replace(/^(?:List|IEnumerable)</u, '').replace(/>$/u, '');
   return /^\w+$/u.test(inner) ? { type: inner, list, envelope: Boolean(wrapped) } : null;
 }
 
@@ -332,7 +375,8 @@ export function readCsharpEndpoints(source, file, { dtoSources = [], serviceSour
       const declaredResultType = responseTypeOf(declaration, pending);
       const resultType = declaredResultType === 'IActionResult' || !declaredResultType
         ? okResponseType(actionBody) : declaredResultType;
-      const service = !resultType ? serviceResponse(actionBody, source, serviceSources) : null;
+      const service = !resultType ? serviceResponse(actionBodyOf(source, t, end), source, serviceSources,
+        source.slice(t[i].at, t[end - 1]?.at ?? t[i].at)) : null;
       const resolvedType = resultType ?? service?.type ?? null;
       const fields = resolvedType ? dtoFields(dtoSources, resolvedType) : [];
       const responseFields = fields.length ? fields.map((field) => ({ ...field,

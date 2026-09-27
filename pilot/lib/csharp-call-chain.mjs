@@ -12,6 +12,18 @@ function blockEnd(source, start) {
   return source.length;
 }
 const lineOf = (source, at) => source.slice(0, at).split('\n').length;
+function simpleType(type) {
+  const value = String(type ?? '').replace(/\s|\?/gu, '');
+  if (/^(?:List|IEnumerable)<|\[\]$/u.test(value)) return 'list';
+  if (/^string$/iu.test(value)) return 'string';
+  if (/^(?:int|long|short|double|decimal|float)$/iu.test(value)) return 'number';
+  if (/^bool$/iu.test(value)) return 'boolean';
+  return null;
+}
+function declaredType(text, name) {
+  const declarations = [...text.matchAll(/\b((?:List|IEnumerable)\s*<[^>]+>|[A-Za-z_]\w*(?:\[\])?)\s+([A-Za-z_]\w*)\s*(?:[,)=;]|$)/gu)];
+  return simpleType(declarations.filter((match) => match[2] === name).at(-1)?.[1]);
+}
 
 function declarations(source, path) {
   const clean = neutralizeCsharp(source);
@@ -66,7 +78,9 @@ function declarations(source, path) {
     const owners = classes.filter((cls) => cls.start < start && end <= cls.end);
     if (!owners.length) continue;
     methods.push({ method, path, start: lineOf(source, start), end: lineOf(source, end - 1),
-      body: clean.slice(brace, end), excerpt: source.slice(start, end), fields, classes: owners });
+      body: clean.slice(brace, end), excerpt: source.slice(start, end), fields, classes: owners,
+      parameters: clean.slice(lex[open].at + 1, lex[close - 1].at),
+      returnType: clean.slice(start, lex[open - 1].at).trim().replace(/\s+/gu, '') });
   }
   return { classes, methods };
 }
@@ -83,8 +97,24 @@ export function traceCsharpCalls(sources, paths, endpoint) {
     const lex = tokens(body), result = [];
     for (let i = 0; i < lex.length - 3; i++) {
       if (lex[i].kind === 'word' && lex[i + 1].value === '.' && lex[i + 2].kind === 'word'
-        && lex[i + 3].value === '(' && lex[i - 1]?.value !== '.')
-        result.push({ receiver: lex[i].value, name: lex[i + 2].value });
+        && lex[i + 3].value === '(' && lex[i - 1]?.value !== '.') {
+        const args = [];
+        let depth = 1, start = i + 4, j = start;
+        for (; j < lex.length && depth; j++) {
+          if (lex[j].value === '(') depth++;
+          else if (lex[j].value === ')') {
+            depth--;
+            if (!depth) {
+              if (j > start) args.push(lex.slice(start, j).map((token) => token.value).join(''));
+              break;
+            }
+          } else if (lex[j].value === ',' && depth === 1) {
+            args.push(lex.slice(start, j).map((token) => token.value).join(''));
+            start = j + 1;
+          }
+        }
+        result.push({ receiver: lex[i].value, name: lex[i + 2].value, args });
+      }
     }
     return result;
   }
@@ -102,8 +132,21 @@ export function traceCsharpCalls(sources, paths, endpoint) {
       if (!fieldType && !staticType) continue;
       if (fieldType) neededTypes.add(fieldType);
       if (staticType) neededTypes.add(staticType);
-      const candidates = index.filter((item) => item.method === call.name && item.classes.some((cls) =>
+      let candidates = index.filter((item) => item.method === call.name && item.classes.some((cls) =>
         cls.name === (fieldType ?? staticType) || (fieldType && cls.interfaces.includes(fieldType))));
+      candidates = candidates.filter((item) => (item.parameters.trim() ? item.parameters.split(',').length : 0) === call.args.length);
+      for (let i = 0; i < call.args.length; i++) {
+        const arg = call.args[i];
+        const known = /^-?\d+(?:\.\d+)?$/u.test(arg) ? 'number' : /^(?:true|false)$/u.test(arg) ? 'boolean'
+          : /^[A-Za-z_]\w*$/u.test(arg) ? declaredType(parent.parameters + '; ' + parent.body, arg) : null;
+        if (known) candidates = candidates.filter((item) => {
+          const parameter = item.parameters.split(',')[i]?.trim().replace(/\s+[A-Za-z_]\w*$/u, '');
+          return simpleType(parameter) === known;
+        });
+      }
+      if (candidates.length > 1 && new Set(candidates.map((item) => item.returnType)).size === 1
+        && new Set(candidates.map((item) => item.classes.at(-1)?.name)).size === 1)
+        candidates = candidates.slice(0, 1);
       if (candidates.length > 1) { pending.push(`chamada ambígua: ${call.name}`); continue; }
       const method = candidates[0];
       if (!method) { pending.push(`chamada não resolvida: ${call.name}`); continue; }

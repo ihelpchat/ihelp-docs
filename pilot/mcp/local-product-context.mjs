@@ -356,7 +356,7 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
           const trace = traceCsharpCalls(sources, Object.keys(sources), endpoint);
           endpoint.pending.push(...trace.pending);
           if (endpoint.responseFields === null) {
-            const outputType = trace.methods.find((item) => /\b(?:Task\s*<\s*)?(?:List|IEnumerable)\s*<\s*[A-Za-z_]\w*\s*>/u.test(item.excerpt));
+            const outputType = trace.methods.find((item) => /\b(?:Task\s*<\s*)?(?:(?:List|IEnumerable)\s*<\s*)?[A-Za-z_]\w*\s*>+/u.test(item.excerpt));
             if (outputType) {
               const type = outputType.excerpt.match(/\b(?:Task\s*<\s*)?(?:(?:List|IEnumerable)\s*<\s*)?([A-Za-z_]\w*)\s*>+/u)?.[1];
               const dtoPath = paths.find((candidate) => candidate.split('/').at(-1) === `${type}.cs`);

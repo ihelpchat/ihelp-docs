@@ -103,6 +103,19 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint]) {
   }
   return [...new Set(issues)];
 }
+function markFactNames(text, endpoints) {
+  const names = [...new Set(endpoints.flatMap((endpoint) => [
+    ...(endpoint.parameters ?? []).map((item) => item.name),
+    ...(endpoint.responseFields ?? []).map((item) => item.name),
+  ]))].filter(Boolean);
+  if (!names.length) return text;
+  const facts = new Set(names);
+  return String(text).split(/(`[^`]*`)/u).map((segment) => {
+    if (segment.startsWith('`')) return segment;
+    return segment.replace(/(?<![\p{L}\p{N}_])([\p{L}_][\p{L}\p{N}_]*)(?![\p{L}\p{N}_])/gu,
+      (name) => facts.has(name) ? '`' + name + '`' : name);
+  }).join('');
+}
 function apiSchemaIssue(article) {
   if (!article || typeof article !== 'object' || Array.isArray(article)) return 'schema de prosa inválido';
   const allowed = new Set(['path', 'endpoint', 'title', 'description', 'intro', 'notas', 'responseDescriptions', 'parameterDescriptions']);
@@ -613,6 +626,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     const context = groundingContext(productContext, request, existing);
     const proseProblems = [];
     const groundingProblems = [];
+    const missingParameterDescriptions = [];
     for (const prose of parsed.articles) {
       const endpoint = selectable.find((item) => publicEndpointId(item) === prose.endpoint);
       if (!endpoint || apiSchemaIssue(prose)) continue;
@@ -628,11 +642,16 @@ async function generateContentPackageCore(root, request, options = {}) {
         proseProblems.push(...proseIssues({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable));
         groundingProblems.push(...apiUnitIssues([item.description], context));
       }
+      for (const parameter of endpoint.parameters.filter((item) => item.in !== 'route' || item.required !== false)) {
+        if (!prose.parameterDescriptions?.some((item) => item.name === parameter.name))
+          missingParameterDescriptions.push('parâmetro sem descrição: ' + parameter.name);
+      }
     }
     proseProblems.push(...proseIssues({ title: safePackage.summary, description: '', intro: '', notas: [] },
       { parameters: [], responseFields: selectable.flatMap((item) => item.responseFields ?? []) }, selectable));
     groundingProblems.push(...apiUnitIssues(parsed.summary, context));
-    const retryIssues = [...new Set([...proseProblems, ...groundingProblems])];
+    const retryIssues = [...new Set([...proseProblems, ...groundingProblems,
+      ...(!options.retryIssues ? missingParameterDescriptions : [])])];
     if (retryIssues.length) {
       if (!options.retryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, retryIssues });
       return withPending(proseProblems.length ? apiPending(retryIssues.join('; ')) : evidencePending(retryIssues));
@@ -640,6 +659,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     const articles = [];
     const usedEndpoints = new Set();
     const pending = [];
+    pending.push(...missingParameterDescriptions);
     const factsByPath = new Map();
     const requestedSection = [request.description, request.details].filter((value) => typeof value === 'string').join(' ').match(/(?<!\/)\bapi\/([a-z0-9-]+)\//iu)?.[1];
     for (const prose of parsed.articles) {
@@ -692,8 +712,10 @@ async function generateContentPackageCore(root, request, options = {}) {
       pending.push(...technical.pending);
       pending.push(...(endpoint.responseFields ?? []).filter((field) => !described.has(responseFieldPath(endpoint, field)))
         .map((field) => `descrição de resposta sem fonte: ${responseFieldPath(endpoint, field)}`));
-      const body = [prose.intro.text, ...prose.notas.map((item) => item.text), technical.body].filter(Boolean).join('\n\n');
-      const article = { path: prose.path, title: prose.title, description: prose.description.text,
+      const body = [prose.intro.text, ...prose.notas.map((item) => item.text)]
+        .filter(Boolean).map((text) => markFactNames(text, selectable)).concat(technical.body).join('\n\n');
+      const article = { path: prose.path, title: prose.title,
+        description: markFactNames(prose.description.text, selectable),
         source: technical.source, contentType: technical.contentType, method: technical.method,
         endpoint: technical.endpoint, body, productActions: [] };
       const validation = validateArticle(article);

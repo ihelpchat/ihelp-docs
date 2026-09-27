@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readCsharpEndpoints } from '../lib/csharp-endpoints.mjs';
+import { traceCsharpCalls } from '../lib/csharp-call-chain.mjs';
 import { generateContentPackage } from './content-ai-service.mjs';
 
 const dtoSources = ['ContactDetailsDto', 'OtherDto'].map((name) => ({
@@ -50,6 +51,29 @@ test('retornos diferentes com argumento desconhecido preservam pendência', () =
   const result = read(controller('GetId()'), [scalar, ['OtherDto', 'int id']]);
   assert.equal(result.responseFields, null);
   assert.match(result.pending.join('; '), /campos de resposta não verificáveis/u);
+});
+
+test('cadeia distingue sobrecargas do repositório pelo tipo', () => {
+  const action = controller('businessId, idRef', 'string idRef', 'int businessId = 1;');
+  const paths = ['Controllers/ContactsController.cs', 'Services/ContactsService.cs', 'Repository/ContactsRepository.cs'];
+  const sources = {
+    [paths[0]]: action,
+    [paths[1]]: `public class ContactsService : IContactsService {
+      private readonly IContactsRepository _repository;
+      public async Task<ContactDetailsDto> GetContactDetailsAsync(int businessId, string idRef) {
+        return await _repository.GetContactDetailsAsync(idRef);
+      }
+    }`,
+    [paths[2]]: `public class ContactsRepository : IContactsRepository {
+      public Task<ContactDetailsDto> GetContactDetailsAsync(string idRef) { return null; }
+      public Task<List<OtherDto>> GetContactDetailsAsync(List<int> ids) { return null; }
+    }`,
+  };
+  const endpoint = readCsharpEndpoints(action, paths[0], { dtoSources })[0];
+  endpoint.file = paths[0];
+  const trace = traceCsharpCalls(sources, paths, endpoint);
+  assert.equal(trace.methods.filter((item) => item.method === 'GetContactDetailsAsync').length, 2);
+  assert.doesNotMatch(trace.pending.join('; '), /chamada ambígua: GetContactDetailsAsync/u);
 });
 
 const endpoint = { verb: 'GET', route: '/api/v2/contacts', public: true, documented: true,
