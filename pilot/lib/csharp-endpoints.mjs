@@ -86,19 +86,38 @@ const lineOf = (source, at) => source.slice(0, at).split('\n').length;
 const camel = (name) => name[0].toLowerCase() + name.slice(1);
 function dtoFields(dtoSources, type) {
   for (const { file, source } of dtoSources) {
-    const clean = neutralizeCsharp(source);
+    const { neutralized: clean, tokens: items } = scanCsharp(source);
     const declaration = new RegExp(`\\b(?:class|record)\\s+${type}\\b`, 'u').exec(clean);
     if (!declaration) continue;
-    const body = clean.slice(declaration.index).split(/\n\s*\}\s*(?:;|$)/u)[0];
+    const opening = items.findIndex((item) => item.at >= declaration.index + declaration[0].length && item.value === '{');
+    if (opening < 0) continue;
+    let closing = opening + 1, nesting = 1;
+    for (; closing < items.length && nesting; closing++) {
+      if (items[closing].value === '{') nesting++;
+      if (items[closing].value === '}') nesting--;
+    }
+    if (nesting) continue;
+    const start = items[opening].at + 1;
+    const body = clean.slice(start, items[closing - 1].at);
+    let cursor = opening + 1, depth = 1;
     return [...body.matchAll(/\bpublic\s+([\w<>?,\[\]]+)\s+(\w+)\s*\{\s*get\s*;[^}]*\}\s*(?:=\s*([^;]+);)?/gu)]
+      .filter((match) => {
+        const at = start + match.index;
+        while (cursor < closing - 1 && items[cursor].at < at) {
+          if (items[cursor].value === '{') depth++;
+          if (items[cursor].value === '}') depth--;
+          cursor++;
+        }
+        return depth === 1;
+      })
       .map((match) => {
-        const original = source.slice(declaration.index + match.index, declaration.index + match.index + match[0].length);
+        const original = source.slice(start + match.index, start + match.index + match[0].length);
         const initializer = match[3] === undefined ? undefined : original.slice(match[0].indexOf('=') + 1, -1).trim();
         const value = initializer && (/^-?\d+(?:\.\d+)?$/u.test(initializer) ? Number(initializer)
           : /^(?:true|false)$/u.test(initializer) ? initializer === 'true'
             : /^"[^"\n]*"$/u.test(initializer) ? initializer.slice(1, -1)
               : /^new\s+List<\w+>\s*\(\s*\)$/u.test(initializer) ? [] : undefined);
-        return { name: camel(match[2]), type: match[1], source: `${file}:${lineOf(source, declaration.index + match.index)}`,
+        return { name: camel(match[2]), type: match[1], source: `${file}:${lineOf(source, start + match.index)}`,
           ...(value !== undefined ? { default: value } : {}) };
       });
   }
@@ -316,7 +335,8 @@ export function readCsharpEndpoints(source, file, { dtoSources = [], serviceSour
       const service = !resultType ? serviceResponse(actionBody, source, serviceSources) : null;
       const resolvedType = resultType ?? service?.type ?? null;
       const fields = resolvedType ? dtoFields(dtoSources, resolvedType) : [];
-      const responseFields = fields.length ? fields : null;
+      const responseFields = fields.length ? fields.map((field) => ({ ...field,
+        path: `${service?.envelope ? `dados${service.list ? '[]' : ''}.` : service?.list ? '[].' : ''}${field.name}` })) : null;
       const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : [];
       endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
         ...(reference ? { controllerRoute, parameters, serverAssigned, responseFields, responseType: resolvedType,

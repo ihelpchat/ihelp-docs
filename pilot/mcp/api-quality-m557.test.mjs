@@ -35,6 +35,7 @@ test('retorno do serviço prova campos públicos e envelope de lista', () => {
   assert.deepEqual(endpoint.responseFields.map(({ name, type, source }) => [name, type, source]), [
     ['nome', 'string', 'Dto/ContactDto.cs:2'], ['id', 'int', 'Dto/ContactDto.cs:3'],
   ]);
+  assert.deepEqual(endpoint.responseFields.map((field) => field.path), ['dados[].nome', 'dados[].id']);
   assert.equal(endpoint.responseEnvelope, 'dados');
   assert.equal(endpoint.responseList, true);
   const page = renderApiReference(endpoint, [], { components: ['Fields', 'Field', 'Response'], sections: ['Resposta'] });
@@ -93,7 +94,7 @@ test('descrição da IA usa campo factual e ausência registra pendência', asyn
   const endpoint = { ...parsed()[0], public: true, documented: true, authorization: 'authenticated' };
   const article = { path: 'api/contatos/listar', endpoint: 'GET /contacts/{letter}', title: 'Listar contatos',
     description: 'Lista os contatos disponíveis para consulta na referência pública.', intro: 'Consulte os contatos disponíveis.', notas: [], grounding: [],
-    responseDescriptions: [{ name: 'nome', description: 'Nome do contato.', grounding: [] }] };
+    responseDescriptions: [{ name: 'dados[].nome', description: 'Nome do contato.', grounding: [] }] };
   const context = { groundingRequired: false, matches: [], code: [], endpoints: [endpoint],
     apiExamples: [{ path: article.path, frontmatter: { method: 'GET', endpoint: '/contacts' },
       components: ['Params', 'Param', 'Fields', 'Field'], sections: ['Resposta'], paramNames: ['letter'] }] };
@@ -104,24 +105,27 @@ test('descrição da IA usa campo factual e ausência registra pendência', asyn
   });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   assert.match(result.articles[0].body, /string — Nome do contato\./u);
-  assert.match(result.pending.join('; '), /descrição de resposta sem fonte: id/u);
+  assert.match(result.pending.join('; '), /descrição de resposta sem fonte: dados\[\]\.id/u);
 });
 
 test('duas descrições do mesmo caminho são recusadas', async () => {
   const endpoint = { ...parsed()[0], public: true, documented: true, authorization: 'authenticated' };
   const item = { name: 'dados[].id', description: { text: 'Identificador do contato.', citations: [] } };
+  let schemaPaths;
   const generate = async (responseDescriptions) => generateContentPackage(process.cwd(), { module: 'api', topic: 'Contatos' }, {
     productContext: { groundingRequired: false, matches: [], code: [], endpoints: [endpoint],
       apiExamples: [{ path: 'api/contatos/listar', frontmatter: { method: 'GET', endpoint: '/contacts' },
         components: ['Fields', 'Field'], sections: ['Resposta'] }] },
     plan: { status: 'ready' },
-    client: { responses: { create: async () => ({ output_text: JSON.stringify({ status: 'ready', summary: 'Contatos.', questions: [], grounding: [],
+    client: { responses: { create: async (payload) => { schemaPaths = payload.text.format.schema.properties.articles.items.properties.responseDescriptions.items.properties.name.enum;
+      return { output_text: JSON.stringify({ status: 'ready', summary: 'Contatos.', questions: [], grounding: [],
       articles: [{ path: 'api/contatos/listar', endpoint: 'GET /contacts/{letter}', title: 'Listar contatos',
-        description: { text: 'Lista contatos.', citations: [] }, intro: { text: 'Consulte contatos.', citations: [] }, notas: [],
-        responseDescriptions }] }), model: 'synthetic' }) } },
+        description: { text: 'Lista os contatos disponíveis para consulta na referência pública.', citations: [] }, intro: { text: 'Consulte contatos.', citations: [] }, notas: [],
+        responseDescriptions }] }), model: 'synthetic' }; } } },
   });
   const positive = await generate([item]);
   assert.equal(positive.status, 'ready', positive.summary);
+  assert.deepEqual(schemaPaths, ['dados[].nome', 'dados[].id']);
   const result = await generate([item, item]);
   assert.equal(result.status, 'needs_information');
   assert.match(result.summary, /descrição de campo sem fato: dados\[\]\.id/u);

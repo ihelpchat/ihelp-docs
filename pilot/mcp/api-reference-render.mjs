@@ -4,6 +4,7 @@ export { valueFor } from './api-synthetic-example.mjs';
 export const isSyntheticNumericExample = (value) => value === valueFor({ name: 'phone', type: 'string' });
 const publicRoute = (route) => route.replace(/^\/api\/v\d+/iu, '');
 const simpleFieldName = (name) => name.replace(/([a-z])([A-Z])/gu, '$1 $2').replace(/[_-]+/gu, ' ').toLocaleLowerCase('pt-BR');
+export const responseFieldPath = (endpoint, field) => field.path ?? `${endpoint.responseEnvelope ? `${endpoint.responseEnvelope}${endpoint.responseList ? '[]' : ''}.` : endpoint.responseList ? '[].' : ''}${field.name}`;
 
 // The endpoint and the observed page vocabulary are the only inputs to technical MDX.
 export function renderApiReference(endpoint, examples, page) {
@@ -75,9 +76,8 @@ export function renderApiReference(endpoint, examples, page) {
 
   if (endpoint.responseFields === null) add('resposta', `## ${heading('resposta', 'Resposta')}\n\nCampos de resposta ainda não documentados.`);
   else {
-    const prefix = `${endpoint.responseEnvelope ? `${endpoint.responseEnvelope}${endpoint.responseList ? '[]' : ''}.` : endpoint.responseList ? '[].' : ''}`;
     const synthetic = syntheticResponseExample(endpoint);
-    add('resposta', `## ${heading('resposta', 'Resposta')}\n\n${components.has('Fields') ? '<Fields>\n' : ''}${endpoint.responseFields.map((field) => `<Field name="${safe(prefix + field.name)}">${safe(field.type)} — ${safe(page?.responseDescriptions?.[field.name] ?? simpleFieldName(field.name))}</Field>`).join('\n')}${components.has('Fields') ? '\n</Fields>' : ''}${synthetic ? `\n\n\`\`\`json\n${JSON.stringify(synthetic, null, 2)}\n\`\`\`` : ''}`);
+    add('resposta', `## ${heading('resposta', 'Resposta')}\n\n${components.has('Fields') ? '<Fields>\n' : ''}${endpoint.responseFields.map((field) => `<Field name="${safe(responseFieldPath(endpoint, field))}">${safe(field.type)} — ${safe(page?.responseDescriptions?.[responseFieldPath(endpoint, field)] ?? simpleFieldName(field.name))}</Field>`).join('\n')}${components.has('Fields') ? '\n</Fields>' : ''}${synthetic ? `\n\n\`\`\`json\n${JSON.stringify(synthetic, null, 2)}\n\`\`\`` : ''}`);
   }
   const order = (kind) => kind === 'autorização' ? -1 : sections.findIndex((section) => section.toLowerCase().startsWith(kind === 'campos' ? 'campos relevantes' : kind));
   const rank = (kind) => kind === 'autorização' ? -1 : order(kind) < 0 ? 100 : order(kind);

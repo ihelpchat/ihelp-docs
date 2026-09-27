@@ -19,7 +19,7 @@ const article = (path, endpoint, responseDescriptions = []) => ({ path, endpoint
   description: unit('Consulta os contatos disponíveis na referência pública da API.'),
   intro: unit('Use para consultar contatos.'), notas: [], responseDescriptions });
 const packageOutput = { status: 'ready', summary: 'Contatos.', questions: [], grounding: [], articles: [
-  article(source.list.path, 'GET /contacts', [{ name: 'id', description: unit(description) }]),
+  article(source.list.path, 'GET /contacts', [{ name: 'dados[].id', description: unit(description) }]),
   article(source.tags.path, source.tags.endpoint),
 ] };
 async function replay(mutate = () => {}, endpoints = [list, tags]) {

@@ -7,7 +7,7 @@ import { sanitizeCodeForModel } from './code-hygiene.mjs';
 import { catalogActions, isCatalogAction } from './product-actions.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
-import { renderApiReference } from './api-reference-render.mjs';
+import { renderApiReference, responseFieldPath } from './api-reference-render.mjs';
 import { finalizeSecurityResponse, securityReview } from './security-review.mjs';
 import { extractCitedEndpoints } from './public-submit-gate.mjs';
 import { contentMaxOutputTokens } from './env-compat.mjs';
@@ -543,9 +543,13 @@ async function generateContentPackageCore(root, request, options = {}) {
   const explicit = request.module === 'api' && explicitEndpointsFrom(request).length > 0;
   const selectable = request.module === 'api' ? productContext.endpoints.filter((item) => item.public && (explicit ? item.explicit : item.documented)) : [];
   if (request.module === 'api' && !selectable.length) return withPending(apiPending('endpoint não público: confirmar'));
+  const fieldPaths = [...new Set(selectable.flatMap((endpoint) =>
+    (endpoint.responseFields ?? []).map((field) => responseFieldPath(endpoint, field))))];
+  const responseDescriptions = structuredClone(API_ARTICLE_SCHEMA.properties.responseDescriptions);
+  responseDescriptions.items.properties.name = fieldPaths.length ? { type: 'string', enum: fieldPaths } : { type: 'string' };
   const apiSchema = { ...API_PACKAGE_SCHEMA, properties: { ...API_PACKAGE_SCHEMA.properties,
     articles: { type: 'array', items: { ...API_ARTICLE_SCHEMA, properties: { ...API_ARTICLE_SCHEMA.properties,
-      endpoint: { type: 'string', enum: selectable.map(publicEndpointId) } } } } } };
+      endpoint: { type: 'string', enum: selectable.map(publicEndpointId) }, responseDescriptions } } } } };
   const response = await modelResponse(options, baseRequest('pacote_documentacao', request.module === 'api' ? apiSchema : PACKAGE_SCHEMA, [
     {
       role: 'developer',
@@ -553,7 +557,7 @@ async function generateContentPackageCore(root, request, options = {}) {
         'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.',
         request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
         request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
-        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. description, intro, cada nota e cada descrição de responseDescriptions são objetos {text,citations}; cada text contém uma frase (ponto e vírgula permitido), com suas próprias citações. Não crie grounding separado para esses campos. Em responseDescriptions, descreva cada campo de resposta por nome exato usando apenas fatos do código, pedido ou página publicada; cite cada descrição. Sem fonte para um campo, omita-o da lista: o renderizador usará o nome simples e registrará pendência.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
+        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. description, intro, cada nota e cada descrição de responseDescriptions são objetos {text,citations}; cada text contém uma frase (ponto e vírgula permitido), com suas próprias citações. Não crie grounding separado para esses campos. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver, e descreva apenas fatos do código, pedido ou página publicada; cite cada descrição. Sem fonte para um campo, omita-o da lista: o renderizador usará o nome simples e registrará pendência.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
         request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
@@ -610,7 +614,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       }
       const described = new Map();
       for (const item of prose.responseDescriptions ?? []) {
-        if (!endpoint.responseFields?.some((field) => field.name === item.name) || described.has(item.name))
+        if (!endpoint.responseFields?.some((field) => responseFieldPath(endpoint, field) === item.name) || described.has(item.name))
           return withPending(apiPending(`descrição de campo sem fato: ${item.name}`));
         const descriptionIssue = proseIssue({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable);
         if (descriptionIssue) return withPending(apiPending(descriptionIssue));
@@ -632,8 +636,8 @@ async function generateContentPackageCore(root, request, options = {}) {
         return withPending(apiPending(`parâmetros renderizados sem correspondência com o fato: ${prose.path}`));
       }
       pending.push(...technical.pending);
-      pending.push(...(endpoint.responseFields ?? []).filter((field) => !described.has(field.name))
-        .map((field) => `descrição de resposta sem fonte: ${field.name}`));
+      pending.push(...(endpoint.responseFields ?? []).filter((field) => !described.has(responseFieldPath(endpoint, field)))
+        .map((field) => `descrição de resposta sem fonte: ${responseFieldPath(endpoint, field)}`));
       const body = [prose.intro.text, ...prose.notas.map((item) => item.text), technical.body].filter(Boolean).join('\n\n');
       const article = { path: prose.path, title: prose.title, description: prose.description.text,
         source: technical.source, contentType: technical.contentType, method: technical.method,
