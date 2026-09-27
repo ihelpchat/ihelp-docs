@@ -101,6 +101,35 @@ test('draft de submitArticle revisa host fora de api antes de escrever e aceita 
   await access(path);
 });
 
+test('host IPv4 isolado em prosa bloqueia draft antes de gravar', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm556-host-'));
+  await mkdir(join(root, 'content/docs'), { recursive: true });
+  const safe = { ...article, path: 'docs/teste/consulta', source: 'produto', contentType: 'guia',
+    body: `${article.body}\n\nExemplo: Host: apiv3.ihelpchat.com. ${'Consulte os contatos no iHelp. '.repeat(12)}` };
+  const unsafe = { ...safe, body: safe.body.replace('Host: apiv3.ihelpchat.com', 'Host: 10.0.0.5') };
+  await assert.rejects(submitArticle(root, unsafe, 'draft', 'user:tester'), /URL ou host fora da API pública.*IP/iu);
+  await assert.rejects(access(join(root, '.drafts/docs/teste/consulta.mdx')), { code: 'ENOENT' });
+  assert.equal((await submitArticle(root, safe, 'draft', 'user:tester')).status, 'draft');
+});
+
+test('gramática de host cobre prosa, código e esquemas sem confundir arquivos ou versões', () => {
+  const safe = { ...article, body: `${article.body}\n\nHost: apiv3.ihelpchat.com; faq.ihelpchat.com; arquivo.pdf; versão 2.3` };
+  assert.deepEqual(examine(safe).blocks, []);
+  for (const [name, token, reason] of [
+    ['IP isolado', '10.0.0.5', /IP/iu],
+    ['IPv6', '[fd00::5]:8080', /IP/iu],
+    ['host interno', 'db.internal', /interno/iu],
+    ['localhost', 'localhost', /interno/iu],
+    ['porta', 'api.exemplo.com:8080', /porta/iu],
+    ['esquema ftp', 'ftp://10.0.0.5', /IP/iu],
+    ['domínio externo', 'servidor.railway.app', /domínio/iu],
+  ]) {
+    const changed = { ...safe, body: safe.body.replace('Host: apiv3.ihelpchat.com', `Host: ${token}`) };
+    assert.match(examine(changed).blocks.join(' '), /URL ou host fora da API pública e do site do FAQ/iu, name);
+    assert.match(examine(changed).blocks.join(' '), reason, name);
+  }
+});
+
 test('pacote exige confirmação por DELETE e rejeita item alheio', async () => {
   const { root, backend } = await backendFixture();
   const previous = process.env.BACKEND_LOCAL_CHECKOUT;
