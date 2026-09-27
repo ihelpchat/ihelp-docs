@@ -154,3 +154,34 @@ test('fato de outro assunto na mesma cadeia não responde cadastro ou ação de 
   assert.deepEqual(discardAnsweredScreenQuestions(['Qual o nome do botão para excluir contato?'], [task]).questions,
     ['Qual o nome do botão para excluir contato?']);
 });
+
+test('plural de categoria casa com a fonte; plural falso não interrompe o descarte', () => {
+  const field = { kind: 'field', name: 'telefone', required: true,
+    source: 'src/components/pages/Contacts/CreateContact.tsx:10' };
+  const singular = 'Quais campos são obrigatórios no cadastro de contato?';
+  const plural = singular.replace('contato?', 'contatos?');
+  assert.deepEqual(discardAnsweredScreenQuestions([singular], [field]).questions, []);
+  assert.deepEqual(discardAnsweredScreenQuestions([plural], [field]).questions, []);
+  assert.doesNotThrow(() => discardAnsweredScreenQuestions([singular.replace('contato?', 'coraçãos?')], [field]));
+});
+
+test('ação usa aria-label canônico e texto JSX completo quando não há aria-label', async () => {
+  const button = '<button onClick={remove} aria-label="Excluir selecionados" title="Excluir contatos marcados">Excluir Selecionados ({n})</button>';
+  const files = { ...sources, [page]: sources[page].replace('<Modal />', `${button}<Modal />`) };
+  const withAria = (await run(files)).facts.filter((fact) => fact.kind === 'action' && fact.handler === 'remove');
+  assert.deepEqual(withAria.map((fact) => fact.text), ['Excluir selecionados']);
+  assert.equal(withAria[0].ariaLabel, 'Excluir selecionados');
+  assert.equal(withAria[0].body, 'Excluir Selecionados (…)');
+  assert.equal(withAria[0].title, 'Excluir contatos marcados');
+  const withoutAria = (await run({ ...files, [page]: files[page].replace(' aria-label="Excluir selecionados"', '') }))
+    .facts.filter((fact) => fact.kind === 'action' && fact.handler === 'remove');
+  assert.deepEqual(withoutAria.map((fact) => fact.text), ['Excluir Selecionados (…)']);
+});
+
+test('rótulo JSX cortado não publica ação', async () => {
+  for (const label of ['Excluir Selecionados (', 'Excluir Selecionados "']) {
+    const files = { ...sources, [page]: sources[page].replace('<Modal />',
+      `<button onClick={remove}>${label}</button><Modal />`) };
+    assert.equal((await run(files)).facts.some((fact) => fact.kind === 'action' && fact.handler === 'remove'), false);
+  }
+});
