@@ -193,6 +193,21 @@ function retryPrompt(issues) {
 function apiPending(reason) {
   return { status: 'needs_information', summary: reason, questions: [reason], articles: [] };
 }
+
+function finalizeGeneratedPages(result, request, factsByPath = new Map()) {
+  const securityWarnings = [];
+  for (const article of result.articles) {
+    const review = securityReview(article, { facts: factsByPath.get(article.path), request });
+    securityWarnings.push(...review.warnings);
+    if (review.blocks.length) return { ...result, ...apiPending(`${article.path}: ${review.blocks.join('; ')}`),
+      securityWarnings: [...new Set(securityWarnings)] };
+    if (review.warnings.length && !review.confirmed) return { ...result,
+      ...apiPending(`Confirme a revisão de segurança de ${article.path}.`),
+      questions: [`Para seguir, confirme o endpoint sensível: ${review.endpoint}`],
+      securityWarnings: [...new Set(securityWarnings)] };
+  }
+  return { ...result, securityWarnings: [...new Set(securityWarnings)] };
+}
 export function normalizeCatalogLabel(action) {
   return resolveCatalogAction(action) ?? action;
 }
@@ -482,7 +497,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     const articles = [];
     const usedEndpoints = new Set();
     const pending = [];
-    const securityWarnings = [];
+    const factsByPath = new Map();
     const requestedSection = [request.description, request.details].filter((value) => typeof value === 'string').join(' ').match(/(?<!\/)\bapi\/([a-z0-9-]+)\//iu)?.[1];
     for (const prose of parsed.articles) {
       const schemaIssue = apiSchemaIssue(prose);
@@ -522,13 +537,9 @@ async function generateContentPackageCore(root, request, options = {}) {
       const article = { path: prose.path, title: prose.title, description: prose.description,
         source: technical.source, contentType: technical.contentType, method: technical.method,
         endpoint: technical.endpoint, body, productActions: [] };
-      const review = securityReview(article, { facts: endpoint, request });
-      if (review.blocks.length) return withPending(apiPending(`${prose.path}: ${review.blocks.join('; ')}`));
-      securityWarnings.push(...review.warnings);
-      if (review.warnings.length && !review.confirmed) return withPending({ ...apiPending(`Confirme a revisão de segurança de ${prose.path}.`),
-        questions: [`Para seguir, confirme o endpoint sensível: ${review.endpoint}`], securityWarnings });
       const validation = validateArticle(article);
       if (!validation.valid) return withPending(apiPending(`${prose.path}: ${validation.issues.join('; ')}`));
+      factsByPath.set(article.path, endpoint);
       articles.push(article);
     }
     const withoutPage = selectable.map(publicEndpointId).find((id) => !usedEndpoints.has(id));
@@ -540,7 +551,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       if (!options.groundingRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, groundingRetryIssues: summaryIssues });
       return withPending(evidencePending(summaryIssues));
     }
-    return withPending({ ...safePackage, articles, pending: [...new Set([...(productContext.pending ?? []), ...pending])], existing, model: response.model, securityWarnings: [...new Set(securityWarnings)] });
+    return finalizeGeneratedPages(withPending({ ...safePackage, articles, pending: [...new Set([...(productContext.pending ?? []), ...pending])], existing, model: response.model }), request, factsByPath);
   }
   if (parsed.articles.some((article) => article.source === 'api' || /^api\//u.test(article.path ?? ''))) {
     return withPending(apiPending('página API exige fatos estruturados e módulo api'));
@@ -573,7 +584,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       articles: [], existing, model: response.model,
     });
   }
-  return withPending({ ...safePackage, articles, existing, model: response.model });
+  return finalizeGeneratedPages(withPending({ ...safePackage, articles, existing, model: response.model }), request);
 }
 
 const GUIDE_SCHEMA = {
@@ -640,7 +651,7 @@ export async function generateCanonicalGuide(root, request, options = {}) {
   }));
   if (article.guide.guideId !== request.guideId || article.contentType !== 'guia'
     || article.productActions.some((action) => !confirmedAction(action, request, productContext))) return evidencePending();
-  return { status: 'ready', articles: [article] };
+  return finalizeGeneratedPages({ status: 'ready', articles: [article] }, request);
 }
 
 export async function planContent(root, request, options = {}) {
