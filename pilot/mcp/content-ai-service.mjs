@@ -473,7 +473,7 @@ async function planContentCore(root, request, options = {}) {
   }
   const { grounding: _grounding, ...safePlan } = parsed;
   const filtered = discardAnsweredScreenQuestions(safePlan.questions, productContext.screenFacts);
-  const groundedAfterDiscard = !groundingIssues(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks']).length;
+  const groundedAfterDiscard = validateGroundedOutput(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks']);
   return { ...safePlan, questions: filtered.questions, discardedQuestions: filtered.discarded,
     ...(safePlan.status === 'needs_information' && safePlan.questions.length && !filtered.questions.length && !safePlan.risks.length && groundedAfterDiscard ? { status: 'ready' } : {}),
     suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, pending: productContext.pending ?? [], codeHygiene, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
