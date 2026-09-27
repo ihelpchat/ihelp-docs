@@ -222,3 +222,31 @@ test('required exige formulário do assunto do pedido quando pergunta é implíc
   const ownerless = { ...contact, owner: '' };
   assert.deepEqual(discardAnsweredScreenQuestions([question], [ownerless], request).questions, [question]);
 });
+
+test('referência local não renderiza; alias renderizado e chamada em JSX alcançam a função', async () => {
+  const base = { ...sources, [page]: `${sources[page]}\nfunction Unused() { return <button onClick={remove}>Excluir Empresa</button>; }` };
+  const referenced = { ...base, [page]: base[page].replace('return <><button', 'const X = Unused; return <><button') };
+  assert.doesNotMatch(JSON.stringify((await run(referenced)).facts), /Excluir Empresa/u);
+  const alias = { ...referenced, [page]: referenced[page].replace('<Modal />', '<Modal /><X />') };
+  assert.match(JSON.stringify((await run(alias)).facts), /Excluir Empresa/u);
+  const called = { ...base, [page]: base[page].replace('<Modal />', '<Modal />{show && Unused()}') };
+  assert.match(JSON.stringify((await run(called)).facts), /Excluir Empresa/u);
+});
+
+test('descarte exige fatos de todos os assuntos explícitos do cadastro', () => {
+  const question = 'Quais campos são obrigatórios no cadastro de contatos e empresas?';
+  const contact = { kind: 'field', name: 'nome', required: true, owner: 'CreateContactModal',
+    subject: 'cadastro contato', source: `${modal}:2` };
+  const company = { ...contact, owner: 'CreateCompanyModal', subject: 'cadastro empresa' };
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [contact]).questions, [question]);
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [contact, company]).questions, []);
+});
+
+test('descarte exige fatos de todos os assuntos alternativos do upload', () => {
+  const question = 'Quais formatos são aceitos na importação de contatos ou empresas?';
+  const contact = { kind: 'upload', accept: '.csv', owner: 'ImportContactsModal',
+    subject: 'importacao contato', source: `${modal}:2` };
+  const company = { ...contact, owner: 'ImportCompaniesModal', subject: 'importacao empresa' };
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [contact]).questions, [question]);
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [contact, company]).questions, []);
+});
