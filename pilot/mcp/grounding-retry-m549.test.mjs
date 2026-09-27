@@ -24,6 +24,22 @@ test('quote só com segmentos curtos é rejeitado', () => {
   assert.equal(validateGroundedOutput(output({ ...citation, quote: 'Nomes; api; três' }), context, ['guidance']), false);
 });
 
+for (const [source, citedContext, path] of [
+  ['pedido', context, undefined],
+  ['pagina', { ...context, existing: [{ path: 'docs/contatos', description: details }] }, 'docs/contatos'],
+]) {
+  const cite = (quote) => ({ source, ...(path ? { path } : {}), quote });
+  test(`${source}: segmento curto inventado após trecho literal é rejeitado`, () => {
+    assert.equal(validateGroundedOutput(output(cite(`${reordered} INVENTADO.`)), citedContext, ['guidance']), false);
+  });
+  test(`${source}: segmentos literais reordenados são aceitos`, () => {
+    assert.equal(validateGroundedOutput(output(cite(reordered)), citedContext, ['guidance']), true);
+  });
+  test(`${source}: apenas segmentos literais curtos não cumprem o mínimo`, () => {
+    assert.equal(validateGroundedOutput(output(cite('Nomes; três')), citedContext, ['guidance']), false);
+  });
+}
+
 test('página docs publicada no contexto é citável na API; fora do contexto não', () => {
   const page = { path: 'docs/contatos', description: 'A página explica como encontrar contatos da equipe.' };
   const cite = { source: 'pagina', path: page.path, quote: page.description };
