@@ -30,6 +30,8 @@ const API_GROUNDING_SCHEMA = { type: 'array', items: {
     CITATION_SCHEMA,
     { type: 'object', additionalProperties: false, required: ['source', 'quote'],
       properties: { source: { type: 'string', enum: ['pedido'] }, quote: { type: 'string' } } },
+    { type: 'object', additionalProperties: false, required: ['source', 'path', 'quote'],
+      properties: { source: { type: 'string', enum: ['pagina'] }, path: { type: 'string' }, quote: { type: 'string' } } },
   ] } } },
 } };
 
@@ -111,11 +113,20 @@ export function validateGroundedOutput(output, context, fields) {
           && [context.request?.details, context.request?.description].some((value) =>
             typeof value === 'string' && normalizeSpaces(value).includes(quote));
       }
+      if (citation?.source === 'pagina') {
+        const quote = typeof citation.quote === 'string' ? normalizeSpaces(citation.quote) : '';
+        const pages = [...context.existing ?? [], ...context.apiExamples ?? []];
+        return context.module === 'api' && quote.length >= 12 && pages.some((page) =>
+          page.path === citation.path && [page.title, page.description, page.body, page.content]
+            .some((value) => typeof value === 'string' && normalizeSpaces(value).includes(quote)));
+      }
       return evidence.some((match) =>
         citation?.repository === match.repository && citation.path === match.path
         && citation.sha === match.sha && citation.sha === match.ref
-        && Number.isInteger(citation.lineStart) && citation.lineStart === match.line
-        && citation.lineEnd === match.line);
+        && Number.isInteger(citation.lineStart) && Number.isInteger(citation.lineEnd)
+        && citation.lineStart > 0 && citation.lineEnd >= citation.lineStart
+        && citation.lineEnd - citation.lineStart < 30
+        && citation.lineStart <= match.line && match.line <= citation.lineEnd);
     }));
 }
 
@@ -136,8 +147,8 @@ function evidenceIndex(context) {
   ].map((source) => provenance(endpoint, source)).filter(Boolean))];
 }
 
-function groundingContext(productContext, request) {
-  return { ...productContext, module: request.module, request };
+function groundingContext(productContext, request, existing) {
+  return { ...productContext, module: request.module, request, existing };
 }
 
 function evidencePending() {
@@ -282,12 +293,11 @@ function requestText(request, existing, productContext) {
   return [
     `Tema: ${request.topic}`,
     `Módulo: ${request.module}`,
-    `Objetivo: ${request.description}`,
+    `<<PEDIDO>>\n${request.description}${request.details ? `\n${request.details}` : ''}\n<<FIM DO PEDIDO>>`,
     `Público: ${request.audience ?? 'Cliente em trial sem treinamento'}`,
-    `Detalhes confirmados: ${request.details ?? 'Nenhum detalhe adicional.'}`,
     request.productRoute ? `Rota confirmada no produto: ${request.productRoute}` : '',
     request.tangoUrl ? `Tango já existente: ${request.tangoUrl}` : '',
-    `Documentação publicada semelhante (fonte editorial):\n${existing.length ? existing.map((item) => `- ${item.title} (${item.path}): ${item.description}${request.module === 'api' ? '' : `\n${item.body ?? ''}`}`).join('\n') : '- Nenhum'}`,
+    `Documentação publicada semelhante (fonte editorial):\n${existing.length ? existing.map((item) => `- ${item.title} (${item.path}): ${item.description}${item.body ? `\n${item.body}` : ''}`).join('\n') : '- Nenhum'}`,
     `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${redactSensitiveData(item.path)} LINHA ${item.line ?? 'não informada'} SHA ${item.sha ?? item.ref}\n${redactSensitiveData(item.excerpt)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
     request.module === 'api' ? `FATOS ESTRUTURADOS DE ENDPOINTS (somente public=true é gerável):\n${JSON.stringify(selectedEndpoints.length ? selectedEndpoints : productContext.endpoints ?? [])}\nFORMATO REAL DAS PÁGINAS API:\n${JSON.stringify(productContext.apiExamples ?? [])}` : '',
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
@@ -358,7 +368,7 @@ export async function planContent(root, request, options = {}) {
         'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
         'Sugira ações no produto somente com rota fornecida ou sustentada pelos detalhes. target é um identificador data-help-id estável, nunca um seletor CSS.',
         request.module === 'api' ? 'Planeje páginas de referência da API. Para tema amplo, foque nos endpoints documented=true. Não peça dados já presentes nos fatos estruturados. Endpoint sem public=true exige confirmação. responseFields=null não bloqueia: a resposta exibirá nota fixa e pendência.' : 'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
-        'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Na API, uma afirmação vinda do pedido pode citar um trecho literal de details ou description com {source: "pedido", quote: "trecho literal"} de pelo menos 12 caracteres. Sem evidência, use needs_information.',
+        'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Na API, source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Fatos técnicos vêm apenas do código, nunca do JSON de formato. Sem evidência, use needs_information.',
       ].join(' '),
     },
     { role: 'user', content: requestText(request, existing, productContext) },
@@ -366,7 +376,7 @@ export async function planContent(root, request, options = {}) {
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return { ...apiPending(modelJson.reason), pending: productContext.pending ?? [] };
   const parsed = modelJson.value;
-  if (parsed.status === 'ready' && !validateGroundedOutput(parsed, groundingContext(productContext, request), ['guidance', 'risks'])) return { ...evidencePending(), pending: productContext.pending ?? [] };
+  if (parsed.status === 'ready' && !validateGroundedOutput(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks'])) return { ...evidencePending(), pending: productContext.pending ?? [] };
   const { grounding: _grounding, ...safePlan } = parsed;
   return { ...safePlan, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, pending: productContext.pending ?? [], productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
 }
@@ -399,7 +409,7 @@ export async function generateContentPackage(root, request, options = {}) {
         request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
         request.module === 'api' ? 'Se faltar método, rota, parâmetros ou autorização, use needs_information e deixe articles vazio. responseFields=null é permitido: a resposta terá nota fixa e pendência.' : 'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
         request.module === 'api' ? 'A prosa não pode conter método HTTP, caminho, bloco de código, componente JSX nem código inline, exceto nome exato de parâmetro ou campo dos fatos.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
-        request.module === 'api' ? 'Cite cada frase de summary, description, intro e notas com grounding estruturado. Quando a frase vier das respostas do time, cite um trecho literal de details ou description com {source: "pedido", quote: "trecho literal"} (mínimo 12 caracteres). Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
+        request.module === 'api' ? 'Cite cada frase de summary, description, intro e notas com grounding estruturado. source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. O JSON interno de formato não é fonte. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].filter(Boolean).join(' '),
     },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`) },
@@ -438,7 +448,7 @@ export async function generateContentPackage(root, request, options = {}) {
       usedEndpoints.add(endpoint);
       const issue = proseIssue(prose, endpoint);
       if (issue) return withPending(apiPending(issue));
-      if (!validateGroundedOutput(prose, groundingContext(productContext, request), ['description', 'intro', 'notas'])) return withPending(evidencePending());
+      if (!validateGroundedOutput(prose, groundingContext(productContext, request, existing), ['description', 'intro', 'notas'])) return withPending(evidencePending());
       const technical = renderApiReference(endpoint, productContext.apiExamples, page);
       const renderedParams = [...technical.body.matchAll(/<Param\s+[^>]*name="([^"]+)"/gu)].map((match) => match[1]);
       if (renderedParams.length !== endpoint.parameters.length) {
@@ -455,14 +465,14 @@ export async function generateContentPackage(root, request, options = {}) {
     }
     const summaryIssue = proseIssue({ title: parsed.summary, description: '', intro: '', notas: [] }, { parameters: [], responseFields: [] });
     if (summaryIssue) return withPending(apiPending(summaryIssue));
-    if (!validateGroundedOutput(parsed, groundingContext(productContext, request), ['summary'])) return withPending(evidencePending());
+    if (!validateGroundedOutput(parsed, groundingContext(productContext, request, existing), ['summary'])) return withPending(evidencePending());
     return withPending({ ...safePackage, articles, pending: [...new Set([...(productContext.pending ?? []), ...pending])], existing, model: response.model });
   }
   if (parsed.articles.some((article) => article.source === 'api' || /^api\//u.test(article.path ?? ''))) {
     return withPending(apiPending('página API exige fatos estruturados e módulo api'));
   }
-  if (!validateGroundedOutput(parsed, groundingContext(productContext, request), ['summary']) || parsed.articles.some((article) =>
-    !validateGroundedOutput(article, groundingContext(productContext, request), ['description', 'body', 'assistantOverview', 'assistantSuggestions']))) {
+  if (!validateGroundedOutput(parsed, groundingContext(productContext, request, existing), ['summary']) || parsed.articles.some((article) =>
+    !validateGroundedOutput(article, groundingContext(productContext, request, existing), ['description', 'body', 'assistantOverview', 'assistantSuggestions']))) {
     return withPending(evidencePending());
   }
   const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => ({
