@@ -4,10 +4,13 @@ import { join, relative } from 'node:path';
 import { parse } from 'yaml';
 import { sensitiveKinds } from './sensitive-data.mjs';
 import { PRODUCT_TERMS } from './product-terms.mjs';
+import { valueFor } from './api-reference-render.mjs';
 
 const allowedHosts = new Set(['apiv3.ihelpchat.com', 'app.ihelpchat.com', 'app.tango.us', 'assets.ihelpchat.com',
   'images.ihelpchat.com', 'faq.ihelpchat.com', 'ihelpchat.com.br', 'www.ihelpchat.com.br']);
 const unique = (values) => [...new Set(values)];
+export const finalizeSecurityResponse = (result, warnings = result.securityWarnings ?? []) =>
+  ({ ...result, securityWarnings: unique(warnings) });
 const endpointName = (article) => `${String(article.method ?? 'GET').toUpperCase()} ${article.endpoint ?? ''}`.trim();
 const stringsOf = (value) => typeof value === 'string' ? [value]
   : Array.isArray(value) ? value.flatMap(stringsOf)
@@ -41,7 +44,31 @@ function hasExamplePersonName(text) {
     .some(([name]) => !permittedName(name)));
 }
 
-export function securityReview(article, { facts = {}, request = {} } = {}) {
+function pathExampleBlock(facts, examples) {
+  const routes = [facts.route, ...(facts.optionalAliases ?? (facts.optionalAlias ? [facts.optionalAlias] : []))]
+    .filter(Boolean).map((route) => route.replace(/^\/api\/v\d+/iu, ''));
+  for (const { endpoint } of examples) {
+    const sample = endpoint.replace(/^\/api\/v\d+/iu, '').split('/').filter(Boolean);
+    const template = routes.find((route) => route.split('/').filter(Boolean).length === sample.length);
+    if (!template) continue;
+    const expected = template.split('/').filter(Boolean);
+    for (const [index, segment] of expected.entries()) {
+      const parameter = segment.match(/^\{([^}]+)\}$/u)?.[1];
+      if (!parameter) {
+        if (segment.toLowerCase() !== sample[index].toLowerCase())
+          return `path de exemplo diverge do template em ${segment}`;
+        continue;
+      }
+      const field = facts.parameters?.find((item) => item.name.toLowerCase() === parameter.toLowerCase())
+        ?? { name: parameter, type: 'string' };
+      if (!/^\{[^}]+\}$/u.test(sample[index]) && sample[index] !== valueFor(field))
+        return `path de exemplo com valor real em ${parameter}; use o valor sintético`;
+    }
+  }
+  return null;
+}
+
+export function securityReview(article, { facts = {}, request = {}, examples = [] } = {}) {
   const blocks = [];
   const warnings = [];
   const body = String(article.body ?? '');
@@ -51,7 +78,8 @@ export function securityReview(article, { facts = {}, request = {} } = {}) {
   if (kinds.credential || kinds.internal || kinds.control) blocks.push('Conteúdo contém possível segredo ou informação interna.');
   if (normalizedIds(text))
     blocks.push('Exemplo contém id real (ObjectId ou UUID). Use id-exemplo-1.');
-  if (/\/(?!5500000000000(?:[/?#\s"'`]|$))(?:\d{6,})(?:[/?#\s"'`]|$)/u.test(text)) blocks.push('Path de exemplo contém id numérico real. Use id-exemplo-1.');
+  const pathBlock = pathExampleBlock(facts, examples);
+  if (pathBlock) blocks.push(pathBlock);
   for (const match of text.matchAll(/https?:\/\/[^\s<>)"'`]+/giu)) {
     try {
       const url = new URL(match[0].replace(/[.,;:!?]+$/u, ''));

@@ -5,7 +5,7 @@ import { validateCanonicalGuide } from '../lib/canonical-guides.mjs';
 import { validatePublicArtifact } from '../lib/guide-package.mjs';
 import approvedMap from '../product-map/approved.json' with { type: 'json' };
 import { sensitiveKinds } from './sensitive-data.mjs';
-import { securityReview } from './security-review.mjs';
+import { finalizeSecurityResponse, securityReview } from './security-review.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
 import { routeMatches } from './api-route-match.mjs';
 import { contentRoutes, internalLinkIssues, parseArticle, parseMdx, plainText, publishedContent, visit } from './editorial-standard.mjs';
@@ -96,6 +96,7 @@ function citedMethod(line, before, after) {
 export function extractCitedEndpoints(article) {
   const primary = { method: String(article.method ?? '').toUpperCase(), endpoint: String(article.endpoint ?? '') };
   const endpoints = [primary];
+  const examples = [];
   const unresolved = [];
   const body = String(article.body ?? '').replace(/\\\r?\n\s*/gu, ' ')
     .replace(/\b(?:fetch|requests\.(?:get|post|put|patch|delete))\s*\([\s\S]*?\)/giu,
@@ -108,7 +109,8 @@ export function extractCitedEndpoints(article) {
     for (const match of line.matchAll(/https?:\/\/[^\s`<>"')]+/giu)) {
       let url;
       try { url = new URL(match[0].replace(/[.,;:!?]+$/u, '')); } catch { continue; }
-      if (API_HOSTS.has(url.hostname)) matches.push({ index: match.index, length: match[0].length, route: url.pathname });
+      if (API_HOSTS.has(url.hostname)) matches.push({ index: match.index, length: match[0].length,
+        route: url.pathname.replace(/%7B/giu, '{').replace(/%7D/giu, '}') });
     }
     for (const match of line.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(\/[A-Za-z0-9_{}./?=&%-]+)/giu))
       matches.push({ index: match.index + match[0].indexOf(match[2]), length: match[2].length, route: match[2], method: match[1].toUpperCase() });
@@ -125,6 +127,7 @@ export function extractCitedEndpoints(article) {
       const endpoint = candidate.route.replace(/[.,;:!?]+$/u, '').split(/[?#]/u)[0];
       const method = candidate.method ?? citedMethod(line, line.slice(0, candidate.index), line.slice(candidate.index + candidate.length));
       if (!method) { if (!unresolved.includes(endpoint)) unresolved.push(endpoint); continue; }
+      examples.push({ method, endpoint });
       const base = primary.endpoint.replace(/^\/api\/v\d+/iu, '');
       const short = endpoint.replace(/^\/api\/v\d+/iu, '');
       if (method === primary.method && (routeMatches(short, base) || short.startsWith(`${base}/id-exemplo-`))) continue;
@@ -132,7 +135,7 @@ export function extractCitedEndpoints(article) {
         endpoints.push({ method, endpoint });
     }
   }
-  return { endpoints, unresolved };
+  return { endpoints, unresolved, examples };
 }
 
 // Único preflight de segurança para páginas propostas ou gravadas pelo MCP.
@@ -142,7 +145,7 @@ export async function reviewBeforePageWrite(root, items, request = {}) {
   const missing = [];
   for (const { article } of items) {
     const api = article.path.startsWith('api/');
-    const cited = api ? extractCitedEndpoints(article) : { endpoints: [{}], unresolved: [] };
+    const cited = api ? extractCitedEndpoints(article) : { endpoints: [{}], unresolved: [], examples: [] };
     missing.push(...cited.unresolved.map((endpoint) => `endpoint citado sem método: ${endpoint}`));
     for (const endpoint of cited.endpoints) {
       const candidate = api ? { ...article, ...endpoint } : article;
@@ -150,7 +153,10 @@ export async function reviewBeforePageWrite(root, items, request = {}) {
       if (api && !facts) {
         missing.push(`sem fatos do código para conferir os campos do endpoint ${endpoint.method} ${endpoint.endpoint}`);
       }
-      const review = securityReview(candidate, { facts: facts ?? {}, request });
+      const examples = cited.examples.filter((example) => example.method === endpoint.method
+        && routeMatches(example.endpoint.replace(/^\/api\/v\d+/iu, ''),
+          endpoint.endpoint.replace(/^\/api\/v\d+/iu, '')));
+      const review = securityReview(candidate, { facts: facts ?? {}, request, examples });
       if (review.blocks.length) reject(review.blocks[0]);
       warnings.push(...review.warnings);
       if (review.warnings.length) required.add(review.endpoint);
@@ -163,7 +169,7 @@ export async function reviewBeforePageWrite(root, items, request = {}) {
   for (const item of given) if (!required.has(item)) reject(`confirmação ${item} não corresponde a endpoint sensível do pacote`);
   const questions = [...missing, ...[...required].filter((item) => !given.includes(item))
     .map((item) => `Para seguir, confirme o endpoint sensível: ${item}`)];
-  return { ...(questions.length ? { status: 'needs_information', questions } : {}), securityWarnings: [...new Set(warnings)] };
+  return finalizeSecurityResponse(questions.length ? { status: 'needs_information', questions } : {}, warnings);
 }
 
 function checkJargon(text) {

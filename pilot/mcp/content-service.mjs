@@ -10,6 +10,7 @@ import { articleFields, articleSchema } from './article-fields.mjs';
 import { githubWriteToken } from './env-compat.mjs';
 import { guideSchema } from '../architecture/conversation-v1.mjs';
 import { assertPublicSubmit } from './public-submit-gate.mjs';
+import { finalizeSecurityResponse } from './security-review.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -279,7 +280,7 @@ async function submitArticleAudited(root, article, mode, requestedBy, options = 
   if (!actor) throw new SubmitArticleError('INVALID_REQUESTED_BY', 'requestedBy deve ser um ID opaco user: ou service: sem dados pessoais');
   const items = safeArticleList([article]);
   const gate = await assertPublicSubmit(root, items, [], { securityOnly: mode === 'draft', request: options });
-  if (gate.status === 'needs_information') return gate;
+  if (gate.status === 'needs_information') return finalizeSecurityResponse(gate);
   await appendAudit(root, actor, safeMode, target, 'attempt');
   let result;
   try {
@@ -297,7 +298,7 @@ async function submitArticleAudited(root, article, mode, requestedBy, options = 
     }
     throw error;
   }
-  return result;
+  return finalizeSecurityResponse(result, gate.securityWarnings);
 }
 
 async function createDraft(root, article, rendered, { allowExistingDraft = false } = {}) {
@@ -509,8 +510,8 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
     items = safeArticleList(articles, deletes);
     gate = await assertPublicSubmit(root, items, deletes, { request: draftOptions, securityOnly: mode !== 'pull_request' });
   } catch (error) { throw publicSubmitError(error); }
-  if (gate.status === 'needs_information') return gate;
-  if (mode === 'dry_run') return { status: 'dry_run', articles: articles.map(({ path }) => path), deleted: deletes, ...gate };
+  if (gate.status === 'needs_information') return finalizeSecurityResponse(gate);
+  if (mode === 'dry_run') return finalizeSecurityResponse({ status: 'dry_run', articles: articles.map(({ path }) => path), deleted: deletes, ...gate });
   await recordAudit(root, { actor, operation, mode: auditMode, target: targets, result: 'attempt' });
   try {
     let result;
@@ -536,7 +537,7 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
       }
       throw error;
     }
-    return result;
+    return finalizeSecurityResponse(result, gate.securityWarnings);
   } catch (error) {
     if (error instanceof SubmitArticleError && error.code === 'PR_CREATED_AUDIT_FAILED') throw error;
     if (actor) await recordAudit(root, { actor, operation, mode: auditMode, target: targets, result: 'failure' });

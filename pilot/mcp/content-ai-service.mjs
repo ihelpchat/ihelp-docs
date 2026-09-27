@@ -7,7 +7,8 @@ import { catalogActions, isCatalogAction } from './product-actions.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
 import { renderApiReference } from './api-reference-render.mjs';
-import { securityReview } from './security-review.mjs';
+import { finalizeSecurityResponse, securityReview } from './security-review.mjs';
+import { extractCitedEndpoints } from './public-submit-gate.mjs';
 import { contentMaxOutputTokens } from './env-compat.mjs';
 import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
@@ -197,16 +198,15 @@ function apiPending(reason) {
 function finalizeGeneratedPages(result, request, factsByPath = new Map()) {
   const securityWarnings = [];
   for (const article of result.articles) {
-    const review = securityReview(article, { facts: factsByPath.get(article.path), request });
+    const review = securityReview(article, { facts: factsByPath.get(article.path), request,
+      examples: extractCitedEndpoints(article).examples });
     securityWarnings.push(...review.warnings);
-    if (review.blocks.length) return { ...result, ...apiPending(`${article.path}: ${review.blocks.join('; ')}`),
-      securityWarnings: [...new Set(securityWarnings)] };
-    if (review.warnings.length && !review.confirmed) return { ...result,
+    if (review.blocks.length) return finalizeSecurityResponse({ ...result, ...apiPending(`${article.path}: ${review.blocks.join('; ')}`) }, securityWarnings);
+    if (review.warnings.length && !review.confirmed) return finalizeSecurityResponse({ ...result,
       ...apiPending(`Confirme a revisão de segurança de ${article.path}.`),
-      questions: [`Para seguir, confirme o endpoint sensível: ${review.endpoint}`],
-      securityWarnings: [...new Set(securityWarnings)] };
+      questions: [`Para seguir, confirme o endpoint sensível: ${review.endpoint}`] }, securityWarnings);
   }
-  return { ...result, securityWarnings: [...new Set(securityWarnings)] };
+  return finalizeSecurityResponse(result, securityWarnings);
 }
 export function normalizeCatalogLabel(action) {
   return resolveCatalogAction(action) ?? action;
@@ -659,5 +659,6 @@ export async function planContent(root, request, options = {}) {
 }
 
 export async function generateContentPackage(root, request, options = {}) {
-  return withCodeRefreshOffer(await generateContentPackageCore(root, request, options));
+  const result = await generateContentPackageCore(root, request, options);
+  return withCodeRefreshOffer(finalizeSecurityResponse(result));
 }
