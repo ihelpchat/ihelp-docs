@@ -8,6 +8,7 @@ import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
 import { renderApiReference } from './api-reference-render.mjs';
 import { contentMaxOutputTokens } from './env-compat.mjs';
+import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
 contentMaxOutputTokens();
@@ -292,6 +293,8 @@ function groundingPending(context) {
     guidance: 'Código do produto indisponível ou sem evidência para este tema.',
     questions: ['Confirme os checkouts autorizados, seus SHAs e a implementação do tema.'],
     risks: [], suggestedActions: [], articles: [],
+    pending: [context.code?.some(({ available }) => !available) || !context.code?.length
+      ? 'código do produto indisponível' : 'nenhum trecho encontrado no código do produto'],
   };
 }
 
@@ -316,7 +319,7 @@ async function related(root, request) {
   }));
 }
 
-export async function planContent(root, request, options = {}) {
+async function planContentCore(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpointsFrom(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
@@ -348,7 +351,7 @@ export async function planContent(root, request, options = {}) {
   return { ...safePlan, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, pending: productContext.pending ?? [], productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
 }
 
-export async function generateContentPackage(root, request, options = {}) {
+async function generateContentPackageCore(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpointsFrom(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
@@ -530,4 +533,12 @@ export async function generateCanonicalGuide(root, request, options = {}) {
   if (article.guide.guideId !== request.guideId || article.contentType !== 'guia'
     || article.productActions.some((action) => !confirmedAction(action, request, productContext))) return evidencePending();
   return { status: 'ready', articles: [article] };
+}
+
+export async function planContent(root, request, options = {}) {
+  return withCodeRefreshOffer(await planContentCore(root, request, options));
+}
+
+export async function generateContentPackage(root, request, options = {}) {
+  return withCodeRefreshOffer(await generateContentPackageCore(root, request, options));
 }

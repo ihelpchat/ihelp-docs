@@ -10,9 +10,10 @@ import { getIhelpContext } from './product-context-service.mjs';
 import { authorizeTool, registerToolPolicy, requestIdentity } from './access-control.mjs';
 import { createGuide } from './create-guide.mjs';
 import { atualizarPorDeploy } from './update-by-deploy.mjs';
+import { refreshCodeProduct } from './code-refresh-offer.mjs';
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
-const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy']);
+const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto']);
 const requestedBySchema = z.string().optional().describe('Ator opcional; se informado, deve coincidir com o ator da credencial');
 const contentRequestSchema = z.object({
   topic: z.string().min(3).max(120),
@@ -179,6 +180,15 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
   }, async ({ requestedBy, before, after, prova }) => {
     try { return textResult(await atualizarPorDeploy(root, { before, after, prova, requestedBy })); }
     catch (error) { return textResult({ error: error instanceof Error ? error.message : String(error) }, true); }
+  });
+
+  registerTool('atualizar_codigo_produto', {
+    mutates: true,
+    description: 'Atualiza sob demanda a cópia de leitura do front e do back. Repita o pedido original depois da atualização.',
+    inputSchema: z.strictObject({ requestedBy: requestedBySchema }),
+  }, async () => {
+    try { return textResult(await refreshCodeProduct()); }
+    catch { return textResult({ error: 'Não foi possível atualizar a cópia do código' }, true); }
   });
 
   registerTool('docs_submit_package', {
