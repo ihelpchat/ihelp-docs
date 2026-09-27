@@ -9,6 +9,7 @@ import { submitArticle, submitContentPackage } from './content-service.mjs';
 import { renderApiReference } from './api-reference-render.mjs';
 import { McpServer } from '@modelcontextprotocol/server';
 import { buildServer } from './server.mjs';
+import { generateContentPackage } from './content-ai-service.mjs';
 
 const article = { path: 'api/teste/contato', title: 'Consultar contato',
   description: 'Consulte os dados de um contato pelo identificador informado.',
@@ -19,6 +20,30 @@ const examine = (candidate = article, input = {}) => {
   assert.equal(typeof review.securityReview, 'function');
   return review.securityReview(candidate, { facts: input.facts ?? facts, request: input });
 };
+
+test('docs_generate_package revisa página docs antes de devolvê-la', async () => {
+  const body = 'Abra a tela de contatos, escolha a opção de consulta e confira os dados exibidos. '.repeat(9);
+  const safe = { path: 'docs/teste/consulta', title: 'Consultar contatos',
+    description: 'Aprenda a consultar os contatos cadastrados no iHelp.', source: 'produto', contentType: 'faq',
+    assistantQuestion: 'Como consultar contatos?', assistantOverview: 'Abra Contatos, procure a pessoa na lista e confira os dados antes de continuar.',
+    assistantInitialSteps: 1, assistantSuggestions: ['Como buscar um contato?'], body,
+    productActions: [], grounding: [] };
+  const request = { topic: 'Consultar contatos', module: 'Contatos', description: 'Explicar a consulta de contatos.' };
+  const productContext = { groundingRequired: false, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] };
+  const generate = async (candidate) => generateContentPackage(process.cwd(), request, {
+    productContext, plan: { status: 'ready' },
+    client: { responses: { create: async () => ({ model: 'fixture', output_text: JSON.stringify({
+      status: 'ready', summary: 'Consulta de contatos.', questions: [], articles: [candidate], grounding: [],
+    }) }) } },
+  });
+  const allowed = await generate(safe);
+  assert.equal(allowed.status, 'ready', allowed.questions?.join('; '));
+  assert.equal(allowed.articles.length, 1);
+  const blocked = await generate({ ...safe, body: `${body} https://10.0.0.5/internal` });
+  assert.notEqual(blocked.status, 'ready');
+  assert.deepEqual(blocked.articles, []);
+  assert.match(blocked.questions.join(' '), /URL ou host fora da API pública/iu);
+});
 
 async function backendFixture() {
   const root = await mkdtemp(join(await realpath(tmpdir()), 'm556-back-'));
