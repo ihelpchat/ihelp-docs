@@ -17,14 +17,16 @@ const examples = [{ sections: ['Parâmetros de rota', 'Exemplo', 'Resposta', 'Ca
   baseUrl: 'https://apiv3.ihelpchat.com',
   components: ['Params', 'Param', 'CodeTabs', 'Response', 'Fields', 'Field'],
   languages: ['bash', 'js', 'python', 'http'] }];
-const prose = { path: 'api/contatos/buscar-detalhes-do-contato', title: 'Buscar detalhes do contato',
+const prose = { path: 'api/contatos/buscar-detalhes-do-contato', endpoint: 'GET /contacts/details/{IdRef}', title: 'Buscar detalhes do contato',
   description: 'Consulta os detalhes de um contato identificado pelo seu código público.',
   intro: 'Consulte os detalhes do contato informado.', notas: [], grounding: [] };
 const payload = { status: 'ready', summary: 'Referência de contatos.', questions: [], articles: [prose], grounding: [] };
 const context = { groundingRequired: false, matches: [], code: [], endpoints: [endpoint], apiExamples: examples };
 const request = { module: 'api', topic: 'Detalhes de contatos' };
 async function generate(change = (value) => value, changedContext = context) {
-  const output = change(structuredClone(payload));
+  const fixture = structuredClone(payload);
+  fixture.articles[0].endpoint = `${changedContext.endpoints[0].verb} ${changedContext.endpoints[0].route.replace(/^\/api\/v\d+/iu, '')}`;
+  const output = change(fixture);
   return generateContentPackage(process.cwd(), request, { productContext: changedContext,
     plan: { status: 'ready', guidance: 'Documente o endpoint.', questions: [] },
     client: { responses: { create: async () => ({ output_text: JSON.stringify(output), model: 'simulado' }) } } });

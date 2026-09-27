@@ -8,12 +8,12 @@ const facts = [
   { verb: 'GET', route: '/api/v2/contactTags/getContactsTagByContactId/{contactId}', parameters: [{ name: 'contactId', type: 'int', in: 'route' }] },
 ].map((fact) => ({ ...fact, public: true, documented: true, policy: 'authenticated', responseFields: [] }));
 const ids = ['GET /contacts', 'GET /contacts/details/{IdRef}', 'GET /contactTags/getContactsTagByContactId/{contactId}'];
-const paths = ['api/contatos/buscar-contatos', 'api/contatos/detalhes-do-contato', 'api/contatos/tags-do-contato'];
+const paths = ['api/contatos/buscar-contatos', 'api/contatos/buscar-detalhes-do-contato', 'api/contatos/buscar-tags-do-contato'];
 const style = { sections: ['Parâmetros', 'Exemplo', 'Resposta'], baseUrl: 'https://apiv3.ihelpchat.com',
   components: ['Params', 'Param', 'CodeTabs', 'Fields', 'Field'], languages: ['bash'] };
 const request = { topic: 'Contatos', module: 'api', description: 'Criar páginas novas em api/contatos/.' };
 const prose = ids.map((endpoint, index) => ({ endpoint, path: paths[index], title: `Página ${index + 1}`,
-  description: 'Consulte os contatos disponíveis.', intro: 'Use a referência para consultar os dados.', notas: [], grounding: [] }));
+  description: 'Consulte os dados dos contatos disponíveis na referência da API.', intro: 'Use a referência para consultar os dados.', notas: [], grounding: [] }));
 const positive = { status: 'ready', summary: 'Referência de contatos.', questions: [], articles: prose, grounding: [] };
 const context = { groundingRequired: false, matches: [], code: [], endpoints: facts, apiExamples: [style] };
 
@@ -38,6 +38,14 @@ test('três páginas novas escolhem fatos distintos e renderizam método, rota e
   for (const [index, name] of ['page', 'IdRef', 'contactId'].entries()) {
     assert.match(result.articles[index].body, new RegExp(`<Param name="${name}"`));
   }
+});
+
+test('ordem dos artigos não muda o fato escolhido pelo endpoint', async () => {
+  const { result } = await run((value) => { value.articles.reverse(); });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+  assert.deepEqual(result.articles.map((article) => article.endpoint), ids.map((id) => id.slice(4)).reverse());
+  assert.match(result.articles[0].body, /<Param name="contactId"/);
+  assert.match(result.articles[2].body, /<Param name="page"/);
 });
 
 for (const [name, change, reason] of [

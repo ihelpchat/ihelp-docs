@@ -82,10 +82,10 @@ function proseIssue(article, endpoint) {
 }
 function apiSchemaIssue(article) {
   if (!article || typeof article !== 'object' || Array.isArray(article)) return 'schema de prosa inválido';
-  const allowed = new Set(['path', 'title', 'description', 'intro', 'notas', 'grounding']);
+  const allowed = new Set(['path', 'endpoint', 'title', 'description', 'intro', 'notas', 'grounding']);
   const extra = Object.keys(article).find((key) => !allowed.has(key));
   if (extra) return `campo da IA não permitido: ${extra}`;
-  if (typeof article.path !== 'string' || typeof article.title !== 'string'
+  if (typeof article.path !== 'string' || typeof article.endpoint !== 'string' || typeof article.title !== 'string'
     || typeof article.description !== 'string' || typeof article.intro !== 'string'
     || !Array.isArray(article.notas) || !article.notas.every((item) => typeof item === 'string')
     || !Array.isArray(article.grounding)) return 'schema de prosa inválido';
@@ -110,12 +110,17 @@ function groundingIssues(output, context, fields) {
   const issues = lines.filter((line) => !claims.some((claim) => claim.text === line)).map((line) => `frase sem citação: ${line}`);
   const normalizeSpaces = (value) => value.replace(/\s+/gu, ' ').trim();
   const segmentsOf = (quote) => String(quote).split(/(?<=[.!?;])\s+|\n/u)
-    .map((segment) => normalizeSpaces(segment).replace(/^[\p{P}]+|[\p{P}]+$/gu, '').trim()).filter(Boolean);
+    .map(normalizeSpaces).filter(Boolean);
   const literalSegments = (quote, sources) => {
     const segments = segmentsOf(quote);
     return normalizeSpaces(String(quote)).length >= 12 && segments.some((segment) => segment.length >= 12)
-      && segments.every((segment) => sources.some((source) =>
-        typeof source === 'string' && normalizeSpaces(source).includes(segment)));
+      && segments.every((segment, index) => sources.some((source) => {
+        if (typeof source !== 'string') return false;
+        const literal = normalizeSpaces(source);
+        if (literal.includes(segment)) return true;
+        return index === segments.length - 1 && !/[.!?;]$/u.test(segment)
+          && [...literal.matchAll(new RegExp(`${segment.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}[.!?;]`, 'gu'))].length > 0;
+      }));
   };
   const evidence = evidenceIndex(context);
   if (!claims.length) issues.push('grounding vazio');
@@ -252,8 +257,8 @@ const PACKAGE_SCHEMA = {
 };
 const API_ARTICLE_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['path', 'title', 'description', 'intro', 'notas', 'grounding'],
-  properties: { path: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' },
+  required: ['path', 'endpoint', 'title', 'description', 'intro', 'notas', 'grounding'],
+  properties: { path: { type: 'string' }, endpoint: { type: 'string', enum: [] }, title: { type: 'string' }, description: { type: 'string' },
     intro: { type: 'string' }, notas: { type: 'array', items: { type: 'string' } }, grounding: API_GROUNDING_SCHEMA },
 };
 const API_PACKAGE_SCHEMA = { ...PACKAGE_SCHEMA, properties: { ...PACKAGE_SCHEMA.properties,
@@ -331,6 +336,10 @@ function pageMatchesEndpoint(page, endpoint) {
   return page?.frontmatter?.method && page?.frontmatter?.endpoint && endpoint.verb === page.frontmatter.method && [endpoint.route, ...(endpoint.optionalAliases ?? (endpoint.optionalAlias ? [endpoint.optionalAlias] : []))]
     .some((route) => route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')
       === page.frontmatter.endpoint.toLowerCase().replace(/\{[^}]+\}/gu, '{}'));
+}
+
+function publicEndpointId(endpoint) {
+  return `${endpoint.verb} ${endpoint.route.replace(/^\/api\/v\d+/iu, '')}`;
 }
 
 function groundingPending(context) {
@@ -425,13 +434,19 @@ async function generateContentPackageCore(root, request, options = {}) {
     return withPending({ status: plan.status, summary: plan.summary ?? plan.guidance, questions: plan.questions, articles: [], existing, model: plan.model });
   }
   const { pending: _pending, ...planForPrompt } = plan;
-  const response = await modelResponse(options, baseRequest('pacote_documentacao', request.module === 'api' ? API_PACKAGE_SCHEMA : PACKAGE_SCHEMA, [
+  const explicit = request.module === 'api' && explicitEndpointsFrom(request).length > 0;
+  const selectable = request.module === 'api' ? productContext.endpoints.filter((item) => item.public && (explicit ? item.explicit : item.documented)) : [];
+  if (request.module === 'api' && !selectable.length) return withPending(apiPending('endpoint não público: confirmar'));
+  const apiSchema = { ...API_PACKAGE_SCHEMA, properties: { ...API_PACKAGE_SCHEMA.properties,
+    articles: { type: 'array', items: { ...API_ARTICLE_SCHEMA, properties: { ...API_ARTICLE_SCHEMA.properties,
+      endpoint: { type: 'string', enum: selectable.map(publicEndpointId) } } } } } };
+  const response = await modelResponse(options, baseRequest('pacote_documentacao', request.module === 'api' ? apiSchema : PACKAGE_SCHEMA, [
     {
       role: 'developer',
       content: [
         'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.',
         request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
-        request.module === 'api' ? 'Escreva somente path, title, description, intro e notas para endpoints públicos. A ordem dos artigos deve seguir a ordem dos fatos. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
+        request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
         request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
@@ -453,21 +468,23 @@ async function generateContentPackageCore(root, request, options = {}) {
   if (request.module === 'api' && !parsed.articles.length) return withPending(apiPending('nenhuma página de API gerada'));
   if (request.module === 'api') {
     if (!productContext.apiExamples?.length) return withPending(apiPending('formato da referência API indisponível'));
-    const explicit = explicitEndpointsFrom(request).length > 0;
-    const selectable = productContext.endpoints.filter((item) => item.public && (explicit ? item.explicit : item.documented));
-    if (parsed.articles.length !== selectable.length) return withPending(apiPending(`artigos sem fato correspondente: ${parsed.articles.length}/${selectable.length}`));
     const articles = [];
     const usedEndpoints = new Set();
     const pending = [];
-    for (const [index, prose] of parsed.articles.entries()) {
+    const requestedSection = [request.description, request.details].filter((value) => typeof value === 'string').join(' ').match(/(?<!\/)\bapi\/([a-z0-9-]+)\//iu)?.[1];
+    for (const prose of parsed.articles) {
       const schemaIssue = apiSchemaIssue(prose);
       if (schemaIssue) return withPending(apiPending(schemaIssue));
+      if (!apiSchema.properties.articles.items.properties.endpoint.enum.includes(prose.endpoint))
+        return withPending(apiPending(`endpoint fora da lista: ${prose.endpoint}`));
+      if (usedEndpoints.has(prose.endpoint)) return withPending(apiPending(`endpoint repetido: ${prose.endpoint}`));
       const page = productContext.apiExamples?.find((item) => item.path === prose.path);
-      if (!page && selectable.length > 1) return withPending(apiPending(`página sem endpoint documentado: ${prose.path}`));
-      const endpoint = page ? selectable.find((item) => pageMatchesEndpoint(page, item)) : selectable.length === 1 ? selectable[0] : selectable[index];
-      if (!endpoint || usedEndpoints.has(endpoint)) {
-        return withPending(apiPending(`endpoint sem fato único: ${prose.path}`));
-      }
+      if (!page && requestedSection && !prose.path.startsWith(`api/${requestedSection}/`))
+        return withPending(apiPending(`path fora da seção pedida: ${prose.path}`));
+      const endpoint = selectable.find((item) => publicEndpointId(item) === prose.endpoint);
+      if (!endpoint) return withPending(apiPending(`endpoint fora da lista: ${prose.endpoint}`));
+      if (page && !pageMatchesEndpoint(page, endpoint))
+        return withPending(apiPending(`endpoint divergente da página publicada: ${prose.path}`));
       if (endpoint.documented && productContext.apiExamples?.some((item) => pageMatchesEndpoint(item, endpoint)) && !page) {
         return withPending(apiPending(`path divergente da página publicada: ${prose.path}`));
       }
@@ -475,7 +492,7 @@ async function generateContentPackageCore(root, request, options = {}) {
         || !('responseFields' in endpoint) || !(endpoint.authorization ?? endpoint.policy)) {
         return withPending(apiPending(`fatos técnicos incompletos: ${prose.path}`));
       }
-      usedEndpoints.add(endpoint);
+      usedEndpoints.add(prose.endpoint);
       const issue = proseIssue(prose, endpoint);
       if (issue) return withPending(apiPending(issue));
       const issues = groundingIssues(prose, groundingContext(productContext, request, existing), ['description', 'intro', 'notas']);
@@ -497,6 +514,8 @@ async function generateContentPackageCore(root, request, options = {}) {
       if (!validation.valid) return withPending(apiPending(`${prose.path}: ${validation.issues.join('; ')}`));
       articles.push(article);
     }
+    const withoutPage = selectable.map(publicEndpointId).find((id) => !usedEndpoints.has(id));
+    if (withoutPage) return withPending(apiPending(`endpoint sem página: ${withoutPage}`));
     const summaryIssue = proseIssue({ title: parsed.summary, description: '', intro: '', notas: [] }, { parameters: [], responseFields: [] });
     if (summaryIssue) return withPending(apiPending(summaryIssue));
     const summaryIssues = groundingIssues(parsed, groundingContext(productContext, request, existing), ['summary']);

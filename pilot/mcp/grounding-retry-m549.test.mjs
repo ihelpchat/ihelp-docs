@@ -111,7 +111,7 @@ test('recusa de página fora do contexto informa página não listada no retry',
 
 const endpoint = { verb: 'GET', route: '/api/v2/contacts', public: true, documented: true,
   policy: 'authenticated', parameters: [], responseFields: null };
-const prose = { path: 'api/contatos/buscar', title: 'Buscar contatos',
+const prose = { path: 'api/contatos/buscar', endpoint: 'GET /contacts', title: 'Buscar contatos',
   description: 'Consulte os contatos da sua equipe usando a referência pública.', intro: 'A lista mostra os contatos disponíveis.', notas: [],
   grounding: [
     { text: 'Consulte os contatos da sua equipe usando a referência pública.', citations: [citation] },
