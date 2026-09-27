@@ -1,4 +1,5 @@
 import { readFile, readdir } from 'node:fs/promises';
+import { STATUS_CODES } from 'node:http';
 import { join, relative } from 'node:path';
 import { parse } from 'yaml';
 import { sensitiveKinds } from './sensitive-data.mjs';
@@ -15,8 +16,10 @@ const normalizedIds = (text) => [...text.matchAll(/(?<![\da-f])[\da-f][\da-f_:\s
   .some(([candidate]) => [24, 32].includes(candidate.replace(/[-_\s:]/gu, '').length)
     && /^[\da-f]+$/iu.test(candidate.replace(/[-_\s:]/gu, '')));
 
-const PERSON_NAME = /\b\p{Lu}[\p{L}\p{M}]+(?:[ \t]+\p{Lu}[\p{L}\p{M}]+)+\b/gu;
+const PERSON_NAME = /\b\p{Lu}[\p{Ll}\p{M}]+(?:[ \t]+\p{Lu}[\p{Ll}\p{M}]+)+\b/gu;
+const httpStatusPhrases = new Set(Object.values(STATUS_CODES).map((phrase) => phrase.toLocaleLowerCase('en-US')));
 const permittedName = (name) => /\b(?:Exemplo|Teste)\b/iu.test(name)
+  || httpStatusPhrases.has(name.toLocaleLowerCase('en-US'))
   || PRODUCT_TERMS.some((term) => term.toLocaleLowerCase('pt-BR') === name.toLocaleLowerCase('pt-BR'));
 
 function exampleZones(text) {
