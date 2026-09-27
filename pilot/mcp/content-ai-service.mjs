@@ -42,15 +42,17 @@ const API_GROUNDING_SCHEMA = { type: 'array', items: {
 const API_PROSE_UNIT_SCHEMA = { type: 'object', additionalProperties: false, required: ['text', 'citations'],
   properties: { text: { type: 'string' }, citations: API_GROUNDING_SCHEMA.items.properties.citations } };
 
-function proseIssue(article, endpoint) {
-  const parameters = endpoint.parameters ?? [];
+function proseIssue(article, endpoint, packageEndpoints = [endpoint]) {
+  const parameters = packageEndpoints.flatMap((item) => item.parameters ?? []);
   const parameterNames = new Set(parameters.map((field) => field.name));
-  const fieldNames = new Set([...parameters.filter((field) => field.in === 'body'), ...endpoint.responseFields ?? []]
+  const fieldNames = new Set([...parameters.filter((field) => field.in === 'body'),
+    ...(endpoint.responseFields ?? [])]
     .map((field) => field.name));
   const headerNames = new Set(['Authorization', 'Content-Type']);
   const names = new Set([...parameterNames, ...fieldNames, ...headerNames]);
   const inlineNames = new Set([...parameterNames, ...fieldNames]);
-  for (const route of [endpoint.route, ...(endpoint.optionalAliases ?? (endpoint.optionalAlias ? [endpoint.optionalAlias] : []))]) {
+  for (const route of packageEndpoints.flatMap((item) =>
+    [item.route, ...(item.optionalAliases ?? (item.optionalAlias ? [item.optionalAlias] : []))])) {
     for (const segment of (route ?? '').split('/')) {
       if (segment) names.add(segment.replace(/^\{([^}]+)\}$/u, '$1'));
     }
@@ -595,7 +597,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       }
       usedEndpoints.add(prose.endpoint);
       const issue = proseIssue({ title: prose.title, description: prose.description.text,
-        intro: prose.intro.text, notas: prose.notas.map((item) => item.text) }, endpoint);
+        intro: prose.intro.text, notas: prose.notas.map((item) => item.text) }, endpoint, selectable);
       if (issue) return withPending(apiPending(issue));
       const issues = apiUnitIssues([prose.description, prose.intro, ...prose.notas], groundingContext(productContext, request, existing));
       if (issues.length) {
@@ -606,7 +608,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       for (const item of prose.responseDescriptions ?? []) {
         if (!endpoint.responseFields?.some((field) => field.name === item.name) || described.has(item.name))
           return withPending(apiPending(`descrição de campo sem fato: ${item.name}`));
-        const descriptionIssue = proseIssue({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint);
+        const descriptionIssue = proseIssue({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable);
         if (descriptionIssue) return withPending(apiPending(descriptionIssue));
         const descriptionGrounding = apiUnitIssues([item.description], groundingContext(productContext, request, existing));
         if (descriptionGrounding.length) return withPending(evidencePending(descriptionGrounding));

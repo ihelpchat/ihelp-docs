@@ -1,9 +1,6 @@
-import { syntheticResponseExample } from './api-synthetic-example.mjs';
+import { syntheticResponseExample, valueFor } from './api-synthetic-example.mjs';
 const safe = (value) => String(value ?? '').replace(/[<>{}"`]/gu, '');
-export const valueFor = (parameter) => /^(?:int|long|double|decimal|float|short|number)$/iu.test(parameter.type) ? '1'
-  : /^bool(?:ean)?$/iu.test(parameter.type) ? 'false'
-    : /(?:^|_)(?:id|idref|uuid|contactid)(?:$|_)/iu.test(parameter.name) || /id$/iu.test(parameter.name) ? 'id-exemplo-1'
-      : /(?:phone|telefone|celular|whatsapp)/iu.test(parameter.name) ? '5500000000000' : 'exemplo';
+export { valueFor } from './api-synthetic-example.mjs';
 export const isSyntheticNumericExample = (value) => value === valueFor({ name: 'phone', type: 'string' });
 const publicRoute = (route) => route.replace(/^\/api\/v\d+/iu, '');
 const simpleFieldName = (name) => name.replace(/([a-z])([A-Z])/gu, '$1 $2').replace(/[_-]+/gu, ' ').toLocaleLowerCase('pt-BR');
@@ -97,5 +94,5 @@ export function renderApiReference(endpoint, examples, page) {
   ] : [];
   return { source: 'api', contentType: 'referencia', method: endpoint.verb,
     endpoint: displayRoute, body: paragraphs.map((item) => item.body).join('\n\n'),
-    pending: [...parameterPending, ...(endpoint.responseFields === null ? [`campos de resposta não verificáveis: ${endpoint.verb} ${endpoint.route}`] : endpoint.responseFields.length && !syntheticResponseExample(endpoint) ? ['exemplo sintético aguardando a M5.56'] : [])] };
+    pending: [...parameterPending, ...(endpoint.responseFields === null ? [`campos de resposta não verificáveis: ${endpoint.verb} ${endpoint.route}`] : [])] };
 }
