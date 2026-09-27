@@ -103,6 +103,35 @@ try {
     const stateDir = join(root, 'boot-state');
     const result = await health({ MCP_STATE_DIR: stateDir, GITHUB_READ_TOKEN: 'fixture-token', GIT_CONFIG_GLOBAL: config });
     assert.equal(result.status, 200);
+    const restarted = await health({ MCP_STATE_DIR: stateDir });
+    assert.equal(restarted.status, 200);
+    assert.equal(restarted.body.productContext.front.sha, result.body.productContext.front.sha);
+    assert.equal(restarted.body.productContext.back.sha, result.body.productContext.back.sha);
+    assert.equal(restarted.body.productContext.stale, true);
+    const probe = spawnSync(process.execPath, ['--input-type=module', '-e', `
+      import './pilot/mcp/http.mjs';
+      import { planContent } from './pilot/mcp/content-ai-service.mjs';
+      import { getIhelpContext } from './pilot/mcp/product-context-service.mjs';
+      const root = process.cwd() + '/pilot/';
+      const context = await getIhelpContext(root, 'widget', 'produto', { requireLocal: true, cache: false });
+      const match = context.matches.find((item) => item.path === 'src/pages/Widget.tsx');
+      const plan = await planContent(root,
+        { topic: 'widget', module: 'produto', description: 'Documentar widget' },
+        { contextOptions: { cache: false }, client: { responses: { create: async () => ({
+          model: 'fixture', output_text: JSON.stringify({ status: 'ready', guidance: 'Abra a tela.', questions: [],
+            risks: [], suggestedActions: [], grounding: match ? [{ text: 'Abra a tela.', citations: [{
+              repository: match.repository, path: match.path, lineStart: match.line, lineEnd: match.line,
+              sha: match.sha }] }] : [] }) }) } } });
+      process.stdout.write(JSON.stringify({ status: plan.status, files: plan.productContext?.files ?? [] }));
+      process.exit(0);
+    `], { cwd: new URL('../..', import.meta.url).pathname, encoding: 'utf8', timeout: 30_000,
+      env: { ...process.env, MCP_STATE_DIR: stateDir, GITHUB_READ_TOKEN: '', PRODUCT_LOCAL_CHECKOUT: '',
+        BACKEND_LOCAL_CHECKOUT: '', PORT: '0', DOCS_ROOT: root, OPENAI_API_KEY: '',
+        DOCS_MCP_API_KEY: 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz' } });
+    assert.equal(probe.status, 0, probe.stderr);
+    assert.equal(JSON.parse(probe.stdout).status, 'ready');
+    assert.ok(JSON.parse(probe.stdout).files.some((file) => file.includes('src/pages/Widget.tsx')),
+      'planContent precisa ler a geração restaurada sem token');
     const previous = { front: process.env.PRODUCT_LOCAL_CHECKOUT, back: process.env.BACKEND_LOCAL_CHECKOUT };
     process.env.PRODUCT_LOCAL_CHECKOUT = join(stateDir, 'checkouts/current/front');
     process.env.BACKEND_LOCAL_CHECKOUT = join(stateDir, 'checkouts/current/back');
