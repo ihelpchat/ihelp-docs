@@ -1,0 +1,62 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { planContent, validateGroundedOutput } from './content-ai-service.mjs';
+
+const reordered = 'São páginas NOVAS em api/contatos/ (a seção ainda não existe). Nomes: "Buscar contatos" (listagem), "Buscar detalhes do contato" e "Buscar tags do contato".';
+const details = 'Nomes: "Buscar contatos" (listagem), "Buscar detalhes do contato" e "Buscar tags do contato". São páginas NOVAS em api/contatos/ (a seção ainda não existe).';
+const claim = 'Crie as três páginas de contatos.';
+const citation = { source: 'pedido', quote: reordered };
+const request = { topic: 'Referência de contatos', module: 'api', details };
+const context = { groundingRequired: true, module: 'api', request, existing: [], matches: [{ repository: 'ihelpchat/olah-ihelp', path: 'ContactsController.cs', line: 12, sha: 'a'.repeat(40), ref: 'a'.repeat(40) }], code: [{ available: true }],
+  endpoints: [{ public: true, route: '/api/v2/contacts' }], support: { categories: [], rules: [] } };
+const output = (cite = citation) => ({ guidance: claim, grounding: [{ text: claim, citations: [cite] }] });
+
+test('quote reordenado do replay real é aceito por segmentos literais', () => {
+  assert.equal(validateGroundedOutput(output(), context, ['guidance']), true);
+});
+
+test('segmento inventado no quote reordenado é rejeitado', () => {
+  const invented = { ...citation, quote: reordered.replace('São páginas NOVAS', 'São páginas ANTIGAS') };
+  assert.equal(validateGroundedOutput(output(invented), context, ['guidance']), false);
+});
+
+test('quote só com segmentos curtos é rejeitado', () => {
+  assert.equal(validateGroundedOutput(output({ ...citation, quote: 'Nomes; api; três' }), context, ['guidance']), false);
+});
+
+test('página docs publicada no contexto é citável na API; fora do contexto não', () => {
+  const page = { path: 'docs/contatos', description: 'A página explica como encontrar contatos da equipe.' };
+  const cite = { source: 'pagina', path: page.path, quote: page.description };
+  assert.equal(validateGroundedOutput(output(cite), { ...context, existing: [page] }, ['guidance']), true);
+  assert.equal(validateGroundedOutput(output(cite), context, ['guidance']), false);
+});
+
+const plan = (cite) => ({ status: 'ready', guidance: claim, questions: [], risks: [], suggestedActions: [],
+  grounding: [{ text: claim, citations: [cite] }] });
+async function runPlan(responses) {
+  const calls = [];
+  const result = await planContent(process.cwd(), request, { productContext: context, client: { responses: {
+    create: async (payload) => {
+      calls.push(payload);
+      return { output_text: JSON.stringify(responses[Math.min(calls.length - 1, responses.length - 1)]), model: 'simulado' };
+    },
+  } } });
+  return { result, calls };
+}
+
+test('uma citação inválida seguida de válida refaz o plano com a recusa no prompt', async () => {
+  const bad = { ...citation, quote: reordered.replace('São páginas NOVAS', 'São páginas ANTIGAS') };
+  const { result, calls } = await runPlan([plan(bad), plan(citation)]);
+  assert.equal(result.status, 'ready');
+  assert.equal(calls.length, 2);
+  assert.match(JSON.stringify(calls[1].input), /São páginas ANTIGAS/);
+  assert.match(JSON.stringify(calls[1].input), /não é trecho literal/);
+});
+
+test('duas respostas inválidas param após a segunda e informam o motivo', async () => {
+  const bad = { ...citation, quote: reordered.replace('São páginas NOVAS', 'São páginas ANTIGAS') };
+  const { result, calls } = await runPlan([plan(bad), plan(bad)]);
+  assert.equal(result.status, 'needs_evidence');
+  assert.equal(calls.length, 2);
+  assert.match(JSON.stringify(result), /não é trecho literal/);
+});
