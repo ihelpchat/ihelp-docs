@@ -239,7 +239,7 @@ function serviceResponse(body, controllerSource, serviceSources) {
   if (!type) return null;
   const allowedTypes = new Set([type, type.startsWith('I') ? type.slice(1) : `I${type}`]);
   const declarations = serviceSources.filter(({ file }) => allowedTypes.has(file.split('/').at(-1).replace(/\.cs$/u, '')))
-    .flatMap(({ source, file }) => [...neutralizeCsharp(source).matchAll(new RegExp(`\\b(Task\\s*<\\s*(?:List\\s*<\\s*)?[A-Za-z_]\\w*\\s*>\\s*>|Task\\s*<\\s*[A-Za-z_]\\w*\\s*>|IEnumerable\\s*<\\s*[A-Za-z_]\\w*\\s*>)\\s+${method}\\s*\\(`, 'gu'))]
+    .flatMap(({ source, file }) => [...neutralizeCsharp(source).matchAll(new RegExp(`\\b(Task\\s*<\\s*(?:(?:List|IEnumerable)\\s*<\\s*)?[A-Za-z_]\\w*\\s*>\\s*>|Task\\s*<\\s*[A-Za-z_]\\w*\\s*>|IEnumerable\\s*<\\s*[A-Za-z_]\\w*\\s*>)\\s+${method}\\s*\\(`, 'gu'))]
     .map((match) => ({ type: match[1], source: `${file}:${lineOf(source, match.index)}` })));
   const distinct = [...new Set(declarations.map((item) => item.type.replace(/\s+/gu, '')))];
   if (distinct.length !== 1) return null;

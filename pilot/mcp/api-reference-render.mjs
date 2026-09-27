@@ -41,9 +41,10 @@ export function renderApiReference(endpoint, examples, page) {
   });
   const query = parameters.filter((item) => item.in === 'query');
   const bodyFields = parameters.filter((item) => item.in === 'body');
-  const requestBody = Object.fromEntries(bodyFields.map((item) => [item.name, /^(?:int|long|double|decimal|float|short|number)$/iu.test(item.type) ? 1 : /^bool(?:ean)?$/iu.test(item.type) ? false : valueFor(item)]));
+  const requestBody = Object.fromEntries(bodyFields.map((item) => [item.name, /^(?:int|long|double|decimal|float|short|number)$/iu.test(item.type) ? Number(valueFor(item)) : /^bool(?:ean)?$/iu.test(item.type) ? valueFor(item) === 'true' : valueFor(item)]));
   const bodyJson = JSON.stringify(requestBody);
-  const queryString = query.length ? `?${query.map((item) => `${encodeURIComponent(item.name)}=${encodeURIComponent(valueFor(item))}`).join('&')}` : '';
+  const exampleQuery = query.filter((item) => item.required || /^(?:page|limit|searchData)$/iu.test(item.name));
+  const queryString = exampleQuery.length ? `?${exampleQuery.flatMap((item) => [valueFor(item)].flat().map((value) => `${encodeURIComponent(item.name)}=${encodeURIComponent(value)}`)).join('&')}` : '';
   const example = page ?? examples?.find((item) => item.sections?.includes('Exemplo')) ?? examples?.[0];
   const url = `https://apiv3.ihelpchat.com${sample}${queryString}`;
   const sections = example?.sections ?? [];
@@ -59,10 +60,14 @@ export function renderApiReference(endpoint, examples, page) {
     const title = parameters.every((item) => item.in === 'route') ? heading('parâmetros de rota', 'Parâmetros de rota') : heading('parâmetros', 'Parâmetros');
     add('parâmetros', `## ${title}\n\n<Params>\n${parameters.map((item) => {
       const publicType = publicTypes.get(String(item.type).replace(/\?$/u, ''));
-      const type = publicType === 'número' || /^(?:double|float|short)$/iu.test(item.type) ? 'number'
+      const array = /^(?:List|IEnumerable)\s*<\s*(int|long|double|decimal|float|short|number)\s*>$|^(?:int|long|double|decimal|float|short|number)\[\]$/iu.test(item.type);
+      const type = array ? 'array' : publicType === 'número' || /^(?:double|float|short)$/iu.test(item.type) ? 'number'
         : publicType === 'verdadeiro ou falso' || /^boolean$/iu.test(item.type) ? 'boolean' : 'string';
       const required = item.required ?? (item.in === 'route' || (item.in === 'body' && !item.type.endsWith('?')));
-      return `<Param name="${safe(item.name)}" type="${type}"${required ? ' required' : ''}>${safe(item.in)} (${safe(item.type)})${required ? '' : ', opcional'}${Object.hasOwn(item, 'default') ? `; padrão: ${safe(JSON.stringify(item.default))}` : ''}</Param>`;
+      const label = array ? 'lista de números' : safe(item.type);
+      const defaultValue = Object.hasOwn(item, 'default') && item.default !== '' && item.default !== null;
+      const description = page?.parameterDescriptions?.[item.name];
+      return `<Param name="${safe(item.name)}" type="${type}"${required ? ' required' : ''}>${safe(item.in)} (${label})${required ? '' : ', opcional'}${defaultValue ? `; padrão: ${safe(JSON.stringify(item.default))}` : ''}${description ? ` — ${safe(description)}` : ''}</Param>`;
     }).join('\n')}\n</Params>`);
   }
 
@@ -80,8 +85,8 @@ export function renderApiReference(endpoint, examples, page) {
   if (requestHeaders.includes('Authorization')) add('autorização', 'Requer autenticação. Envie `Authorization: Bearer $IHELP_TOKEN`.');
   const blocks = [];
   if (languages.has('bash')) blocks.push(`\`\`\`bash\ncurl${endpoint.verb === 'GET' ? '' : ` -X ${endpoint.verb}`} "${url}"${requestHeaders.map((name) => ` -H "${name}: ${headerValue('bash', name)}"`).join('')}${bodyFields.length ? ` -d '${bodyJson}'` : ''}\n\`\`\``);
-  if (languages.has('js')) blocks.push(`\`\`\`js\nconst res = await fetch('${url}', { method: '${endpoint.verb}'${requestHeaders.length ? `, headers: { ${requestHeaders.map((name) => `${JSON.stringify(name)}: ${name === 'Authorization' ? headerValue('js', name) : JSON.stringify(headerValue('js', name))}`).join(', ')} }` : ''}${bodyFields.length ? `, body: JSON.stringify(${bodyJson})` : ''} });\n\`\`\``);
-  if (languages.has('python')) blocks.push(`\`\`\`python\nimport os, requests\nr = requests.request('${endpoint.verb}', '${url}'${requestHeaders.length ? `, headers={${requestHeaders.map((name) => `${JSON.stringify(name)}: ${name === 'Authorization' ? headerValue('python', name) : JSON.stringify(headerValue('python', name))}`).join(', ')}}` : ''}${bodyFields.length ? `, json=${bodyJson.replace(/\btrue\b/gu, 'True').replace(/\bfalse\b/gu, 'False')}` : ''}, timeout=15)\n\`\`\``);
+  if (languages.has('js')) blocks.push(`\`\`\`js\nconst res = await fetch('${url}', { method: '${endpoint.verb}'${requestHeaders.length ? `, headers: { ${requestHeaders.map((name) => `${JSON.stringify(name)}: ${name === 'Authorization' ? headerValue('js', name) : JSON.stringify(headerValue('js', name))}`).join(', ')} }` : ''}${bodyFields.length ? `, body: JSON.stringify(${bodyJson})` : ''} });${endpoint.responseEnvelope ? `\nconst { ${endpoint.responseEnvelope} } = await res.json();` : ''}\n\`\`\``);
+  if (languages.has('python')) blocks.push(`\`\`\`python\nimport os, requests\nr = requests.request('${endpoint.verb}', '${url}'${requestHeaders.length ? `, headers={${requestHeaders.map((name) => `${JSON.stringify(name)}: ${name === 'Authorization' ? headerValue('python', name) : JSON.stringify(headerValue('python', name))}`).join(', ')}}` : ''}${bodyFields.length ? `, json=${bodyJson.replace(/\btrue\b/gu, 'True').replace(/\bfalse\b/gu, 'False')}` : ''}, timeout=15)${endpoint.responseEnvelope ? `\nrows = r.json()[${JSON.stringify(endpoint.responseEnvelope)}]` : ''}\n\`\`\``);
   if (languages.has('http')) blocks.push(`\`\`\`http\n${endpoint.verb} ${url}${requestHeaders.map((name) => `\n${name}: ${headerValue('http', name)}`).join('')}${bodyFields.length ? `\n\n${bodyJson}` : ''}\n\`\`\``);
   if (blocks.length) add('exemplo', `## ${heading('exemplo', 'Exemplo')}\n\nValores fictícios para exemplo.\n\n${components.has('CodeTabs') ? `<CodeTabs labels={${JSON.stringify([...languages].map((language) => ({ bash: 'cURL', js: 'Node', python: 'Python', http: 'URL' })[language]))}}>\n\n` : ''}${blocks.join('\n\n')}${components.has('CodeTabs') ? '\n\n</CodeTabs>' : ''}`);
 

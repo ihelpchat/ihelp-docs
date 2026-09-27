@@ -43,8 +43,16 @@ test('requisição mostra só busca e paginação, preservando todos os Params',
     const params = new URL(url).searchParams;
     assert.deepEqual([...params.keys()], ['searchData', 'page', 'limit']);
     assert.equal(params.get('limit'), '20');
-    assert.equal(params.get('searchData'), 'exemplo');
+    assert.equal(params.get('searchData'), '9969');
   }
+});
+
+test('lista de inteiros obrigatória repete a chave na query', () => {
+  const fact = { ...list, parameters: [{ name: 'departmentIds', type: 'List<int>', in: 'query', required: true }] };
+  const body = renderApiReference(fact, [style], style).body;
+  assert.match(body, /departmentIds=1&departmentIds=2/u);
+  assert.deepEqual(securityReview({ path: 'api/contatos/listar', method: 'GET', endpoint: '/contacts', body },
+    { facts: fact }).blocks, []);
 });
 
 test('List<int> é array descrito como lista de números; padrão vazio não aparece', () => {
@@ -60,7 +68,7 @@ const prose = (parameterDescriptions) => ({ status: 'ready', summary: [unit('Ref
   articles: [{ path: 'api/contatos/listar', endpoint: 'GET /contacts', title: 'Listar contatos',
     description: unit('Lista contatos disponíveis para consulta.'), intro: unit('Consulte os contatos disponíveis.'),
     notas: [], responseDescriptions: [], parameterDescriptions }] });
-const generate = (parameterDescriptions) => generateContentPackage(process.cwd(), { module: 'api', topic: 'Contatos' }, {
+const generate = (parameterDescriptions) => generateContentPackage(process.cwd(), { module: 'api', topic: 'Contatos', confirmations: ['GET /contacts'] }, {
   productContext: { groundingRequired: false, matches: [], code: [], endpoints: [list], apiExamples: [style] },
   plan: { status: 'ready' }, client: { responses: { create: async () =>
     ({ output_text: JSON.stringify(prose(parameterDescriptions)), model: 'fixture' }) } },

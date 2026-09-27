@@ -120,7 +120,7 @@ test('resposta sintética usa envelope e campos tipados e passa revisão da M5.5
   const mutated = rendered.body.replace(/"id":\s*\d+/u, '"id": "507f1f77bcf86cd799439011"');
   assert.match(securityReview({ path: 'api/contatos/buscar-contatos', method: 'GET', endpoint: '/contacts',
     body: mutated }, { facts }).blocks.join('; '), /id real|ObjectId/iu);
-  const named = rendered.body.replace('"nome": "exemplo"', '"nome": "Maria Silva"');
+  const named = rendered.body.replace('"nome": "Maria Exemplo"', '"nome": "Maria Silva"');
   assert.match(securityReview({ path: 'api/contatos/buscar-contatos', method: 'GET', endpoint: '/contacts',
     body: named }, { facts }).blocks.join('; '), /nome de pessoa/iu);
 });

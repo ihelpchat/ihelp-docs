@@ -105,7 +105,7 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint]) {
 }
 function apiSchemaIssue(article) {
   if (!article || typeof article !== 'object' || Array.isArray(article)) return 'schema de prosa inválido';
-  const allowed = new Set(['path', 'endpoint', 'title', 'description', 'intro', 'notas', 'responseDescriptions']);
+  const allowed = new Set(['path', 'endpoint', 'title', 'description', 'intro', 'notas', 'responseDescriptions', 'parameterDescriptions']);
   const extra = Object.keys(article).find((key) => !allowed.has(key));
   if (extra) return `campo da IA não permitido: ${extra}`;
   const unit = (value) => value && typeof value === 'object' && !Array.isArray(value)
@@ -117,6 +117,8 @@ function apiSchemaIssue(article) {
   if (!/^api\/[a-z0-9][a-z0-9/-]*$/u.test(article.path)) return `path API inválido: ${article.path}`;
   if (article.responseDescriptions !== undefined && (!Array.isArray(article.responseDescriptions)
     || !article.responseDescriptions.every((item) => typeof item?.name === 'string' && unit(item?.description)))) return 'descrições de resposta inválidas';
+  if (article.parameterDescriptions !== undefined && (!Array.isArray(article.parameterDescriptions)
+    || !article.parameterDescriptions.every((item) => typeof item?.name === 'string' && unit(item?.description)))) return 'descrições de parâmetro inválidas';
   return null;
 }
 
@@ -343,10 +345,12 @@ const PACKAGE_SCHEMA = {
 };
 const API_ARTICLE_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['path', 'endpoint', 'title', 'description', 'intro', 'notas', 'responseDescriptions'],
+  required: ['path', 'endpoint', 'title', 'description', 'intro', 'notas', 'responseDescriptions', 'parameterDescriptions'],
   properties: { path: { type: 'string' }, endpoint: { type: 'string', enum: [] }, title: { type: 'string' }, description: API_PROSE_UNIT_SCHEMA,
     intro: API_PROSE_UNIT_SCHEMA, notas: { type: 'array', items: API_PROSE_UNIT_SCHEMA },
     responseDescriptions: { type: 'array', items: { type: 'object', additionalProperties: false,
+      required: ['name', 'description'], properties: { name: { type: 'string' }, description: API_PROSE_UNIT_SCHEMA } } },
+    parameterDescriptions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: ['name', 'description'], properties: { name: { type: 'string' }, description: API_PROSE_UNIT_SCHEMA } } } },
 };
 const API_PACKAGE_SCHEMA = { ...PACKAGE_SCHEMA, required: ['status', 'summary', 'questions', 'articles'],
@@ -561,11 +565,14 @@ async function generateContentPackageCore(root, request, options = {}) {
   if (request.module === 'api' && !selectable.length) return withPending(apiPending('endpoint não público: confirmar'));
   const fieldPaths = [...new Set(selectable.flatMap((endpoint) =>
     (endpoint.responseFields ?? []).map((field) => responseFieldPath(endpoint, field))))];
+  const parameterNames = [...new Set(selectable.flatMap((endpoint) => endpoint.parameters.map((item) => item.name)))];
   const responseDescriptions = structuredClone(API_ARTICLE_SCHEMA.properties.responseDescriptions);
   responseDescriptions.items.properties.name = fieldPaths.length ? { type: 'string', enum: fieldPaths } : { type: 'string' };
+  const parameterDescriptions = structuredClone(API_ARTICLE_SCHEMA.properties.parameterDescriptions);
+  parameterDescriptions.items.properties.name = parameterNames.length ? { type: 'string', enum: parameterNames } : { type: 'string' };
   const apiSchema = { ...API_PACKAGE_SCHEMA, properties: { ...API_PACKAGE_SCHEMA.properties,
     articles: { type: 'array', items: { ...API_ARTICLE_SCHEMA, properties: { ...API_ARTICLE_SCHEMA.properties,
-      endpoint: { type: 'string', enum: selectable.map(publicEndpointId) }, responseDescriptions } } } } };
+      endpoint: { type: 'string', enum: selectable.map(publicEndpointId) }, responseDescriptions, parameterDescriptions } } } } };
   const response = await modelResponse(options, baseRequest('pacote_documentacao', request.module === 'api' ? apiSchema : PACKAGE_SCHEMA, [
     {
       role: 'developer',
@@ -573,7 +580,7 @@ async function generateContentPackageCore(root, request, options = {}) {
         'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.',
         request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
         request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
-        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions são objetos {text,citations}, também com uma frase por text (ponto e vírgula permitido). Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver, e descreva apenas fatos do código, pedido ou página publicada; cite cada descrição. Sem fonte para um campo, omita-o da lista: o renderizador usará o nome simples e registrará pendência.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
+        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations}, também com uma frase por text (ponto e vírgula permitido). Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros, como cabeçalhos e diferenças entre endpoints.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
         request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
@@ -614,6 +621,10 @@ async function generateContentPackageCore(root, request, options = {}) {
         intro: prose.intro.text, notas: prose.notas.map((item) => item.text) }, endpoint, selectable));
       groundingProblems.push(...apiUnitIssues(units, context));
       for (const item of prose.responseDescriptions ?? []) {
+        proseProblems.push(...proseIssues({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable));
+        groundingProblems.push(...apiUnitIssues([item.description], context));
+      }
+      for (const item of prose.parameterDescriptions ?? []) {
         proseProblems.push(...proseIssues({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable));
         groundingProblems.push(...apiUnitIssues([item.description], context));
       }
@@ -658,6 +669,12 @@ async function generateContentPackageCore(root, request, options = {}) {
           return withPending(apiPending(`descrição de campo sem fato: ${item.name}`));
         described.set(item.name, item.description.text);
       }
+      const describedParameters = new Map();
+      for (const item of prose.parameterDescriptions ?? []) {
+        if (!endpoint.parameters.some((parameter) => parameter.name === item.name) || describedParameters.has(item.name))
+          return withPending(apiPending(`descrição de parâmetro sem fato: ${item.name}`));
+        describedParameters.set(item.name, item.description.text);
+      }
       const requestedRoute = explicitEndpointsFrom(request).find((item) => item.verb === endpoint.verb
         && [endpoint.route, ...(endpoint.optionalAliases ?? [])].some((route) =>
           route.replace(/^\/api\/v\d+/iu, '').toLowerCase().replace(/\{[^}]+\}/gu, '{}')
@@ -666,7 +683,8 @@ async function generateContentPackageCore(root, request, options = {}) {
         ...(requestedRoute ? { frontmatter: { endpoint: requestedRoute.replace(/^\/api\/v\d+/iu, '') } } : {}),
         paramNames: undefined };
       const technical = renderApiReference(endpoint, productContext.apiExamples,
-        { ...(renderPage ?? {}), responseDescriptions: Object.fromEntries(described) });
+        { ...(renderPage ?? {}), responseDescriptions: Object.fromEntries(described),
+          parameterDescriptions: Object.fromEntries(describedParameters) });
       const renderedParams = [...technical.body.matchAll(/<Param\s+[^>]*name="([^"]+)"/gu)].map((match) => match[1]);
       if (renderedParams.length !== endpoint.parameters.filter((item) => item.in !== 'route' || item.required !== false || technical.endpoint.toLowerCase().includes(`{${item.name.toLowerCase()}}`)).length) {
         return withPending(apiPending(`parâmetros renderizados sem correspondência com o fato: ${prose.path}`));

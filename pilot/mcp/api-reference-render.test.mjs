@@ -242,7 +242,7 @@ test('query e body usam nomes e valores tipados dos fatos', () => {
   assert.match(rendered.body, /<Param name="page" type="number">query/);
   assert.match(rendered.body, /<Param name="name" type="string" required>body/);
   assert.match(rendered.body, /\/api\/v2\/contacts\?page=1/);
-  assert.match(rendered.body, /-d '\{"name":"exemplo"\}'/);
+  assert.match(rendered.body, /-d '\{"name":"Maria Exemplo"\}'/);
 });
 
 test('página sem parâmetro de corpo não o remove do artigo', () => {
@@ -251,7 +251,7 @@ test('página sem parâmetro de corpo não o remove do artigo', () => {
   const page = { ...examples[0], paramNames: [] };
   const rendered = renderApiReference(fact, [page], page);
   assert.match(rendered.body, /<Param name="name" type="string" required>body/);
-  assert.match(rendered.body, /-d '\{"name":"exemplo"\}'/);
+  assert.match(rendered.body, /-d '\{"name":"Maria Exemplo"\}'/);
   assert.deepEqual(rendered.pending, ['parâmetro no código ausente da página: name']);
 });
 
