@@ -222,6 +222,34 @@ test('normalização e artigo inteiro bloqueiam variantes de dados sensíveis', 
   ]) assert.match(examine(candidate).blocks.join(' '), reason, name);
 });
 
+test('gramática numérica e nomes em zonas de exemplo bloqueiam com motivo', () => {
+  const base = { ...article, body: `${article.body}\n\nExemplo: pessoa Maria Exemplo` };
+  assert.deepEqual(examine(base).blocks, []);
+  for (const [name, body, reason] of [
+    ['CNPJ', `${base.body}\n\nCNPJ 12.345.678/0001-95`, /dado pessoal/iu],
+    ['CPF', `${base.body}\n\nCPF 123.456.789-09`, /dado pessoal/iu],
+    ['telefone', `${base.body}\n\n(17) 99261-0896`, /dado pessoal/iu],
+    ['nome em prosa de exemplo', base.body.replace('Maria Exemplo', 'João Silva'), /nome de pessoa/iu],
+    ['nome em JSON', `${base.body}\n\n` + '```json\n{"name":"João Silva"}\n```', /nome de pessoa/iu],
+  ]) assert.match(examine({ ...base, body }).blocks.join(' '), reason, name);
+  for (const [name, body] of [
+    ['sintético', `${base.body}\n\n5500000000000`],
+    ['data ISO', `${base.body}\n\n2026-09-27T10:00:00Z`],
+    ['termo do produto', base.body.replace('Maria Exemplo', 'Central de Ajuda')],
+  ]) assert.deepEqual(examine({ ...base, body }).blocks, [], name);
+});
+
+test('CNPJ em draft bloqueia antes de qualquer escrita no disco', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm556-cnpj-'));
+  await mkdir(join(root, 'content/docs'), { recursive: true });
+  const safe = { ...article, path: 'docs/teste/consulta', source: 'produto', contentType: 'guia',
+    body: `${article.body} ${'Esta orientação apresenta um exemplo seguro para consultar contatos no iHelp. '.repeat(9)}` };
+  assert.deepEqual(examine(safe).blocks, []);
+  const unsafe = { ...safe, body: `${safe.body}\n\nCNPJ 12.345.678/0001-95` };
+  await assert.rejects(submitArticle(root, unsafe, 'draft', 'user:tester'), /dado pessoal/iu);
+  await assert.rejects(access(join(root, '.drafts/docs/teste/consulta.mdx')), { code: 'ENOENT' });
+});
+
 test('GET com showAll no corpo avisa mesmo quando também menciona limit', () => {
   const candidate = { ...article, body: `${article.body}\n\nGET /contacts?showAll=true&limit=50` };
   assert.deepEqual(examine().warnings, []);
