@@ -1,3 +1,4 @@
+import { apiProseFixture } from './api-prose-test-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
@@ -79,8 +80,8 @@ test('descrição da IA usa campo factual e ausência registra pendência', asyn
       components: ['Params', 'Param', 'Fields', 'Field'], sections: ['Resposta'], paramNames: ['letter'] }] };
   const result = await generateContentPackage(process.cwd(), { module: 'api', topic: 'Contatos' }, {
     productContext: context, plan: { status: 'ready' },
-    client: { responses: { create: async () => ({ output_text: JSON.stringify({ status: 'ready', summary: 'Contatos.',
-      questions: [], articles: [article], grounding: [] }), model: 'synthetic' }) } },
+    client: { responses: { create: async () => ({ output_text: JSON.stringify(apiProseFixture({ status: 'ready', summary: 'Contatos.',
+      questions: [], articles: [article], grounding: [] })), model: 'synthetic' }) } },
   });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   assert.match(result.articles[0].body, /string — Nome do contato\./u);

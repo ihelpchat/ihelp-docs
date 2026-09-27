@@ -1,3 +1,4 @@
+import { apiProseFixture } from './api-prose-test-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateContentPackage } from './content-ai-service.mjs';
@@ -24,7 +25,7 @@ async function run(change = () => {}, changedContext = context) {
   const result = await generateContentPackage(process.cwd(), request, { productContext: changedContext, plan: { status: 'ready' },
     client: { responses: { create: async (payload) => {
       schema = payload.text.format.schema;
-      return { output_text: JSON.stringify(response), model: 'simulado' };
+      return { output_text: JSON.stringify(apiProseFixture(response)), model: 'simulado' };
     } } } });
   return { result, schema };
 }

@@ -2,25 +2,30 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
+import { renderArticle } from './content-service.mjs';
 
 const replay = JSON.parse(await readFile(new URL('./fixtures/m557-resp3-replay.json', import.meta.url)));
-const citation = replay.citation;
-const unit = (text) => ({ text, citations: [citation] });
-const request = { module: 'api', topic: 'Contatos', description: 'Criar GET /api/v2/contacts e uma página nova em api/contatos/buscar-contatos. Listagem sem o segmento opcional letter.' };
+const unit = (text, citations) => ({ text, citations });
+const request = { module: 'api', topic: 'Contatos',
+  description: 'Criar a seção Contatos da referência da API. Uma página por endpoint. Criar GET /api/v2/contacts e uma página nova em api/contatos/buscar-contatos. Listagem sem o segmento opcional letter.',
+  details: 'O idRef do detalhe e o contactId das tags vêm da listagem. Nenhum filtro é obrigatório. searchData é texto livre que casa com trecho do nome ou do número do contato. page começa em 1 e o padrão é 1. limit tem padrão 20.' };
 const endpoint = { verb: 'GET', route: '/api/v2/contacts/{letter}', optionalAliases: ['/api/v2/contacts'],
   public: true, documented: false, explicit: true, authorization: 'authenticated',
   parameters: [{ name: 'letter', type: 'string', in: 'route', required: false },
     ...['searchData', 'page', 'limit'].map((name) => ({ name, type: 'string', in: 'query', required: false }))],
   responseFields: [{ name: 'idRef', type: 'string' }] };
 const context = { groundingRequired: true, code: [{ available: true }],
-  matches: [{ ...citation, line: citation.lineStart, ref: citation.sha }], endpoints: [endpoint],
+  matches: Object.values(replay.citations).flat().filter((item) => item.repository)
+    .map((item) => ({ ...item, line: item.lineStart, ref: item.sha })), endpoints: [endpoint],
   apiExamples: [{ sections: ['Parâmetros', 'Resposta'], components: ['Params', 'Param', 'Fields', 'Field'],
     baseUrl: 'https://apiv3.ihelpchat.com' }] };
 const base = { status: 'ready', summary: replay.summary, questions: [],
-  grounding: [{ text: replay.summary, citations: [citation] }], articles: [{
+  grounding: [{ text: replay.summary, citations: replay.citations.summary }], articles: [{
     path: replay.path, endpoint: replay.endpoint, title: replay.title,
-    description: unit(replay.description), intro: unit(replay.intro),
-    notas: replay.notas.map(unit), responseDescriptions: [],
+    description: unit(replay.description, replay.citations.description), intro: unit(replay.intro, replay.citations.intro),
+    notas: replay.notas.map((text) => unit(text, replay.citations.nota)), responseDescriptions: [
+      { name: 'idRef', description: unit('Identificador de referência do contato.', replay.citations.responseDescription) },
+    ],
   }] };
 async function generate(change = () => {}) {
   const value = structuredClone(base);
@@ -33,8 +38,11 @@ test('resp-3 adaptado: unidades citadas rendem página sem letter', async () => 
   const result = await generate();
   assert.equal(result.status, 'ready', result.summary);
   assert.equal(result.articles[0].endpoint, '/contacts');
-  assert.doesNotMatch(result.articles[0].body, /name="letter"/u);
+  const page = renderArticle(result.articles[0]);
+  assert.match(page, /^endpoint: \/contacts$/mu);
+  assert.doesNotMatch(page, /letter/u);
   assert.match(result.articles[0].body, /Os filtros de consulta são opcionais/u);
+  assert.match(page, /Identificador de referência do contato/u);
 });
 
 test('intro sem citação mantém motivo frase sem citação', async () => {
@@ -49,12 +57,18 @@ test('duas frases numa unidade são rejeitadas', async () => {
   assert.match(result.summary, /uma frase por item: Use esta página/u);
 });
 
+test('descrição de campo sem citação é rejeitada com a frase', async () => {
+  const result = await generate((value) => { value.articles[0].responseDescriptions[0].description.citations = []; });
+  assert.equal(result.status, 'needs_evidence');
+  assert.match(result.summary, /frase sem citação: Identificador de referência do contato/u);
+});
+
 async function plan(changedRequest) {
   return planContent(process.cwd(), changedRequest, { productContext: context,
     client: { responses: { create: async (payload) => {
       assert.match(payload.input[0].content, /página nova.*documented=false|documented=false.*página nova/iu);
       return { output_text: JSON.stringify({ status: 'needs_information', guidance: '',
-        questions: ['O endpoint marcado documented=false deve ser publicado em api/contatos/buscar-contatos?'],
+        questions: ['Os endpoints marcados documented=false devem ser publicados?'],
         risks: [], suggestedActions: [], grounding: [] }), model: 'offline' };
     } } } });
 }

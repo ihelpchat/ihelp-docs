@@ -1,3 +1,4 @@
+import { apiProseFixture } from './api-prose-test-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as service from './content-ai-service.mjs';
@@ -29,7 +30,7 @@ async function generate(change = (value) => value, changedContext = context) {
   const output = change(fixture);
   return generateContentPackage(process.cwd(), request, { productContext: changedContext,
     plan: { status: 'ready', guidance: 'Documente o endpoint.', questions: [] },
-    client: { responses: { create: async () => ({ output_text: JSON.stringify(output), model: 'simulado' }) } } });
+    client: { responses: { create: async () => ({ output_text: JSON.stringify(apiProseFixture(output)), model: 'simulado' }) } } });
 }
 
 test('sem fatos estruturados não chama o provider', async () => {
@@ -146,7 +147,8 @@ test('parâmetro factual é aceito sem diferenciar maiúsculas', async () => {
 test('campo do body e headers fixos são aceitos na prosa', async () => {
   const facts = { ...endpoint, parameters: [...endpoint.parameters, { name: 'name', type: 'string', in: 'body' }] };
   const result = await generate((value) => {
-    value.articles[0].intro = 'O campo name identifica o contato. O header Authorization autentica a consulta.';
+    value.articles[0].intro = 'O campo name identifica o contato.';
+    value.articles[0].notas = ['O header Authorization autentica a consulta.'];
     return value;
   }, { ...context, endpoints: [facts] });
   assert.equal(result.status, 'ready', result.questions?.join('; '));

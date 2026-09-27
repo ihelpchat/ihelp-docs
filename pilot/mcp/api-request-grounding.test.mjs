@@ -1,3 +1,4 @@
+import { apiProseFixture } from './api-prose-test-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateContentPackage } from './content-ai-service.mjs';
@@ -32,7 +33,7 @@ async function generate(change = (value) => value, changedRequest = request, mod
         assert.match(payload.input[0].content, /pedido/i);
         assert.match(JSON.stringify(payload.text.format.schema), /"source"/);
       }
-      return { output_text: JSON.stringify(value), model: 'simulado' };
+      return { output_text: JSON.stringify(apiProseFixture(value)), model: 'simulado' };
     } } } });
 }
 
