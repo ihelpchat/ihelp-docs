@@ -140,9 +140,35 @@ test('plano de API sem citação na orientação segue para geração', async ()
 });
 
 test('plano de API rejeita nome técnico ausente dos fatos, mesmo sem exigir citação', async () => {
-  const { result } = await runPlan([{ ...plan(citation), grounding: [], guidance: 'O campo segredo identifica o contato.' }]);
+  const { result } = await runPlan([{ ...plan(citation), grounding: [], guidance: 'O campo segredoInterno identifica o contato.' }]);
   assert.equal(result.status, 'needs_information');
-  assert.match(result.summary, /nome técnico sem fato: segredo/i);
+  assert.match(result.summary, /nome técnico sem fato: segredoInterno/i);
+});
+
+for (const guidance of ['O campo de busca filtra os contatos.', 'A chave de acesso permite a consulta.']) {
+  test(`plano de API aceita descrição comum: ${guidance}`, async () => {
+    const { result } = await runPlan([{ ...plan(citation), grounding: [], guidance }]);
+    assert.equal(result.status, 'ready', result.summary);
+  });
+}
+
+for (const [guidance, name] of [
+  ['O campo segredoInterno identifica o contato.', 'segredoInterno'],
+  ['O parâmetro `tokenMestre` identifica o contato.', 'tokenMestre'],
+]) {
+  test(`plano de API rejeita nome técnico sem fato: ${name}`, async () => {
+    const { result } = await runPlan([{ ...plan(citation), grounding: [], guidance }]);
+    assert.equal(result.status, 'needs_information');
+    assert.match(result.summary, new RegExp(`nome técnico sem fato: ${name}`, 'i'));
+  });
+}
+
+test('plano de API aceita parâmetro factual após artigo', async () => {
+  const factualContext = { ...context, endpoints: [{ ...endpoint, parameters: [{ name: 'limit', type: 'int', in: 'query' }] }] };
+  const guidance = 'O parâmetro limit restringe o resultado.';
+  const result = await planContent(process.cwd(), request, { productContext: factualContext,
+    client: { responses: { create: async () => ({ output_text: JSON.stringify({ ...plan(citation), grounding: [], guidance }), model: 'simulado' }) } } });
+  assert.equal(result.status, 'ready', result.summary);
 });
 
 test('plano de API aceita path editorial do pedido na guidance', async () => {

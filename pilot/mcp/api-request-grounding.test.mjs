@@ -69,14 +69,14 @@ for (const [name, change] of [
 });
 
 test('API rejeita nome técnico do pedido sem fato de código', async () => {
-  const details = `${request.details} O campo segredo representa um valor reservado.`;
+  const details = `${request.details} O campo segredoInterno representa um valor reservado.`;
   const result = await generate((value) => {
-    value.articles[0].description = 'O campo segredo representa um valor reservado.';
-    value.articles[0].grounding[0] = { text: value.articles[0].description, citations: [{ source: 'pedido', quote: 'O campo segredo representa um valor reservado.' }] };
+    value.articles[0].description = 'O campo segredoInterno representa um valor reservado.';
+    value.articles[0].grounding[0] = { text: value.articles[0].description, citations: [{ source: 'pedido', quote: 'O campo segredoInterno representa um valor reservado.' }] };
     return value;
   }, { ...request, details });
   assert.equal(result.status, 'needs_information');
-  assert.match(result.questions.join(' '), /nome técnico sem fato: segredo/i);
+  assert.match(result.questions.join(' '), /nome técnico sem fato: segredoInterno/i);
 });
 
 test('guia rejeita citação do pedido com motivo', async () => {

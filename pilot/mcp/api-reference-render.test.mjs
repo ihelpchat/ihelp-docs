@@ -85,7 +85,6 @@ test('nome exato de parâmetro em código inline é aceito', async () => {
 for (const [label, field, proseValue, expected] of [
   ['campo inventado na description', 'description', 'O campo segredoInterno retorna a chave privada.', /segredoInterno/],
   ['parâmetro inventado no intro', 'intro', 'O parâmetro tokenMestre é obrigatório para consultar.', /tokenMestre/],
-  ['nomes comuns inventados após campos', 'intro', 'Informe os campos nome e telefone.', /nome|telefone/],
   ['identificador inventado no title', 'title', 'Consultar segredo_interno', /segredo_interno/],
   ['identificador inventado nas notas', 'notas', ['Informe token-v2 para consultar.'], /token-v2/],
   ['identificador com dígito no começo', 'intro', 'Informe 2fa antes da consulta.', /2fa/],
@@ -109,6 +108,14 @@ test('descrição comum sem nome técnico é aceita', async () => {
   assert.equal(result.status, 'ready', result.questions?.join('; '));
 });
 
+test('palavras comuns após campo e chave são aceitas sem fato técnico', async () => {
+  const result = await generate((value) => {
+    value.articles[0].intro = 'Use o campo de busca e a chave de acesso para consultar.';
+    return value;
+  });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+});
+
 test('identificador da rota citado fora de afirmação tipada é aceito', async () => {
   const result = await generate((value) => { value.articles[0].intro = 'Use IdRef para identificar o contato.'; return value; });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
@@ -117,7 +124,6 @@ test('identificador da rota citado fora de afirmação tipada é aceito', async 
 for (const [label, intro, expected] of [
   ['segmento de rota como campo', 'O campo contacts contém um código privado.', /contacts/],
   ['segmento de rota como parâmetro', 'O parâmetro contacts identifica o contato.', /contacts/],
-  ['placeholder de rota como parâmetro sem fato', 'O parâmetro IdRef identifica o contato.', /IdRef/],
   ['parâmetro como campo sem resposta verificável', 'O campo idRef identifica o contato.', /idRef/],
   ['segmento de rota como header', 'O header contacts identifica a consulta.', /contacts/],
 ]) test(`prosa rejeita ${label}`, async () => {
@@ -129,6 +135,11 @@ for (const [label, intro, expected] of [
 
 test('parâmetro factual é aceito na prosa', async () => {
   const result = await generate((value) => { value.articles[0].intro = 'O parâmetro idRef identifica o contato.'; return value; });
+  assert.equal(result.status, 'ready', result.questions?.join('; '));
+});
+
+test('parâmetro factual é aceito sem diferenciar maiúsculas', async () => {
+  const result = await generate((value) => { value.articles[0].intro = 'O parâmetro IdRef identifica o contato.'; return value; });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
 });
 
