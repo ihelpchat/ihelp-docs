@@ -9,6 +9,13 @@ const MAX_CHARS = 1_000_000;
 const VISIBLE = new Set(['label', 'labelText', 'title', 'placeholder', 'aria-label', 'tooltip']);
 const ACTION = /^(?:button|MenuItem|MenuButton|Button|ButtonWithIcon|ButtonIconAction)$/iu;
 const FIELD = /^(?:input|select|textarea|Input\w*|Select\w*|Controller)$/u;
+// Call shapes confirmed in the read-only front: addNotification({title, description});
+// the remaining entries cover the standard feedback APIs accepted by the screen contract.
+const FEEDBACK_CALLS = [
+  [/^(?:toast|notification|message)(?:\.[A-Za-z]+)?$/u, 'argument'],
+  [/^(?:enqueueSnackbar|alert|confirm|window\.confirm|show\w*Toast|notify\w*)$/u, 'argument'],
+  [/^addNotification$/u, 'object'],
+];
 const normalized = (value) => String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
 // One TS/TSX lexer. Offsets and newlines stay fixed; values always come from the original AST.
@@ -127,8 +134,9 @@ function collect(filePath, source, facts, entryName) {
   const usedImports = new Set();
   for (const statement of file.statements) if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
     const names = [];
-    if (statement.importClause?.name) names.push(statement.importClause.name.text);
-    for (const item of statement.importClause?.namedBindings?.elements ?? []) names.push(item.name.text);
+    if (statement.importClause?.name) names.push({ local: statement.importClause.name.text, exported: null });
+    for (const item of statement.importClause?.namedBindings?.elements ?? [])
+      names.push({ local: item.name.text, exported: item.propertyName?.text ?? item.name.text });
     imports.set(statement.moduleSpecifier.text, names);
   }
   const { found, defaultExport } = declarations(file);
@@ -165,7 +173,8 @@ function collect(filePath, source, facts, entryName) {
       seen.add(name);
       name = aliases.get(name);
     }
-    for (const [specifier, names] of imports) if (names.includes(name)) usedImports.add(specifier);
+    for (const [specifier, names] of imports) for (const binding of names)
+      if (binding.local === name) usedImports.add(`${specifier}\0${binding.local}`);
     if (found.has(name)) reachable.push([found.get(name), name]);
   }
   function jsxValue(node) {
@@ -206,12 +215,12 @@ function collect(filePath, source, facts, entryName) {
   function visit(node) {
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) render(jsxName(node).split('.')[0]);
     if (ts.isJsxExpression(node)) renderExpression(node.expression);
-    if (ts.isJsxExpression(node) && ts.isIdentifier(node.expression)) {
+    if (ts.isJsxExpression(node) && node.expression && ts.isIdentifier(node.expression)) {
       const local = found.get(node.expression.text);
       if (local && ts.isVariableDeclaration(local) && jsxValue(local.initializer)) render(node.expression.text);
     }
     if (ts.isJsxAttribute(node) && renderProps.has(node.name.text) && ts.isJsxExpression(node.initializer)
-      && ts.isIdentifier(node.initializer.expression)) render(node.initializer.expression.text);
+      && node.initializer.expression && ts.isIdentifier(node.initializer.expression)) render(node.initializer.expression.text);
     if (ts.isJsxText(node)) {
       const value = safeText(node.getText(file));
       if (value) emit(node, 'text', { text: value });
@@ -229,9 +238,17 @@ function collect(filePath, source, facts, entryName) {
         if (value) emit(attr(node, name), 'text', { text: value, property: name });
       }
       const handler = attr(node, 'onClick')?.initializer;
+      const children = ts.isJsxOpeningElement(node) && ts.isJsxElement(node.parent) ? node.parent.children : [];
+      const body = validActionLabel(jsxBody(children, file));
+      const actionLabel = validActionLabel(attrValue(node, 'aria-label')) ?? body
+        ?? validActionLabel(attrValue(node, 'labelText')) ?? validActionLabel(attrValue(node, 'label'))
+        ?? validActionLabel(attrValue(node, 'title'));
+      if (actionLabel) for (const property of node.attributes.properties) {
+        if (!ts.isJsxAttribute(property) || !/^on[A-Z]/u.test(property.name.text)
+          || !ts.isJsxExpression(property.initializer)) continue;
+        walkHandler(property.initializer.expression, actionLabel, 0, new Set());
+      }
       if (ACTION.test(tag) || /^button$/iu.test(tag)) {
-        const children = ts.isJsxOpeningElement(node) && ts.isJsxElement(node.parent) ? node.parent.children : [];
-        const body = validActionLabel(jsxBody(children, file));
         const ariaLabel = validActionLabel(attrValue(node, 'aria-label'));
         const title = validActionLabel(attrValue(node, 'title'));
         const text = ariaLabel ?? body ?? validActionLabel(attrValue(node, 'labelText'))
@@ -302,6 +319,55 @@ function collect(filePath, source, facts, entryName) {
     }
     ts.forEachChild(node, visit);
   }
+  function walkHandler(expression, action, depth, seenHandlers) {
+    if (!expression) return;
+    if (ts.isIdentifier(expression)) {
+      const declaration = found.get(expression.text);
+      if (!declaration || seenHandlers.has(declaration)) return;
+      seenHandlers.add(declaration);
+      const value = ts.isVariableDeclaration(declaration) ? declaration.initializer : declaration;
+      const callback = value && ts.isCallExpression(value) && value.expression.getText(file) === 'useCallback'
+        ? value.arguments[0] : value;
+      const body = (ts.isFunctionDeclaration(callback) || ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))
+        ? callback.body : null;
+      if (body) walkHandler(body, action, depth, seenHandlers);
+      return;
+    }
+    const scan = (node) => {
+      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) return;
+      if (ts.isFunctionDeclaration(node) && node !== expression) return;
+      if (ts.isCallExpression(node)) {
+        const call = node.expression.getText(file);
+        const feedback = FEEDBACK_CALLS.find(([pattern]) => pattern.test(call));
+        if (feedback) {
+          if (feedback[1] === 'object' && ts.isObjectLiteralExpression(node.arguments[0])) {
+            for (const prop of node.arguments[0].properties) if (ts.isPropertyAssignment(prop)
+              && ['title', 'description', 'message'].includes(prop.name.getText(file))) {
+              const value = literal(prop.initializer);
+              if (value) addFact(facts, filePath, file, prop, 'message',
+                { text: value, owner: action, action, subject: subjectOf(owner, title, filePath) });
+            }
+          } else {
+            const value = literal(node.arguments[0]);
+            if (value) addFact(facts, filePath, file, node, 'message',
+              { text: value, owner: action, action, subject: subjectOf(owner, title, filePath) });
+          }
+        }
+        if (/^(?:navigate|history\.push)$/u.test(call)) {
+          const route = literal(node.arguments[0]);
+          if (route) addFact(facts, filePath, file, node, 'destination',
+            { route, owner: action, action, subject: subjectOf(owner, title, filePath) });
+        }
+        if (call === 'handleSubmit' && depth === 0)
+          for (const argument of node.arguments) if (ts.isIdentifier(argument))
+            walkHandler(argument, action, depth, seenHandlers);
+        if (depth < 2 && ts.isIdentifier(node.expression) && !feedback)
+          walkHandler(node.expression, action, depth + 1, seenHandlers);
+      }
+      ts.forEachChild(node, scan);
+    };
+    scan(expression);
+  }
   while (reachable.length) {
     const [node, name] = reachable.shift();
     if (visited.has(node)) continue;
@@ -332,16 +398,15 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
   const translationKeys = new Map();
   while (queue.length && files.length < MAX_FILES) {
     const [path, depth, used] = queue.shift();
-    if (seen.has(path) || !allowed.has(path)) continue;
-    seen.add(path);
+    if (seen.has(`${path}\0${used ?? ''}`) || !allowed.has(path)) continue;
+    seen.add(`${path}\0${used ?? ''}`);
     const source = await readSource(path);
     total += source.length;
     if (total > MAX_CHARS) { pending.push('limite de caracteres dos fatos da tela'); break; }
     const localFacts = [];
     const parsed = collect(path, source, localFacts, used);
     for (const [key, meta] of parsed.translationKeys) translationKeys.set(key, meta);
-    files.push(path);
-    code.push({ path, excerpt: source });
+    if (!files.includes(path)) { files.push(path); code.push({ path, excerpt: source }); }
     if (depth === 0) {
       const objects = parsed.file.statements.flatMap((statement) => {
         const found = [];
@@ -364,17 +429,17 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
       if (title && ts.isPropertyAssignment(title) && literal(title.initializer))
         addFact(facts, path, parsed.file, title, 'route', { text: literal(title.initializer), route,
           owner: component, subject: subjectOf(component, literal(title.initializer), path) });
-      const routeImport = [...parsed.imports].find(([, names]) => names.includes(component));
+      const routeImport = [...parsed.imports].find(([, names]) => names.some((name) => name.local === component));
       const next = routeImport && resolveImport(path, routeImport[0], allowed);
-      if (next) queue.push([next, 1, component]);
+      if (next) queue.push([next, 1, routeImport[1].find((name) => name.local === component).exported ?? component]);
       continue;
     }
     facts.push(...localFacts);
     if (depth >= 3) continue;
     for (const [specifier, names] of parsed.imports) {
-      if (!names.length || !parsed.usedImports.has(specifier)) continue;
       const target = resolveImport(path, specifier, allowed);
-      if (target) queue.push([target, depth + 1, names[0]]);
+      if (target) for (const binding of names) if (parsed.usedImports.has(`${specifier}\0${binding.local}`))
+        queue.push([target, depth + 1, binding.exported ?? binding.local]);
     }
   }
   if (translationKeys.size && allowed.has('src/translate/pt.ts') && files.length < MAX_FILES) {
