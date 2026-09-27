@@ -64,6 +64,34 @@ try {
     }
   });
 
+  for (const [name, run] of [['planContent', planContent], ['generateContentPackage', generateContentPackage]]) {
+    await test(`API sem rota e sem checkout do back oferece refresh em ${name}`, async () => {
+      const request = { topic: 'Nova integração', module: 'api', description: 'Documentar a nova integração' };
+      process.env.BACKEND_LOCAL_CHECKOUT = join(root, 'back-indisponivel');
+      try {
+        const result = await run(docsRoot, request, { contextOptions: { cache: false } });
+        assert.equal(result.summary, 'endpoints estruturados ausentes');
+        assert.match(result.questions.at(-1), /Não encontrei isso no código da versão de 26\/09\/2026\. Quer atualizar a cópia do código e tentar de novo\? Use a ferramenta atualizar_codigo_produto\./u);
+        assert.deepEqual(result.codeSnapshot, { front: first.front, back: first.back,
+          updatedAt: first.updatedAt, stale: false });
+      } finally {
+        process.env.BACKEND_LOCAL_CHECKOUT = join(stateDir, 'checkouts/current/back');
+      }
+    });
+  }
+
+  await test('endpoint não público continua sem oferta nos dois retornos finais', async () => {
+    const request = { topic: 'API interna', module: 'api', description: 'Documentar integração interna' };
+    const productContext = { groundingRequired: true, endpoints: [], nonPublicEndpoints: true,
+      matches: [], code: [], support: { categories: [], rules: [] }, coverage: [], pending: [] };
+    for (const run of [planContent, generateContentPackage]) {
+      const result = await run(docsRoot, request, { productContext });
+      assert.equal(result.summary, 'endpoint não público: confirmar');
+      assert.deepEqual(result.questions, ['endpoint não público: confirmar']);
+      assert.equal(result.codeSnapshot, undefined);
+    }
+  });
+
   await test('código encontrado e pendência editorial não oferecem refresh', async () => {
     const context = { groundingRequired: true, code: [{ available: true, repository: 'front', ref: first.front.sha }],
       matches: [{ repository: 'front', path: 'src/pages/Widget.tsx', line: 1, sha: first.front.sha,
