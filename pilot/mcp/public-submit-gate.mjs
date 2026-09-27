@@ -5,6 +5,9 @@ import { validateCanonicalGuide } from '../lib/canonical-guides.mjs';
 import { validatePublicArtifact } from '../lib/guide-package.mjs';
 import approvedMap from '../product-map/approved.json' with { type: 'json' };
 import { sensitiveKinds } from './sensitive-data.mjs';
+import { finalizeSecurityResponse, securityReview } from './security-review.mjs';
+import { getIhelpContext } from './product-context-service.mjs';
+import { routeMatches } from './api-route-match.mjs';
 import { contentRoutes, internalLinkIssues, parseArticle, parseMdx, plainText, publishedContent, visit } from './editorial-standard.mjs';
 import publishedBaseline from './public-submit-baseline.json' with { type: 'json' };
 
@@ -55,6 +58,120 @@ function checkInterfaceLabels(body, path) {
 
 function reject(message) { throw Object.assign(new Error(`gate público: ${message}`), { code: 'PUBLIC_GATE' }); }
 
+async function securityFacts(root, article) {
+  const route = String(article.endpoint ?? '');
+  const verb = String(article.method ?? '').toUpperCase();
+  const context = await getIhelpContext(root, `${verb} ${route}`, 'api', {
+    requireLocal: true, repositoryIds: ['backend'], explicitEndpoints: [{ verb, route }],
+  }).catch(() => null);
+  const endpoint = context?.endpoints?.find((item) => item.verb === verb &&
+    [item.route, ...(item.optionalAliases ?? [])].some((candidate) =>
+      routeMatches(route, candidate) || routeMatches(route, candidate.replace(/^\/api\/v\d+/iu, ''))));
+  return endpoint ?? null;
+}
+
+const API_HOSTS = new Set(['apiv3.ihelpchat.com']);
+const HTTP_METHOD = '(?:GET|POST|PUT|PATCH|DELETE)';
+
+function citedMethod(line, before, after) {
+  const explicit = before.match(new RegExp(`\\b(${HTTP_METHOD})\\s+$`, 'iu'));
+  if (explicit) return explicit[1].toUpperCase();
+  const command = line.match(/\bcurl\b[^\n]*/iu)?.[0];
+  const context = command ?? line;
+  const option = context.match(new RegExp(`(?:-X|--request)\\s+['"]?(${HTTP_METHOD})\\b`, 'iu'));
+  if (option) return option[1].toUpperCase();
+  const property = context.match(new RegExp(`(?:["']?method["']?)\\s*:\\s*['"]?(${HTTP_METHOD})\\b`, 'iu'));
+  if (property) return property[1].toUpperCase();
+  const leading = before.match(new RegExp(`\\b(${HTTP_METHOD})\\s+[^\\n]*$`, 'iu'));
+  if (leading) return leading[1].toUpperCase();
+  if (command) return /(?:^|\s)(?:-d|--data(?:-[\w-]+)?|-F)(?=\s|=|$)/iu.test(command) ? 'POST' : 'GET';
+  // Uma propriedade de fetch pode vir depois da URL no mesmo comando.
+  const following = after.match(new RegExp(`(?:["']?method["']?)\\s*:\\s*['"]?(${HTTP_METHOD})\\b`, 'iu'));
+  if (following) return following[1].toUpperCase();
+  const client = before.match(/\b(?:fetch|requests\.(get|post|put|patch|delete))\s*\([^\n]*$/iu);
+  if (client) return client[1]?.toUpperCase() ?? 'GET';
+  return undefined;
+}
+
+export function extractCitedEndpoints(article) {
+  const primary = { method: String(article.method ?? '').toUpperCase(), endpoint: String(article.endpoint ?? '') };
+  const endpoints = [primary];
+  const examples = [];
+  const unresolved = [];
+  const body = String(article.body ?? '').replace(/\\\r?\n\s*/gu, ' ')
+    .replace(/\b(?:fetch|requests\.(?:get|post|put|patch|delete))\s*\([\s\S]*?\)/giu,
+      (call) => call.replace(/\r?\n\s*/gu, ' '));
+  let fenced = false;
+  for (const line of body.split(/\r?\n/u)) {
+    const fence = /^\s*```/u.test(line);
+    if (fence) { fenced = !fenced; continue; }
+    const matches = [];
+    for (const match of line.matchAll(/https?:\/\/[^\s`<>"')]+/giu)) {
+      let url;
+      try { url = new URL(match[0].replace(/[.,;:!?]+$/u, '')); } catch { continue; }
+      if (API_HOSTS.has(url.hostname)) matches.push({ index: match.index, length: match[0].length,
+        route: url.pathname.replace(/%7B/giu, '{').replace(/%7D/giu, '}') });
+    }
+    for (const match of line.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(\/[A-Za-z0-9_{}./?=&%-]+)/giu))
+      matches.push({ index: match.index + match[0].indexOf(match[2]), length: match[2].length, route: match[2], method: match[1].toUpperCase() });
+    const codeRanges = fenced ? [[0, line.length]] : [...line.matchAll(/`[^`\n]+`/gu)].map((match) => [match.index, match.index + match[0].length]);
+    for (const [start, end] of codeRanges) {
+      const code = line.slice(start, end);
+      for (const match of code.matchAll(/(?<![A-Za-z0-9/:])\/[A-Za-z0-9_{}.-]+(?:\/[A-Za-z0-9_{}.-]+)+(?:\?[^\s`"']+)?/gu)) {
+        const index = start + match.index;
+        if (!matches.some((item) => index >= item.index && index < item.index + item.length))
+          matches.push({ index, length: match[0].length, route: match[0] });
+      }
+    }
+    for (const candidate of matches.sort((a, b) => a.index - b.index)) {
+      const endpoint = candidate.route.replace(/[.,;:!?]+$/u, '').split(/[?#]/u)[0];
+      const method = candidate.method ?? citedMethod(line, line.slice(0, candidate.index), line.slice(candidate.index + candidate.length));
+      if (!method) { if (!unresolved.includes(endpoint)) unresolved.push(endpoint); continue; }
+      examples.push({ method, endpoint });
+      const base = primary.endpoint.replace(/^\/api\/v\d+/iu, '');
+      const short = endpoint.replace(/^\/api\/v\d+/iu, '');
+      if (method === primary.method && (routeMatches(short, base) || short.startsWith(`${base}/id-exemplo-`))) continue;
+      if (!endpoints.some((item) => item.method === method && routeMatches(endpoint, item.endpoint)))
+        endpoints.push({ method, endpoint });
+    }
+  }
+  return { endpoints, unresolved, examples };
+}
+
+// Único preflight de segurança para páginas propostas ou gravadas pelo MCP.
+export async function reviewBeforePageWrite(root, items, request = {}) {
+  const warnings = [];
+  const required = new Set();
+  const missing = [];
+  for (const { article } of items) {
+    const api = article.path.startsWith('api/');
+    const cited = api ? extractCitedEndpoints(article) : { endpoints: [{}], unresolved: [], examples: [] };
+    missing.push(...cited.unresolved.map((endpoint) => `endpoint citado sem método: ${endpoint}`));
+    for (const endpoint of cited.endpoints) {
+      const candidate = api ? { ...article, ...endpoint } : article;
+      const facts = api ? await securityFacts(root, candidate) : {};
+      if (api && !facts) {
+        missing.push(`sem fatos do código para conferir os campos do endpoint ${endpoint.method} ${endpoint.endpoint}`);
+      }
+      const examples = cited.examples.filter((example) => example.method === endpoint.method
+        && routeMatches(example.endpoint.replace(/^\/api\/v\d+/iu, ''),
+          endpoint.endpoint.replace(/^\/api\/v\d+/iu, '')));
+      const review = securityReview(candidate, { facts: facts ?? {}, request, examples });
+      if (review.blocks.length) reject(review.blocks[0]);
+      warnings.push(...review.warnings);
+      if (review.warnings.length) required.add(review.endpoint);
+    }
+  }
+  if (request.confirmations !== undefined && (!Array.isArray(request.confirmations)
+    || request.confirmations.some((item) => typeof item !== 'string')))
+    reject('confirmations deve ser uma lista de endpoints sensíveis');
+  const given = request.confirmations ?? [];
+  for (const item of given) if (!required.has(item)) reject(`confirmação ${item} não corresponde a endpoint sensível do pacote`);
+  const questions = [...missing, ...[...required].filter((item) => !given.includes(item))
+    .map((item) => `Para seguir, confirme o endpoint sensível: ${item}`)];
+  return finalizeSecurityResponse(questions.length ? { status: 'needs_information', questions } : {}, warnings);
+}
+
 function checkJargon(text) {
   for (const term of jargon) {
     const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -67,15 +184,19 @@ function checkJargon(text) {
   }
 }
 
-export async function assertPublicSubmit(root, items, deletes = [], { ignoreBaseline = false } = {}) {
+export async function assertPublicSubmit(root, items, deletes = [], { ignoreBaseline = false, request = {}, securityOnly = false } = {}) {
+  const security = await reviewBeforePageWrite(root, items, request);
+  if (securityOnly || security.status === 'needs_information') return security;
   const published = await publishedContent(root);
   const after = new Map(published);
   for (const path of deletes) after.delete(path);
   for (const { article, rendered } of items) after.set(article.path, rendered);
   const routesAfter = contentRoutes(after.keys());
   for (const { article, rendered } of items) {
-    const kinds = sensitiveKinds(rendered);
-    if (kinds.credential || kinds.personal || kinds.internal || kinds.control) reject('fonte interna ou dado privado');
+    if (!article.path.startsWith('api/')) {
+      const kinds = sensitiveKinds(rendered);
+      if (kinds.credential || kinds.personal || kinds.internal || kinds.control) reject('fonte interna ou dado privado');
+    }
     if (/<(?:img|Image)\b/iu.test(article.body)) reject('print sem aprovação editorial');
 
     if (article.guide) {
@@ -144,5 +265,6 @@ export async function assertPublicSubmit(root, items, deletes = [], { ignoreBase
     if (incoming.length) reject(`links de entrada quebrados: ${incoming.join('; ')}`);
   }
   const reviewRequired = items.some(({ article }) => Boolean(article.guide));
-  return reviewRequired ? { reviewRequired: true, proofStatus: 'manual_required' } : {};
+  return { ...(items.some(({ article }) => article.path.startsWith('api/')) ? { securityWarnings: security.securityWarnings } : {}),
+    ...(reviewRequired ? { reviewRequired: true, proofStatus: 'manual_required' } : {}) };
 }

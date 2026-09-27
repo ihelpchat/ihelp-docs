@@ -3,11 +3,12 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
-import { readArticle } from './editorial-standard.mjs';
 import { buildServer } from './server.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
-const article = await readArticle(root, 'api/crm/funis/listar-funis');
+const article = { path: 'docs/teste/contatos', title: 'Consultar contatos',
+  description: 'Orientação pública sobre a consulta de contatos no iHelp.', source: 'produto', contentType: 'guia',
+  body: 'Abra Contatos no menu lateral. Confira a lista antes de continuar. Selecione o contato desejado. Revise os dados exibidos na tela. Confira o nome antes de fazer qualquer alteração. Se não encontrar o contato, volte à lista e tente outra busca. Use somente os dados da sua própria conta. Ao terminar, feche a página para voltar ao atendimento. Esta orientação ajuda a localizar um contato sem mudar suas informações.' };
 const snapshot = { frontSha: 'a'.repeat(40), backSha: 'b'.repeat(40), manifest: { routes: [], labels: [], markers: [], permissions: [] } };
 const request = {
   ...article,

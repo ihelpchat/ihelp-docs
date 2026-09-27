@@ -53,7 +53,7 @@ test('renderizador produz rota pública, requisição concreta e pendência de r
   const [article] = result.articles;
   assert.equal(article.method, 'GET');
   assert.equal(article.endpoint, '/contacts/details/{idRef}');
-  assert.match(article.body, /curl[^\n]*\/api\/v2\/contacts\/details\/abc123/);
+  assert.match(article.body, /curl[^\n]*\/api\/v2\/contacts\/details\/id-exemplo-1/);
   assert.match(article.body, /<Param name="idRef" type="string" required>/);
   assert.match(article.body, /Campos de resposta ainda não documentados/);
   assert.doesNotMatch(article.body, /<Field\b/);
@@ -169,6 +169,14 @@ test('somente responseFields entram em Fields', () => {
   assert.doesNotMatch(rendered.body, /segredoInterno/);
 });
 
+test('parâmetro serverAssigned impede devolver página gerada', async () => {
+  const facts = { ...endpoint, parameters: [{ ...endpoint.parameters[0], serverAssigned: true }] };
+  const result = await generate((value) => value, { ...context, endpoints: [facts] });
+  assert.equal(result.status, 'needs_information');
+  assert.match(result.questions.join(' '), /serverAssigned|preenchido pelo servidor/iu);
+  assert.deepEqual(result.articles, []);
+});
+
 test('alias de placeholder já publicado preserva endpoint e Param da página', () => {
   const fact = { ...endpoint, route: '/api/v2/contactTags/getContactsTagByContactId/{contactId}',
     parameters: [{ name: 'contactId', type: 'int', in: 'route' }] };
@@ -234,7 +242,7 @@ test('query e body usam nomes e valores tipados dos fatos', () => {
   assert.match(rendered.body, /<Param name="page" type="number">query/);
   assert.match(rendered.body, /<Param name="name" type="string" required>body/);
   assert.match(rendered.body, /\/api\/v2\/contacts\?page=1/);
-  assert.match(rendered.body, /-d '\{"name":"abc123"\}'/);
+  assert.match(rendered.body, /-d '\{"name":"exemplo"\}'/);
 });
 
 test('página sem parâmetro de corpo não o remove do artigo', () => {
@@ -243,7 +251,7 @@ test('página sem parâmetro de corpo não o remove do artigo', () => {
   const page = { ...examples[0], paramNames: [] };
   const rendered = renderApiReference(fact, [page], page);
   assert.match(rendered.body, /<Param name="name" type="string" required>body/);
-  assert.match(rendered.body, /-d '\{"name":"abc123"\}'/);
+  assert.match(rendered.body, /-d '\{"name":"exemplo"\}'/);
   assert.deepEqual(rendered.pending, ['parâmetro no código ausente da página: name']);
 });
 
