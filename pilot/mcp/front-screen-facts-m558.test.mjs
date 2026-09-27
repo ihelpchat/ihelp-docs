@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractScreenFacts, discardAnsweredScreenQuestions } from './front-screen-facts.mjs';
+import { extractScreenFacts } from './front-screen-facts.mjs';
 import { canReadFrontFile } from './local-product-context.mjs';
 import { publicProductContext } from './product-context-service.mjs';
 import { validateGroundedOutput, planContent } from './content-ai-service.mjs';
@@ -43,15 +43,6 @@ test('uma troca de linha conserva a linha real', async () => {
   assert.ok(result.facts.some((fact) => fact.text === 'Adicionar Contato' && fact.source === `${page}:3`));
 });
 
-test('só descarta pergunta com fato correspondente e registra', () => {
-  const facts = [{ kind: 'action', text: 'Adicionar Contato', source: `${page}:2` },
-    { kind: 'upload', accept: '.csv,.xlsx', owner: 'ImportContactsModal', subject: 'importacao contato', source: `${modal}:2` }];
-  const result = discardAnsweredScreenQuestions(['Qual o nome do botão para adicionar contato?', 'Quais formatos são aceitos na importação?', 'Qual o prazo para importar?'], facts);
-  assert.deepEqual(result.questions, ['Qual o prazo para importar?']);
-  assert.equal(result.discarded.length, 2);
-  assert.equal(result.discarded[0].source, `${page}:2`);
-});
-
 test('porta única limita leitura a TS/TSX autorizado do front', () => {
   assert.equal(canReadFrontFile(router), true);
   assert.equal(canReadFrontFile(page), true);
@@ -72,49 +63,12 @@ test('fato da tela entra no grounding com linha e SHA exatos', () => {
   assert.equal(validateGroundedOutput(statement, context, ['guidance']), false);
 });
 
-test('plano descarta pergunta respondida e preserva a não respondida', async () => {
-  const sha = 'a'.repeat(40);
-  const context = { groundingRequired: true, code: [{ available: true }], matches: [],
-    screenFacts: [{ kind: 'action', text: 'Adicionar Contato', source: `${page}:2`, repository: 'ihelpchat/front-react', sha }],
-    support: { categories: [], rules: [] }, coverage: [] };
-  const result = await planContent(new URL('../', import.meta.url).pathname,
-    { topic: 'Contato', module: 'Contatos', description: 'Explique como cadastrar.' }, { productContext: context,
-      client: { responses: { create: async () => ({ model: 'fixture', output_text: JSON.stringify({
-        status: 'needs_information', guidance: 'Confirmar botões.', risks: [], suggestedActions: [], grounding: [],
-        questions: ['Qual o nome do botão para adicionar contato?', 'Qual é o prazo de cadastro?'],
-      }) }) } } });
-  assert.deepEqual(result.questions, ['Qual é o prazo de cadastro?']);
-  assert.equal(result.discardedQuestions[0].source, `${page}:2`);
-});
-
 test('código front não sai no contexto público e eco é bloqueado', () => {
   const excerpt = 'const internal = makePrivate(x, y, z); internal.execute(a, b, c);';
   const context = { screenCode: [{ path: page, excerpt }], code: [{ screenCode: [{ path: page, excerpt }] }] };
   assert.doesNotMatch(JSON.stringify(publicProductContext(context)), /makePrivate/u);
   const output = guardModelOutput({ articles: [{ body: excerpt }] }, context, 'package');
   assert.equal(output.value.status, 'needs_information');
-});
-
-test('ação só é respondida por rótulo com o mesmo verbo', () => {
-  const question = 'Qual o nome do botão para excluir contato?';
-  const add = { kind: 'action', text: 'Adicionar Contato', source: `${page}:2` };
-  const remove = { ...add, text: 'Excluir contato' };
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [add]).questions, [question]);
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [add, remove]).questions, []);
-});
-
-test('campo obrigatório de cadastro: uma alteração em required muda o descarte', () => {
-  const question = 'Quais campos são obrigatórios no cadastro?';
-  const required = { kind: 'field', name: 'nome', required: true, owner: 'CreateContactModal', subject: 'cadastro contato', source: `${modal}:2` };
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [required]).questions, []);
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [{ ...required, required: false }]).questions, [question]);
-});
-
-test('nome visível de conceito usa sinônimo controlado', () => {
-  const question = '“Carteirizar” é o nome usado na interface?';
-  const owner = { kind: 'text', text: 'Proprietário do Contato', source: `${modal}:2` };
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [owner]).questions, []);
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [{ ...owner, text: 'Telefone' }]).questions, [question]);
 });
 
 test('import local não usado fica fora da cadeia; uso em JSX o inclui', async () => {
@@ -145,26 +99,6 @@ test('chamada e passagem de componente contam como uso; comentário e string nã
 test('uso JSX após template interpolado continua visível ao lexer', async () => {
   const files = { ...sources, [page]: sources[page].replace('<Modal />', '<div className={`${active ? "on" : "off"}`}><Modal /></div>') };
   assert.equal((await run(files)).files.includes(modal), true);
-});
-
-test('fato de outro assunto na mesma cadeia não responde cadastro ou ação de contato', () => {
-  const attendance = { kind: 'field', name: 'phoneNumbers', required: true,
-    source: 'src/components/shared/Attendance/NewAttendance.tsx:10' };
-  const task = { kind: 'action', text: 'Excluir Tarefa', source: 'src/components/pages/Contacts/Tasks.tsx:20' };
-  assert.deepEqual(discardAnsweredScreenQuestions(['Quais campos são obrigatórios no cadastro de contato?'], [attendance]).questions,
-    ['Quais campos são obrigatórios no cadastro de contato?']);
-  assert.deepEqual(discardAnsweredScreenQuestions(['Qual o nome do botão para excluir contato?'], [task]).questions,
-    ['Qual o nome do botão para excluir contato?']);
-});
-
-test('plural de categoria casa com a fonte; plural falso não interrompe o descarte', () => {
-  const field = { kind: 'field', name: 'telefone', required: true,
-    owner: 'CreateContactModal', subject: 'cadastro contato', source: 'src/components/pages/Contacts/CreateContact.tsx:10' };
-  const singular = 'Quais campos são obrigatórios no cadastro de contato?';
-  const plural = singular.replace('contato?', 'contatos?');
-  assert.deepEqual(discardAnsweredScreenQuestions([singular], [field]).questions, []);
-  assert.deepEqual(discardAnsweredScreenQuestions([plural], [field]).questions, []);
-  assert.doesNotThrow(() => discardAnsweredScreenQuestions([singular.replace('contato?', 'coraçãos?')], [field]));
 });
 
 test('ação usa aria-label canônico e texto JSX completo quando não há aria-label', async () => {
@@ -204,25 +138,6 @@ test('fatos trazem dono e assunto do componente que os renderiza', async () => {
   assert.match(upload.subject, /importacao/u);
 });
 
-test('formatos exigem o assunto do upload', () => {
-  const contact = { kind: 'upload', accept: '.csv', owner: 'ImportContactsModal', subject: 'importacao contato', source: `${modal}:2` };
-  const company = 'Quais formatos são aceitos na importação de empresas?';
-  assert.deepEqual(discardAnsweredScreenQuestions([company], [contact], { topic: 'Agenda de Contatos', module: 'Contatos' }).questions, [company]);
-  const question = 'Quais formatos são aceitos na importação de contatos?';
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [contact], { topic: 'Agenda de Contatos', module: 'Contatos' }).questions, []);
-});
-
-test('required exige formulário do assunto do pedido quando pergunta é implícita', () => {
-  const contact = { kind: 'field', name: 'nome', required: true, owner: 'CreateContactModal', subject: 'cadastro contato', source: `${modal}:2` };
-  const question = 'Quais campos são obrigatórios no cadastro?';
-  const request = { topic: 'Agenda de Contatos', module: 'Contatos' };
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [contact], request).questions, []);
-  const company = { ...contact, owner: 'CreateCompanyModal', subject: 'cadastro empresa' };
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [company], request).questions, [question]);
-  const ownerless = { ...contact, owner: '' };
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [ownerless], request).questions, [question]);
-});
-
 test('referência local não renderiza; alias renderizado e chamada em JSX alcançam a função', async () => {
   const base = { ...sources, [page]: `${sources[page]}\nfunction Unused() { return <button onClick={remove}>Excluir Empresa</button>; }` };
   const referenced = { ...base, [page]: base[page].replace('return <><button', 'const X = Unused; return <><button') };
@@ -233,20 +148,41 @@ test('referência local não renderiza; alias renderizado e chamada em JSX alcan
   assert.match(JSON.stringify((await run(called)).facts), /Excluir Empresa/u);
 });
 
-test('descarte exige fatos de todos os assuntos explícitos do cadastro', () => {
-  const question = 'Quais campos são obrigatórios no cadastro de contatos e empresas?';
-  const contact = { kind: 'field', name: 'nome', required: true, owner: 'CreateContactModal',
-    subject: 'cadastro contato', source: `${modal}:2` };
-  const company = { ...contact, owner: 'CreateCompanyModal', subject: 'cadastro empresa' };
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [contact]).questions, [question]);
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [contact, company]).questions, []);
+test('função aninhada só entra quando chamada pelo retorno', async () => {
+  const files = { ...sources, [page]: sources[page].replace('return <>',
+    'function Unused() { return <button onClick={remove}>Excluir Empresa</button> } return <>') };
+  assert.doesNotMatch(JSON.stringify((await run(files)).facts), /Excluir Empresa/u);
+  const called = { ...files, [page]: files[page].replace('<Modal />', '<Modal />{Unused()}') };
+  assert.match(JSON.stringify((await run(called)).facts), /Excluir Empresa/u);
 });
 
-test('descarte exige fatos de todos os assuntos alternativos do upload', () => {
-  const question = 'Quais formatos são aceitos na importação de contatos ou empresas?';
-  const contact = { kind: 'upload', accept: '.csv', owner: 'ImportContactsModal',
-    subject: 'importacao contato', source: `${modal}:2` };
-  const company = { ...contact, owner: 'ImportCompaniesModal', subject: 'importacao empresa' };
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [contact]).questions, [question]);
-  assert.deepEqual(discardAnsweredScreenQuestions([question], [contact, company]).questions, []);
+test('JSX local só entra quando referenciado pelo retorno', async () => {
+  const files = { ...sources, [page]: sources[page].replace('return <>',
+    'const extra = <button onClick={remove}>Excluir Empresa</button>; return <>') };
+  assert.doesNotMatch(JSON.stringify((await run(files)).facts), /Excluir Empresa/u);
+  const used = { ...files, [page]: files[page].replace('<Modal />', '<Modal />{extra}') };
+  assert.match(JSON.stringify((await run(used)).facts), /Excluir Empresa/u);
+});
+
+test('plano recebe fatos e conserva todas as perguntas do modelo', async () => {
+  const sha = 'a'.repeat(40);
+  const fact = { kind: 'action', text: 'Adicionar Contato', owner: 'ContactPage',
+    subject: 'contato', source: `${page}:2`, repository: 'ihelpchat/front-react', sha };
+  const questions = ['Qual o nome do botão para adicionar contato?', 'Qual é o prazo de cadastro?'];
+  let prompt;
+  const result = await planContent(new URL('../', import.meta.url).pathname,
+    { topic: 'Contato', module: 'Contatos', description: 'Explique como cadastrar.' }, {
+      productContext: { groundingRequired: true, code: [{ available: true }], matches: [],
+        screenFacts: [fact], support: { categories: [], rules: [] }, coverage: [] },
+      client: { responses: { create: async (input) => {
+        prompt = input.input;
+        return { model: 'fixture', output_text: JSON.stringify({ status: 'needs_information',
+          guidance: 'Confirmar botões.', risks: [], suggestedActions: [], grounding: [], questions }) };
+      } } },
+    });
+  assert.deepEqual(result.questions, questions);
+  assert.equal(result.discardedQuestions, undefined);
+  assert.match(JSON.stringify(prompt), /FATOS DA TELA/u);
+  assert.match(JSON.stringify(prompt), /Adicionar Contato/u);
+  assert.match(JSON.stringify(prompt), /não pergunte o que os FATOS DA TELA já respondem; cite o fato/iu);
 });
