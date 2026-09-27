@@ -14,6 +14,13 @@ const internalSuffixes = new Set(['local', 'internal', 'lan', 'corp', 'intranet'
 const hostReason = (type) => `URL ou host fora da API pública e do site do FAQ (${type}).`;
 function hostBlocks(text) {
   const blocks = [];
+  for (const match of text.matchAll(/(?<![\p{L}\p{N}_])[a-z][a-z\d+.-]*:\/\/[^\s<>)"'`]+/giu)) {
+    try {
+      const url = new URL(match[0].replace(/[.,;:!?]+$/u, ''));
+      if (url.protocol !== 'https:' || !allowedHosts.has(url.hostname) || url.username || url.password)
+        blocks.push(hostReason('domínio'));
+    } catch { blocks.push('URL inválida na página.'); }
+  }
   const domain = /(?<![\p{L}\p{N}_])([a-z\d](?:[a-z\d-]*[a-z\d])?(?:\.[a-z\d](?:[a-z\d-]*[a-z\d])?)+)(?::\d{1,5})?(?![\p{L}\p{N}_])/giu;
   for (const match of text.matchAll(domain)) {
     const host = match[1].toLowerCase();
