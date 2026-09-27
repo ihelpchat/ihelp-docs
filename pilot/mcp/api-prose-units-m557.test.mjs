@@ -19,8 +19,8 @@ const context = { groundingRequired: true, code: [{ available: true }],
     .map((item) => ({ ...item, line: item.lineStart, ref: item.sha })), endpoints: [endpoint],
   apiExamples: [{ sections: ['Parâmetros', 'Resposta'], components: ['Params', 'Param', 'Fields', 'Field'],
     baseUrl: 'https://apiv3.ihelpchat.com' }] };
-const base = { status: 'ready', summary: replay.summary, questions: [],
-  grounding: [{ text: replay.summary, citations: replay.citations.summary }], articles: [{
+const summaryText = 'O pacote contém páginas novas da referência de Contatos.';
+const base = { status: 'ready', summary: [unit(summaryText, replay.citations.summary)], questions: [], articles: [{
     path: replay.path, endpoint: replay.endpoint, title: replay.title,
     description: unit(replay.description, replay.citations.description), intro: unit(replay.intro, replay.citations.intro),
     notas: replay.notas.map((text) => unit(text, replay.citations.nota)), responseDescriptions: [
@@ -37,12 +37,41 @@ async function generate(change = () => {}) {
 test('resp-3 adaptado: unidades citadas rendem página sem letter', async () => {
   const result = await generate();
   assert.equal(result.status, 'ready', result.summary);
+  assert.equal(result.summary, summaryText, 'consumidor recebe texto, não unidades');
   assert.equal(result.articles[0].endpoint, '/contacts');
   const page = renderArticle(result.articles[0]);
   assert.match(page, /^endpoint: \/contacts$/mu);
   assert.doesNotMatch(page, /letter/u);
   assert.match(result.articles[0].body, /Os filtros de consulta são opcionais/u);
   assert.match(page, /Identificador de referência do contato/u);
+});
+
+test('summary API com duas unidades citadas retorna textos juntados', async () => {
+  const result = await generate((value) => { value.summary.push(unit('Cada página descreve um endpoint solicitado.', replay.citations.summary)); });
+  assert.equal(result.status, 'ready', result.summary);
+  assert.equal(result.summary, `${summaryText} Cada página descreve um endpoint solicitado.`);
+});
+
+test('summary API sem citação é rejeitado pelo motivo correto', async () => {
+  const result = await generate((value) => { value.summary[0].citations = []; });
+  assert.equal(result.status, 'needs_evidence');
+  assert.match(result.summary, /frase sem citação: O pacote contém páginas novas/u);
+});
+
+test('pacote não API mantém summary texto e grounding separado', async () => {
+  const text = 'Pacote pronto para revisão.';
+  const citation = context.matches.find((item) => item.repository);
+  const result = await generateContentPackage(process.cwd(), { topic: 'Contatos', module: 'produto' }, {
+    productContext: context, plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
+      assert.equal(payload.text.format.schema.properties.summary.type, 'string');
+      assert.ok(payload.text.format.schema.required.includes('grounding'));
+      return { output_text: JSON.stringify({ status: 'ready', summary: text, questions: [], articles: [],
+        grounding: [{ text, citations: [{ repository: citation.repository, path: citation.path,
+          lineStart: citation.line, lineEnd: citation.line, sha: citation.sha }] }] }), model: 'offline' };
+    } } },
+  });
+  assert.equal(result.status, 'ready', result.summary);
+  assert.equal(result.summary, text);
 });
 
 test('intro sem citação mantém motivo frase sem citação', async () => {
