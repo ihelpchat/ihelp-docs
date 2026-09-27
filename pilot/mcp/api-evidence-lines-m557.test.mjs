@@ -25,16 +25,33 @@ test('prompt numera callEvidence e matches com linhas do arquivo original', asyn
   const prompt = input.find((item) => item.role === 'user').content;
   assert.match(prompt, /329\| if \(departmentIds != null\)\n330\|     filterByDepartment\(\);/u);
   assert.match(prompt, /411\| before\n412\| filter\n413\| after/u);
-  assert.match(input.find((item) => item.role === 'developer').content, /faixa mais curta.*30 linhas/iu);
+  let generationInput;
+  await generateContentPackage(root, request, { productContext: { ...context, apiExamples: [{ sections: ['Resposta'] }] },
+    plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
+      generationInput = payload.input;
+      return { output_text: '{}' };
+    } } } });
+  assert.match(generationInput.find((item) => item.role === 'developer').content, /faixa mais curta.*30 linhas/iu);
 });
 
-test('literal verbatim omitido de cinco linhas mantém a linha seguinte', () => {
+test('literal verbatim omitido de cinco linhas mantém a linha seguinte', async () => {
   const source = 'var sql = @"postgres://u:p@host/db\nsegredo 2\nsegredo 3\nsegredo 4\nsegredo 5";\nFilterByDepartment();';
   const result = sanitizeCodeForModel(source);
   assert.equal(result.literalsOmitted, 1);
   assert.equal(result.text.split('\n').length, source.split('\n').length);
   assert.equal(result.text.split('\n')[5], 'FilterByDepartment();');
   assert.doesNotMatch(result.text, /postgres|segredo/u);
+  let prompt;
+  await planContent(root, request, { productContext: { ...context,
+    callEvidence: [{ ...context.callEvidence[0], start: 412, end: 417, excerpt: source }] },
+  client: { responses: { create: async (payload) => {
+    prompt = payload.input.find((item) => item.role === 'user').content;
+    return { output_text: JSON.stringify({ status: 'needs_information', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [] }) };
+  } } } });
+  assert.match(prompt, /412\| var sql = "<literal omitido>"\n413\| \n414\| \n415\| \n416\| ;\n417\| FilterByDepartment\(\);/u);
+  const interpolated = sanitizeCodeForModel(source.replace('@"', '$@"'));
+  assert.equal(interpolated.literalsOmitted, 1);
+  assert.equal(interpolated.text.split('\n')[5], 'FilterByDepartment();');
 });
 
 const replay = JSON.parse(await readFile(new URL('./fixtures/m557-resp3-replay.json', import.meta.url)));

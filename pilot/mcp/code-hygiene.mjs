@@ -44,7 +44,9 @@ export function sanitizeCodeForModel(source) {
     }
     if (input.startsWith('/*', i)) {
       const end = input.indexOf('*/', i + 2);
-      i = end < 0 ? input.length : end + 2;
+      const stop = end < 0 ? input.length : end + 2;
+      output += (input.slice(i, stop).match(/\n/gu) ?? []).join('');
+      i = stop;
       counts.commentsRemoved++;
       continue;
     }
@@ -81,7 +83,10 @@ export function sanitizeCodeForModel(source) {
         if (char === quote) { closed = true; end++; break; }
         value += char;
       }
-      if (!closed || !(interpolated ? permittedInterpolated(value) : permitted(value))) { output += MARKER; counts.literalsOmitted++; }
+      if (!closed || !(interpolated ? permittedInterpolated(value) : permitted(value))) {
+        output += MARKER + (input.slice(i, end).match(/\n/gu) ?? []).join('');
+        counts.literalsOmitted++;
+      }
       else output += input.slice(i, end);
       i = end;
       continue;
