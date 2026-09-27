@@ -94,3 +94,36 @@ test('código front não sai no contexto público e eco é bloqueado', () => {
   const output = guardModelOutput({ articles: [{ body: excerpt }] }, context, 'package');
   assert.equal(output.value.status, 'needs_information');
 });
+
+test('ação só é respondida por rótulo com o mesmo verbo', () => {
+  const question = 'Qual o nome do botão para excluir contato?';
+  const add = { kind: 'action', text: 'Adicionar Contato', source: `${page}:2` };
+  const remove = { ...add, text: 'Excluir contato' };
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [add]).questions, [question]);
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [add, remove]).questions, []);
+});
+
+test('campo obrigatório de cadastro: uma alteração em required muda o descarte', () => {
+  const question = 'Quais campos são obrigatórios no cadastro?';
+  const required = { kind: 'field', name: 'nome', required: true, source: `${modal}:2` };
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [required]).questions, []);
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [{ ...required, required: false }]).questions, [question]);
+});
+
+test('nome visível de conceito usa sinônimo controlado', () => {
+  const question = '“Carteirizar” é o nome usado na interface?';
+  const owner = { kind: 'text', text: 'Proprietário do Contato', source: `${modal}:2` };
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [owner]).questions, []);
+  assert.deepEqual(discardAnsweredScreenQuestions([question], [{ ...owner, text: 'Telefone' }]).questions, [question]);
+});
+
+test('import local não usado fica fora da cadeia; uso em JSX o inclui', async () => {
+  const unused = 'src/components/pages/Contacts/Unused.tsx';
+  const files = { ...sources, [page]: `import Unused from './Unused';\n${sources[page]}`,
+    [unused]: 'export default function Unused() { return <button onClick={remove}>Excluir Empresa</button>; }' };
+  const absent = await run(files);
+  assert.equal(absent.files.includes(unused), false);
+  assert.doesNotMatch(JSON.stringify(absent.facts), /Excluir Empresa/u);
+  const rendered = { ...files, [page]: files[page].replace('<Modal />', '<Modal /><Unused />') };
+  assert.equal((await run(rendered)).files.includes(unused), true);
+});
