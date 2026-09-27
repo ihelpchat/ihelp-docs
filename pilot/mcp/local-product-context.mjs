@@ -342,19 +342,13 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
             for (const candidate of next) {
               if (await hasSymlink(join(root, candidate), root)) continue;
               const raw = await deadline.wait(reader(join(root, candidate), { signal: deadline.signal }));
-              if (/\b(?:ConnectionString|Server\s*=|Password\s*=|Data Source\s*=|Initial Catalog\s*=)/iu.test(raw)) {
-                endpoint.pending.push(`arquivo com connection string bloqueado: ${candidate}`);
-                continue;
-              }
               if (raw.length <= MAX_FILE_BYTES) sources[candidate] = raw;
             }
           }
           const trace = traceCsharpCalls(sources, Object.keys(sources), endpoint);
           endpoint.pending.push(...trace.pending);
           for (const method of trace.methods) {
-            const cut = method.excerpt.replace(/"(?:[^"\\]|\\.)*"/gu, (literal) =>
-              /(?:Server\s*=|Password\s*=|token|secret|credential|https?:\/\/[^\s]*@)/iu.test(literal) ? '"[REDACTED]"' : literal);
-            const excerpt = redactSensitiveData(cut);
+            const excerpt = redactSensitiveData(method.excerpt);
             if (containsSensitiveData(excerpt, { detectOpaque: true })) {
               endpoint.pending.push(`trecho sensível: ${method.path}:${method.start}`);
               continue;

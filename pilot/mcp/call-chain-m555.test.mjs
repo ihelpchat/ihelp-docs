@@ -119,7 +119,7 @@ test('prompt corta literal secreto antes de enviar ao provider', async () => {
       prompt = JSON.stringify(payload.input);
       return { output_text: JSON.stringify({ status: 'needs_information', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [] }) };
     } } } });
-  assert.match(prompt, /\[REDACTED\]/u);
+  assert.match(prompt, /\[segredo removido\]/u);
   assert.doesNotMatch(prompt, /synthetic-secret|Server=db\.fixture/u);
 });
 
@@ -148,6 +148,8 @@ test('payload do provider redige gramática de credenciais em toda evidência', 
         } } } });
       assert.ok(payload, location);
       assert.equal(payload.includes(forbidden), false, `${location}: ${secret}`);
+      if (secret.startsWith('Host=') || secret.startsWith('Server='))
+        assert.equal(payload.includes(secret.split(';')[0]), false, `connection string inteira: ${location}`);
     }
   }
 });
@@ -230,7 +232,7 @@ test('pedido explícito envia só a action pedida e corta evidência acima do te
     process.env.BACKEND_LOCAL_CHECKOUT = await realpath(work);
     const context = await getIhelpContext(new URL('../', import.meta.url).pathname, 'contacts', 'api',
       { repositoryIds: ['backend'], cache: false, explicitEndpoints: [{ verb: 'GET', route: '/api/v2/contacts' }] });
-    assert.ok(context.callEvidence.some((item) => item.method === 'Build'), JSON.stringify(context.pending));
+    assert.ok(context.code[0].callEvidence.some((item) => item.method === 'Build'), JSON.stringify(context.pending));
     assert.equal(context.callEvidence.some((item) => /SisterA|SisterB/u.test(item.method)), false);
     assert.ok(context.callEvidence.reduce((sum, item) => sum + item.excerpt.length, 0) <= 30_000);
     assert.match(context.pending.join('; '), /limite de caracteres/u);
@@ -242,6 +244,10 @@ test('pedido explícito envia só a action pedida e corta evidência acima do te
         return { output_text: JSON.stringify({ status: 'needs_information', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [] }) };
       } } } });
     assert.doesNotMatch(payload, /SISTER_A_PRIVATE|SISTER_B_PRIVATE/u);
+    const missing = await getIhelpContext(new URL('../', import.meta.url).pathname, 'contacts', 'api',
+      { repositoryIds: ['backend'], cache: false, explicitEndpoints: [{ verb: 'GET', route: '/api/v2/contacts/missing' }] });
+    assert.equal(missing.callEvidence.length, 0);
+    assert.match(missing.pending.join('; '), /endpoint citado não encontrado \(GET \/api\/v2\/contacts\/missing\)/u);
   } finally {
     if (previous === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
     else process.env.BACKEND_LOCAL_CHECKOUT = previous;

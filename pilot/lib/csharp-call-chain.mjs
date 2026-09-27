@@ -135,7 +135,7 @@ export function traceCsharpCalls(sources, paths, endpoint) {
       seen.add(`${method.path}:${method.start}:${method.method}`);
       if (methods.length >= MAX_CALL_METHODS) { pending.push(`limite de métodos: ${MAX_CALL_METHODS}`); break; }
       methods.push({ method: method.method, path: method.path, start: method.start, end: method.end,
-        excerpt: method.excerpt });
+        excerpt: method.excerpt, depth: depth + 1 });
       visit(method, depth + 1);
     }
   }
