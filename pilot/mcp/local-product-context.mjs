@@ -341,10 +341,18 @@ export async function searchLocalProductContext(topic, module, { repositoryIds =
   const deadline = deadlineContext(Math.max(1, deadlineMs));
   const code = [];
   try {
+    // Pin the common generation once, before scanning either repository.
+    const frontPath = process.env[SOURCES.frontend.env];
+    const backPath = process.env[SOURCES.backend.env];
+    const current = frontPath && backPath && dirname(frontPath) === dirname(backPath)
+      && frontPath.endsWith('/checkouts/current/front') && backPath.endsWith('/checkouts/current/back')
+      ? dirname(frontPath) : null;
+    const generation = current ? await deadline.wait(realpath(current)).catch(() => null) : null;
     for (const id of repositoryIds) {
       const configured = SOURCES[id];
       if (!configured) { code.push(pending({ repository: id }, 'Repositório não autorizado')); continue; }
-      code.push(await scan({ repository: configured.repository, role: configured.role, root: process.env[configured.env] }, topic, module, deadline, { readFile, cache, explicitEndpoints }));
+      const root = generation ? join(generation, id === 'frontend' ? 'front' : 'back') : process.env[configured.env];
+      code.push(await scan({ repository: configured.repository, role: configured.role, root }, topic, module, deadline, { readFile, cache, explicitEndpoints }));
     }
   } finally {
     deadline.close();

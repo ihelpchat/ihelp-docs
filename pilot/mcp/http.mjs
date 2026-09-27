@@ -20,7 +20,7 @@ import { publishedPathOrNull } from './published-paths.mjs';
 import { opaqueId } from './opaque-id.mjs';
 import { authenticate, requestIdentity } from './access-control.mjs';
 import { assistantRouterModel, assistantRouterEffort, conversationsRetentionDays, mcpCredentialsFromEnv, envCompatibility, productCheckoutRefreshHours } from './env-compat.mjs';
-import { readProductCheckoutState, syncProductCheckouts } from './product-checkouts.mjs';
+import { readProductCheckoutState, initializeProductCheckouts } from './product-checkouts.mjs';
 
 const credentials = mcpCredentialsFromEnv();
 if (!credentials.length) throw new Error('Configure DOCS_MCP_CREDENTIALS ou DOCS_MCP_API_KEY antes de iniciar o MCP');
@@ -32,7 +32,6 @@ const handler = toNodeHandler(mcpHandler);
 const port = Number(process.env.PORT ?? 3100);
 const root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname;
 const stateDir = process.env.MCP_STATE_DIR ?? '/data';
-const checkoutPaths = { front: join(stateDir, 'checkouts/front'), back: join(stateDir, 'checkouts/back') };
 const hasExternalCheckouts = Boolean(process.env[envCompatibility.localCheckouts.frontend] || process.env[envCompatibility.localCheckouts.backend]);
 const checkoutToken = process.env[envCompatibility.githubReadToken.current];
 let productContext = { status: 'unavailable', reason: 'GITHUB_READ_TOKEN ausente' };
@@ -41,9 +40,7 @@ async function refreshProductContext() {
   if (syncingProduct) return;
   syncingProduct = true;
   try {
-    productContext = await syncProductCheckouts({ stateDir, token: checkoutToken });
-    process.env[envCompatibility.localCheckouts.frontend] = checkoutPaths.front;
-    process.env[envCompatibility.localCheckouts.backend] = checkoutPaths.back;
+    productContext = await initializeProductCheckouts({ stateDir, token: checkoutToken });
   } catch {
     productContext = { status: 'unavailable', reason: 'sync do código do produto falhou' };
   } finally { syncingProduct = false; }
@@ -56,12 +53,6 @@ if (hasExternalCheckouts) {
     } });
   } catch { productContext = { status: 'unavailable', reason: 'checkout do produto indisponível' }; }
 } else if (checkoutToken) {
-  // Keep a valid previous pair available while an update is prepared.
-  try {
-    await readProductCheckoutState({ stateDir });
-    process.env[envCompatibility.localCheckouts.frontend] = checkoutPaths.front;
-    process.env[envCompatibility.localCheckouts.backend] = checkoutPaths.back;
-  } catch { /* first sync */ }
   await refreshProductContext();
   const refresh = setInterval(refreshProductContext, productCheckoutRefreshHours() * 60 * 60_000);
   refresh.unref();

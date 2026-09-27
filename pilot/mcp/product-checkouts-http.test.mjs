@@ -6,6 +6,8 @@ import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getIhelpContext } from './product-context-service.mjs';
+import { planContent } from './content-ai-service.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'm553-http-'));
 const contentSha = 'a'.repeat(64);
@@ -77,5 +79,53 @@ try {
     assert.equal(result.status, 200);
     assert.equal(result.body.productContext.front.sha, shas.front);
     assert.equal(result.body.productContext.back.sha, shas.back);
+  });
+  await test('boot HTTP sincroniza os dois repositórios e planContent usa ambos', async () => {
+    const rewrite = [];
+    for (const [id, ref, file, word] of [
+      ['front', 'master', 'src/pages/Widget.tsx', 'widget'],
+      ['back', 'release/validation', 'Controllers/ChannelController.cs', 'canal'],
+    ]) {
+      const bare = join(root, `${id}-boot.git`);
+      const work = join(root, `${id}-boot-source`);
+      await mkdir(work);
+      git(root, 'init', '--bare', bare);
+      git(work, 'init'); git(work, 'checkout', '-b', ref);
+      await mkdir(join(work, file.split('/').slice(0, -1).join('/')), { recursive: true });
+      await writeFile(join(work, file), `export const ${word} = '${word} fixture';`);
+      git(work, 'add', '.'); git(work, 'commit', '-m', 'fixture');
+      git(work, 'remote', 'add', 'origin', bare); git(work, 'push', 'origin', ref);
+      const remote = id === 'front' ? 'front-react' : 'olah-ihelp';
+      rewrite.push(`[url "file://${bare}"]\n\tinsteadOf = https://github.com/ihelpchat/${remote}.git`);
+    }
+    const config = join(root, 'gitconfig');
+    await writeFile(config, `${rewrite.join('\n')}\n`);
+    const stateDir = join(root, 'boot-state');
+    const result = await health({ MCP_STATE_DIR: stateDir, GITHUB_READ_TOKEN: 'fixture-token', GIT_CONFIG_GLOBAL: config });
+    assert.equal(result.status, 200);
+    const previous = { front: process.env.PRODUCT_LOCAL_CHECKOUT, back: process.env.BACKEND_LOCAL_CHECKOUT };
+    process.env.PRODUCT_LOCAL_CHECKOUT = join(stateDir, 'checkouts/current/front');
+    process.env.BACKEND_LOCAL_CHECKOUT = join(stateDir, 'checkouts/current/back');
+    try {
+      for (const [topic, expected] of [['widget', 'src/pages/Widget.tsx'], ['canal', 'Controllers/ChannelController.cs']]) {
+        const context = await getIhelpContext(new URL('../', import.meta.url).pathname, topic, 'produto', { requireLocal: true, cache: false });
+        const match = context.matches.find((item) => item.path === expected);
+        assert.ok(match, `contexto ausente: ${expected}`);
+        const client = { responses: { create: async () => ({ model: 'fixture', output_text: JSON.stringify({
+          status: 'ready', guidance: 'Abra a tela.', questions: [], risks: [], suggestedActions: [],
+          grounding: [{ text: 'Abra a tela.', citations: [{ repository: match.repository, path: match.path,
+            lineStart: match.line, lineEnd: match.line, sha: match.sha }] }],
+        }) }) } };
+        const plan = await planContent(new URL('../', import.meta.url).pathname,
+          { topic, module: 'produto', description: `Documentar ${topic}` }, { client, contextOptions: { cache: false } });
+        assert.equal(plan.status, 'ready');
+        assert.ok(plan.productContext.files.some((file) => file.includes(expected)));
+      }
+    } finally {
+      if (previous.front === undefined) delete process.env.PRODUCT_LOCAL_CHECKOUT;
+      else process.env.PRODUCT_LOCAL_CHECKOUT = previous.front;
+      if (previous.back === undefined) delete process.env.BACKEND_LOCAL_CHECKOUT;
+      else process.env.BACKEND_LOCAL_CHECKOUT = previous.back;
+    }
   });
 } finally { await rm(root, { recursive: true, force: true }); }

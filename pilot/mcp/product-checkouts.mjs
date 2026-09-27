@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { cp, mkdtemp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdtemp, mkdir, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { productSparseFolders } from './local-product-context.mjs';
 
 const exec = promisify(execFile);
@@ -29,12 +29,13 @@ async function shaOf(path) {
 }
 
 export async function readProductCheckoutState({ stateDir, paths } = {}) {
-  const front = paths?.front ?? join(stateDir, 'checkouts/front');
-  const back = paths?.back ?? join(stateDir, 'checkouts/back');
+  const generation = paths ? null : await realpath(join(stateDir, 'checkouts/current'));
+  const front = paths?.front ?? join(generation, 'front');
+  const back = paths?.back ?? join(generation, 'back');
   const [frontSha, backSha] = await Promise.all([shaOf(front), shaOf(back)]);
   let updatedAt;
-  if (stateDir) {
-    try { updatedAt = JSON.parse(await readFile(join(stateDir, 'checkouts/status.json'), 'utf8')).updatedAt; }
+  if (generation) {
+    try { updatedAt = JSON.parse(await readFile(join(generation, 'status.json'), 'utf8')).updatedAt; }
     catch { /* externally supplied checkouts have no sync timestamp */ }
   }
   return { front: { sha: frontSha }, back: { sha: backSha }, ...(updatedAt ? { updatedAt } : {}) };
@@ -44,55 +45,54 @@ export async function syncProductCheckouts({ stateDir, token, now = () => new Da
   if (!stateDir || !token) throw new Error('Estado ou GITHUB_READ_TOKEN ausente');
   const root = join(stateDir, 'checkouts');
   await mkdir(root, { recursive: true });
-  const staged = {};
-  const backups = {};
+  const generation = await mkdtemp(join(root, `gen-${Date.now()}-`));
+  const current = join(root, 'current');
+  const temporaryLink = join(root, 'current.tmp');
   let active;
+  let published = false;
   try {
     for (const id of ['front', 'back']) {
       active = id;
       const { url, ref, role } = repositories[id];
-      const target = join(root, id);
-      const staging = await mkdtemp(join(root, `.${id}-next-`));
-      staged[id] = staging;
-      if (await stat(join(target, '.git')).catch(() => null)) {
-        await cp(target, staging, { recursive: true, force: true });
-        await git(staging, token, 'fetch', '--depth', '1', 'origin', ref);
-        await git(staging, token, 'checkout', '--detach', 'FETCH_HEAD');
-      } else {
-        await rm(staging, { recursive: true });
-        await git(root, token, 'clone', '--depth', '1', '--filter=blob:none', '--sparse', '--branch', ref, '--', url, staging);
-      }
-      await git(staging, token, 'sparse-checkout', 'set', '--', ...productSparseFolders(role));
-      await shaOf(staging);
+      const target = join(generation, id);
+      await git(root, token, 'clone', '--depth', '1', '--filter=blob:none', '--sparse', '--branch', ref, '--', url, target);
+      await git(target, token, 'sparse-checkout', 'set', '--', ...productSparseFolders(role));
+      await shaOf(target);
     }
-    const result = { front: { sha: await shaOf(staged.front) }, back: { sha: await shaOf(staged.back) }, updatedAt: new Date(now()).toISOString() };
-    for (const id of ['front', 'back']) {
-      const target = join(root, id);
-      if (await stat(target).catch(() => null)) {
-        const backup = await mkdtemp(join(root, `.${id}-old-`));
-        await rm(backup, { recursive: true });
-        await rename(target, backup);
-        backups[id] = backup;
+    const result = { front: { sha: await shaOf(join(generation, 'front')) }, back: { sha: await shaOf(join(generation, 'back')) }, updatedAt: new Date(now()).toISOString() };
+    await writeFile(join(generation, 'status.json'), JSON.stringify(result));
+    const previous = await readlink(current).catch(() => null);
+    await rm(temporaryLink, { force: true });
+    await symlink(basename(generation), temporaryLink, 'dir');
+    await rename(temporaryLink, current);
+    published = true;
+    // The previous generation stays intact for readers that pinned it before publication.
+    for (const entry of await readdir(root)) {
+      if (entry.startsWith('gen-') && entry !== basename(generation) && entry !== previous) {
+        await rm(join(root, entry), { recursive: true, force: true }).catch(() => {});
       }
-      await rename(staged[id], target);
-      delete staged[id];
     }
-    const statusTemp = join(root, '.status-next.json');
-    await writeFile(statusTemp, JSON.stringify(result));
-    await rename(statusTemp, join(root, 'status.json'));
-    for (const backup of Object.values(backups)) await rm(backup, { recursive: true, force: true }).catch(() => {});
     log('Checkouts do produto atualizados');
     return result;
   } catch {
-    for (const id of ['front', 'back']) {
-      if (!backups[id]) continue;
-      const target = join(root, id);
-      await rm(target, { recursive: true, force: true });
-      await rename(backups[id], target);
-    }
     log(`Sync do produto falhou: ${active ?? 'estado'}`);
     throw new Error(`Sync do produto falhou: ${active ?? 'estado'}`);
   } finally {
-    for (const path of Object.values(staged)) await rm(path, { recursive: true, force: true });
+    await rm(temporaryLink, { force: true }).catch(() => {});
+    if (!published) await rm(generation, { recursive: true, force: true });
   }
+}
+
+export async function initializeProductCheckouts(options) {
+  const { stateDir } = options;
+  const paths = { front: join(stateDir, 'checkouts/current/front'), back: join(stateDir, 'checkouts/current/back') };
+  try {
+    await readProductCheckoutState({ stateDir });
+    process.env.PRODUCT_LOCAL_CHECKOUT = paths.front;
+    process.env.BACKEND_LOCAL_CHECKOUT = paths.back;
+  } catch { /* first sync has no current generation */ }
+  const result = await syncProductCheckouts(options);
+  process.env.PRODUCT_LOCAL_CHECKOUT = paths.front;
+  process.env.BACKEND_LOCAL_CHECKOUT = paths.back;
+  return result;
 }

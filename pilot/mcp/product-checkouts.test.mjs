@@ -9,6 +9,7 @@ const { productCheckoutRefreshHours } = await import('./env-compat.mjs');
 const { syncProductCheckouts, initializeProductCheckouts } = await import('./product-checkouts.mjs').catch(() => ({}));
 const { searchLocalProductContext } = await import('./local-product-context.mjs');
 const { planContent } = await import('./content-ai-service.mjs');
+const { getIhelpContext } = await import('./product-context-service.mjs');
 
 function git(cwd, ...args) {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env,
@@ -100,7 +101,7 @@ await test('boot publica checkout para planContent e leitura fixa o par durante 
       git(work, 'init');
       git(work, 'checkout', '-b', ref);
       await mkdir(join(work, file.split('/').slice(0, -1).join('/')), { recursive: true });
-      await writeFile(join(work, file), `export const ${word} = '${word} old';`);
+      await writeFile(join(work, file), `export const ${word} = 'produto ${word} old';`);
       git(work, 'add', '.'); git(work, 'commit', '-m', 'old');
       git(work, 'remote', 'add', 'origin', bare); git(work, 'push', 'origin', ref);
       repositories[id] = { url: bare, ref, role, work, file, word };
@@ -110,10 +111,15 @@ await test('boot publica checkout para planContent e leitura fixa o par durante 
     assert.equal(boot.front.sha, git(join(stateDir, 'checkouts/current/front'), 'rev-parse', 'HEAD'));
     assert.equal(process.env.PRODUCT_LOCAL_CHECKOUT, join(stateDir, 'checkouts/current/front'));
     assert.equal(process.env.BACKEND_LOCAL_CHECKOUT, join(stateDir, 'checkouts/current/back'));
-    const client = { responses: { create: async () => ({ model: 'fixture', output_text: JSON.stringify({
-      status: 'ready', guidance: '', questions: [], risks: [], suggestedActions: [], grounding: [],
-    }) }) } };
     for (const [topic, expected] of [['widget', 'src/pages/Widget.tsx'], ['canal', 'Controllers/ChannelController.cs']]) {
+      const context = await getIhelpContext(new URL('../', import.meta.url).pathname, topic, 'produto', { requireLocal: true, cache: false });
+      const match = context.matches.find((item) => item.path === expected);
+      assert.ok(match, `match ausente: ${expected}`);
+      const client = { responses: { create: async () => ({ model: 'fixture', output_text: JSON.stringify({
+        status: 'ready', guidance: 'Abra a tela.', questions: [], risks: [], suggestedActions: [],
+        grounding: [{ text: 'Abra a tela.', citations: [{ repository: match.repository, path: match.path,
+          lineStart: match.line, lineEnd: match.line, sha: match.sha }] }],
+      }) }) } };
       const plan = await planContent(new URL('../', import.meta.url).pathname,
         { topic, module: 'produto', description: `Documentar ${topic}` }, { client, contextOptions: { cache: false } });
       assert.notEqual(plan.status, 'needs_information', `planContent precisa acessar ${expected}`);
@@ -122,11 +128,11 @@ await test('boot publica checkout para planContent e leitura fixa o par durante 
     const oldRoot = await realpath(join(stateDir, 'checkouts/current'));
     for (const id of ['front', 'back']) {
       const { work, file, word, ref } = repositories[id];
-      await writeFile(join(work, file), `export const ${word} = '${word} new';`);
+      await writeFile(join(work, file), `export const ${word} = 'produto ${word} new';`);
       git(work, 'add', '.'); git(work, 'commit', '-m', 'new'); git(work, 'push', 'origin', ref);
     }
     let changed = false;
-    const old = await searchLocalProductContext('widget canal', 'produto', { cache: false, readFile: async (path, options) => {
+    const old = await searchLocalProductContext('produto', 'produto', { cache: false, readFile: async (path, options) => {
       if (!changed) {
         changed = true;
         await syncProductCheckouts({ stateDir, token: 'fixture-token', repositories });
@@ -137,11 +143,15 @@ await test('boot publica checkout para planContent e leitura fixa o par durante 
     assert.equal(old.code[0].ref, boot.front.sha);
     assert.equal(old.code[1].ref, boot.back.sha);
     assert.ok(old.matches.some((match) => match.path === repositories.front.file));
-    assert.ok(old.matches.some((match) => match.path === repositories.back.file));
+    assert.ok(old.matches.some((match) => match.path === repositories.back.file), JSON.stringify(old.code));
     assert.notEqual(await realpath(join(stateDir, 'checkouts/current')), oldRoot);
-    const next = await searchLocalProductContext('widget canal', 'produto', { cache: false });
+    const next = await searchLocalProductContext('produto', 'produto', { cache: false });
     assert.notEqual(next.code[0].ref, old.code[0].ref);
     assert.notEqual(next.code[1].ref, old.code[1].ref);
+    const secondRoot = await realpath(join(stateDir, 'checkouts/current'));
+    await syncProductCheckouts({ stateDir, token: 'fixture-token', repositories });
+    await assert.rejects(realpath(oldRoot), 'geração anterior à última deve ser removida');
+    assert.equal(await realpath(secondRoot), secondRoot, 'geração anterior deve permanecer');
   } finally {
     if (previous.front === undefined) delete process.env.PRODUCT_LOCAL_CHECKOUT;
     else process.env.PRODUCT_LOCAL_CHECKOUT = previous.front;
