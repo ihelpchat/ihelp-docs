@@ -108,11 +108,13 @@ function groundingIssues(output, context, fields) {
   if (!lines.length) return ['frases sem grounding'];
   const issues = lines.filter((line) => !claims.some((claim) => claim.text === line)).map((line) => `frase sem citação: ${line}`);
   const normalizeSpaces = (value) => value.replace(/\s+/gu, ' ').trim();
-  const segmentsOf = (quote) => String(quote).split(/(?<=[.!?;])\s+|\n/u).map(normalizeSpaces).filter((segment) => segment.length >= 12);
+  const segmentsOf = (quote) => String(quote).split(/(?<=[.!?;])\s+|\n/u)
+    .map((segment) => normalizeSpaces(segment).replace(/^[\p{P}]+|[\p{P}]+$/gu, '').trim()).filter(Boolean);
   const literalSegments = (quote, sources) => {
     const segments = segmentsOf(quote);
-    return segments.length > 0 && segments.every((segment) => sources.some((source) =>
-      typeof source === 'string' && normalizeSpaces(source).includes(segment)));
+    return normalizeSpaces(String(quote)).length >= 12 && segments.some((segment) => segment.length >= 12)
+      && segments.every((segment) => sources.some((source) =>
+        typeof source === 'string' && normalizeSpaces(source).includes(segment)));
   };
   const evidence = evidenceIndex(context);
   if (!claims.length) issues.push('grounding vazio');
