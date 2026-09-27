@@ -26,7 +26,7 @@ function git(cwd, ...args) {
   return result.stdout.trim();
 }
 
-async function health(extra = {}) {
+async function healthOnce(extra = {}) {
   const server = createServer();
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -53,6 +53,15 @@ async function health(extra = {}) {
       const exited = once(child, 'exit');
       child.kill('SIGTERM');
       await exited;
+    }
+  }
+}
+
+async function health(extra = {}) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { return await healthOnce(extra); }
+    catch (error) {
+      if (!error.message.includes('EADDRINUSE') || attempt === 2) throw error;
     }
   }
 }
