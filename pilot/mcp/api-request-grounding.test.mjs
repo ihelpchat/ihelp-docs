@@ -7,7 +7,7 @@ const request = { topic: 'API de contatos', module: 'api', description: 'Referê
 const match = { repository: 'ihelpchat/olah-ihelp', path: 'Controllers/ContactsController.cs', sha: 'a'.repeat(40), ref: 'a'.repeat(40), line: 12 };
 const code = { repository: match.repository, path: match.path, sha: match.sha, lineStart: match.line, lineEnd: match.line };
 const pedido = { source: 'pedido', quote };
-const prose = { path: 'api/contatos/buscar', title: 'Buscar contatos',
+const prose = { path: 'api/contatos/buscar', endpoint: 'GET /contacts', title: 'Buscar contatos',
   description: 'A busca aceita filtros por nome do contato.', intro: 'Consulte os contatos usando os filtros informados.', notas: [], grounding: [] };
 const output = { status: 'ready', summary: 'Referência para buscar contatos.', questions: [], articles: [prose], grounding: [] };
 const context = { groundingRequired: true, code: [{ available: true }], matches: [match], endpoints: [{ verb: 'GET', route: '/api/v2/contacts', public: true, documented: true, policy: 'authenticated', parameters: [], responseFields: null }],
@@ -69,14 +69,14 @@ for (const [name, change] of [
 });
 
 test('API rejeita nome técnico do pedido sem fato de código', async () => {
-  const details = `${request.details} O campo segredo representa um valor reservado.`;
+  const details = `${request.details} O campo segredoInterno representa um valor reservado.`;
   const result = await generate((value) => {
-    value.articles[0].description = 'O campo segredo representa um valor reservado.';
-    value.articles[0].grounding[0] = { text: value.articles[0].description, citations: [{ source: 'pedido', quote: 'O campo segredo representa um valor reservado.' }] };
+    value.articles[0].description = 'O campo segredoInterno representa um valor reservado.';
+    value.articles[0].grounding[0] = { text: value.articles[0].description, citations: [{ source: 'pedido', quote: 'O campo segredoInterno representa um valor reservado.' }] };
     return value;
   }, { ...request, details });
   assert.equal(result.status, 'needs_information');
-  assert.match(result.questions.join(' '), /nome técnico sem fato: segredo/i);
+  assert.match(result.questions.join(' '), /nome técnico sem fato: segredoInterno/i);
 });
 
 test('guia rejeita citação do pedido com motivo', async () => {

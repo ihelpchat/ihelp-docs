@@ -157,6 +157,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
       if (frontmatter?.source === 'api' && frontmatter?.method && frontmatter?.endpoint) {
         documented.add(`${frontmatter.method} ${String(frontmatter.endpoint).toLowerCase().replace(/\{[^}]+\}/gu, '{}')}`);
         apiExamples.push({ path: `api/${page.replace(/\.mdx$/u, '')}`,
+          content: redactSensitiveData(raw),
           baseUrl: raw.match(/https:\/\/[^\s/"']+(?=\/api\/v\d+)/u)?.[0] ?? null,
           paramNames: [...raw.matchAll(/<Param\s+[^>]*name=["']([^"']+)["']/gu)].map((item) => item[1]),
           components: [...new Set([...raw.matchAll(/<(Params|Param|CodeTabs|Response|Fields|Field)\b/gu)].map((item) => item[1]))],
