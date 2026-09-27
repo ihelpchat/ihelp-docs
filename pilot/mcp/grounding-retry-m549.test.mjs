@@ -35,6 +35,22 @@ for (const [source, citedContext, path] of [
   test(`${source}: segmentos literais reordenados são aceitos`, () => {
     assert.equal(validateGroundedOutput(output(cite(reordered)), citedContext, ['guidance']), true);
   });
+  test(`${source}: pontuação final alterada é rejeitada`, () => {
+    const literal = 'A ação está autorizada.';
+    const sourceContext = source === 'pedido'
+      ? { ...citedContext, request: { ...request, details: literal } }
+      : { ...citedContext, existing: [{ path, description: literal }] };
+    assert.equal(validateGroundedOutput(output(cite('A ação está autorizada?')), sourceContext, ['guidance']), false);
+    assert.equal(validateGroundedOutput(output(cite('A ação está autorizada!')), sourceContext, ['guidance']), false);
+    assert.equal(validateGroundedOutput(output(cite('A ação está autorizada.')), sourceContext, ['guidance']), true);
+    assert.equal(validateGroundedOutput(output(cite('A ação está autorizada')), sourceContext, ['guidance']), true);
+  });
+  test(`${source}: pontuação de segmento intermediário alterada é rejeitada`, () => {
+    const sourceContext = source === 'pedido'
+      ? { ...citedContext, request: { ...request, details: 'Primeira ação autorizada. Segunda ação confirmada.' } }
+      : { ...citedContext, existing: [{ path, description: 'Primeira ação autorizada. Segunda ação confirmada.' }] };
+    assert.equal(validateGroundedOutput(output(cite('Primeira ação autorizada? Segunda ação confirmada.')), sourceContext, ['guidance']), false);
+  });
   test(`${source}: apenas segmentos literais curtos não cumprem o mínimo`, () => {
     assert.equal(validateGroundedOutput(output(cite('Nomes; três')), citedContext, ['guidance']), false);
   });
