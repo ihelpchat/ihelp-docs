@@ -19,7 +19,8 @@ import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { publishedPathOrNull } from './published-paths.mjs';
 import { opaqueId } from './opaque-id.mjs';
 import { authenticate, requestIdentity } from './access-control.mjs';
-import { assistantRouterModel, assistantRouterEffort, conversationsRetentionDays, mcpCredentialsFromEnv } from './env-compat.mjs';
+import { assistantRouterModel, assistantRouterEffort, conversationsRetentionDays, mcpCredentialsFromEnv, envCompatibility, productCheckoutRefreshHours } from './env-compat.mjs';
+import { readProductCheckoutState, restoreProductCheckouts, initializeProductCheckouts } from './product-checkouts.mjs';
 
 const credentials = mcpCredentialsFromEnv();
 if (!credentials.length) throw new Error('Configure DOCS_MCP_CREDENTIALS ou DOCS_MCP_API_KEY antes de iniciar o MCP');
@@ -30,6 +31,39 @@ const mcpHandler = createMcpHandler(() => buildServer());
 const handler = toNodeHandler(mcpHandler);
 const port = Number(process.env.PORT ?? 3100);
 const root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname;
+const stateDir = process.env.MCP_STATE_DIR ?? '/data';
+const hasExternalCheckouts = Boolean(process.env[envCompatibility.localCheckouts.frontend] || process.env[envCompatibility.localCheckouts.backend]);
+const checkoutToken = process.env[envCompatibility.githubReadToken.current];
+let productContext = { status: 'unavailable', reason: 'GITHUB_READ_TOKEN ausente' };
+let syncingProduct = false;
+async function refreshProductContext() {
+  if (syncingProduct) return;
+  syncingProduct = true;
+  try {
+    productContext = await initializeProductCheckouts({ stateDir, token: checkoutToken });
+  } catch {
+    productContext = { status: 'unavailable', reason: 'sync do código do produto falhou' };
+  } finally { syncingProduct = false; }
+}
+if (hasExternalCheckouts) {
+  try {
+    productContext = await readProductCheckoutState({ paths: {
+      front: process.env[envCompatibility.localCheckouts.frontend],
+      back: process.env[envCompatibility.localCheckouts.backend],
+    } });
+  } catch { productContext = { status: 'unavailable', reason: 'checkout do produto indisponível' }; }
+} else {
+  try {
+    productContext = { ...await restoreProductCheckouts(stateDir), ...(!checkoutToken ? { stale: true } : {}) };
+  } catch {
+    productContext = { status: 'unavailable', reason: checkoutToken ? 'checkout do produto indisponível' : 'GITHUB_READ_TOKEN ausente' };
+  }
+  if (checkoutToken) {
+    await refreshProductContext();
+    const refresh = setInterval(refreshProductContext, productCheckoutRefreshHours() * 60 * 60_000);
+    refresh.unref();
+  }
+}
 const feedbackFile = process.env.FEEDBACK_FILE ?? '/tmp/ihelp-docs-feedback.jsonl';
 const sessionEventsFile = process.env.SESSION_EVENTS_FILE ?? '/tmp/ihelp-docs-session-events.jsonl';
 const conversationsFile = process.env.CONVERSATIONS_FILE ?? '/tmp/ihelp-docs-conversations.jsonl';
@@ -164,7 +198,7 @@ export const httpServer = createServer(async (request, response) => {
       }
       const budget = await budgetState();
       response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
-        .end(JSON.stringify({ codeSha, contentSha256: catalog.contentSha256, budget }));
+        .end(JSON.stringify({ codeSha, contentSha256: catalog.contentSha256, budget, productContext }));
     } catch {
       response.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ error: 'versão indisponível' }));
     }
