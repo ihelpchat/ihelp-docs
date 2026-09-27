@@ -46,8 +46,8 @@ try {
     { ...article, body: `${body}\n\n[Abra a página](/docs/nao-existe-em-lugar-nenhum).` },
     { ...article, body: `${body}\n\n[Abra a página](./nao-existe-em-lugar-nenhum).` },
     { ...article, body: `${body}\n\n[Abra a página](/docs/nao-existe-em-lugar-nenhum#passo).` },
-    { ...article, body: `${body}\n\n[Instrução interna](https://intranet.example.test/manual).` },
-    { ...article, body: `${body}\n\n[Abra o link](https://evil.example.test/coleta).` },
+    { ...article, body: `${body}\n\n[Instrução interna](https://db.internal/manual).` },
+    { ...article, body: `${body}\n\n[Abra o link](https://evil.example.com/coleta).` },
     { ...article, body: `${body}\n\n![Print de teste](/img/help/print-nao-aprovado.png)` },
     { ...article, body: `${body}\n\nUse template para continuar.` },
     { ...article, body: `${body}\n\nToque no botão **Algo inventado**.` },
@@ -78,7 +78,7 @@ try {
     ...actionVerbs.map(() => /rótulo fora do mapa/u),
     /rótulo fora do mapa/u, /rótulo fora do mapa/u,
     /link interno inexistente/u, /link interno inexistente/u, /link interno inexistente/u,
-    /link externo proibido/u, /link externo proibido/u,
+    /URL ou host fora da API pública/u, /URL ou host fora da API pública/u,
     /asset inexistente/u, /jargão sem explicação/u,
     /rótulo fora do mapa/u, /rótulo fora do mapa/u, /rótulo fora do mapa/u,
     /rótulo fora do mapa/u,
@@ -110,9 +110,9 @@ try {
     '<X foo="docs/nao-existe">Abra a página</X>',
   ];
   const unsafeMdxReasons = [
-    /link interno inexistente/u, /link interno inexistente/u,
-    /link interno inexistente/u, /print sem aprovação editorial/u,
-    /esquema de URL não permitido/u, /esquema de URL não permitido/u,
+    /forma de domínio sem esquema/u, /forma de domínio sem esquema/u,
+    /link interno inexistente/u, /forma de domínio sem esquema/u,
+    /forma de esquema não permitido/u, /forma de esquema não permitido/u,
     /link interno inexistente/u, /link interno inexistente/u,
     /link interno inexistente/u,
   ];
@@ -134,10 +134,11 @@ try {
   assert.equal(validJsx.status, 'pull_request', 'atributo JSX com string estática e rota existente passa');
   const validData = await submitContentPackage(root, [{ ...article, body: `${body}\n\n<Card data={{ href: '/docs/teste/contatos', count: -1, enabled: true, empty: null }} />` }], 'pull_request', 'user:tester');
   assert.equal(validData.status, 'pull_request', 'objeto de dados literais e rota existente passa');
-  const validRelative = await submitContentPackage(root, [{ ...article, body: `${body}\n\n<Card href="contatos">Abra a página</Card>.` }], 'pull_request', 'user:tester');
-  assert.equal(validRelative.status, 'pull_request', 'link relativo existente em JSX passa');
+  await assert.rejects(submitContentPackage(root, [{ ...article, body: `${body}\n\n<Card href="contatos">Abra a página</Card>.` }], 'pull_request', 'user:tester'),
+    /forma de domínio sem esquema/u, 'link sem prefixo relativo é bloqueado');
   const validApi = await submitContentPackage(root, [{ ...article, path: 'api/teste/contatos', body: `${body}\n\nUse \`contactId\` para identificar o contato.` }], 'pull_request', 'user:tester');
-  assert.equal(validApi.status, 'pull_request', 'código inline na referência de API não é rótulo');
+  assert.equal(validApi.status, 'needs_information', 'API sem fatos precisa parar antes de propor PR');
+  assert.match(validApi.questions.join(' '), /sem fatos do código para conferir os campos do endpoint/u);
 
   const removedPath = 'docs/sobre-o-sistema/atendimento';
   const beforeRemovedLink = calls.length;
@@ -173,7 +174,7 @@ try {
   const parsed = parseArticle(published, baselinePath);
   const renamed = { path: baselinePath, ...parsed.metadata, title: `${parsed.metadata.title} atualizado`, body: parsed.body };
   const beforeRenamed = calls.length;
-  await assert.rejects(submitContentPackage(root, [renamed], 'pull_request', 'user:tester'), /rótulo fora do mapa/u);
+  assert.equal((await submitContentPackage(root, [renamed], 'pull_request', 'user:tester')).status, 'needs_information');
   assert.equal(calls.length, beforeRenamed, 'título alterado em página legada exige revalidação antes de writes');
 
   const beforeIndividual = calls.length;

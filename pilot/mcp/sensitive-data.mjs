@@ -1,9 +1,17 @@
-const PERSONAL = [
-  /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu,
-  /(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)/u,
-  /(?<!\d)(?:\+?55[\s().-]*)?\(?\d{2}\)?[\s().-]*9?\d{4}[\s.-]*\d{4}(?!\d)/u,
-  /(?<!\d)\d{10,11}(?!\d)/u,
-];
+import { isSyntheticNumericExample } from './api-reference-render.mjs';
+
+const PERSONAL = [/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu];
+const NUMERIC_RUN = /(?<!\d)\d(?:[\d.\/()+ -]*\d)?/gu;
+const ISO_DATE = /\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)?(?!\d)/gu;
+
+function numericMatches(value) {
+  const text = String(value ?? '');
+  const withoutDates = text.replace(ISO_DATE, (date) => 'X'.repeat(date.length));
+  return [...withoutDates.matchAll(NUMERIC_RUN)].filter(([candidate]) => {
+    const digits = candidate.replace(/\D/gu, '');
+    return digits.length >= 10 && !isSyntheticNumericExample(digits);
+  });
+}
 
 const CREDENTIALS = [
   /(?:Authorization:\s*)?Bearer\s+[A-Za-z0-9._~+/-]{12,}/iu,
@@ -123,7 +131,7 @@ export function sensitiveKinds(value, { detectOpaque = false } = {}) {
   const mixedAlphabet = (text.normalize('NFKC').match(/[\p{L}\p{M}]+/gu) ?? []).some((word) =>
     /\p{Script=Latin}/u.test(word) && /[\p{Script=Cyrillic}\p{Script=Greek}]/u.test(word));
   return {
-    personal: matchesAny(text, PERSONAL),
+    personal: matchesAny(text, PERSONAL) || numericMatches(text).length > 0,
     credential: redactCredentialGrammar(text) !== text || matchesAny(text, CREDENTIALS) || credentialPairs(text).length > 0 || (detectOpaque && opaqueSequences(text).length > 0),
     internal: /🟡|🔴|\b(?:INTERNO|CONFIDENCIAL)\b|\b(?:interno|confidencial)\s*:/u.test(mapped),
     control: mixedAlphabet || /[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text),
@@ -139,7 +147,7 @@ export function redactSensitiveData(value) {
   const grammarRedacted = redactCredentialGrammar(value);
   const withoutPairs = credentialPairs(grammarRedacted).toReversed().reduce((text, { start, end }) =>
     `${text.slice(0, start)}[segredo removido]${text.slice(end)}`, grammarRedacted);
-  return redact(redact(withoutPairs, CREDENTIALS, '[segredo removido]'), PERSONAL, '[dado removido]');
+  return redactPersonalData(redact(withoutPairs, CREDENTIALS, '[segredo removido]'));
 }
 
 export function containsPersonalData(value) {
@@ -147,5 +155,9 @@ export function containsPersonalData(value) {
 }
 
 export function redactPersonalData(value) {
-  return redact(value, PERSONAL, '[dado removido]');
+  const text = String(value ?? '');
+  const matches = numericMatches(text);
+  const numericRedacted = matches.toReversed().reduce((result, match) =>
+    `${result.slice(0, match.index)}[dado removido]${result.slice(match.index + match[0].length)}`, text);
+  return redact(numericRedacted, PERSONAL, '[dado removido]');
 }

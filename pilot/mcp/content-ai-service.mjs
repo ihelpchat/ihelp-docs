@@ -8,6 +8,8 @@ import { catalogActions, isCatalogAction } from './product-actions.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
 import { renderApiReference } from './api-reference-render.mjs';
+import { finalizeSecurityResponse, securityReview } from './security-review.mjs';
+import { extractCitedEndpoints } from './public-submit-gate.mjs';
 import { contentMaxOutputTokens } from './env-compat.mjs';
 import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 import { guardModelOutput } from './model-output-guard.mjs';
@@ -196,6 +198,20 @@ function retryPrompt(issues) {
 }
 function apiPending(reason) {
   return { status: 'needs_information', summary: reason, questions: [reason], articles: [] };
+}
+
+function finalizeGeneratedPages(result, request, factsByPath = new Map()) {
+  const securityWarnings = [];
+  for (const article of result.articles) {
+    const review = securityReview(article, { facts: factsByPath.get(article.path), request,
+      examples: extractCitedEndpoints(article).examples });
+    securityWarnings.push(...review.warnings);
+    if (review.blocks.length) return finalizeSecurityResponse({ ...result, ...apiPending(`${article.path}: ${review.blocks.join('; ')}`) }, securityWarnings);
+    if (review.warnings.length && !review.confirmed) return finalizeSecurityResponse({ ...result,
+      ...apiPending(`Confirme a revisão de segurança de ${article.path}.`),
+      questions: [`Para seguir, confirme o endpoint sensível: ${review.endpoint}`] }, securityWarnings);
+  }
+  return finalizeSecurityResponse(result, securityWarnings);
 }
 export function normalizeCatalogLabel(action) {
   return resolveCatalogAction(action) ?? action;
@@ -458,7 +474,7 @@ async function generateContentPackageCore(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpointsFrom(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
-  const withPending = (result) => ({ ...result, pending: [...new Set([...(productContext.pending ?? []), ...(result.pending ?? [])])] });
+  const withPending = (result) => ({ securityWarnings: [], ...result, pending: [...new Set([...(productContext.pending ?? []), ...(result.pending ?? [])])] });
   if (productContext.pending?.some((item) => item.startsWith('endpoint citado não encontrado'))) return groundingPending(productContext);
   if (request.module === 'api' && !productContext.endpoints?.length) return withPending(apiPending(productContext.nonPublicEndpoints ? 'endpoint não público: confirmar' : 'endpoints estruturados ausentes'));
   if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return withPending(apiPending('endpoint não público: confirmar'));
@@ -506,6 +522,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     const articles = [];
     const usedEndpoints = new Set();
     const pending = [];
+    const factsByPath = new Map();
     const requestedSection = [request.description, request.details].filter((value) => typeof value === 'string').join(' ').match(/(?<!\/)\bapi\/([a-z0-9-]+)\//iu)?.[1];
     for (const prose of parsed.articles) {
       const schemaIssue = apiSchemaIssue(prose);
@@ -547,6 +564,7 @@ async function generateContentPackageCore(root, request, options = {}) {
         endpoint: technical.endpoint, body, productActions: [] };
       const validation = validateArticle(article);
       if (!validation.valid) return withPending(apiPending(`${prose.path}: ${validation.issues.join('; ')}`));
+      factsByPath.set(article.path, endpoint);
       articles.push(article);
     }
     const withoutPage = selectable.map(publicEndpointId).find((id) => !usedEndpoints.has(id));
@@ -558,7 +576,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       if (!options.groundingRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, groundingRetryIssues: summaryIssues });
       return withPending(evidencePending(summaryIssues));
     }
-    return withPending({ ...safePackage, articles, pending: [...new Set([...(productContext.pending ?? []), ...pending])], existing, model: response.model });
+    return finalizeGeneratedPages(withPending({ ...safePackage, articles, pending: [...new Set([...(productContext.pending ?? []), ...pending])], existing, model: response.model }), request, factsByPath);
   }
   if (parsed.articles.some((article) => article.source === 'api' || /^api\//u.test(article.path ?? ''))) {
     return withPending(apiPending('página API exige fatos estruturados e módulo api'));
@@ -591,7 +609,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       articles: [], existing, model: response.model,
     });
   }
-  return withPending({ ...safePackage, articles, existing, model: response.model });
+  return finalizeGeneratedPages(withPending({ ...safePackage, articles, existing, model: response.model }), request);
 }
 
 const GUIDE_SCHEMA = {
@@ -658,7 +676,8 @@ export async function generateCanonicalGuide(root, request, options = {}) {
   }));
   if (article.guide.guideId !== request.guideId || article.contentType !== 'guia'
     || article.productActions.some((action) => !confirmedAction(action, request, productContext))) return evidencePending();
-  return { status: 'ready', articles: [article], ...(parsed.internalCodeEcho ? { internalCodeEcho: parsed.internalCodeEcho } : {}) };
+  return finalizeGeneratedPages({ status: 'ready', articles: [article],
+    ...(parsed.internalCodeEcho ? { internalCodeEcho: parsed.internalCodeEcho } : {}) }, request);
 }
 
 export async function planContent(root, request, options = {}) {
@@ -666,5 +685,6 @@ export async function planContent(root, request, options = {}) {
 }
 
 export async function generateContentPackage(root, request, options = {}) {
-  return withCodeRefreshOffer(await generateContentPackageCore(root, request, options));
+  const result = await generateContentPackageCore(root, request, options);
+  return withCodeRefreshOffer(finalizeSecurityResponse(result));
 }
