@@ -139,10 +139,9 @@ test('plano de API sem citação na orientação segue para geração', async ()
   assert.equal(calls.length, 2, 'a geração deve acontecer após o plano');
 });
 
-test('plano de API rejeita nome técnico ausente dos fatos, mesmo sem exigir citação', async () => {
+test('plano de API aceita nome técnico sem fato na orientação interna', async () => {
   const { result } = await runPlan([{ ...plan(citation), grounding: [], guidance: 'O campo segredoInterno identifica o contato.' }]);
-  assert.equal(result.status, 'needs_information');
-  assert.match(result.summary, /nome técnico sem fato: segredoInterno/i);
+  assert.equal(result.status, 'ready', result.summary);
 });
 
 for (const guidance of ['O campo de busca filtra os contatos.', 'A chave de acesso permite a consulta.']) {
@@ -156,10 +155,38 @@ for (const [guidance, name] of [
   ['O campo segredoInterno identifica o contato.', 'segredoInterno'],
   ['O parâmetro `tokenMestre` identifica o contato.', 'tokenMestre'],
 ]) {
-  test(`plano de API rejeita nome técnico sem fato: ${name}`, async () => {
+  test(`plano de API aceita nome técnico sem fato: ${name}`, async () => {
     const { result } = await runPlan([{ ...plan(citation), grounding: [], guidance }]);
+    assert.equal(result.status, 'ready', result.summary);
+  });
+}
+
+test('plano de API com `GET` e nomes sem fato chega à geração', async () => {
+  const calls = [];
+  const result = await generateContentPackage(process.cwd(), request, { productContext: packageContext,
+    client: { responses: { create: async () => {
+      calls.push(1);
+      return { output_text: JSON.stringify(calls.length === 1
+        ? { ...plan(citation), grounding: [], guidance: 'Documente `GET` e o campo segredoInterno.', risks: ['Confira `tokenMestre`.'] }
+        : packageResponse(citation)), model: 'simulado' };
+    } } } });
+  assert.equal(result.status, 'ready', result.summary);
+  assert.equal(calls.length, 2);
+});
+
+for (const [description, expected] of [
+  ['Use `GET` para consultar contatos.', /código inline proibido: `GET`/i],
+  ['O campo segredoInterno identifica o contato.', /nome técnico sem fato: segredoInterno/i],
+]) {
+  test(`geração de API rejeita prosa: ${description}`, async () => {
+    const result = await generateContentPackage(process.cwd(), request, { productContext: packageContext,
+      plan: { status: 'ready' }, client: { responses: { create: async () => {
+        const value = packageResponse(citation);
+        value.articles[0].description = description;
+        return { output_text: JSON.stringify(value), model: 'simulado' };
+      } } } });
     assert.equal(result.status, 'needs_information');
-    assert.match(result.summary, new RegExp(`nome técnico sem fato: ${name}`, 'i'));
+    assert.match(result.summary, expected);
   });
 }
 
