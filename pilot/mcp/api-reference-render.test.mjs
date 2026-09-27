@@ -32,6 +32,12 @@ async function generate(change = (value) => value, changedContext = context) {
     plan: { status: 'ready', guidance: 'Documente o endpoint.', questions: [] },
     client: { responses: { create: async () => ({ output_text: JSON.stringify(apiProseFixture(output)), model: 'simulado' }) } } });
 }
+const describeParameters = (...names) => (value) => {
+  value.articles[0].parameterDescriptions = names.map((name) => ({
+    name, description: 'Identifica o valor usado nesta consulta.',
+  }));
+  return value;
+};
 
 test('sem fatos estruturados não chama o provider', async () => {
   const result = await generateContentPackage(process.cwd(), request, { productContext: { ...context, endpoints: [] },
@@ -192,7 +198,7 @@ test('rota opcional preserva a página pública sem o segmento opcional', async 
     parameters: [{ name: 'letter', type: 'string', in: 'route', required: false }, { name: 'page', type: 'int', in: 'query' }] };
   const page = { ...examples[0], path: prose.path, paramNames: ['page'],
     frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts' } };
-  const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
+  const result = await generate(describeParameters('page'), { ...context, endpoints: [fact], apiExamples: [page] });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   assert.equal(result.articles[0].endpoint, '/contacts');
   assert.match(result.articles[0].body, /\/api\/v2\/contacts\?page=1/);
@@ -209,7 +215,7 @@ test('parâmetros vêm dos fatos e divergências da página viram pendências no
     ], responseFields: [] };
   const page = { ...examples[0], path: prose.path, paramNames: ['searchData', 'page', 'limit'],
     frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts' } };
-  const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
+  const result = await generate(describeParameters('page', 'limit'), { ...context, endpoints: [fact], apiExamples: [page] });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   assert.deepEqual([...result.articles[0].body.matchAll(/<Param name="([^"]+)"/gu)].map((match) => match[1]), ['page', 'limit']);
   assert.deepEqual(result.pending, [
@@ -221,7 +227,7 @@ test('página alinhada aos fatos não cria pendência de parâmetro', async () =
   const fact = { ...endpoint, responseFields: [] };
   const page = { ...examples[0], path: prose.path, paramNames: ['IdRef'],
     frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts/details/{IdRef}' } };
-  const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
+  const result = await generate(describeParameters('idRef'), { ...context, endpoints: [fact], apiExamples: [page] });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   assert.deepEqual(result.pending, []);
 });
