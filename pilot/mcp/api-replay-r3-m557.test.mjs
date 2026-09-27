@@ -46,6 +46,29 @@ test('nome público WhatsApp é aceito na descrição de campo', async () => {
   assert.equal(result.status, 'ready', result.summary);
 });
 
+test('idRef na prosa corresponde ao segmento {IdRef} sem diferenciar maiúsculas', async () => {
+  const detail = { verb: 'GET', route: '/api/v2/contacts/details/{IdRef}', public: true, documented: true,
+    authorization: 'authenticated', parameters: [{ name: 'IdRef', type: 'string', in: 'route' }], responseFields: [] };
+  const result = await replay((value) => {
+    value.summary = [unit('Use idRef para consultar detalhes.')];
+    value.articles[0] = article('api/contatos/detalhes', 'GET /contacts/details/{IdRef}');
+    value.articles[0].intro.text = 'Use idRef para consultar o contato.';
+  }, [detail]);
+  assert.equal(result.status, 'ready', result.summary);
+});
+
+test('idRefx com uma letra inventada continua recusado', async () => {
+  const detail = { verb: 'GET', route: '/api/v2/contacts/details/{IdRef}', public: true, documented: true,
+    authorization: 'authenticated', parameters: [{ name: 'IdRef', type: 'string', in: 'route' }], responseFields: [] };
+  const result = await replay((value) => {
+    value.summary = [unit('Use idRefx para consultar detalhes.')];
+    value.articles[0] = article('api/contatos/detalhes', 'GET /contacts/details/{IdRef}');
+    value.articles[0].intro.text = 'Use idRefx para consultar o contato.';
+  }, [detail]);
+  assert.equal(result.status, 'needs_information');
+  assert.match(result.summary, /nome técnico sem fato: idRefx/u);
+});
+
 test('uma letra inventada em WhatsAppz mantém recusa por nome técnico sem fato', async () => {
   const result = await replay((value) => { value.articles[0].responseDescriptions[0].description.text =
     'Campo textual de WhatsAppz.'; });

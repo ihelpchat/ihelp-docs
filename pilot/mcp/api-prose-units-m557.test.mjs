@@ -112,6 +112,30 @@ test('descrição de campo sem citação é rejeitada com a frase', async () => 
   assert.match(result.summary, /frase sem citação: Identificador de referência do contato/u);
 });
 
+test('citação existente com SHA alterado informa citação inválida, não ausência', async () => {
+  const result = await generate((value) => {
+    value.articles[0].responseDescriptions[0].description.citations[0].sha += 'a';
+  });
+  assert.equal(result.status, 'needs_evidence');
+  assert.match(result.summary, /citações inválidas: Identificador de referência do contato.*SHA/u);
+  assert.doesNotMatch(result.summary, /frase sem citação: Identificador de referência do contato/u);
+});
+
+test('quote do pedido aceita inicial minúscula', async () => {
+  const result = await generate((value) => {
+    value.articles[0].intro.citations = [{ source: 'pedido', quote: 'o idRef do detalhe e o contactId das tags vêm da listagem.' }];
+  });
+  assert.equal(result.status, 'ready', result.summary);
+});
+
+test('quote com uma palavra trocada mantém recusa literal', async () => {
+  const result = await generate((value) => {
+    value.articles[0].intro.citations = [{ source: 'pedido', quote: 'o idRef do detalhe e o contactId das fotos vêm da listagem.' }];
+  });
+  assert.equal(result.status, 'needs_evidence');
+  assert.match(result.summary, /não é trecho literal do pedido/u);
+});
+
 async function plan(changedRequest) {
   return planContent(process.cwd(), changedRequest, { productContext: context,
     client: { responses: { create: async (payload) => {

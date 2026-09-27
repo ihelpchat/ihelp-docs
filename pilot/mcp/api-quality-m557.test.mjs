@@ -64,6 +64,17 @@ public class CustomDto { public int Id { get; set; } public string Valor { get; 
   assert.equal(new Set(endpoint.responseFields.map((field) => field.path)).size, 3);
 });
 
+test('DTO com BOM conserva linha real da primeira propriedade e das seguintes', () => {
+  const source = '\uFEFFusing System;\nnamespace Demo {\npublic class ContactDto {\n public int Id { get; set; }\n public string Nome { get; set; }\n public string IdRef { get; set; }\n}\n}';
+  const [endpoint] = readCsharpEndpoints(controller, 'Controllers/ContactsController.cs', {
+    dtoSources: [{ file: 'Dto/ContactDto.cs', source }],
+    serviceSources: [{ file: 'Services/IContactsService.cs', source: service }],
+  });
+  assert.deepEqual(endpoint.responseFields.map((field) => field.source), [
+    'Dto/ContactDto.cs:4', 'Dto/ContactDto.cs:5', 'Dto/ContactDto.cs:6',
+  ]);
+});
+
 test('sem retorno declarado conserva pendência textual', () => {
   const [endpoint] = readCsharpEndpoints(controller, 'Controllers/ContactsController.cs', {
     dtoSources: [{ file: 'Dto/ContactDto.cs', source: dto }],
