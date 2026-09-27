@@ -150,3 +150,52 @@ test('summary do pacote rejeitado também aciona uma única nova geração', asy
   assert.equal(calls.length, 2);
   assert.match(JSON.stringify(calls[1].input), /não é trecho literal/);
 });
+
+test('plano de API sem citação na orientação segue para geração', async () => {
+  const calls = [];
+  const result = await generateContentPackage(process.cwd(), request, { productContext: packageContext,
+    client: { responses: { create: async () => {
+      calls.push(1);
+      const value = calls.length === 1
+        ? { ...plan(citation), grounding: [], guidance: 'Oriente a criação das páginas de contatos.' }
+        : packageResponse(citation);
+      return { output_text: JSON.stringify(value), model: 'simulado' };
+    } } } });
+  assert.equal(result.status, 'ready', result.summary);
+  assert.equal(calls.length, 2, 'a geração deve acontecer após o plano');
+});
+
+test('plano de API rejeita nome técnico ausente dos fatos, mesmo sem exigir citação', async () => {
+  const { result } = await runPlan([{ ...plan(citation), grounding: [], guidance: 'O campo segredo identifica o contato.' }]);
+  assert.equal(result.status, 'needs_information');
+  assert.match(result.summary, /nome técnico sem fato: segredo/i);
+});
+
+test('plano de guia sem citação continua bloqueado com motivo', async () => {
+  const guideContext = { ...context, module: 'guia' };
+  const result = await planContent(process.cwd(), { ...request, module: 'guia' }, { productContext: guideContext,
+    client: { responses: { create: async () => ({ output_text: JSON.stringify({ ...plan(citation), grounding: [] }), model: 'simulado' }) } } });
+  assert.equal(result.status, 'needs_evidence');
+  assert.match(result.summary, /frase sem citação: Crie as três páginas de contatos/);
+});
+
+for (const module of ['api', 'guia']) {
+  test(`${module}: marcador [1] em linha isolada não é afirmação`, () => {
+    const grounded = { guidance: `${claim}\n[1]`, grounding: [{ text: claim, citations: [
+      module === 'api' ? citation : { repository: context.matches[0].repository, path: context.matches[0].path,
+        lineStart: 12, lineEnd: 12, sha: context.matches[0].sha },
+    ] }] };
+    assert.equal(validateGroundedOutput(grounded, { ...context, module }, ['guidance']), true);
+  });
+}
+
+test('prosa de API gerada sem citação continua bloqueada com motivo', async () => {
+  const result = await generateContentPackage(process.cwd(), request, { productContext: packageContext,
+    plan: { status: 'ready' }, client: { responses: { create: async () => {
+      const value = packageResponse(citation);
+      value.articles[0].grounding = [];
+      return { output_text: JSON.stringify(value), model: 'simulado' };
+    } } } });
+  assert.equal(result.status, 'needs_evidence');
+  assert.match(result.summary, /frase sem citação: Consulte os contatos/);
+});
