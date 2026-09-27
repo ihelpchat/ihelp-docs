@@ -186,3 +186,31 @@ test('plano recebe fatos e conserva todas as perguntas do modelo', async () => {
   assert.match(JSON.stringify(prompt), /Adicionar Contato/u);
   assert.match(JSON.stringify(prompt), /não pergunte o que os FATOS DA TELA já respondem; cite o fato/iu);
 });
+
+test('import nomeado segue somente cada componente renderizado, inclusive alias', async () => {
+  const x = 'src/components/pages/Contacts/X.tsx';
+  const named = { ...sources, [page]: `import { Unused, Used } from './X';\nexport default function ContactPage() { return <Used />; }`,
+    [x]: `export function Unused() { return <button onClick={remove}>Excluir Empresa</button> }\nexport function Used() { return <button onClick={add}>Adicionar Contato</button> }` };
+  const one = (await run(named)).facts;
+  assert.match(JSON.stringify(one), /Adicionar Contato/u);
+  assert.doesNotMatch(JSON.stringify(one), /Excluir Empresa/u);
+  const both = { ...named, [page]: named[page].replace('<Used />', '<><Used /><Unused /></>') };
+  assert.match(JSON.stringify((await run(both)).facts), /Excluir Empresa/u);
+  const alias = { ...named, [page]: named[page].replace('{ Unused, Used }', '{ Used as U }').replace('<Used />', '<U />') };
+  assert.match(JSON.stringify((await run(alias)).facts), /Adicionar Contato/u);
+});
+
+test('handler alcançado vincula feedback à ação; sem vínculo não coleta', async () => {
+  const live = { ...sources, [page]: `export default function ContactPage() { const save = () => toast.success('Contato criado'); return <button onClick={save}>Salvar</button>; }` };
+  const fact = (await run(live)).facts.find((item) => item.kind === 'message' && item.text === 'Contato criado');
+  assert.equal(fact?.owner, 'Salvar');
+  const detached = { ...live, [page]: live[page].replace('onClick={save}', 'onClick={other}') };
+  assert.equal((await run(detached)).facts.some((item) => item.kind === 'message' && item.text === 'Contato criado'), false);
+});
+
+test('handler segue chamadas locais até dois níveis, sem trazer JSX', async () => {
+  const body = `function third() { toast.success('Três'); } function second() { toast.success('Dois'); third(); } function first() { toast.success('Um'); second(); } const save = () => first();`;
+  const files = { ...sources, [page]: `export default function ContactPage() { ${body} return <button onClick={save}>Salvar</button>; }` };
+  const messages = (await run(files)).facts.filter((item) => item.kind === 'message').map((item) => item.text);
+  assert.deepEqual(messages.sort(), ['Dois', 'Um']);
+});
