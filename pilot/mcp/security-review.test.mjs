@@ -133,6 +133,17 @@ test('gramática de host cobre prosa, código e esquemas sem confundir arquivos 
   }
 });
 
+test('URL com esquema valida host mesmo quando TLD não está na lista de domínios soltos', () => {
+  const safe = { ...article, body: article.body.replace('https://apiv3.ihelpchat.com', 'https://faq.ihelpchat.com/x') };
+  assert.deepEqual(examine(safe).blocks, []);
+
+  const external = { ...safe, body: safe.body.replace('https://faq.ihelpchat.com/x', 'https://www.tella.tv/x') };
+  assert.match(examine(external).blocks.join(' '), /URL ou host fora da API pública.*domínio/iu);
+
+  const bareDomain = { ...safe, body: safe.body.replace('https://faq.ihelpchat.com/x', 'www.tella.tv') };
+  assert.deepEqual(examine(bareDomain).blocks, []);
+});
+
 test('pacote exige confirmação por DELETE e rejeita item alheio', async () => {
   const { root, backend } = await backendFixture();
   const previous = process.env.BACKEND_LOCAL_CHECKOUT;
