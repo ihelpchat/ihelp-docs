@@ -95,6 +95,10 @@ export function renderApiReference(endpoint, examples, page) {
     const synthetic = syntheticResponseExample(endpoint);
     add('resposta', `## ${heading('resposta', 'Resposta')}\n\n${components.has('Fields') ? '<Fields>\n' : ''}${endpoint.responseFields.map((field) => `<Field name="${safe(responseFieldPath(endpoint, field))}">${safe(field.type)} — ${safe(page?.responseDescriptions?.[responseFieldPath(endpoint, field)] ?? simpleFieldName(field.name))}</Field>`).join('\n')}${components.has('Fields') ? '\n</Fields>' : ''}${synthetic ? `\n\n\`\`\`json\n${JSON.stringify(synthetic, null, 2)}\n\`\`\`` : ''}`);
   }
+  if (endpoint.errors?.length) {
+    const cell = (value) => safe(value).replace(/\|/gu, '\\|').replace(/\s+/gu, ' ');
+    add('erros', `## Erros comuns\n\n| HTTP | Mensagem | Quando |\n|---|---|---|\n${endpoint.errors.map((error) => `| ${error.status} | ${cell(error.message)} | ${cell(error.when)} |`).join('\n')}`);
+  }
   const order = (kind) => kind === 'autorização' ? -1 : sections.findIndex((section) => section.toLowerCase().startsWith(kind === 'campos' ? 'campos relevantes' : kind));
   const rank = (kind) => kind === 'autorização' ? -1 : order(kind) < 0 ? 100 : order(kind);
   paragraphs.sort((left, right) => rank(left.kind) - rank(right.kind));

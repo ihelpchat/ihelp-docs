@@ -7,7 +7,7 @@ import { containsSensitiveData, redactSensitiveData } from './sensitive-data.mjs
 import { envCompatibility } from './env-compat.mjs';
 import ts from 'typescript';
 import uiSynonyms from './ui-synonyms.json' with { type: 'json' };
-import { readCsharpEndpoints } from '../lib/csharp-endpoints.mjs';
+import { readCsharpEndpoints, collectCsharpErrors } from '../lib/csharp-endpoints.mjs';
 import { traceCsharpCalls } from '../lib/csharp-call-chain.mjs';
 import { routeMatches } from './api-route-match.mjs';
 
@@ -355,6 +355,8 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
           }
           const trace = traceCsharpCalls(sources, Object.keys(sources), endpoint);
           endpoint.pending.push(...trace.pending);
+          endpoint.errors = collectCsharpErrors(content, endpoint, trace.methods)
+            .filter((error) => !containsSensitiveData(error.message, { detectOpaque: true }));
           if (endpoint.responseFields === null) {
             const outputType = trace.methods.find((item) => /\b(?:Task\s*<\s*)?(?:(?:List|IEnumerable)\s*<\s*)?[A-Za-z_]\w*\s*>+/u.test(item.excerpt));
             if (outputType) {
@@ -363,12 +365,22 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
               if (dtoPath && !dtoSources.some((item) => item.file === dtoPath) && !await hasSymlink(join(root, dtoPath), root)) {
                 dtoSources.push({ file: dtoPath, source: await deadline.wait(fileRead(dtoPath, { signal: deadline.signal })) });
               }
+              const primary = dtoSources.find((item) => item.file === dtoPath);
+              if (primary) {
+                const nestedTypes = [...primary.source.matchAll(/\bpublic\s+(?:List|IEnumerable|ICollection|IReadOnlyList)<\s*([A-Za-z_]\w*)\s*>\s+\w+\s*\{\s*get\s*;/gu)]
+                  .map((match) => match[1]);
+                for (const nestedType of [...new Set(nestedTypes)].slice(0, 8)) {
+                  const nestedPath = paths.find((candidate) => candidate.split('/').at(-1) === `${nestedType}.cs`);
+                  if (nestedPath && !dtoSources.some((item) => item.file === nestedPath) && !await hasSymlink(join(root, nestedPath), root))
+                    dtoSources.push({ file: nestedPath, source: await deadline.wait(fileRead(nestedPath, { signal: deadline.signal })) });
+                }
+              }
               const resolved = readCsharpEndpoints(content, path, { dtoSources,
                 serviceSources: Object.entries(sources).map(([file, source]) => ({ file, source })) })
                 .find((item) => item.method === endpoint.method && item.route === endpoint.route);
               if (resolved?.responseFields) Object.assign(endpoint, { responseFields: resolved.responseFields,
                 responseType: resolved.responseType, responseEnvelope: resolved.responseEnvelope,
-                responseList: resolved.responseList, pending: endpoint.pending.filter((item) => !item.startsWith('campos de resposta não verificáveis:')) });
+                responseList: resolved.responseList, pending: [...endpoint.pending.filter((item) => !item.startsWith('campos de resposta não verificáveis:')), ...resolved.pending] });
             }
           }
           for (const method of trace.methods) {

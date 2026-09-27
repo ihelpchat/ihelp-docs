@@ -259,6 +259,25 @@ function discardDocumentedQuestions(questions, request, productContext) {
   return { questions: kept, discardedQuestions };
 }
 
+// This classifier is shared by the API plan and other structured documentation flows.
+export function classifyApiQuestions(questions, endpoints) {
+  const parameters = new Set(endpoints.flatMap((endpoint) => (endpoint.parameters ?? []).map((item) => item.name.toLowerCase())));
+  const fields = new Set(endpoints.flatMap((endpoint) => (endpoint.responseFields ?? [])
+    .map((item) => String(item.path ?? item.name).replace(/^(?:dados\[?\]?\.)/u, '').replace(/^\[\]\./u, '')
+      .split('.')[0].replace(/\[\]$/u, '').toLowerCase())));
+  const blocking = [], pending = [];
+  for (const question of questions) {
+    const text = String(question);
+    const names = [...text.matchAll(/\b(parâmetro|parametro|campo)s?\s+(?:de\s+)?[`"']?([A-Za-z_]\w*)/giu)]
+      .filter((match) => !['de', 'do', 'da', 'e', 'tipo', 'tipos', 'primeiro', 'resposta'].includes(match[2].toLowerCase()));
+    const asksRoute = /\b(?:rota|route|método|metodo|method|endpoint)\b/iu.test(text) && !/erros?\/status|status\s+HTTP/iu.test(text);
+    const missing = names.some((match) => /parâmetro|parametro/iu.test(match[1])
+      ? !parameters.has(match[2].toLowerCase()) : !fields.has(match[2].toLowerCase()));
+    (asksRoute || missing ? blocking : pending).push(text);
+  }
+  return { blocking, pending };
+}
+
 function evidencePending(issues = []) {
   return { status: 'needs_evidence', summary: `A resposta não está vinculada às linhas do código recuperado.${issues.length ? ` ${issues.join('; ')}` : ''}`,
     questions: ['Confirme a fonte e as citações de cada afirmação.'], articles: [] };
@@ -529,7 +548,7 @@ async function planContentCore(root, request, options = {}) {
         'Você é a editora de conteúdo do iHelp. Oriente quem está criando documentação antes de escrever.',
         'O público final acabou de acessar o produto há 30 segundos, está em trial e não recebeu treinamento.',
         'Identifique conflitos, informação ausente, duplicidade e nomes de telas ou botões que precisam ser confirmados.',
-        'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
+        request.module === 'api' ? 'Use needs_information somente quando faltar método, rota, parâmetro ou campo de primeiro nível da resposta. Outras dúvidas são pendências não bloqueantes. Não invente comportamento.' : 'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
         'Sugira ações no produto somente com rota fornecida ou sustentada pelos detalhes. target é um identificador data-help-id estável, nunca um seletor CSS.',
         request.module === 'api' ? 'Planeje páginas de referência da API. Para tema amplo, foque nos endpoints documented=true. Se o pedido nomeia o caminho de uma página nova para um endpoint público, documented=false não exige pergunta. Não peça dados já presentes nos fatos estruturados. Endpoint sem public=true exige confirmação. responseFields=null não bloqueia: a resposta exibirá nota fixa e pendência.' : 'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
         request.module === 'api' ? 'Guidance e risks são orientação interna e não precisam de grounding por frase. Nunca são publicados. Podem mencionar métodos e nomes técnicos para orientar a geração; o schema é a única validação desta resposta. A prosa publicada será validada com grounding completo na geração.' : 'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
@@ -544,7 +563,11 @@ async function planContentCore(root, request, options = {}) {
   const filtered = request.module === 'api' ? discardDocumentedQuestions(parsed.questions ?? [], request, productContext)
     : { questions: parsed.questions ?? [], discardedQuestions: [] };
   parsed.questions = filtered.questions;
-  if (parsed.status === 'needs_information' && !parsed.questions.length && filtered.discardedQuestions.length) parsed.status = 'ready';
+  const classified = request.module === 'api' ? classifyApiQuestions(parsed.questions, productContext.endpoints ?? [])
+    : { blocking: parsed.questions, pending: [] };
+  if (request.module === 'api') parsed.questions = classified.blocking;
+  if (request.module === 'api' && parsed.status === 'needs_information' && !parsed.questions.length) parsed.status = 'ready';
+  else if (request.module === 'api' && classified.blocking.length) parsed.status = 'needs_information';
   if (parsed.status === 'ready') {
     const issues = request.module === 'api' ? []
       : groundingIssues(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks']);
@@ -554,20 +577,21 @@ async function planContentCore(root, request, options = {}) {
     }
   }
   const { grounding: _grounding, ...safePlan } = parsed;
-  return { ...safePlan, discardedQuestions: filtered.discardedQuestions, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, pending: productContext.pending ?? [], codeHygiene, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
+  return { ...safePlan, discardedQuestions: filtered.discardedQuestions, suggestedActions: parsed.suggestedActions.map(normalizeCatalogLabel), existing, pending: [...new Set([...(productContext.pending ?? []), ...classified.pending.map((question) => `pergunta pendente: ${question}`)])], codeHygiene, productContext: { repositories: productContext.code?.map(({ repository, ref, role }) => ({ repository, ref, role })) ?? [], files: productContext.matches.map(({ repository, path, line, sha }) => `${repository}:${redactSensitiveData(path)}:${line ?? '?'}@${sha ?? '?'}`), supportCategories: productContext.support?.categories?.map(({ category }) => category) ?? [] }, model: response.model };
 }
 
 async function generateContentPackageCore(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpointsFrom(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
-  const withPending = (result) => ({ securityWarnings: [], ...result, pending: [...new Set([...(productContext.pending ?? []), ...(result.pending ?? [])])] });
+  let plan = options.plan;
+  const withPending = (result) => ({ securityWarnings: [], ...result, pending: [...new Set([...(productContext.pending ?? []), ...(plan?.pending ?? []), ...(result.pending ?? [])])] });
   if (productContext.pending?.some((item) => item.startsWith('endpoint citado não encontrado'))) return groundingPending(productContext);
   if (request.module === 'api' && !productContext.endpoints?.length) return withPending(apiPending(productContext.nonPublicEndpoints ? 'endpoint não público: confirmar' : 'endpoints estruturados ausentes'));
   if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return withPending(apiPending('endpoint não público: confirmar'));
   const pending = groundingPending(productContext);
   if (pending) return pending;
-  const plan = options.plan ?? await planContent(root, request, { ...options, productContext });
+  plan ??= await planContent(root, request, { ...options, productContext });
   if (plan.status !== 'ready') {
     return withPending({ status: plan.status, summary: plan.summary ?? plan.guidance, questions: plan.questions,
       discardedQuestions: plan.discardedQuestions ?? [], articles: [], existing, model: plan.model });

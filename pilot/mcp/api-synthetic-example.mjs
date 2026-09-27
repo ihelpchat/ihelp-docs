@@ -26,15 +26,26 @@ export function valueFor(parameter) {
 
 export function syntheticResponseExample(endpoint) {
   if (!endpoint.responseFields?.length) return null;
-  const fields = Object.fromEntries(endpoint.responseFields.map((field) => {
+  const fields = {};
+  for (const field of endpoint.responseFields) {
     const type = String(field.type ?? 'string').replace(/\?$/u, '');
     const list = type.endsWith('[]');
     const scalarType = list ? type.slice(0, -2) : type;
     const raw = valueFor({ ...field, type: scalarType });
     const value = /^(?:int|long|double|decimal|float|short|number)$/iu.test(scalarType) ? Number(raw)
       : /^bool(?:ean)?$/iu.test(scalarType) ? raw === 'true' : raw;
-    return [field.name, list ? [value] : value];
-  }));
+    const path = String(field.path ?? field.name).replace(/^dados(?:\[\])?\./u, '').replace(/^\[\]\./u, '').split('.');
+    let target = fields;
+    for (const part of path.slice(0, -1)) {
+      const key = part.replace(/\[\]$/u, '');
+      if (!(key in target) || typeof target[key] !== 'object') target[key] = part.endsWith('[]') ? [{}] : {};
+      target = part.endsWith('[]') ? target[key][0] : target[key];
+    }
+    const last = path.at(-1), key = last.replace(/\[\]$/u, '');
+    if (path.length === 1 && endpoint.responseFields.some((item) => item.path?.startsWith(`${field.path}[].`) || item.path?.startsWith(`${field.path}.`)))
+      target[key] = last.endsWith('[]') || /^(?:List|IEnumerable)</u.test(type) ? [{}] : {};
+    else target[key] = list ? [value] : value;
+  }
   const payload = endpoint.responseList ? [fields] : fields;
   return endpoint.responseEnvelope ? { [endpoint.responseEnvelope]: payload } : payload;
 }

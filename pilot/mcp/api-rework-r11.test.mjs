@@ -44,6 +44,30 @@ test('pergunta secundária vira pendência e o plano segue; parâmetro ausente b
   assert.deepEqual(missing.blocking, ['Qual o tipo do parâmetro cursor ausente dos fatos?']);
 });
 
+test('plano API segue para a geração e conserva pergunta pendente', async () => {
+  const found = { ...endpoint(), public: true, documented: true };
+  const productContext = { groundingRequired: false, matches: [], code: [], endpoints: [found], pending: [],
+    apiExamples: [{ sections: ['Resposta'], components: ['Fields', 'Field'] }] };
+  const question = 'Quais erros/status HTTP devem ser documentados para o endpoint?';
+  const request = { module: 'api', topic: 'Contatos', description: 'Documentar detalhes dos contatos' };
+  const plan = await content.planContent(process.cwd(), request, { productContext, client: { responses: {
+    create: async () => ({ output_text: JSON.stringify({ status: 'needs_information', guidance: 'Documentar detalhes.',
+      questions: [question], risks: [], suggestedActions: [], grounding: [] }), model: 'fixture' }),
+  } } });
+  assert.equal(plan.status, 'ready');
+  assert.deepEqual(plan.questions, []);
+  assert.ok(plan.pending.includes(`pergunta pendente: ${question}`));
+  let calls = 0;
+  const generated = await content.generateContentPackage(process.cwd(), request, { productContext, plan,
+    client: { responses: { create: async () => {
+      calls++;
+      return { output_text: JSON.stringify({ status: 'ready', summary: [], questions: [], articles: [] }), model: 'fixture' };
+    } } },
+  });
+  assert.equal(calls, 1);
+  assert.ok(generated.pending.includes(`pergunta pendente: ${question}`));
+});
+
 test('catch BadRequest e throw alcançado geram erros; throw não alcançado fica fora', () => {
   const found = endpoint();
   const reached = [{ excerpt: 'public Task<ContactDetailsDto> GetContactDetailsAsync(string idRef) { throw new Exception("Contato não encontrado."); }' }];
@@ -53,11 +77,16 @@ test('catch BadRequest e throw alcançado geram erros; throw não alcançado fic
   const rendered = renderApiReference({ ...found, errors }, [], {});
   assert.match(rendered.body, /## Erros comuns[\s\S]*\| HTTP \| Mensagem \| Quando \|/u);
   assert.match(rendered.body, /\| 400 \| Contato não encontrado\. \|/u);
+  const notReached = collectCsharpErrors(controller, found, []);
+  assert.doesNotMatch(JSON.stringify(notReached), /Contato não encontrado/u);
   const unrelated = collectCsharpErrors(controller, found, [{ excerpt: 'public void Other() { throw new Exception("Outro erro."); }' }]);
   assert.doesNotMatch(JSON.stringify(unrelated), /Contato não encontrado/u);
   assert.match(JSON.stringify(unrelated), /Outro erro/u);
   const withoutCatch = collectCsharpErrors(controller.replace('BadRequest(ResponseHttp.ToReturn(ex.Message))', 'Ok()'), found, reached);
   assert.doesNotMatch(JSON.stringify(withoutCatch), /"status":400/u);
+  const explicit = collectCsharpErrors(controller.replace('return Ok(ResponseHttp.ToReturn(values));',
+    'return NotFound("Ausente"); return Unauthorized(); return Forbid(); return StatusCode(503, "Indisponível");'), found, []);
+  assert.deepEqual([...new Set(explicit.map((item) => item.status))].sort(), [400, 401, 403, 404, 503]);
 });
 
 test('lista de DTO expande um nível e tipo desconhecido vira pendência', () => {

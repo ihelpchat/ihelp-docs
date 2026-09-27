@@ -123,6 +123,59 @@ function dtoFields(dtoSources, type) {
   }
   return [];
 }
+function childDtoType(type) {
+  const clean = String(type ?? '').replace(/\?$/u, '').trim();
+  const list = /^(?:List|IEnumerable|ICollection|IReadOnlyList)<\s*([A-Za-z_]\w*)\s*>$/u.exec(clean);
+  const name = list?.[1] ?? (/^[A-Za-z_]\w*$/u.test(clean) ? clean : null);
+  if (!name || /^(?:string|bool|boolean|int|long|short|double|decimal|float|Guid|DateTime|DateTimeOffset|object)$/iu.test(name)) return null;
+  return { name, list: Boolean(list) };
+}
+
+function expandedResponseFields(dtoSources, fields, prefix) {
+  const result = [], pending = [];
+  for (const field of fields) {
+    const path = `${prefix}${field.name}`;
+    result.push({ ...field, path });
+    const child = childDtoType(field.type);
+    if (!child) continue;
+    const nested = dtoFields(dtoSources, child.name);
+    if (!nested.length) { pending.push(`tipo aninhado não resolvido: ${child.name} (${path})`); continue; }
+    result.push(...nested.map((item) => ({ ...item, path: `${path}${child.list ? '[]' : ''}.${item.name}` })));
+  }
+  return { fields: result, pending };
+}
+
+export function collectCsharpErrors(controllerSource, endpoint, reachedMethods = []) {
+  const clean = neutralizeCsharp(controllerSource);
+  const signature = new RegExp(`\\b${endpoint.method}\\s*\\([^)]*\\)\\s*\\{`, 'u').exec(clean);
+  let body = '';
+  if (signature) {
+    const start = signature.index + signature[0].lastIndexOf('{');
+    let depth = 0, end = start;
+    for (; end < clean.length; end++) {
+      if (clean[end] === '{') depth++;
+      if (clean[end] === '}' && --depth === 0) { end++; break; }
+    }
+    body = controllerSource.slice(start, end);
+  }
+  const errors = [];
+  const add = (status, message, when) => {
+    if (!errors.some((item) => item.status === status && item.message === message)) errors.push({ status, message, when });
+  };
+  const catchMessage = /catch\s*\(\s*Exception\s+(\w+)\s*\)\s*\{\s*return\s+BadRequest\s*\(\s*ResponseHttp\.ToReturn\s*\(\s*\1\.Message\s*\)\s*\)/u.test(body);
+  if (catchMessage) add(400, 'Mensagem de erro', 'Exceção capturada pela action; corpo em ResponseHttp.ToReturn.');
+  for (const method of reachedMethods) {
+    if (!catchMessage) break;
+    for (const match of String(method.excerpt ?? '').matchAll(/\bthrow\s+new\s+(?:[A-Za-z_]\w*)?Exception\s*\(\s*"([^"\n]*)"\s*\)/gu))
+      add(400, match[1], 'Quando o serviço retorna esta falha.');
+  }
+  for (const match of body.matchAll(/\b(NotFound|Unauthorized|Forbid|StatusCode)\s*\(\s*(\d{3})?/gu)) {
+    const status = ({ NotFound: 404, Unauthorized: 401, Forbid: 403 })[match[1]] ?? Number(match[2]);
+    if (status) add(status, '—', `Resposta explícita da action (${match[1]}).`);
+  }
+  if ((endpoint.authorization ?? endpoint.policy) !== 'anonymous') add(401, 'Token ausente, inválido ou expirado', 'Autenticação exigida.');
+  return errors;
+}
 function signatureParameters(items, route, dtoSources, file, source) {
   const groups = [];
   let group = [], depth = 0;
@@ -379,9 +432,10 @@ export function readCsharpEndpoints(source, file, { dtoSources = [], serviceSour
         source.slice(t[i].at, t[end - 1]?.at ?? t[i].at)) : null;
       const resolvedType = resultType ?? service?.type ?? null;
       const fields = resolvedType ? dtoFields(dtoSources, resolvedType) : [];
-      const responseFields = fields.length ? fields.map((field) => ({ ...field,
-        path: `${service?.envelope ? `dados${service.list ? '[]' : ''}.` : service?.list ? '[].' : ''}${field.name}` })) : null;
-      const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : [];
+      const expandedFields = fields.length ? expandedResponseFields(dtoSources, fields,
+        service?.envelope ? `dados${service.list ? '[]' : ''}.` : service?.list ? '[].' : '') : null;
+      const responseFields = expandedFields?.fields ?? null;
+      const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : expandedFields.pending;
       endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
         ...(reference ? { controllerRoute, parameters, serverAssigned, responseFields, responseType: resolvedType,
           responseEnvelope: service?.envelope ? 'dados' : null, responseList: service?.list ?? false,
