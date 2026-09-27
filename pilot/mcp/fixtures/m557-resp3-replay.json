@@ -1,0 +1,18 @@
+{
+  "summary": "O pacote contém três páginas novas da referência da API de Contatos, uma por endpoint solicitado.",
+  "path": "api/contatos/buscar-contatos",
+  "endpoint": "GET /contacts/{letter}",
+  "title": "Buscar contatos",
+  "description": "Lista contatos e permite aplicar critérios de busca e segmentação.",
+  "intro": "Use esta página para consultar contatos e obter os identificadores usados nas consultas de detalhes e tags.",
+  "notas": [
+    "Os filtros de consulta são opcionais; searchData busca por trechos do nome ou do número, page começa em 1 e tem padrão 1, e limit tem padrão 20."
+  ],
+  "citation": {
+    "repository": "ihelpchat/olah-ihelp",
+    "path": "Comzada.Application/Controllers/V2/ContactsController.cs",
+    "lineStart": 687,
+    "lineEnd": 687,
+    "sha": "71f8201dcc027b1f4b1c5266b3976a8001ae80a0"
+  }
+}
