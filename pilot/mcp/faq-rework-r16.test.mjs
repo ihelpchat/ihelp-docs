@@ -115,7 +115,7 @@ test('pipeline limita chamadas a plano, geração, juiz e uma nova tentativa', a
         return { model: 'fixture', output_text: JSON.stringify(reply) };
       } } },
     });
-  assert.deepEqual(names, ['plano_documentacao', 'pacote_documentacao', 'juiz_faq', 'pacote_documentacao']);
+  assert.deepEqual(names, ['plano_documentacao', 'pacote_documentacao', 'juiz_faq', 'pacote_documentacao', 'juiz_faq']);
   assert.equal(result.status, 'ready', JSON.stringify(result.questions));
   assert.match(result.articles[0].body, /<AConfirmar>O robô recebe a primeira mensagem/u);
   assert.doesNotMatch(result.articles[0].assistantOverview, /primeira mensagem/u);
