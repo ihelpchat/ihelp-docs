@@ -270,3 +270,46 @@ test('tooltip mais próximo nomeia botão de ícone e liga handler', async () =>
   const bare = { ...files, [page]: files[page].replace('<CustomTooltip title="Salvar">', '<>').replace('</CustomTooltip>', '</>') };
   assert.equal((await run(bare)).facts.some((fact) => fact.kind === 'action' && fact.handler === 'handleSave'), false);
 });
+
+test('arrow inline não executa função aninhada nem usa chamada interna como handler', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    return <button onClick={() => { const never = () => toast.success('Falso'); }}>Salvar</button>;
+  }` };
+  const facts = (await run(files)).facts;
+  assert.deepEqual(facts.filter((fact) => fact.kind === 'action').map((fact) => [fact.text, fact.handler]),
+    [['Salvar', '(inline)']]);
+  assert.equal(facts.some((fact) => fact.kind === 'message'), false);
+});
+
+test('arrow inline executando toast diretamente atribui feedback à ação', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    return <button onClick={() => { toast.success('Ok'); }}>Salvar</button>;
+  }` };
+  const facts = (await run(files)).facts;
+  assert.deepEqual(facts.filter((fact) => fact.kind === 'action').map((fact) => [fact.text, fact.handler]),
+    [['Salvar', '(inline)']]);
+  assert.deepEqual(facts.filter((fact) => fact.kind === 'message').map((fact) => [fact.text, fact.owner]),
+    [['Ok', 'Salvar']]);
+});
+
+test('arrow inline delegando a função local usa o nome e o feedback da função', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const save = () => toast.success('Ok');
+    return <button onClick={() => save()}>Salvar</button>;
+  }` };
+  const facts = (await run(files)).facts;
+  assert.deepEqual(facts.filter((fact) => fact.kind === 'action').map((fact) => [fact.text, fact.handler]),
+    [['Salvar', 'save']]);
+  assert.deepEqual(facts.filter((fact) => fact.kind === 'message').map((fact) => [fact.text, fact.owner]),
+    [['Ok', 'Salvar']]);
+});
+
+test('callback map em filho JSX inclui elemento, sem colher feedback da função', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    return <ul>{items.map(i => { const never = () => toast.success('Falso'); return <li title="Nome do contato">{i.nome}</li>; })}</ul>;
+  }` };
+  const facts = (await run(files)).facts;
+  assert.equal(facts.some((fact) => fact.kind === 'text' && fact.text === '…'), false);
+  assert.equal(facts.some((fact) => fact.kind === 'message'), false);
+  assert.equal(facts.some((fact) => fact.kind === 'text' && fact.text === 'Nome do contato' && fact.property === 'title'), true);
+});
