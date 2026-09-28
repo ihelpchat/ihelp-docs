@@ -636,27 +636,44 @@ export async function judgeClaims(sections, context, provider) {
   for (const claim of claims) {
     const verdict = answer.claims.find((item) => item.id === claim.id);
     if (!verdict || !['sustentada', 'a confirmar', 'contradiz a fonte'].includes(verdict.status)
-      || typeof verdict.reason !== 'string' || verdict.reason.length > 500 || statuses.has(claim.id))
+      || typeof verdict.reason !== 'string' || verdict.reason.length > 500
+      || (verdict.sourceMention !== undefined && typeof verdict.sourceMention !== 'boolean')
+      || (verdict.rewrite !== undefined && typeof verdict.rewrite !== 'string')
+      || statuses.has(claim.id))
       throw new Error('juiz: claims inválidas');
     statuses.set(claim.id, verdict);
   }
   const pending = [], contradictions = [];
   let cursor = 0;
-  const mark = (unit, key) => ({ ...unit, text: splitClaims(unit.text).map((phrase) => {
-    const claim = claims[cursor++], verdict = statuses.get(claim.id);
-    const noBusiness = !context.business?.some((item) => item.module === context.request?.module)
-      && ['oQueE', 'paraQueServe', 'casosDeUso'].includes(key);
-    const status = noBusiness && verdict.status === 'sustentada' ? 'a confirmar' : verdict.status;
-    if (status === 'sustentada') return phrase;
-    const reason = noBusiness && verdict.status === 'sustentada' ? 'Contexto de negócio ausente' : verdict.reason;
-    pending.push(`${phrase} — ${reason}`);
-    if (status === 'contradiz a fonte') contradictions.push({ text: phrase, reason });
-    return `<AConfirmar>${phrase}</AConfirmar>`;
-  }).join(' ') });
+  const mark = (unit, key) => {
+    const text = splitClaims(unit.text).flatMap((phrase) => {
+      const claim = claims[cursor++], verdict = statuses.get(claim.id);
+      if (verdict.sourceMention) {
+        const rewrite = verdict.rewrite?.trim() ?? '';
+        if (!rewrite || splitClaims(rewrite).length !== 1 || mentionsSource(rewrite)
+          || rigidFaqIssue(rewrite, context)) {
+          pending.push(`${phrase} — menção à fonte; reescrita inválida`);
+          return [];
+        }
+        pending.push(`${phrase} — menção à fonte; reescrita sem atribuição`);
+        phrase = rewrite;
+      }
+      const noBusiness = !context.business?.some((item) => item.module === context.request?.module)
+        && ['oQueE', 'paraQueServe', 'casosDeUso'].includes(key);
+      const status = noBusiness && verdict.status === 'sustentada' ? 'a confirmar' : verdict.status;
+      if (status === 'sustentada') return [phrase];
+      const reason = noBusiness && verdict.status === 'sustentada' ? 'Contexto de negócio ausente' : verdict.reason;
+      pending.push(`${phrase} — ${reason}`);
+      if (status === 'contradiz a fonte') contradictions.push({ text: phrase, reason });
+      return [`<AConfirmar>${phrase}</AConfirmar>`];
+    }).join(' ');
+    return text ? { ...unit, text } : null;
+  };
   const result = {};
   for (const [key] of Object.entries(FREE_FAQ_SECTIONS)) result[key] = key === 'passos'
-    ? (sections.passos ?? []).map((task) => ({ ...task, passos: task.passos.map((unit) => mark(unit, key)) }))
-    : (sections[key] ?? []).map((unit) => mark(unit, key));
+    ? (sections.passos ?? []).map((task) => ({ ...task, passos: task.passos.map((unit) => mark(unit, key)).filter(Boolean) }))
+      .filter((task) => task.passos.length)
+    : (sections[key] ?? []).map((unit) => mark(unit, key)).filter(Boolean);
   return { sections: result, pending, contradictions,
     verdicts: claims.map((claim) => ({ text: claim.text, ...statuses.get(claim.id) })) };
 }

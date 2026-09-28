@@ -30,7 +30,11 @@ test('atribuição gramatical é recusada nas saídas públicas sem bloquear lin
     'Conforme o plano contratado, o limite muda.',
     'Segundo passo: clique em **Salvar**.',
     'De acordo com o horário de atendimento configurado, o robô responde fora do expediente.',
-  ]) assert.equal(mentionsSource(phrase), false, phrase);
+  ]) {
+    assert.equal(mentionsSource(phrase), false, phrase);
+    assert.equal(validateFreeFaqSections(sections(phrase), { ...context,
+      screenFacts: [{ kind: 'action', text: 'Salvar' }] }).sections.oQueE.length, 1, phrase);
+  }
 });
 
 test('juiz semântico reescreve uma vez e omite atribuição persistente, sem nova chamada', async () => {
