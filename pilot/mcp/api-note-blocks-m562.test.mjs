@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateContentPackage } from './content-ai-service.mjs';
+import { publicScalarType } from './api-public-types.mjs';
 
 // Notes replayed from the saved Buscar contatos response, with the new typed envelope.
 const unit = (text) => ({ text, citations: [], refs: [] });
@@ -119,4 +120,10 @@ test('query sem crases também é validada antes de ser marcada', async () => {
   assert.equal(calls, 2);
   assert.equal(result.status, 'needs_information');
   assert.match(result.summary, /query|parâmetro|código inline/iu);
+});
+
+test('tipo público escalar das coleções e anuláveis usa a tabela compartilhada', () => {
+  for (const type of ['List<int>', 'IEnumerable<int>', 'ICollection<int?>', 'int[]', 'List<int?>?', 'int[]?'])
+    assert.equal(publicScalarType(type), 'int', type);
+  assert.equal(publicScalarType('List<TipoInterno>'), null);
 });

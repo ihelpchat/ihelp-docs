@@ -8,6 +8,7 @@ import { catalogActions, isCatalogAction } from './product-actions.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
 import { internalTypeIssue, renderApiReference, responseFieldPath } from './api-reference-render.mjs';
+import { publicScalarType, publicTypes } from './api-public-types.mjs';
 import { finalizeSecurityResponse, securityReview } from './security-review.mjs';
 import { extractCitedEndpoints } from './public-submit-gate.mjs';
 import { contentMaxOutputTokens } from './env-compat.mjs';
@@ -80,9 +81,11 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint], refs = []
   const inlineNames = new Set([...parameterNames, ...fieldNames, ...refs.map((ref) => ref.name)]
     .map((name) => name.toLocaleLowerCase('pt-BR')));
   const literalOf = (parameter, value) => {
-    const type = String(parameter.type ?? '').replace(/\s|\?|\[\]/gu, '').toLowerCase();
-    if (type === 'bool' || type === 'boolean') return /^(?:true|false)$/u.test(value);
-    if (/^(?:int|long|short|byte|uint|ulong|ushort)$/u.test(type)) return /^-?\d+$/u.test(value);
+    const type = publicScalarType(parameter.type);
+    const kind = publicTypes.get(type)?.label;
+    if (kind === 'verdadeiro ou falso') return /^(?:true|false)$/u.test(value);
+    if (kind === 'número') return ['decimal', 'double', 'float', 'number'].includes(type)
+      ? /^-?\d+(?:\.\d+)?$/u.test(value) : /^-?\d+$/u.test(value);
     const choices = parameter.enumValues ?? parameter.values ?? parameter.enum;
     return Array.isArray(choices) && choices.some((choice) => String(choice) === value);
   };
@@ -123,6 +126,9 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint], refs = []
         || (value.includes('=') && pairsValid(value))
         || parameters.some((parameter) => literalOf(parameter, value));
       if (!allowed) issues.push(`código inline proibido: ${code[0]}`);
+    }
+    for (const query of value.matchAll(/(?<![\p{L}\p{N}_])([\p{L}_][\p{L}\p{N}_]*=[^&\s`,;.!?]+(?:&[\p{L}_][\p{L}\p{N}_]*=[^&\s`,;.!?]+)*)(?![\p{L}\p{N}_])/gu)) {
+      if (!pairsValid(query[1])) issues.push(`query com parâmetro ou valor sem fato: ${query[1]}`);
     }
     const method = value.match(/\b(?:GET|POST|PUT|PATCH|DELETE)\b/iu);
     if (method) issues.push(`método proibido na prosa: ${method[0]}`);
