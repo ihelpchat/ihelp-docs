@@ -27,7 +27,8 @@ test('nome visível vem do item de menu com a mesma rota', async () => {
     const direct = deterministicFaqAnswer(request, [...facts, { kind: 'action', text: 'Criar',
       repository: 'ihelpchat/front-react', path: 'src/Fixture.tsx', lineStart: 3, lineEnd: 3, sha }]);
     assert.match(direct.text, new RegExp(`Na tela \\*\\*${expected}\\*\\*`));
-    assert.match(fixedFaqSupportSection(request, facts)[0].text, new RegExp(`em ${expected}`));
+    assert.match(fixedFaqSupportSection(request, facts)[0].text,
+      new RegExp(`concluir um passo na tela ${expected}`));
   }
 });
 
