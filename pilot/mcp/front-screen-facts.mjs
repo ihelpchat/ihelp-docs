@@ -114,8 +114,8 @@ function validActionLabel(value) {
 function safeText(value) {
   const text = String(value ?? '').replace(/\s+/gu, ' ').trim();
   if (!text || text.length > 200 || !/[\p{L}\p{N}]/u.test(text)
-    || containsSensitiveData(text, { detectOpaque: true })
-    || sanitizeCodeForModel(JSON.stringify(text.replaceAll('…', '1'))).literalsOmitted) return null;
+    || (sanitizeCodeForModel(JSON.stringify(text.replaceAll('…', '1'))).literalsOmitted
+      && !containsSensitiveData(text, { detectOpaque: true }))) return null;
   return text;
 }
 function lineOf(file, node) { return file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1; }
@@ -133,8 +133,24 @@ function addFact(facts, filePath, file, node, kind, values) {
   if (values.text !== undefined && !text) return;
   const fact = { kind, ...(text ? { text } : {}), ...values,
     ...(text ? { text } : {}), source: `${filePath}:${lineOf(file, node)}` };
-  if (Object.values(fact).some((value) => typeof value === 'string' && containsSensitiveData(value, { detectOpaque: true }))) return;
   facts.push(fact);
+}
+function finalizeScreenFacts(facts, pending) {
+  let omitted = false;
+  const clean = (value) => {
+    if (typeof value === 'string') {
+      if (!containsSensitiveData(value, { detectOpaque: true })) return value;
+      omitted = true;
+      return '[valor omitido]';
+    }
+    if (Array.isArray(value)) return value.map(clean);
+    if (value && typeof value === 'object')
+      return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, clean(nested)]));
+    return value;
+  };
+  const finalized = facts.map(clean);
+  if (omitted) pending.push('valor sensível omitido em fato de tela');
+  return [...new Map(finalized.map((fact) => [JSON.stringify(fact), fact])).values()];
 }
 function schemaFields(schema, file, path) {
   const zod = schema && ts.isCallExpression(schema) && /^z\.(?:object|objectOf)$/u.test(schema.expression.getText(file));
@@ -824,7 +840,7 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
   }
   if (queue.length) pending.push(`limite de arquivos dos fatos da tela: ${MAX_FILES}`);
   for (const fact of facts) delete fact.presenceEvidence;
-  return { route, sha, files, facts: [...new Map(facts.map((fact) => [JSON.stringify(fact), fact])).values()], code, pending };
+  return { route, sha, files, facts: finalizeScreenFacts(facts, pending), code, pending };
 }
 
 // Closed vocabulary used to assign a subject to screen facts.

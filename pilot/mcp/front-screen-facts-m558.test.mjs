@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import ts from 'typescript';
 import { extractScreenFacts } from './front-screen-facts.mjs';
 import { canReadFrontFile } from './local-product-context.mjs';
 import { publicProductContext } from './product-context-service.mjs';
@@ -603,9 +604,21 @@ test('schema importado também conflita com required JSX', async () => {
 
 test('porta de saída é obrigatória para os fatos do extrator', () => {
   const source = readFileSync(new URL('./front-screen-facts.mjs', import.meta.url), 'utf8');
-  const extractor = source.slice(source.indexOf('export async function extractScreenFacts('), source.indexOf('// Closed vocabulary'));
-  assert.match(extractor, /facts:\s*finalizeScreenFacts\(facts, pending\)/u);
-  assert.equal((extractor.match(/facts:\s*(?!\[\])/gu) ?? []).length, 1);
+  const file = ts.createSourceFile('front-screen-facts.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const extractor = file.statements.find((statement) => ts.isFunctionDeclaration(statement)
+    && statement.name?.text === 'extractScreenFacts');
+  assert.ok(extractor);
+  const exits = [];
+  const visit = (node) => {
+    if (ts.isReturnStatement(node) && ts.isObjectLiteralExpression(node.expression)) {
+      const facts = node.expression.properties.find((property) => ts.isPropertyAssignment(property)
+        && property.name.getText(file) === 'facts');
+      if (facts) exits.push(facts.initializer.getText(file));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(extractor.body);
+  assert.deepEqual(exits, ['[]', '[]', 'finalizeScreenFacts(facts, pending)']);
 });
 
 test('mensagem de schema importado é barrada na saída, prompt e contexto público', async () => {
@@ -641,15 +654,16 @@ test('mensagem de schema importado é barrada na saída, prompt e contexto públ
 
 test('toast com e-mail e destino com host interno são omitidos; textos comuns passam', async () => {
   const pageSource = `export default function ContactPage() {
-    const save = () => { toast.success('Contato cliente@empresa.com'); navigate('https://db.internal/contact'); };
+    const save = () => { toast.success('Contato salvo'); navigate('/contact/detail'); };
     return <button onClick={save}>Salvar</button>;
   }`;
-  const unsafe = await run({ ...sources, [page]: pageSource });
-  assert.doesNotMatch(JSON.stringify(unsafe.facts), /cliente@empresa\.com|db\.internal/u);
-  assert.ok(unsafe.pending.includes('valor sensível omitido em fato de tela'));
-  const safe = await run({ ...sources, [page]: pageSource
-    .replace('Contato cliente@empresa.com', 'Contato salvo')
-    .replace('https://db.internal/contact', '/contact/detail') });
+  const safe = await run({ ...sources, [page]: pageSource });
   assert.ok(safe.facts.some((fact) => fact.kind === 'message' && fact.text === 'Contato salvo'));
   assert.ok(safe.facts.some((fact) => fact.kind === 'destination' && fact.route === '/contact/detail'));
+  const email = await run({ ...sources, [page]: pageSource.replace('Contato salvo', 'Contato cliente@empresa.com') });
+  assert.doesNotMatch(JSON.stringify(email.facts), /cliente@empresa\.com/u);
+  assert.ok(email.pending.includes('valor sensível omitido em fato de tela'));
+  const host = await run({ ...sources, [page]: pageSource.replace('/contact/detail', 'https://db.internal/contact') });
+  assert.doesNotMatch(JSON.stringify(host.facts), /db\.internal/u);
+  assert.ok(host.pending.includes('valor sensível omitido em fato de tela'));
 });
