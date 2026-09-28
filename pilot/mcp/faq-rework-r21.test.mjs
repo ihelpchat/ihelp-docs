@@ -12,12 +12,12 @@ const fixtures = [
   { route: '/bot', module: 'Robôs', sentence: 'A tela Robôs organiza as respostas de atendimento.', expected: 'O módulo Robôs organiza as respostas de atendimento.' },
 ];
 
-test('subtítulo sustentado usa módulo do menu em Contatos e Robôs sem repetir no corpo', () => {
+test('subtítulo sustentado usa módulo do menu em Contatos e Robôs e preserva a primeira frase', () => {
   for (const fixture of fixtures) {
     const sections = { oQueE: [{ text: `${fixture.sentence} Outra frase de contexto.` }] };
     const facts = [{ kind: 'route', route: fixture.route, text: fixture.module, sha }];
     assert.equal(faqSubtitle(sections, { topic: fixture.module }, facts), fixture.expected);
-    assert.equal(sections.oQueE[0].text, 'Outra frase de contexto.');
+    assert.equal(sections.oQueE[0].text, `${fixture.sentence} Outra frase de contexto.`);
   }
 });
 

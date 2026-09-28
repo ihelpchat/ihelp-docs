@@ -14,15 +14,15 @@ const distinctActions = ['Adicionar Contato', 'Abrir Cadastro de Contato', 'Sele
   'Escolher Atendente Responsável', 'Conferir Dados do Contato', 'Salvar Novo Contato',
   'Voltar à Lista de Contatos', 'Localizar Contato Cadastrado'];
 
-test('subtítulo sustentado sai de O que é uma só vez; pendência usa fallback fixo', () => {
+test('subtítulo sustentado também permanece em O que é; pendência usa fallback fixo', () => {
   const request = { topic: 'Robô', module: 'Robôs', description: 'Criar, editar e publicar robôs.' };
   const facts = [{ kind: 'route', text: 'Robôs', route: '/bot' },
     ...['Criar robô', 'Editar robô', 'Publicar'].map((text, line) => ({ kind: 'action', text,
       repository: 'fixture', path: 'fixture', sha: 'a', lineStart: line, lineEnd: line }))];
   const supported = { oQueE: [{ text: 'Os robôs orientam o atendimento. Eles têm um fluxo configurável.' }] };
   assert.equal(faqSubtitle(supported, request, facts), 'Os robôs orientam o atendimento.');
-  assert.equal(supported.oQueE[0].text, 'Eles têm um fluxo configurável.');
-  assert.doesNotMatch(renderFreeFaqSections(supported), /Os robôs orientam o atendimento/u);
+  assert.equal(supported.oQueE[0].text, 'Os robôs orientam o atendimento. Eles têm um fluxo configurável.');
+  assert.match(renderFreeFaqSections(supported), /## O que é\n\nOs robôs orientam o atendimento/u);
   const pending = { oQueE: [{ text: '<AConfirmar>Os robôs orientam o atendimento.</AConfirmar>' }] };
   assert.equal(faqSubtitle(pending, request, facts), 'Como criar, editar e publicar robôs de atendimento no iHelp.');
   assert.match(pending.oQueE[0].text, /AConfirmar/u);

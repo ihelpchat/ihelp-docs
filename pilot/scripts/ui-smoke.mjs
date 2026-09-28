@@ -54,18 +54,23 @@ async function assertFaqGuideShortcut(page, label) {
   await page.goto(`${baseUrl}/docs/sobre-o-sistema/agenda-de-contatos/`, { waitUntil: 'networkidle' });
   const badge = page.getByRole('link', { name: 'Guia passo a passo' });
   const action = page.locator('.ih-prose a.ih-ai-product-action');
-  assert.equal(await badge.count(), 1, `${label}: selo ausente`);
-  assert.equal(await badge.getAttribute('href'), '#guia-importar-contatos');
+  assert.equal(await badge.count(), 0, `${label}: selo sem guia canônico`);
   const pills = page.locator('.ih-meta-badges .ih-meta-pill');
-  assert.equal(await pills.count(), 2, `${label}: selos não estão agrupados`);
+  assert.equal(await pills.count(), 1, `${label}: página sem guia só tem o selo FAQ`);
+  assert.equal(await action.count(), 1, `${label}: atalho do módulo ausente`);
+  assert.match(await action.getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/contact\?ihelpGuide=importar-contatos$/);
+  assert.equal(await action.evaluate((element) => getComputedStyle(element).minHeight), '44px');
+  await assertNoHorizontalOverflow(page, `${label} FAQ sem guia`);
+
+  await page.goto(`${baseUrl}/docs/principais-motivos-de-suporte/reconectar-canal-qr/`, { waitUntil: 'networkidle' });
+  assert.equal(await badge.count(), 1, `${label}: selo do guia canônico ausente`);
+  assert.match(await badge.getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/configuracoes\/channel\?ihelpGuide=reconectar-canal-qr$/);
+  assert.equal(await pills.count(), 2, `${label}: selos do guia não estão agrupados`);
   const [faqBox, guideBox] = await Promise.all([pills.first().boundingBox(), badge.boundingBox()]);
   assert.ok(faqBox && guideBox && Math.abs(faqBox.y - guideBox.y) < 2
     && Math.abs(faqBox.height - guideBox.height) < 2, `${label}: selos devem ficar lado a lado no mesmo tamanho`);
-  assert.equal(await action.count(), 1, `${label}: atalho ausente`);
-  assert.match(await action.getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/contact\?ihelpGuide=importar-contatos$/);
-  assert.equal(await action.evaluate((element) => getComputedStyle(element).minHeight), '44px');
-  await badge.click();
-  assert.equal(new URL(page.url()).hash, '#guia-importar-contatos');
+  assert.equal(await action.count(), 1, `${label}: link secundário do módulo ausente`);
+  assert.match(await action.getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/configuracoes\/channel\?ihelpGuide=abrir-canais$/);
   await assertNoHorizontalOverflow(page, `${label} atalho FAQ`);
   await page.screenshot({ path: `/tmp/ihelp-faq-guide-${label}.png`, fullPage: true });
 }
