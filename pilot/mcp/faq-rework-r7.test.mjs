@@ -65,3 +65,13 @@ test('derivações mínimas dos verbos neutros preservam cobertura de negócio',
     assert.equal(result.sections.quandoUsar?.length, 1, `${noun}: ${result.pending.join('; ')}`);
   }
 });
+
+test('replay Robô: apresentação de escolhas não exige verbo genérico na fonte', () => {
+  const quote = 'como “Vendas” ou “Suporte”';
+  const text = 'Você pode criar um menu com opções como “Vendas” e “Suporte” para apresentar escolhas no fluxo.';
+  const result = validateFaqSections({ quandoUsar: [{ text,
+    citations: [{ source: 'pagina', path: '/docs/robo', quote }] }] },
+  { request: { topic: 'Robô', description: 'Criar um menu no fluxo.' },
+    existing: [{ path: '/docs/robo', body: quote }] });
+  assert.equal(result.sections.quandoUsar?.length, 1, result.pending.join('; '));
+});
