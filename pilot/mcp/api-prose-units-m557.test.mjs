@@ -102,6 +102,21 @@ test('intro sem citação mantém motivo frase sem citação', async () => {
   assert.match(result.summary, /frase sem citação: Use esta página/u);
 });
 
+test('nota API com atribuição à fonte vai para nova tentativa e vira pendência', async () => {
+  let calls = 0;
+  const result = await generateContentPackage(process.cwd(), request, { productContext: context, plan: { status: 'ready' },
+    client: { responses: { create: async (payload) => {
+      calls++;
+      if (calls === 2) assert.match(JSON.stringify(payload.input), /menção à fonte/u);
+      const value = structuredClone(base);
+      value.articles[0].notas = [unit('Segundo o contexto, os contatos aparecem na lista.', replay.citations.nota)];
+      return { output_text: JSON.stringify(value), model: 'offline' };
+    } } } });
+  assert.equal(calls, 2);
+  assert.doesNotMatch(result.articles[0].body, /segundo o contexto/iu);
+  assert.match(result.pending.join(' '), /menção à fonte/u);
+});
+
 test('duas frases numa unidade são rejeitadas', async () => {
   const result = await generate((value) => { value.articles[0].intro.text += ' Consulte os dados.'; });
   assert.equal(result.status, 'needs_evidence');
