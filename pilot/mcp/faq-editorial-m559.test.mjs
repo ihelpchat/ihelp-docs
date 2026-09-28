@@ -76,12 +76,16 @@ test('passo exige rótulo literal do fato da tela e erro exige mensagem validada
   const facts = adaptScreenFacts({ sha, facts: [
     { kind: 'action', text: 'Adicionar Contato', source: 'src/Contact.tsx:12' },
     { kind: 'validation', text: 'Nome obrigatório', source: 'src/Contact.tsx:13' },
+    { kind: 'field', text: 'Nome', message: 'Preencha o nome', source: 'src/Contact.tsx:14',
+      validationSource: 'src/ContactSchema.ts:7' },
   ] });
   const citation = (line) => ({ repository: 'ihelpchat/front-react', path: 'src/Contact.tsx', lineStart: line, lineEnd: line, sha });
   const result = validateFaqSections({ passos: [unit('Clique em Novo cliente.', [citation(12)])],
     erros: [unit('Se aparecer Nome obrigatório, preencha o nome.', [citation(13)])] }, { screenFacts: facts });
   assert.equal(result.sections.passos, undefined);
   assert.equal(result.sections.erros.length, 1);
+  assert.ok(facts.some((fact) => fact.kind === 'message' && fact.path === 'src/ContactSchema.ts'
+    && fact.lineStart === 7 && fact.text === 'Preencha o nome'));
 });
 
 test('pacote FAQ fica ready com dúvida secundária pendente e seção sem fonte omitida', async () => {
