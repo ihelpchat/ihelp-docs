@@ -240,18 +240,22 @@ export async function selectFaqStyleExamples(docsRoot) {
 }
 
 // M5.58 owns extraction. This adapter accepts only its public fact shape.
-export function adaptScreenFacts(screen = {}) {
+export function adaptScreenFacts(screen = {}, coverage = []) {
   return (screen.facts ?? []).flatMap((fact) => {
     const match = /^(src\/[^:\n]+\.(?:tsx?|jsx?)):(\d+)$/u.exec(fact.source ?? '');
     if (!match || !['route', 'action', 'field', 'column', 'upload', 'uploadLimit',
       'validation', 'message', 'destination', 'guard', 'text', 'state'].includes(fact.kind)) return [];
-    const base = { ...fact, repository: fact.repository ?? 'ihelpchat/front-react',
+    const module = fact.kind === 'route' && !fact.routeTitle
+      ? coverage.find((item) => item.productRoutes?.includes(fact.route))?.module : null;
+    const base = { ...fact, ...(module ? { text: module } : {}),
+      repository: fact.repository ?? 'ihelpchat/front-react',
       path: match[1], lineStart: Number(match[2]), lineEnd: Number(match[2]), sha: fact.sha ?? screen.sha };
     const qualifier = fact.required === true ? 'obrigatório' : fact.required === false ? 'opcional' : null;
     const presence = /^(src\/[^:\n]+\.(?:tsx?|jsx?)):(\d+)$/u.exec(fact.validationSource ?? fact.source ?? '');
     if (['field', 'column'].includes(fact.kind) && fact.text)
       base.claimText = qualifier && fact.validationSource === undefined ? `${fact.text} ${qualifier}` : fact.text;
     const message = /^(src\/[^:\n]+\.(?:tsx?|jsx?)):(\d+)$/u.exec(fact.validationSource ?? fact.source ?? '');
+    if (base.kind === 'text' && base.property === 'placeholder') base.kind = 'field';
     return [base, ...(qualifier && fact.kind === 'field' && fact.validationSource && presence ? [{ ...base,
       claimText: `${fact.text} ${qualifier}${fact.message ? ` ${fact.message}` : ''}`,
       path: presence[1], lineStart: Number(presence[2]), lineEnd: Number(presence[2]) }] : []),
@@ -343,10 +347,29 @@ export function validateFaqSections(sections, context) {
     const units = sections?.[key] ?? [];
     if (!Array.isArray(units) || !units.length) { pending.push(`seção sem fonte: ${FAQ_SECTIONS[key]}`); continue; }
     if (key === 'passos' || key === 'erros') {
-      const valid = units.map((unit) => key === 'passos'
+      const valid = units.map((unit) => ({ unit, rendered: key === 'passos'
         ? structuredFaqStep(unit, indexedFacts, context, pending)
-        : structuredFaqError(unit, indexedFacts, context, pending)).filter(Boolean);
-      if (valid.length) kept[key] = valid;
+        : structuredFaqError(unit, indexedFacts, context, pending) }))
+        .filter((item) => item.rendered);
+      if (valid.length) {
+        if (key === 'passos') {
+          const distinct = [];
+          let lastStep = null, opened = null;
+          for (const { unit, rendered } of valid) {
+            const fact = indexedFacts.find((item) => item.id === unit.fato);
+            const identity = `${unit.acao}:${fact?.kind}:${fact?.route ?? ''}:${fact?.text ?? ''}`;
+            if (identity === lastStep) continue;
+            if (unit.acao === 'abrir') {
+              const screen = fact?.route ?? fact?.text;
+              if (screen === opened) continue;
+              opened = screen;
+            }
+            distinct.push(rendered);
+            lastStep = identity;
+          }
+          if (distinct.length) kept[key] = distinct;
+        } else kept[key] = valid.map((item) => item.rendered);
+      }
       if (valid.length !== units.length || !valid.length) pending.push(`seção sem fonte válida: ${FAQ_SECTIONS[key]}`);
       continue;
     }

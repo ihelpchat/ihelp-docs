@@ -588,7 +588,7 @@ function requestText(request, existing, productContext, codeHygiene = {}) {
     productContext.screenFacts?.length ? `FATOS DA TELA (texto visível, sem código; cite arquivo:linha e SHA):\n${JSON.stringify(productContext.screenFacts)}` : '',
     request.module === 'api' && productContext.callEvidence?.length ? `TRECHOS INTERNOS ALCANÇADOS (cite arquivo:linha; não publique código):\n${productContext.callEvidence.map((item) => `${item.path}:${item.start}-${item.end}\n${numberedCode(safeCode(item.excerpt), item.start)}`).join('\n\n')}` : '',
     request.module === 'api' ? `FATOS ESTRUTURADOS DE ENDPOINTS (somente public=true é gerável):\n${JSON.stringify(selectedEndpoints)}\nFORMATO REAL DAS PÁGINAS API:\n${JSON.stringify(productContext.apiExamples ?? [])}\nMODELOS DE ESTILO (não são fatos do endpoint pedido):\n${JSON.stringify(productContext.apiStyleExamples ?? [])}` : '',
-    faqRequested(request) ? `FATOS DA TELA INDEXADOS (use somente estes ids em passos e erros):\n${JSON.stringify(indexedFaqFacts(adaptScreenFacts({ facts: productContext.screenFacts ?? [], sha: productContext.code?.find((item) => item.role === 'frontend')?.ref })))}\nCONTEXTO DE NEGÓCIO 🟢 CURADO:\n${JSON.stringify(productContext.businessContext ?? [])}\nMODELOS DE ESTILO FAQ (não são fatos do tema):\n${JSON.stringify(productContext.faqStyleExamples ?? [])}` : '',
+    faqRequested(request) ? `FATOS DA TELA INDEXADOS (use somente estes ids em passos e erros):\n${JSON.stringify(indexedFaqFacts(adaptScreenFacts({ facts: productContext.screenFacts ?? [], sha: productContext.code?.find((item) => item.role === 'frontend')?.ref }, productContext.coverage)))}\nCONTEXTO DE NEGÓCIO 🟢 CURADO:\n${JSON.stringify(productContext.businessContext ?? [])}\nMODELOS DE ESTILO FAQ (não são fatos do tema):\n${JSON.stringify(productContext.faqStyleExamples ?? [])}` : '',
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
     `Regras do suporte:\n${productContext.support?.rules?.map((item) => `- ${item}`).join('\n') ?? '- Nenhuma'}`,
     `Matriz de cobertura:\n${productContext.coverage?.map((item) => `- ${item.module}: ${item.coverage}; rotas=${item.productRoutes.join(', ')}; permissão=${item.permission}`).join('\n') ?? '- Nenhuma correspondência'}`,
@@ -805,7 +805,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     articles: { type: 'array', items: { ...API_ARTICLE_SCHEMA, properties: { ...API_ARTICLE_SCHEMA.properties,
       endpoint: { type: 'string', enum: selectable.map(publicEndpointId) }, responseDescriptions, parameterDescriptions } } } } };
   const faqFacts = faqRequested(request) ? indexedFaqFacts(adaptScreenFacts({ facts: productContext.screenFacts ?? [],
-    sha: productContext.code?.find((item) => item.role === 'frontend')?.ref })) : [];
+    sha: productContext.code?.find((item) => item.role === 'frontend')?.ref }, productContext.coverage)) : [];
   const faqSchema = structuredClone(FAQ_PACKAGE_SCHEMA);
   const faqSections = faqSchema.properties.articles.items.properties.sections.properties;
   for (const field of [faqSections.passos.items.properties.fato,
@@ -842,7 +842,7 @@ async function generateContentPackageCore(root, request, options = {}) {
   const { grounding: _grounding, ...safePackage } = parsed;
   const faqCoreTasks = faqRequested(request) && hasFaqTaskFacts(productContext.screenFacts)
     ? missingFaqTaskSteps(request, adaptScreenFacts({ facts: productContext.screenFacts,
-      sha: productContext.code?.find((item) => item.role === 'frontend')?.ref }), [])
+      sha: productContext.code?.find((item) => item.role === 'frontend')?.ref }, productContext.coverage), [])
       .map((item) => item.replace(/^tarefa sem passo: /u, '')) : [];
   const faqCoreInstruction = `Escreva os passos das tarefas que têm FATOS DA TELA: ${faqCoreTasks.join(', ')}. As outras tarefas ficam em pendência. Não recuse a página inteira.`;
   const refusedFaq = () => withPending({ status: 'needs_information',
@@ -1042,7 +1042,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     return withPending(apiPending('FAQ solicitada sem página FAQ em docs/'));
   const faqContext = { request, existing, support: productContext.support,
     business: productContext.businessContext,
-    screenFacts: adaptScreenFacts({ facts: productContext.screenFacts, sha: productContext.code?.find((item) => item.role === 'frontend')?.ref }) };
+    screenFacts: adaptScreenFacts({ facts: productContext.screenFacts, sha: productContext.code?.find((item) => item.role === 'frontend')?.ref }, productContext.coverage) };
   const sectionPending = [];
   const articles = [];
   for (const prose of parsed.articles) {

@@ -4,6 +4,7 @@ import { containsSensitiveData } from './sensitive-data.mjs';
 import { sanitizeCodeForModel } from './code-hygiene.mjs';
 
 export const FRONT_ROUTER = 'src/components/core/components/Router/utils/pagesData.tsx';
+const FRONT_MENU = 'src/components/ui/components/NavBar/index.tsx';
 const MAX_FILES = 72;
 const MAX_CHARS = 1_000_000;
 const VISIBLE = new Set(['label', 'labelText', 'title', 'placeholder', 'aria-label', 'tooltip']);
@@ -840,6 +841,33 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
     code.push({ path, excerpt: source });
   }
   if (queue.length) pending.push(`limite de arquivos dos fatos da tela: ${MAX_FILES}`);
+  // The router title is internal; the navigation item is the name the reader sees.
+  if (route && allowed.has(FRONT_MENU)) {
+    const source = await readSource(FRONT_MENU);
+    const file = ts.createSourceFile(FRONT_MENU, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let visible = null;
+    const visit = (node) => {
+      if (!visible && ts.isObjectLiteralExpression(node)) {
+        const field = (name) => node.properties.find((item) => ts.isPropertyAssignment(item)
+          && item.name.getText(file) === name);
+        const name = field('name');
+        if (literal(field('route')?.initializer) === route && name) {
+          const label = safeText(literal(name.initializer));
+          if (label) visible = { text: label, source: `${FRONT_MENU}:${lineOf(file, name)}` };
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+    if (visible) {
+      for (const fact of facts) if (fact.kind === 'route' && fact.route === route) {
+        fact.routeTitle = fact.text;
+        fact.text = visible.text;
+        fact.source = visible.source;
+      }
+      if (!files.includes(FRONT_MENU)) { files.push(FRONT_MENU); code.push({ path: FRONT_MENU, excerpt: source }); }
+    }
+  }
   for (const fact of facts) delete fact.presenceEvidence;
   return { route, sha, files, facts: finalizeScreenFacts(facts, pending), code, pending };
 }
