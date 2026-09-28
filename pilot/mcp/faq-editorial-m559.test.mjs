@@ -157,6 +157,43 @@ test('passo exige rótulo literal do fato da tela e erro exige mensagem validada
     && fact.lineStart === 7 && fact.text === 'Preencha o nome'));
 });
 
+test('cobertura integral vale para resposta e passos, com uma alteração por negativo', () => {
+  const sha = 'a'.repeat(40);
+  const fact = { repository: 'ihelpchat/front-react', path: 'src/Contact.tsx', lineStart: 12,
+    lineEnd: 12, sha, kind: 'action', text: 'Adicionar Contato' };
+  const citation = (({ repository, path, lineStart, lineEnd, sha: revision }) =>
+    ({ repository, path, lineStart, lineEnd, sha: revision }))(fact);
+  const context = { screenFacts: [fact] };
+  const sentence = 'Clique em Adicionar Contato.';
+  const check = (text) => validateFaqSections({ resposta: [unit(text, [citation])],
+    passos: [unit(text, [citation])] }, context);
+  const accepted = check(sentence);
+  assert.equal(accepted.sections.resposta?.length, 1);
+  assert.equal(accepted.sections.passos?.length, 1);
+  const rejected = check('Clique em Adicionar Contato e suas vendas dobram em 30 dias.');
+  assert.equal(rejected.sections.resposta, undefined);
+  assert.equal(rejected.sections.passos, undefined);
+  assert.deepEqual(rejected.blocking, ['resposta', 'passos']);
+  assert.ok(rejected.pending.some((item) => /palavra sem fonte: .*vendas.*dobram.*30.*dias/u.test(item)));
+});
+
+test('palavra nova no fim da frase reprova todas as seções, inclusive exemplo', () => {
+  const quote = 'Organizar contatos da equipe evita retrabalho no atendimento';
+  const context = { business: [{ path: 'business-context/publico.md', body: `🟢 PÚBLICO\n${quote}` }] };
+  const cite = { source: 'negocio', path: 'business-context/publico.md', quote };
+  const positive = 'Organizar contatos da equipe evita retrabalho no atendimento.';
+  const negative = 'Organizar contatos da equipe evita retrabalho e bloqueia clientes inadimplentes no atendimento.';
+  for (const key of ['paraQueServe', 'quandoUsar', 'suporte']) {
+    assert.equal(validateFaqSections({ [key]: [unit(positive, [cite])] }, context).sections[key]?.length, 1, key);
+    const rejected = validateFaqSections({ [key]: [unit(negative, [cite])] }, context);
+    assert.equal(rejected.sections[key], undefined, key);
+    assert.ok(rejected.pending.some((item) => /palavra sem fonte: .*bloqueia.*clientes.*inadimplentes/u.test(item)), key);
+  }
+  const synthetic = 'Maria Exemplo organiza contatos da equipe e evita retrabalho no atendimento.';
+  assert.equal(validateFaqSections({ exemplo: [unit(synthetic, [cite])] }, context).sections.exemplo?.length, 1);
+  assert.equal(validateFaqSections({ exemplo: [unit(`${synthetic.slice(0, -1)} e bloqueia clientes inadimplentes.`, [cite])] }, context).sections.exemplo, undefined);
+});
+
 test('pacote FAQ fica ready com dúvida secundária pendente e seção sem fonte omitida', async () => {
   const sha = 'a'.repeat(40);
   const citation = { repository: 'ihelpchat/front-react', path: 'src/Contact.tsx', lineStart: 12, lineEnd: 12, sha };
