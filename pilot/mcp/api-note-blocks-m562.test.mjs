@@ -34,16 +34,16 @@ const article = { path: 'api/contatos/buscar-contatos', endpoint: 'GET /contacts
   ], responseDescriptions: [], parameterDescriptions: endpoint.parameters.map((parameter) =>
     ({ name: parameter.name, description: unit(`Filtro ${parameter.name}.`) })) };
 const output = { status: 'ready', summary: [unit('Referência de contatos.')], questions: [], articles: [article] };
-async function generate(outputs) {
+async function generate(outputs, endpointFact = endpoint) {
   let calls = 0;
   const result = await generateContentPackage(process.cwd(), { module: 'api', topic: 'Contatos', confirmations: ['GET /contacts'] }, {
-    productContext: { groundingRequired: false, matches: [], code: [], endpoints: [endpoint],
+    productContext: { groundingRequired: false, matches: [], code: [], endpoints: [endpointFact],
       apiExamples: [{ sections: ['Parâmetros', 'Resposta'], components: ['Params', 'Param', 'Fields', 'Field'] }] },
     plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
       assert.deepEqual(payload.text.format.schema.properties.articles.items.properties.notas.items.properties.type.enum,
         ['Como filtrar', 'Paginação e cabeçalhos', 'Quem vê quais contatos', 'Diferenças e cuidados']);
       assert.deepEqual(payload.text.format.schema.properties.articles.items.properties.responseHeaders.items.properties.name.enum,
-        endpoint.responseHeaders.map((header) => header.name));
+        endpointFact.responseHeaders.map((header) => header.name));
       return { output_text: JSON.stringify(outputs[Math.min(calls++, outputs.length - 1)]), model: 'replay-offline' };
     } } },
   });
@@ -98,7 +98,53 @@ test('tipo livre é recusado e bloco vazio não aparece', async () => {
   sparse.articles[0].responseHeaders = [];
   const { result } = await generate([sparse]);
   assert.equal(result.status, 'ready', result.summary);
-  assert.deepEqual([...result.articles[0].body.matchAll(/^### .+$/gmu)].map(([title]) => title), ['### Diferenças e cuidados']);
+  assert.deepEqual([...result.articles[0].body.matchAll(/^### .+$/gmu)].map(([title]) => title),
+    ['### Paginação e cabeçalhos', '### Diferenças e cuidados']);
+});
+
+test('cabeçalhos dos fatos continuam na tabela quando o modelo omite ambos', async () => {
+  const omitted = structuredClone(output);
+  omitted.articles[0].responseHeaders = [];
+  omitted.articles[0].notas = omitted.articles[0].notas.filter((item) => item.type !== 'Paginação e cabeçalhos');
+  const { result } = await generate([omitted]);
+  assert.equal(result.status, 'ready', result.summary);
+  const body = result.articles[0].body;
+  assert.match(body, /\| `Total-Pages` \|/u);
+  assert.match(body, /\| `Total-Pages-Exported` \|/u);
+  assert.equal((body.match(/^\| `Total-Pages(?:-Exported)?` \|/gmu) ?? []).length, 2);
+  assert.match(body, /a confirmar/u);
+  assert.match(result.pending.join('; '), /descrever cabeçalho Total-Pages(?:-Exported)?/u);
+  assert.match(result.pending.join('; '), /descrever cabeçalho Total-Pages-Exported/u);
+});
+
+test('cabeçalho parcialmente descrito conserva a outra linha factual', async () => {
+  const partial = structuredClone(output);
+  partial.articles[0].responseHeaders.pop();
+  const { result } = await generate([partial]);
+  assert.equal(result.status, 'ready', result.summary);
+  assert.match(result.articles[0].body, /\| `Total-Pages` \| Conta os contatos/u);
+  assert.match(result.articles[0].body, /\| `Total-Pages-Exported` \|.*a confirmar/u);
+  assert.match(result.pending.join('; '), /descrever cabeçalho Total-Pages-Exported/u);
+});
+
+test('descrição de cabeçalho recusada vira texto factual a confirmar', async () => {
+  const refused = structuredClone(output);
+  refused.articles[0].responseHeaders[0].meaning.text = 'Use `inventado=1` para habilitar acesso administrativo.';
+  const { result } = await generate([refused]);
+  assert.equal(result.status, 'ready', result.summary);
+  assert.match(result.articles[0].body, /\| `Total-Pages` \|.*a confirmar/u);
+  assert.doesNotMatch(result.articles[0].body, /inventado=1/u);
+  assert.match(result.pending.join('; '), /descrever cabeçalho Total-Pages/u);
+});
+
+test('endpoint sem cabeçalhos factuais não produz tabela', async () => {
+  const without = { ...endpoint, responseHeaders: [] };
+  const sample = structuredClone(output);
+  sample.articles[0].responseHeaders = [];
+  sample.articles[0].notas = sample.articles[0].notas.filter((item) => item.type !== 'Paginação e cabeçalhos');
+  const { result } = await generate([sample], without);
+  assert.equal(result.status, 'ready', result.summary);
+  assert.doesNotMatch(result.articles[0].body, /\| Cabeçalho \|/u);
 });
 
 test('cabeçalho escrito na nota exige tabela na nova tentativa', async () => {
