@@ -43,6 +43,50 @@ const verbForms = (verb) => {
     : ['o', 'e', 'em', 'emos', 'i', 'eu', 'ia', 'iam', 'endo', 'ido', 'a', 'am', 'esse', 'essem', 'eria', 'eriam'];
   return [base, ...endings.map((ending) => stem + ending)];
 };
+// A mesma normalização identifica ações na frase e nos fatos citados.
+const FAQ_NAVIGATION_VERBS = [
+  'abrir', 'clicar', 'tocar', 'selecionar', 'escolher', 'digitar', 'preencher',
+  'conferir', 'ver', 'voltar', 'localizar', 'acompanhar', 'aguardar',
+];
+const FAQ_DESTRUCTIVE_VERBS = [
+  'apagar', 'excluir', 'remover', 'deletar', 'limpar', 'desativar',
+  'desconectar', 'cancelar', 'bloquear', 'resetar', 'zerar',
+];
+const FAQ_ACTION_VERBS = [...new Set([
+  ...FAQ_NAVIGATION_VERBS, ...FAQ_DESTRUCTIVE_VERBS,
+  'criar', 'adicionar', 'salvar', 'enviar', 'ativar', 'editar', 'importar',
+  'exportar', 'publicar', 'agendar', 'configurar', 'cadastrar', 'vincular',
+  'transferir', 'finalizar',
+])];
+const FAQ_VERB_FORMS = new Map(FAQ_ACTION_VERBS.map((verb) => [verb, new Set([
+  // Primeira pessoa em -o coincide com substantivos de interface (cadastro, bloqueio).
+  ...verbForms(verb).filter((form) => form !== `${fold(verb).slice(0, -2)}o`), ...({
+    apagar: ['apague', 'apaguem'], bloquear: ['bloqueie', 'bloqueiem'],
+    clicar: ['clique', 'cliquem'], excluir: ['exclua', 'excluam', 'exclui'],
+    publicar: ['publique', 'publiquem'], localizar: ['localize', 'localizem'],
+    ver: ['veja', 'vejam', 'vejo', 've', 'veem'],
+  }[verb] ?? []),
+])]));
+const actionVerbs = (text) => [...new Set(words(text).flatMap((word) =>
+  [...FAQ_VERB_FORMS].filter(([, forms]) => forms.has(word)).map(([verb]) => verb)))];
+const sameDestructiveAction = (a, b) => a === b
+  || (['excluir', 'remover', 'deletar'].includes(a) && ['excluir', 'remover', 'deletar'].includes(b));
+const unsupportedFaqAction = (text, citedFacts) => {
+  const citedText = citedFacts.map((fact) => `${fact.text ?? ''} ${fact.message ?? ''}`);
+  const destructiveLabels = citedFacts.filter((fact) => fact.kind === 'action').map((fact) => fact.text ?? '');
+  const destructive = actionVerbs(text).filter((verb) => FAQ_DESTRUCTIVE_VERBS.includes(verb));
+  if (destructive.some((verb) => !destructiveLabels.some((label) =>
+    actionVerbs(label).some((labelVerb) => sameDestructiveAction(verb, labelVerb)))))
+    return 'ação destrutiva sem fato de tela';
+  if (destructive.length && /\b(?:todos|todas|tudo)\b/u.test(fold(text))
+    && !destructiveLabels.some((label) => /\b(?:todos|todas|tudo)\b/u.test(fold(label))
+      && actionVerbs(label).some((labelVerb) => destructive.some((verb) => sameDestructiveAction(verb, labelVerb)))))
+    return 'ação destrutiva sem fato de tela';
+  const unsupported = actionVerbs(text).find((verb) => !FAQ_NAVIGATION_VERBS.includes(verb)
+    && !FAQ_DESTRUCTIVE_VERBS.includes(verb)
+    && !citedText.some((source) => actionVerbs(source).includes(verb)));
+  return unsupported ? `ação sem fato de tela: ${unsupported}` : null;
+};
 const neutral = new Set([...FAQ_NEUTRAL_WORDS, ...FAQ_NEUTRAL_VERBS.flatMap(verbForms),
   ...derivedStems.keys(),
   'quero', 'quer', 'querem', 'queria', 'queriam', 'quis', 'quiser', 'quisesse',
@@ -301,6 +345,10 @@ export function validateFaqSections(sections, context) {
       });
       if (!citationsValid) return false;
       const citedStepFacts = unit.citations.flatMap(citedFacts);
+      if (key === 'passos' || key === 'erros') {
+        const actionIssue = unsupportedFaqAction(unit.text, citedStepFacts);
+        if (actionIssue) { pending.push(actionIssue); return false; }
+      }
       if (key === 'passos' && !citedStepFacts.some((fact) => labelFact(fact) && exactMarkedLabel(unit.text, fact.text))) return false;
       if (key === 'passos' && /\b(?:obrigatóri[oa]s?|opciona(?:l|is))\b/iu.test(unit.text)
         && !citedStepFacts.some((fact) => fact.claimText
