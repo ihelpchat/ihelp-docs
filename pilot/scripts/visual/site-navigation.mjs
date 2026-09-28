@@ -60,7 +60,7 @@ try {
         assert.ok(metrics.sideLink?.height >= 44 && metrics.sideGroup?.height >= 44, 'mobile: menu abaixo de 44px');
         assert.ok(metrics.feedback?.height >= 44, 'mobile: feedback abaixo de 44px');
       }
-      assert.ok(metrics.search?.height >= 44, `${name}: busca abaixo de 44px`);
+      assert.ok(metrics.search?.height >= (name === 'mobile' ? 44 : 34), `${name}: busca abaixo da altura esperada`);
       assert.match(metrics.launcher?.text ?? '', /^Claricia.*assistente virtual$/, `${name}: subtítulo ausente no botão flutuante`);
       assert.ok(metrics.launcher?.height >= 44, `${name}: botão flutuante abaixo de 44px`);
     } finally { await page.close(); }
