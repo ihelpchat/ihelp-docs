@@ -366,7 +366,7 @@ test('docs_generate_package mantém aviso e exige confirmação de DELETE', asyn
     apiExamples: [{ sections: ['Exemplo'], languages: ['bash'] }] };
   const prose = { path: 'api/teste/apagar-contatos', endpoint: 'DELETE /contacts', title: 'Apagar contatos',
     description: { text: 'Apaga contatos cadastrados após a confirmação da operação.', citations: [] },
-    intro: { text: 'Confira os contatos antes de apagar.', citations: [] }, notas: [], responseDescriptions: [] };
+    intro: { text: 'Confira os contatos antes de apagar.', citations: [] }, notas: [], responseHeaders: [], responseDescriptions: [] };
   const generate = (confirmations) => generateContentPackage(process.cwd(),
     { module: 'api', topic: 'Apagar contatos', confirmations }, {
       productContext: context, plan: { status: 'ready', guidance: 'Documente o endpoint.', questions: [] },
