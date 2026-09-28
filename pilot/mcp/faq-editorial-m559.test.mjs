@@ -103,8 +103,10 @@ test('contexto público sob a raiz pilot chega ao prompt e pode ser citado', asy
   const root = await mkdtemp(join(tmpdir(), 'faq-pilot-'));
   try {
     await mkdir(join(root, 'architecture', 'business-context'), { recursive: true });
-    await writeFile(join(root, 'architecture', 'business-context', 'publico.md'),
+    await writeFile(join(root, 'architecture', 'business-context', 'contatos.md'),
       '🟢 PÚBLICO\nOrganizar contatos evita retrabalho da equipe.');
+    await writeFile(join(root, 'architecture', 'business-context', 'robos.md'),
+      '🟢 PÚBLICO\nO robô orienta o primeiro contato.');
     const context = { groundingRequired: true, matches: [{ repository: 'ihelpchat/front-react', path: 'src/Contact.tsx',
       line: 12, ref: 'a'.repeat(40), sha: 'a'.repeat(40), excerpt: '12: Adicionar Contato' }],
       code: [{ available: true, repository: 'ihelpchat/front-react', ref: 'a'.repeat(40), role: 'frontend' }],
@@ -118,8 +120,9 @@ test('contexto público sob a raiz pilot chega ao prompt e pode ser citado', asy
       } } },
     });
     assert.match(prompt, /Organizar contatos evita retrabalho da equipe/u);
+    assert.doesNotMatch(prompt, /O robô orienta o primeiro contato/u);
     assert.equal(validateFaqSections({ paraQueServe: [unit('Organizar contatos evita retrabalho.', [
-      { source: 'negocio', path: 'business-context/publico.md', quote: 'Organizar contatos evita retrabalho da equipe.' },
+      { source: 'negocio', path: 'business-context/contatos.md', quote: 'Organizar contatos evita retrabalho da equipe.' },
     ])] }, { business: context.businessContext }).sections.paraQueServe?.length, 1);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
@@ -317,14 +320,17 @@ test('dúvidas rejeitam palavra sem fonte; erro usa só mensagem estruturada', (
   assert.equal(plural.sections.resposta?.length, 1);
 });
 
-test('pacote FAQ fica ready com dúvida secundária pendente e seção sem fonte omitida', async () => {
+test('pacote FAQ livre fica ready com dúvida secundária pendente', async () => {
   const sha = 'a'.repeat(40);
   const citation = (line) => ({ repository: 'ihelpchat/front-react', path: 'src/Contact.tsx', lineStart: line, lineEnd: line, sha });
-  const sections = Object.fromEntries(['resposta', 'paraQueServe', 'quandoUsar', 'passos', 'exemplo', 'duvidas', 'erros', 'suporte'].map((key) => [key, []]));
+  const sections = Object.fromEntries(['oQueE', 'paraQueServe', 'casosDeUso', 'passos', 'duvidas', 'erros', 'suporte'].map((key) => [key, []]));
   const direct = 'Abra Contatos no menu e clique em Adicionar Contato para cadastrar uma pessoa da sua lista.';
   const steps = distinctActions;
-  sections.resposta = [unit(direct, [citation(12)])];
-  sections.passos = steps.map((_, index) => ({ acao: 'clicar', fato: `f${index + 3}` }));
+  sections.oQueE = [{ text: 'A tela Contatos organiza as pessoas da sua lista.' }];
+  sections.passos = [{ tarefa: 'Cadastrar', passos: [
+    { text: 'Clique em **Adicionar Contato**.' },
+    ...steps.map((text) => ({ text: `Clique em **${text}**.` })),
+  ] }];
   const reply = { status: 'ready', summary: 'Página pronta.', questions: [], articles: [{
     path: 'docs/sobre-o-sistema/contatos-novos', title: 'Contatos novos', description: 'Descrição gerada pelo modelo.',
     source: 'produto', contentType: 'faq', sections, productActions: [],
@@ -341,13 +347,16 @@ test('pacote FAQ fica ready com dúvida secundária pendente e seção sem fonte
     { topic: 'Contatos', module: 'Contatos', description: 'Criar FAQ para cadastrar contatos.' },
     { productContext: context, plan: { status: 'ready', pending: ['pergunta pendente: Qual formato do telefone?'] },
       client: { responses: { create: async (payload) => {
+        if (payload.text.format.name === 'juiz_faq') {
+          const claims = JSON.parse(payload.input[1].content).claims;
+          return { model: 'fixture', output_text: JSON.stringify({ claims: claims.map(({ id }) =>
+            ({ id, status: 'sustentada', reason: '' })) }) };
+        }
         assert.ok(payload.text.format.schema.properties.articles.items.properties.sections);
         assert.ok(!payload.text.format.schema.properties.articles.items.properties.body);
         const schema = payload.text.format.schema.properties.articles.items.properties.sections.properties;
-        assert.equal(schema.passos.items.properties.text, undefined);
-        assert.equal(schema.erros.items.properties.text, undefined);
-        assert.equal(schema.erros.items.properties.corrigir.anyOf[0].properties.text, undefined);
-        assert.ok(schema.passos.items.properties.fato.enum.includes('f2'));
+        assert.equal(schema.passos.items.properties.passos.items.properties.text.type, 'string');
+        assert.equal(schema.passos.items.properties.fato, undefined);
         return { model: 'fixture', output_text: JSON.stringify(reply) };
       } } } });
   assert.equal(result.status, 'ready', JSON.stringify(result.questions));
@@ -355,7 +364,6 @@ test('pacote FAQ fica ready com dúvida secundária pendente e seção sem fonte
   assert.doesNotMatch(result.articles[0].body, /Erros comuns/u);
   assert.match(result.articles[0].body, /## Quando falar com o suporte\n\n/u);
   assert.ok(result.pending.some((item) => item.includes('Qual formato do telefone')));
-  assert.ok(result.pending.some((item) => item.includes('Erros comuns')));
 });
 
 test('plano da Agenda sai ready quando só pergunta detalhes secundários', async () => {
