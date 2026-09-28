@@ -7,6 +7,15 @@ assert.match(reference.measuredAt, /^\d{4}-\d{2}-\d{2}$/, 'referência sem data 
 const baseUrl = process.env.BASE_URL;
 assert.ok(baseUrl, 'BASE_URL necessário para o teste visual');
 const browser = await launch();
+async function assertMobileTargets(page, name) {
+  const undersized = await page.evaluate(() => [...document.querySelectorAll('a, button, input, summary, [role="button"]')]
+    .filter((element) => !element.matches('p a'))
+    .map((element) => ({ element, box: element.getBoundingClientRect(), style: getComputedStyle(element) }))
+    .filter(({ box, style }) => box.width > 0 && box.height > 0 && style.visibility === 'visible' && Number(style.opacity) > 0)
+    .filter(({ box }) => box.width < 44 || box.height < 44)
+    .map(({ element, box }) => `${element.tagName.toLowerCase()}${element.className && typeof element.className === 'string' ? `.${element.className.trim().replaceAll(/\s+/g, '.')}` : ''} ${Math.round(box.width)} × ${Math.round(box.height)}px ${element.textContent.trim().slice(0, 45)}`));
+  assert.deepEqual(undersized, [], `${name}: alvos clicáveis visíveis menores que 44 × 44px`);
+}
 try {
   for (const [name, viewport] of Object.entries({ desktop: { width: 1440, height: 900 }, desktop1280: { width: 1280, height: 900 }, mobile: { width: 390, height: 844 } })) {
     const page = await browser.newPage({ viewport });
@@ -64,6 +73,9 @@ try {
         assert.ok(metrics.menu?.height >= 44, 'mobile: menu abaixo de 44px');
         assert.ok(metrics.sideLink?.height >= 44 && metrics.sideGroup?.height >= 44, 'mobile: menu abaixo de 44px');
         assert.ok(metrics.feedback?.height >= 44, 'mobile: feedback abaixo de 44px');
+        await assertMobileTargets(page, 'Agenda de Contatos');
+        await page.locator('.ih-prose h2').first().hover();
+        await assertMobileTargets(page, 'Agenda de Contatos com título em foco');
       }
       assert.ok(metrics.search?.height >= (name === 'mobile' ? 44 : 34), `${name}: busca abaixo da altura esperada`);
       assert.match(metrics.launcher?.text ?? '', /^Claricia.*assistente virtual$/, `${name}: subtítulo ausente no botão flutuante`);
@@ -81,6 +93,7 @@ try {
         });
         assert.ok(other.searchWidth >= 44 && other.searchHeight >= 44, `mobile: busca em Principais dúvidas ${other.searchWidth} × ${other.searchHeight}px`);
         assert.ok(other.productFont >= 16, `mobile: descrição em Principais dúvidas ${other.productFont}px < 16px`);
+        await assertMobileTargets(page, 'Principais dúvidas');
       }
     } finally { await page.close(); }
   }
