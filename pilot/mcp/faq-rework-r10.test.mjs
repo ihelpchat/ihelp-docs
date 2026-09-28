@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateFaqSections, missingFaqTaskSteps } from './faq-editorial.mjs';
-import { generateContentPackage } from './content-ai-service.mjs';
+import { generateContentPackage, planContent } from './content-ai-service.mjs';
 
 const sha = 'a'.repeat(40);
 const fact = (text, line, kind = 'action') => ({ kind, text, repository: 'ihelpchat/front-react',
@@ -94,4 +94,38 @@ test('Agenda cobra busca, importação e agendamento quando há fatos dessas tar
   assert.deepEqual(missingFaqTaskSteps(agenda, screen, [unit('Clique em **Buscar contato...**.', 11),
     unit('Clique em **Adicionar Contato**.', 12), unit('Abra **Importar Contatos**.', 14),
     unit('Clique em **Agendamento**.', 16)]), []);
+});
+
+test('validação editorial do FAQ participa do retry único e pergunta canônica tem fallback', async () => {
+  const invalid = packageOf([article('docs/robo', 'faq', [createStep, createStep2, createStep3])]);
+  invalid.articles[0].assistantQuestion = '';
+  const { result, calls, prompts } = await run([invalid, invalid]);
+  assert.equal(calls, 2, JSON.stringify(result));
+  assert.match(prompts[1], /assistantQuestion|validação editorial/u);
+  assert.equal(result.status, 'ready', JSON.stringify(result));
+  assert.match(result.articles[0].assistantQuestion, /^Como uso a tela .+\?$/u);
+});
+
+test('plano e geração usam o mesmo núcleo: Robô com fatos segue e mantém perguntas pendentes', async () => {
+  const questions = ['Qual é o resultado de Publicar?', 'Quais opções aparecem em Encaminhar atendimento?'];
+  const planReply = { status: 'needs_information', guidance: 'Criar a página do Robô.', questions,
+    risks: [], suggestedActions: [], grounding: [] };
+  let calls = 0;
+  const plan = await planContent(new URL('../', import.meta.url).pathname, request, {
+    productContext: structuredClone(context), client: { responses: { create: async () => {
+      calls++;
+      return { model: 'fixture', output_text: JSON.stringify(planReply) };
+    } } },
+  });
+  assert.equal(calls, 1);
+  assert.equal(plan.status, 'ready', JSON.stringify(plan));
+  assert.deepEqual(plan.questions, []);
+  assert.ok(questions.every((question) => plan.pending.some((item) => item.includes(question))));
+  const blocked = { status: 'needs_information', summary: 'Faltam detalhes secundários.', questions,
+    articles: [] };
+  const complete = packageOf([article('docs/robo', 'faq', [createStep, createStep2, createStep3])]);
+  const generated = await run([blocked, complete]);
+  assert.equal(generated.calls, 2, JSON.stringify(generated.result));
+  assert.equal(generated.result.status, 'ready', JSON.stringify(generated.result));
+  assert.ok(questions.every((question) => generated.result.pending.some((item) => item.includes(question))));
 });
