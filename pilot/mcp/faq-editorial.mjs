@@ -67,7 +67,7 @@ const FAQ_VERB_FORMS = new Map(FAQ_ACTION_VERBS.map((verb) => [verb, new Set([
 ])]));
 const actionVerbs = (text) => [...new Set(words(text).flatMap((word) =>
   [...FAQ_VERB_FORMS].filter(([, forms]) => forms.has(word)).map(([verb]) => verb)))];
-const FAQ_PROCEDURAL_IMPERATIVE = /\b(?:abra|clique|toque|preencha|digite|escolha|selecione|confira|apague|exclua|destrua|remova|delete|limpe|desative|desconecte|cancele|bloqueie|resete|zere|crie|adicione|salve|envie|ative|edite|importe|exporte|publique|agende|configure|cadastre|vincule|transfira|finalize)\b/iu;
+const FAQ_PROCEDURAL_IMPERATIVE = /(?:^|[.!?;,]\s*|\be\s+)(?:abra|clique|toque|preencha|digite|escolha|selecione|confira|apague|exclua|destrua|remova|delete|limpe|desative|desconecte|cancele|bloqueie|resete|zere|crie|adicione|salve|envie|ative|edite|importe|exporte|publique|agende|configure|cadastre|vincule|transfira|finalize)\b/iu;
 const neutral = new Set([...FAQ_NEUTRAL_WORDS, ...FAQ_NEUTRAL_VERBS.flatMap(verbForms),
   ...derivedStems.keys(),
   'quero', 'quer', 'querem', 'queria', 'queriam', 'quis', 'quiser', 'quisesse',
