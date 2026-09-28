@@ -930,6 +930,8 @@ async function generateContentPackageCore(root, request, options = {}) {
       for (const header of prose.responseHeaders) units.push(header.meaning, header.when);
       if (prose.notas.some((note) => /\b(?:requer|exige|obrigat[oó]ria?)\s+autentica[çc][aã]o|token\s+(?:Bearer|ausente|inv[aá]lido|expirado)/iu.test(note.text)))
         proseProblems.push('autenticação deve ficar na seção fixa');
+      if (prose.notas.some((note) => /\bTotal-Pages(?:-Exported)?\b/iu.test(note.text)))
+        proseProblems.push('cabeçalhos de resposta devem ficar na tabela');
       if (new Set(prose.responseHeaders.map((header) => header.name.toLowerCase())).size !== prose.responseHeaders.length)
         proseProblems.push('cabeçalho de resposta repetido');
       proseProblems.push(...proseIssues({ title: prose.title, description: '', intro: '', notas: [] }, endpoint, selectable));

@@ -74,3 +74,13 @@ test('tipo livre é recusado e bloco vazio não aparece', async () => {
   assert.equal(result.status, 'ready', result.summary);
   assert.deepEqual([...result.articles[0].body.matchAll(/^### .+$/gmu)].map(([title]) => title), ['### Diferenças e cuidados']);
 });
+
+test('cabeçalho escrito na nota exige tabela na nova tentativa', async () => {
+  const invalid = structuredClone(output);
+  invalid.articles[0].notas[2].text = 'Total-Pages conta os contatos filtrados.';
+  invalid.articles[0].responseHeaders = [];
+  const { result, calls } = await generate([invalid]);
+  assert.equal(calls, 2);
+  assert.equal(result.status, 'needs_information');
+  assert.match(result.summary, /cabeçalhos de resposta devem ficar na tabela/u);
+});
