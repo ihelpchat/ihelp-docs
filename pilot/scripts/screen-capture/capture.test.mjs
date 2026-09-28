@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { addUploadedScreenshot, capturePlan, captureScreens, chooseScreenshot } from './capture.mjs';
 import { launch } from '../visual/measure.mjs';
 import { attachScreenshotsToArticle, screenshotForStep } from '../../mcp/screen-capture-manifest.mjs';
+import { assertAllowedTarget } from '../guide-proof.mjs';
 
 const appSha = 'a'.repeat(40);
 const coverage = [{ module: 'Contatos', productRoutes: ['/contact'] }];
@@ -85,4 +86,11 @@ test('plano exige rota e fato da tela com dono', () => {
   assert.throws(() => capturePlan({ page: 'contatos', module: 'Contatos', appSha, coverage, screenFacts: [], steps }), /fato da tela/u);
   assert.throws(() => capturePlan({ page: 'contatos', module: 'Contatos', appSha, coverage, screenFacts,
     steps: [{ ...steps[0], route: '/production' }] }), /coverage matrix/u);
+});
+
+test('host exato aprovado aceita homologação Railway e rejeita produção conhecida', () => {
+  const host = 'front-react-production-4a01.up.railway.app';
+  assert.equal(assertAllowedTarget(`https://${host}/`, { GUIDE_QA_ALLOWED_HOSTS: host }).url, `https://${host}`);
+  assert.throws(() => assertAllowedTarget(`https://${host}/`, {}), /host não permitido/u);
+  assert.throws(() => assertAllowedTarget('https://app.ihelpchat.com/', { GUIDE_QA_ALLOWED_HOSTS: 'app.ihelpchat.com' }), /host não permitido/u);
 });
