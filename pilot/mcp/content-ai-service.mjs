@@ -273,7 +273,10 @@ function evidenceIndex(context) {
     return { repository: endpoint.repository ?? 'ihelpchat/olah-ihelp', path, line,
       sha: endpoint.sha, ref: endpoint.sha };
   };
-  return [...context.matches ?? [], ...(context.callEvidence ?? []).flatMap((item) =>
+  return [...context.matches ?? [], ...(context.screenFacts ?? []).map((fact) => ({
+    repository: fact.repository, path: fact.source.slice(0, fact.source.lastIndexOf(':')),
+    line: Number(fact.source.slice(fact.source.lastIndexOf(':') + 1)), sha: fact.sha, ref: fact.sha })),
+  ...(context.callEvidence ?? []).flatMap((item) =>
     Array.from({ length: Math.max(0, item.end - item.start + 1) }, (_, offset) => ({
       repository: item.repository, path: item.path, line: item.start + offset, sha: item.sha, ref: item.ref }))),
   ...(context.endpoints ?? []).flatMap((endpoint) => [
@@ -523,6 +526,7 @@ function requestText(request, existing, productContext, codeHygiene = {}) {
     request.tangoUrl ? `Tango já existente: ${request.tangoUrl}` : '',
     `Documentação publicada semelhante (fonte editorial):\n${existing.length ? existing.map((item) => `- ${item.title} (${item.path}): ${item.description}${item.body ? `\n${item.body}` : ''}`).join('\n') : '- Nenhum'}`,
     `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${redactSensitiveData(item.path)} LINHA ${item.line ?? 'não informada'} SHA ${item.sha ?? item.ref}\n${numberedCode(safeCode(item.excerpt), item.line)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
+    productContext.screenFacts?.length ? `FATOS DA TELA (texto visível, sem código; cite arquivo:linha e SHA):\n${JSON.stringify(productContext.screenFacts)}` : '',
     request.module === 'api' && productContext.callEvidence?.length ? `TRECHOS INTERNOS ALCANÇADOS (cite arquivo:linha; não publique código):\n${productContext.callEvidence.map((item) => `${item.path}:${item.start}-${item.end}\n${numberedCode(safeCode(item.excerpt), item.start)}`).join('\n\n')}` : '',
     request.module === 'api' ? `FATOS ESTRUTURADOS DE ENDPOINTS (somente public=true é gerável):\n${JSON.stringify(selectedEndpoints)}\nFORMATO REAL DAS PÁGINAS API:\n${JSON.stringify(productContext.apiExamples ?? [])}\nMODELOS DE ESTILO (não são fatos do endpoint pedido):\n${JSON.stringify(productContext.apiStyleExamples ?? [])}` : '',
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
@@ -611,7 +615,7 @@ function groundingPending(context) {
   const missingCitation = context.pending?.filter((item) => item.startsWith('endpoint citado não encontrado')) ?? [];
   if (missingCitation.length) return { status: 'needs_information', summary: missingCitation.join('; '),
     questions: missingCitation, articles: [], pending: context.pending };
-  if (!context.groundingRequired || (context.code.length && context.code.every(({ available }) => available) && (context.matches.length || context.callEvidence?.length))) return null;
+  if (!context.groundingRequired || (context.code.length && context.code.every(({ available }) => available) && (context.matches.length || context.callEvidence?.length || context.screenFacts?.length))) return null;
   return {
     status: 'needs_information',
     summary: 'Código do produto indisponível ou sem evidência para este tema.',
@@ -662,6 +666,7 @@ async function planContentCore(root, request, options = {}) {
         'Você é a editora de conteúdo do iHelp. Oriente quem está criando documentação antes de escrever.',
         'O público final acabou de acessar o produto há 30 segundos, está em trial e não recebeu treinamento.',
         'Identifique conflitos, informação ausente, duplicidade e nomes de telas ou botões que precisam ser confirmados.',
+        'Não pergunte o que os FATOS DA TELA já respondem; cite o fato.',
         request.module === 'api' ? 'Use needs_information somente quando faltar método, rota, parâmetro ou campo de primeiro nível da resposta. Outras dúvidas são pendências não bloqueantes. Não invente comportamento.' : 'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
         'Sugira ações no produto somente com rota fornecida ou sustentada pelos detalhes. target é um identificador data-help-id estável, nunca um seletor CSS.',
         request.module === 'api' ? 'Planeje páginas de referência da API. Para tema amplo, foque nos endpoints documented=true. Se o pedido nomeia o caminho de uma página nova para um endpoint público, documented=false não exige pergunta. Não peça dados já presentes nos fatos estruturados. Endpoint sem public=true exige confirmação. responseFields=null não bloqueia: a resposta exibirá nota fixa e pendência.' : 'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',

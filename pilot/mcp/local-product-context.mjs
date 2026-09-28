@@ -10,6 +10,7 @@ import uiSynonyms from './ui-synonyms.json' with { type: 'json' };
 import { readCsharpEndpoints, collectCsharpErrors } from '../lib/csharp-endpoints.mjs';
 import { traceCsharpCalls } from '../lib/csharp-call-chain.mjs';
 import { routeMatches } from './api-route-match.mjs';
+import { extractScreenFacts, FRONT_ROUTER } from './front-screen-facts.mjs';
 
 const run = promisify(execFile);
 const SOURCE = /\.(?:ts|tsx|js|jsx|cs)$/iu;
@@ -83,6 +84,12 @@ export function isAllowedSourcePath(path, role = 'frontend', includeApiDto = fal
     && (!/(?:^|\/)data(?:\/|$)/iu.test(path) || (role === 'backend' && path.startsWith('Comzada.Application/Data/')))
     && (publicConfigurationController || !BLOCKED_FILE.test(path))
     && !path.startsWith('/') && !path.split('/').includes('..');
+}
+
+export function canReadFrontFile(path) {
+  return typeof path === 'string' && path.startsWith('src/') && /\.tsx?$/u.test(path)
+    && !path.includes('\\') && !path.split('/').some((part) => !part || part === '.' || part === '..')
+    && (isAllowedSourcePath(path, 'frontend') || path === FRONT_ROUTER || path === 'src/translate/pt.ts');
 }
 
 function pathRelevance(path, terms, moduleTerms) {
@@ -198,7 +205,8 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
       if (cache) listedCache.set(listKey, listed);
     }
     if (listed.length > MAX_LISTED) return pending(source, 'Limite de arquivos listados excedido');
-    const sourceAllowed = listed.filter((path) => isAllowedSourcePath(path, source.role, normalize(module) === 'api'));
+    const sourceAllowed = listed.filter((path) => source.role === 'frontend'
+      ? canReadFrontFile(path) : isAllowedSourcePath(path, source.role, normalize(module) === 'api'));
     const blockedBackPaths = source.role === 'backend' ? listed.filter((path) => path.endsWith('.cs')
       && productSparseFolders('backend').some((folder) => path.startsWith(`${folder}/`))
       && !canReadBackFile(path)) : [];
@@ -284,6 +292,21 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
       deadline.remaining();
       const match = await matchFile(path);
       if (match) matches.push(match);
+    }
+    let screen = null;
+    if (source.role === 'frontend' && paths.includes(FRONT_ROUTER)) {
+      const routes = /contat/u.test(normalize(`${topic} ${module}`)) ? ['/contact', '/contact/detail/:idRef'] : [null];
+      const screens = [];
+      for (const route of routes) screens.push(await extractScreenFacts({ route, topic, module, paths, sha, readSource: async (path) => {
+        if (!canReadFrontFile(path) || !paths.includes(path)) throw new Error('Arquivo do front não permitido');
+        deadline.remaining();
+        const full = join(root, path);
+        if (await deadline.wait(hasSymlink(full, root))) throw new Error('Symlink do front não permitido');
+        const content = await deadline.wait(fileRead(path, { encoding: 'utf8', signal: deadline.signal }));
+        return content;
+      } }));
+      screen = { facts: screens.flatMap((item) => item.facts), code: [...new Map(screens.flatMap((item) => item.code).map((item) => [item.path, item])).values()],
+        files: [...new Set(screens.flatMap((item) => item.files))], pending: screens.flatMap((item) => item.pending) };
     }
     if ((await git(root, deadline, 'rev-parse', 'HEAD')).toString().trim() !== sha || (await git(root, deadline, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Fonte alterada durante a leitura');
     let endpoints = [];
@@ -395,7 +418,9 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
       }
     }
     if ((await git(root, deadline, 'rev-parse', 'HEAD')).toString().trim() !== sha || (await git(root, deadline, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Fonte alterada durante a leitura');
-    return { available: true, repository: source.repository, ref: source.sha, role: source.role, endpoints, callEvidence, matches: matches
+    return { available: true, repository: source.repository, ref: source.sha, role: source.role, endpoints, callEvidence,
+      screenFacts: screen?.facts.map((fact) => ({ ...fact, repository: source.repository, sha })) ?? [],
+      screenCode: screen?.code ?? [], screenFiles: screen?.files ?? [], screenPending: screen?.pending ?? [], matches: matches
       .filter(({ path }) => redactSensitiveData(path) === path)
       .sort((a, b) => b.score - a.score).slice(0, 8)
       .map(({ score: _score, path, excerpt, ...match }) => ({ ...match, path, excerpt: redactSensitiveData(excerpt) })) };
