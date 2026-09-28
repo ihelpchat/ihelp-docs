@@ -1,5 +1,9 @@
 import OpenAI from 'openai';
-import { searchContent, validateArticle } from './content-service.mjs';
+import { compile, run } from '@mdx-js/mdx';
+import * as jsxRuntime from 'react/jsx-runtime';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { searchContent, validateArticle, renderArticle } from './content-service.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
 import { readArticle } from './editorial-standard.mjs';
 import { containsSensitiveData, redactSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
@@ -19,7 +23,7 @@ import { classifyFaqQuestions, hasFaqTaskFacts, loadBusinessContext, selectFaqSt
   validateFaqSections, renderFaqSections, fixedFaqSupportSection, deterministicFaqAnswer,
   missingFaqTaskSteps, FAQ_SECTIONS, faqSubtitle, faqModuleName, replaceModuleTerminology } from './faq-editorial.mjs';
 import { FREE_FAQ_SECTIONS, validateFreeFaqSections, judgeClaims, renderFreeFaqSections,
-  faqTasksWithoutFacts, missingFreeFaqTaskSteps } from './faq-editorial.mjs';
+  faqTasksWithoutFacts, missingFreeFaqTaskSteps, shortFreeFaqTasks, trimFaqLabels } from './faq-editorial.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
 contentMaxOutputTokens();
@@ -364,6 +368,23 @@ function finalizeGeneratedPages(result, request, factsByPath = new Map()) {
       questions: [`Para seguir, confirme o endpoint sensível: ${review.endpoint}`] }, securityWarnings);
   }
   return finalizeSecurityResponse(result, securityWarnings);
+}
+export async function validateRenderedFaq(body) {
+  let html;
+  try {
+    const compiled = await compile(body, { outputFormat: 'function-body' });
+    const { default: Content } = await run(compiled, jsxRuntime);
+    html = renderToStaticMarkup(createElement(Content, { components: {
+      AConfirmar: ({ children }) => createElement('span', null, children),
+      ProductAction: () => null,
+      TutorialCard: () => null,
+    } }));
+  } catch (error) {
+    throw new Error(`MDX inválido na montagem: ${error.message}`);
+  }
+  const visible = html.replace(/<[^>]+>/gu, '');
+  if (/\*\*|__|`/u.test(visible)) throw new Error('marcador de formatação solto no MDX renderizado');
+  return visible;
 }
 export function normalizeCatalogLabel(action) {
   return resolveCatalogAction(action) ?? action;
@@ -828,7 +849,7 @@ async function generateContentPackageCore(root, request, options = {}) {
         request.module === 'api' || !faqRequested(request) ? 'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.'
           : 'Escreva o FAQ com os fatos da tela e a experiência do cliente. Afirmações sem fonte serão marcadas pelo juiz para revisão.',
         request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
-        request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : faqRequested(request) ? 'Gere UMA página FAQ em docs/. Escreva livremente como atendente experiente para cliente 60+, com frases naturais e curtas. Em sections inclua O que é em 2–3 frases, Para que serve com ganho, Casos de uso em parágrafos curtos: situação em negrito, seguida de ação e resultado em frase natural, Passo a passo por tarefa (Buscar, Cadastrar, Editar, Responsável, Importar, Agendar conforme o pedido e fatos), Dúvidas comuns, Erros comuns e o que fazer. Cada passo é texto livre, com rótulos exatos da tela em negrito. Chame o item do menu de módulo pelo nome visível nos FATOS DA TELA; use a matriz de cobertura só se faltar esse item. Use tela apenas para telas e janelas específicas dentro do módulo. Deixe suporte vazio; o sistema adiciona a seção fixa. Use modelos só para estilo, nunca como fatos. Se faltar contexto de negócio, ainda escreva as seções de negócio: o juiz marcará a confirmar.' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
+        request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : faqRequested(request) ? 'Gere UMA página FAQ em docs/. Escreva livremente como atendente experiente para cliente 60+, com frases naturais e curtas. Em sections inclua O que é em 1–2 frases, Para que serve com ganho, Casos de uso em parágrafos curtos: situação em negrito, seguida de ação e resultado em frase natural, Passo a passo por tarefa (Buscar, Cadastrar, Editar, Responsável, Importar, Agendar conforme o pedido e fatos), Dúvidas comuns, Erros comuns e o que fazer. Seja conciso: não repita afirmações e não descreva comportamento sem fonte. Cada passo começa no módulo do menu e termina na confirmação quando os fatos do mesmo fluxo mostram o controle. Para Importar, diga como abrir a janela pelo menu ou Mais opções antes de selecionar arquivo. Não use controles de outro fluxo para completar uma tarefa; se faltarem fatos, registre a lacuna. Cada passo é texto livre, com rótulos exatos da tela em negrito. Chame o item do menu de módulo pelo nome visível nos FATOS DA TELA; use a matriz de cobertura só se faltar esse item. Use tela apenas para telas e janelas específicas dentro do módulo. Dê à página só o título do FAQ, sem sufixo de dúvidas frequentes. Deixe suporte vazio; o sistema adiciona a seção fixa. Use modelos só para estilo, nunca como fatos. Se faltar contexto de negócio, ainda escreva as seções de negócio: o juiz marcará a confirmar.' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
         request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations,refs}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations,refs}, também com uma frase por text (ponto e vírgula permitido). Use refs: [] quando não houver referência cruzada. Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros, como cabeçalhos e diferenças entre endpoints.' : faqRequested(request) ? 'Em passos use objetos {tarefa,passos:[{text}]}. Escreva a tarefa sem ###; o sistema cria o heading. Cada text é uma ação concreta, nunca um título. Escreva instruções completas, na ordem da tela, sem repetir abertura do mesmo menu. Tarefa pedida sem fatos da tela não vira seção; registre-a como pendência para a PR. Em Casos de uso use 2 ou 3 itens {text}. Cada item começa com uma situação curta em negrito, terminada por ponto, seguida de ação e resultado em prosa. Use os casos do CONTEXTO DE NEGÓCIO e cite o segmento (contabilidade, clínica, distribuidora) quando existir. Nunca use setas ou listas artificiais. Não gere print se não houver manifesto. Nenhuma estrutura acao/fato da versão antiga.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
@@ -1060,6 +1081,8 @@ async function generateContentPackageCore(root, request, options = {}) {
     if (!prose.sections?.passos?.some((item) => item?.acao)) {
       const checked = validateFreeFaqSections(prose.sections, faqContext);
       const missingTasks = missingFreeFaqTaskSteps(request, faqContext.screenFacts, checked.sections.passos);
+      const shortTasks = shortFreeFaqTasks(checked.sections.passos, faqContext.screenFacts,
+        faqModuleName(request, faqContext.screenFacts));
       const editorialIssues = checked.pending.filter((item) => item.includes('ação destrutiva fora de rótulo da tela')
         || item.includes('caso de uso com seta'));
       if ((missingTasks.length || editorialIssues.length) && !options.faqRetryIssues)
@@ -1073,6 +1096,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       }
       const materialize = (sections) => {
         const { sections: _sections, ...article } = prose;
+        article.title = article.title.replace(/:\s*dúvidas frequentes\s*$/iu, '').trim();
         const display = structuredClone(sections);
         display.passos = (display.passos ?? []).map((task) => ({ ...task,
           passos: task.passos.filter((step) => !/^#{1,6}\s+\S/u.test(step.text.trim())) }))
@@ -1084,8 +1108,8 @@ async function generateContentPackageCore(root, request, options = {}) {
         const firstStep = (display.passos.flatMap((task) => task.passos).find((step) =>
           /\b(?:abra|acesse|clique|escolha|selecione|confira|verifique|corrija|configure|crie|digite|insira|envie|importe|pesquise|revise|localize|inicie|conclua|adicione)\b/iu.test(step.text))?.text ?? '')
           .replace(/<\/?AConfirmar>/gu, '');
-        article.assistantOverview = replaceModuleTerminology((firstStep.length >= 45 ? firstStep
-          : `${article.description} ${firstStep}`.trim()).slice(0, 200), menuModule);
+        article.assistantOverview = trimFaqLabels(replaceModuleTerminology((firstStep.length >= 45 ? firstStep
+          : `${article.description} ${firstStep}`.trim()).slice(0, 200), menuModule));
         article.assistantInitialSteps = firstStep ? 1 : 0;
         article.assistantSuggestions = ['Falar com uma pessoa?'];
         article.productActions = article.productActions.map(normalizeCatalogLabel);
@@ -1118,12 +1142,13 @@ async function generateContentPackageCore(root, request, options = {}) {
       } catch (error) {
         return withPending(apiPending(`${prose.path}: juiz inválido: ${error.message}`));
       }
-      if (judged.contradictions.length && !options.faqRetryIssues) return generateContentPackage(root, request, {
+      if ((judged.contradictions.length || shortTasks.length) && !options.faqRetryIssues) return generateContentPackage(root, request, {
         ...options, productContext, plan,
-        faqRetryIssues: judged.contradictions.map((item) => `Contradição: ${item.text} — ${item.reason}. Reescreva com os fatos.`),
+        faqRetryIssues: [...judged.contradictions.map((item) => `Contradição: ${item.text} — ${item.reason}. Reescreva com os fatos.`),
+          ...shortTasks.map((item) => `${prose.path}: ${item}. Escreva o fluxo completo a partir do módulo e termine na confirmação mostrada pelos fatos.`)],
       });
       const article = materialize(judged.sections);
-      sectionPending.push(...checked.pending, ...missingTasks.map((item) => `${prose.path}: ${item}`),
+      sectionPending.push(...checked.pending, ...[...missingTasks, ...shortTasks].map((item) => `${prose.path}: ${item}`),
         ...judged.pending.map((item) => `${prose.path}: a confirmar: ${item}`));
       sectionPending.push(...faqTasksWithoutFacts(request, faqContext.screenFacts)
         .map((task) => `${prose.path}: tarefa sem fatos de tela: ${task}`));
@@ -1192,6 +1217,10 @@ async function generateContentPackageCore(root, request, options = {}) {
       questions: invalid.flatMap(({ path, issues }) => issues.map((issue) => `${path}: ${issue}`)),
       articles: [], existing, model: response.model,
     });
+  }
+  for (const article of articles.filter((item) => item.contentType === 'faq')) {
+    const page = renderArticle(article);
+    await validateRenderedFaq(page.replace(/^---\n[\s\S]*?\n---\n/u, ''));
   }
   return finalizeGeneratedPages(withPending({ ...safePackage, articles, existing, model: response.model,
     pending: sectionPending }), request);

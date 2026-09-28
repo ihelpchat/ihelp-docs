@@ -187,7 +187,7 @@ export function deterministicFaqAnswer(request = {}, screenFacts = []) {
 
 export function faqSubtitle(sections, request = {}, screenFacts = []) {
   const first = sections.oQueE?.[0]?.text ?? '';
-  const sentence = first.match(/^[^.!?]+[.!?]/u)?.[0]?.trim();
+  const sentence = splitClaims(first)[0];
   if (sentence && !sentence.includes('<AConfirmar>') && !sentence.includes('</AConfirmar>')) {
     return replaceModuleTerminology(sentence, faqModuleName(request, screenFacts));
   }
@@ -534,14 +534,54 @@ const faqAllowedHosts = new Set(['app.tango.us', 'apiv3.ihelpchat.com', 'ihelpch
 const freeUnits = (sections) => Object.entries(FREE_FAQ_SECTIONS).flatMap(([key]) => key === 'passos'
   ? (sections?.passos ?? []).flatMap((task) => task?.passos ?? [])
   : sections?.[key] ?? []);
-const splitClaims = (text) => String(text).match(/[^.!?]+[.!?]+|[^.!?]+$/gu)?.map((part) => part.trim()).filter(Boolean) ?? [];
+// Punctuation inside Markdown spans belongs to the span, not to a sentence boundary.
+const markdownSpan = /\*\*[^*\n]+\*\*|\*[^*\n]+\*|__[^_\n]+__|_[^_\n]+_|`[^`\n]+`|!?\[[^\]\n]+\]\([^\s)]+\)/gu;
+export function splitClaims(text) {
+  const source = String(text);
+  const protectedUntil = Array(source.length).fill(false);
+  for (const match of source.matchAll(markdownSpan))
+    for (let index = match.index; index < match.index + match[0].length; index++) protectedUntil[index] = true;
+  const claims = [];
+  let start = 0;
+  for (let index = 0; index < source.length; index++) {
+    if (protectedUntil[index] || !/[.!?]/u.test(source[index])) continue;
+    while (index + 1 < source.length && !protectedUntil[index + 1] && /[.!?]/u.test(source[index + 1])) index++;
+    if (index + 1 < source.length && !/\s/u.test(source[index + 1])) continue;
+    const part = source.slice(start, index + 1).trim();
+    if (part) claims.push(part);
+    start = index + 1;
+  }
+  const last = source.slice(start).trim();
+  if (last) claims.push(last);
+  return claims;
+}
+export function shortFreeFaqTasks(tasks = [], screenFacts = [], menuModule = null) {
+  return tasks.flatMap((task) => {
+    if (!task.passos?.length) return [];
+    const issues = [];
+    const first = task.passos[0].text ?? '';
+    if (menuModule && (!/\b(?:módulo|menu)\b/iu.test(first) || !fold(first).includes(fold(menuModule))))
+      issues.push(`passo a passo sem ponto de partida em ${task.tarefa}`);
+    const matching = screenFacts.filter((fact) => fold(fact.subject ?? '').includes(fold(task.tarefa ?? ''))
+      && ['action', 'field', 'upload', 'destination'].includes(fact.kind));
+    const changesState = /\b(?:cadastr|cri|edit|agend|import|public|ativ|export|salv|exclu)/iu.test(task.tarefa ?? '');
+    if (task.passos.length === 1 && (matching.length > 1 || changesState))
+      issues.push(`passo a passo curto em ${task.tarefa}`);
+    const completion = matching.find((fact) => fact.kind === 'action' && /^(?:salvar|importar|publicar|concluir|confirmar|agendar)$/iu.test(fact.text));
+    if (completion && !task.passos.some((step) => hasLabel(step.text ?? '', completion.text)))
+      issues.push(`passo a passo sem confirmação em ${task.tarefa}`);
+    if (changesState && !completion && task.passos.length > 1)
+      issues.push(`confirmação sem fatos do fluxo em ${task.tarefa}`);
+    return issues;
+  });
+}
 const FAQ_METANARRATION = /\b(?:pedido|material|fonte|confirmad\w*|presumir|supondo|neste texto|aqui n[aã]o)\b/iu;
-const cleanFaqMeta = (text, pending) => String(text).split(/(?<=[.!?])\s+(?=[\p{Lu}“"'])/u).map((part) => part.trim()).filter((phrase) => {
+const cleanFaqMeta = (text, pending) => splitClaims(text).filter((phrase) => {
   if (!FAQ_METANARRATION.test(phrase)) return true;
   pending.push(`metanarração: ${phrase}`);
   return false;
 }).join(' ');
-const trimFaqLabels = (text) => text.replace(/\*\*([^*\n]+)\*\*/gu, (_match, label) => `**${label.trim()}**`);
+export const trimFaqLabels = (text) => text.replace(/\*\*([^*\n]+)\*\*/gu, (_match, label) => `**${label.trim()}**`);
 
 function rigidFaqIssue(text, context, { useCase = false } = {}) {
   if (String(text).includes('→')) return 'caso de uso com seta';
