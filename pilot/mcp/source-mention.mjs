@@ -12,7 +12,8 @@ export function mentionsSource(value) {
   for (const match of text.matchAll(attribution)) {
     const words = text.slice(match.index + match[0].length).split(/[.!?;:,\n]/u, 1)[0]
       .match(/[a-z]+/gu)?.slice(0, 5) ?? [];
-    if (words.some((word) => material.test(word))) return true;
+    if (words.some((word, index) => material.test(word)
+      && !(word === 'referencia' && words[index - 1] === 'de' && words[index - 2] === 'identificador'))) return true;
   }
   return false;
 }

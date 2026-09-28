@@ -11,7 +11,7 @@ export function apiProseFixture(output) {
     const unit = (text) => ({ text, citations: claims.find((claim) => claim.text === text)?.citations ?? [] });
     const { grounding: _grounding, ...rest } = article;
     return { ...rest, description: unit(article.description), intro: unit(article.intro),
-      notas: article.notas.map(unit), parameterDescriptions: article.parameterDescriptions?.map((item) => {
+      notas: article.notas.map((text) => ({ ...unit(text), type: 'Diferenças e cuidados' })), responseHeaders: [], parameterDescriptions: article.parameterDescriptions?.map((item) => {
         const { grounding: fieldGrounding = [], ...field } = item;
         return { ...field, description: { text: item.description,
           citations: fieldGrounding.find((claim) => claim.text === item.description)?.citations ?? [] } };

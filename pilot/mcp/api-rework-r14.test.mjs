@@ -29,8 +29,8 @@ const onlyA = { verb: 'GET', route: '/api/v2/a', public: true, documented: true,
 const onlyB = { verb: 'GET', route: '/api/v2/b', public: true, documented: true, authorization: 'authenticated', parameters: [{ name: 'onlyB', type: 'string', in: 'query' }], responseFields: [] };
 const unit = (text, refs) => ({ text, citations: [], ...(refs ? { refs } : {}) });
 const base = { status: 'ready', summary: [unit('Use onlyA e onlyB nas respectivas consultas.')], questions: [], articles: [
-  { path: 'api/teste/a', endpoint: 'GET /a', title: 'Página A', description: unit('Consulta os registros disponíveis na primeira página desta referência pública.'), intro: unit('Use onlyA para filtrar.'), notas: [unit('Use onlyB para filtrar.')], responseDescriptions: [], parameterDescriptions: [{ name: 'onlyA', description: unit('Filtro da consulta A.') }] },
-  { path: 'api/teste/b', endpoint: 'GET /b', title: 'Página B', description: unit('Consulta os registros disponíveis na segunda página desta referência pública.'), intro: unit('Use onlyB para filtrar.'), notas: [], responseDescriptions: [], parameterDescriptions: [{ name: 'onlyB', description: unit('Filtro da consulta B.') }] },
+  { path: 'api/teste/a', endpoint: 'GET /a', title: 'Página A', description: unit('Consulta os registros disponíveis na primeira página desta referência pública.'), intro: unit('Use onlyA para filtrar.'), notas: [{ ...unit('Use onlyB para filtrar.'), type: 'Como filtrar' }], responseHeaders: [], responseDescriptions: [], parameterDescriptions: [{ name: 'onlyA', description: unit('Filtro da consulta A.') }] },
+  { path: 'api/teste/b', endpoint: 'GET /b', title: 'Página B', description: unit('Consulta os registros disponíveis na segunda página desta referência pública.'), intro: unit('Use onlyB para filtrar.'), notas: [], responseHeaders: [], responseDescriptions: [], parameterDescriptions: [{ name: 'onlyB', description: unit('Filtro da consulta B.') }] },
 ] };
 async function replay(change) {
   const output = structuredClone(base); change?.(output);
@@ -48,10 +48,20 @@ test('refs válido autoriza referência cruzada e renderiza link', async () => {
   assert.equal(result.status, 'ready', result.summary);
   assert.match(result.articles[0].body, /\[Página B\]\(\/api\/teste\/b\)/u);
 });
-test('refs para endpoint sem o nome é recusado', async () => {
+test('refs para endpoint sem o nome são corrigidos quando o destino é único', async () => {
   const result = await replay((output) => { output.articles[0].notas[0].refs = [{ name: 'onlyB', endpoint: 'GET /a' }]; });
-  assert.equal(result.status, 'needs_information');
-  assert.match(result.summary, /referência inválida: onlyB/u);
+  assert.equal(result.status, 'ready', result.summary);
+  assert.match(result.articles[0].body, /\[Página B\]\(\/api\/teste\/b\)/u);
+  assert.deepEqual(result.internalRepairs, [{ name: 'onlyB', from: 'GET /a', endpoint: 'GET /b' }]);
+});
+test('refs cujo nome não aparece na frase nem no campo são omitidos', async () => {
+  const result = await replay((output) => {
+    output.articles[0].notas[0].refs = [{ name: 'onlyB', endpoint: 'GET /b' }];
+    output.articles[0].description.refs = [{ name: 'onlyB', endpoint: 'GET /b' }];
+  });
+  assert.equal(result.status, 'ready', result.summary);
+  assert.doesNotMatch(result.articles[0].description, /Página B/u);
+  assert.ok(result.internalRepairs.some((item) => item.name === 'onlyB' && item.reason === 'nome ausente da unidade'));
 });
 test('summary do pacote mantém escopo global', async () => {
   const result = await replay((output) => { output.articles[0].notas = []; });

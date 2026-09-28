@@ -25,7 +25,7 @@ const summaryText = 'O pacote contém páginas novas da referência de Contatos.
 const base = { status: 'ready', summary: [unit(summaryText, replay.citations.summary)], questions: [], articles: [{
     path: replay.path, endpoint: replay.endpoint, title: replay.title,
     description: unit(replay.description, replay.citations.description), intro: unit(replay.intro, replay.citations.intro),
-    notas: replay.notas.map((text) => unit(text, replay.citations.nota)), responseDescriptions: [
+    notas: replay.notas.map((text) => ({ ...unit(text, replay.citations.nota), type: 'Como filtrar' })), responseHeaders: [], responseDescriptions: [
       { name: 'idRef', description: unit('Identificador de referência do contato.', replay.citations.responseDescription) },
     ],
   }] };
@@ -166,12 +166,15 @@ test('API carrega contexto do módulo, api-publica e geral e sustenta nota sem c
     const prompts = [];
     const value = structuredClone(base);
     const note = 'Uma consulta reúne os contatos para acompanhamento da equipe.';
-    value.articles[0].notas = [{ text: note, citations: [{ source: 'negocio', quote: note }], refs: [] }];
+    value.articles[0].notas = [{ type: 'Diferenças e cuidados', text: note, citations: [], refs: [] }];
     const fixtureContext = structuredClone(context);
     delete fixtureContext.businessContext;
     const result = await generateContentPackage(process.cwd(), request, { productContext: fixtureContext,
       plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
         prompts.push(payload.input[1].content);
+        const businessId = prompts.at(-1).match(/^(N\d+) \[business\] Uma consulta reúne os contatos/mu)?.[1];
+        assert.ok(businessId, 'contexto de negócio deve ter ID no índice');
+        value.articles[0].notas[0].citations = [businessId];
         return { output_text: JSON.stringify(value), model: 'fixture' };
       } } } });
     assert.deepEqual(fixtureContext.businessContext?.map(({ path }) => path).sort(),
@@ -181,8 +184,10 @@ test('API carrega contexto do módulo, api-publica e geral e sustenta nota sem c
     assert.match(prompts[0], /Uma consulta reúne os contatos/u);
     assert.match(prompts[0], /A API pública permite consultar/u);
     assert.match(prompts[0], /O iHelp organiza o atendimento/u);
+    assert.doesNotMatch(prompts[0], /source: "negocio"|source: "pedido"/u);
     assert.match(result.articles[0].body, /Uma consulta reúne os contatos/u);
     assert.doesNotMatch(result.articles[0].body, /business-context|contatos\.md|api-publica\.md|geral\.md/u);
+    assert.ok(result.internalCitations.some((item) => item.ids.some((id) => /^N\d+$/u.test(id))));
   } finally {
     if (previous === undefined) delete process.env.BUSINESS_CONTEXT_DIR;
     else process.env.BUSINESS_CONTEXT_DIR = previous;

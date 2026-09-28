@@ -171,5 +171,7 @@ export function traceCsharpCalls(sources, paths, endpoint) {
     }
   }
   visit(controller, 0);
-  return { methods, pending: [...new Set(pending)], neededTypes: [...neededTypes] };
+  return { action: controller && { method: controller.method, path: controller.path, start: controller.start,
+    end: controller.end, excerpt: controller.excerpt, depth: 0 },
+  methods, pending: [...new Set(pending)], neededTypes: [...neededTypes] };
 }
