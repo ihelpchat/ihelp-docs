@@ -161,6 +161,11 @@ export function adaptScreenFacts(screen = {}) {
 }
 
 export function validateFaqSections(sections, context) {
+  const citedFacts = (cite) => (context.screenFacts ?? []).filter((fact) =>
+    cite.repository === fact.repository && cite.path === fact.path && cite.sha === fact.sha
+      && Number.isInteger(cite.lineStart) && Number.isInteger(cite.lineEnd)
+      && cite.lineStart > 0 && cite.lineEnd >= cite.lineStart && cite.lineEnd - cite.lineStart < 30
+      && cite.lineStart <= fact.lineStart && fact.lineEnd <= cite.lineEnd);
   const kept = {}, pending = [];
   for (const key of Object.keys(FAQ_SECTIONS)) {
     const units = sections?.[key] ?? [];
@@ -194,20 +199,15 @@ export function validateFaqSections(sections, context) {
           || (context.support?.rules ?? []).some((rule) => literal(cite.quote, rule));
         if (cite.source === 'negocio') return BUSINESS_PATH.test(cite.path ?? '')
           && (context.business ?? []).some((item) => item.path === cite.path && literal(cite.quote, item.body));
-        return (context.screenFacts ?? []).some((fact) => cite.repository === fact.repository
-          && cite.path === fact.path && cite.sha === fact.sha && cite.lineStart === fact.lineStart
-          && cite.lineEnd === fact.lineEnd
-          && (key !== 'erros' || ['validation', 'message'].includes(fact.kind))
+        return citedFacts(cite).some((fact) =>
+          (key !== 'erros' || ['validation', 'message'].includes(fact.kind))
           && (!['passos', 'erros'].includes(key) || (fact.text
             && unit.text.toLocaleLowerCase('pt-BR').includes(fact.text.toLocaleLowerCase('pt-BR')))));
       });
       if (!citationsValid) return false;
       const sources = unit.citations.map((cite) => {
         if (cite.source) return cite.quote;
-        const fact = (context.screenFacts ?? []).find((fact) => cite.repository === fact.repository
-          && cite.path === fact.path && cite.sha === fact.sha && cite.lineStart === fact.lineStart
-          && cite.lineEnd === fact.lineEnd);
-        return fact?.claimText ?? fact?.text ?? '';
+        return citedFacts(cite).map((fact) => fact.claimText ?? fact.text ?? '').join(' ');
       });
       const screenLabels = (context.screenFacts ?? []).filter((fact) => fact.text
         && fact.text.length <= 80 && !/[.!?]/u.test(fact.text) && hasLabel(unit.text, fact.text))
@@ -232,4 +232,11 @@ export function renderFaqSections(sections) {
     if (key === 'passos') return [`## ${title}\n\n${units.map((unit, index) => `${index + 1}. ${unit.text.trim()}`).join('\n')}`];
     return [`## ${title}\n\n${units.map((unit) => unit.text.trim()).join('\n\n')}`];
   }).join('\n\n');
+}
+
+export function fixedFaqSupportSection(request, screenFacts = []) {
+  const topic = normalized(request.topic);
+  const screen = screenFacts.find((fact) => fact.kind === 'route' && fact.text)?.text;
+  const location = screen && screen.length <= 80 ? screen : topic;
+  return [{ text: `Se não conseguir concluir em ${location}, fale com o suporte. Informe qual passo tentou e o que apareceu na tela.`, citations: [] }];
 }

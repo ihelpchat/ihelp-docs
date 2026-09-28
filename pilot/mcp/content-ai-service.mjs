@@ -15,7 +15,7 @@ import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 import { guardModelOutput } from './model-output-guard.mjs';
 import { PRODUCT_TERMS } from './product-terms.mjs';
 import { classifyFaqQuestions, hasFaqTaskFacts, loadBusinessContext, selectFaqStyleExamples, adaptScreenFacts,
-  validateFaqSections, renderFaqSections, FAQ_SECTIONS } from './faq-editorial.mjs';
+  validateFaqSections, renderFaqSections, fixedFaqSupportSection, FAQ_SECTIONS } from './faq-editorial.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
 contentMaxOutputTokens();
@@ -520,6 +520,34 @@ function parseModelJson(response) {
   }
 }
 
+function redactPromptEvidence(text, productContext = {}) {
+  const values = new Set();
+  const visit = (item) => {
+    if (!item || typeof item !== 'object') return;
+    if (Array.isArray(item)) { item.forEach(visit); return; }
+    for (const [key, value] of Object.entries(item)) {
+      if (typeof value === 'string') {
+        if (['sha', 'ref'].includes(key) && /^[a-f0-9]{40}$/iu.test(value)) values.add(value);
+        if (key === 'repository' && /^ihelpchat\/(?:front-react|olah-ihelp)$/u.test(value)) values.add(value);
+        if (key === 'path' && /^(?:src|pilot|api|docs)\/[A-Za-z0-9_./-]+$/u.test(value)
+          && !value.split('/').includes('..') && !containsSensitiveData(value)) values.add(value);
+        if (key === 'route' && /^\/[A-Za-z0-9_/-]{7,}$/u.test(value)) values.add(value);
+      } else if (value && typeof value === 'object') visit(value);
+    }
+  };
+  visit(productContext);
+  const protectedValues = [...values].sort((left, right) => right.length - left.length);
+  let safe = String(text);
+  const replacements = protectedValues.map((value, index) => {
+    const marker = `__STRUCTURAL_EVIDENCE_${index}__`;
+    safe = safe.replaceAll(value, marker);
+    return [marker, value];
+  });
+  safe = redactSensitiveData(safe);
+  for (const [marker, value] of replacements) safe = safe.replaceAll(marker, value);
+  return safe;
+}
+
 function requestText(request, existing, productContext, codeHygiene = {}) {
   const explicit = explicitEndpointsFrom(request).length > 0;
   const selectedEndpoints = (productContext.endpoints ?? []).filter((item) => explicit ? item.explicit : item.documented);
@@ -554,7 +582,7 @@ function requestText(request, existing, productContext, codeHygiene = {}) {
     `Regras do suporte:\n${productContext.support?.rules?.map((item) => `- ${item}`).join('\n') ?? '- Nenhuma'}`,
     `Matriz de cobertura:\n${productContext.coverage?.map((item) => `- ${item.module}: ${item.coverage}; rotas=${item.productRoutes.join(', ')}; permissão=${item.permission}`).join('\n') ?? '- Nenhuma correspondência'}`,
     `Catálogo confiável de ProductAction (id, label, route, target):\n${catalogActions().map((action) => JSON.stringify(action)).join('\n')}`,
-  ].filter(Boolean).map(redactSensitiveData).join('\n');
+  ].filter(Boolean).map((part) => redactPromptEvidence(part, productContext)).join('\n');
 }
 
 function pageMatchesEndpoint(page, endpoint) {
@@ -771,7 +799,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       content: [
         'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.',
         request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
-        request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : faqRequested(request) ? 'Gere uma FAQ em docs/ e, se houver fonte suficiente, um tutorial em tutoriais/. A resposta direta deve ter 45 a 180 caracteres e começar com uma ação. Depois, nesta ordem: para que serve ao negócio; 2 ou 3 casos concretos; passo a passo com rótulos exatos da tela; exemplo fictício completo; dúvidas comuns do suporte; erros comuns com mensagens literais da tela; quando falar com o suporte. Use os três modelos só para estilo, nunca como fatos do tema.' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
+        request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : faqRequested(request) ? 'Gere uma FAQ em docs/ e, se houver fonte suficiente, um tutorial em tutoriais/. A resposta direta deve ter 45 a 180 caracteres e começar com uma ação. Depois, nesta ordem: para que serve ao negócio; 2 ou 3 casos concretos; passo a passo com rótulos exatos da tela; exemplo fictício completo; dúvidas comuns do suporte; erros comuns com mensagens literais da tela. Deixe suporte vazio: essa seção vem de um modelo fixo. Use os três modelos só para estilo, nunca como fatos do tema.' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
         request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations,refs}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations,refs}, também com uma frase por text (ponto e vírgula permitido). Use refs: [] quando não houver referência cruzada. Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros, como cabeçalhos e diferenças entre endpoints.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
@@ -781,7 +809,7 @@ async function generateContentPackageCore(root, request, options = {}) {
         request.module === 'api' ? 'Cite cada unidade de summary, description, intro, notas e descrições de campo nas citations da própria unidade. source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. Use os números reais mostrados ao lado do código e cite a faixa mais curta que contém o comportamento, com no máximo 30 linhas. O JSON interno de formato não é fonte. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : faqRequested(request) ? 'Cite cada unidade nas citations. pedido, pagina, suporte e negocio exigem quote literal de ao menos 12 caracteres. negocio exige path business-context/*.md curado. Fatos da tela exigem repository, path, lineStart, lineEnd e sha exatos do contexto. Rótulos de passos, campos obrigatórios, formatos e mensagens precisam de fatos da tela; required=true permite dizer obrigatório, required=false permite dizer opcional, required=unknown não permite afirmar nenhum dos dois. Suporte só prova a dúvida, não a resposta. Seção sem fonte fica vazia.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].filter(Boolean).join(' '),
     },
-    { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`) },
+    { role: 'user', content: redactPromptEvidence(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`, productContext) },
     ...(options.retryIssues ? [retryPrompt(options.retryIssues)] : []),
     ...(options.faqRetryIssues ? [retryPrompt(options.faqRetryIssues)] : []),
   ], options);
@@ -965,15 +993,17 @@ async function generateContentPackageCore(root, request, options = {}) {
   const sectionPending = [];
   const articles = [];
   for (const prose of parsed.articles) {
-    const result = validateFaqSections(prose.sections, faqContext);
-    sectionPending.push(...result.pending.map((item) => `${prose.path}: ${item}`));
+    const result = validateFaqSections({ ...prose.sections, suporte: [] }, faqContext);
+    sectionPending.push(...result.pending.filter((item) => !item.includes(FAQ_SECTIONS.suporte))
+      .map((item) => `${prose.path}: ${item}`));
     const uncovered = result.pending.filter((item) => item.startsWith('palavra sem fonte:') || item.startsWith('metanarração'));
     if (uncovered.length && !options.faqRetryIssues) return generateContentPackage(root, request, {
       ...options, productContext, plan, faqRetryIssues: uncovered.map((item) => `${prose.path}: ${item}`),
     });
     if (result.blocking.length) return withPending(apiPending(`${prose.path}: faltam fontes para resposta direta ou passo principal${uncovered.length ? `; ${uncovered.join('; ')}` : ''}`));
     const { sections: _sections, ...article } = prose;
-    article.body = renderFaqSections(result.sections);
+    article.body = renderFaqSections({ ...result.sections,
+      suporte: fixedFaqSupportSection(request, faqContext.screenFacts) });
     article.description = article.body.split('\n')[0].slice(0, 240);
     article.assistantOverview = result.sections.resposta.map((unit) => unit.text).join(' ');
     article.assistantInitialSteps = Math.min(3, result.sections.passos.length);
@@ -1048,7 +1078,7 @@ export async function generateCanonicalGuide(root, request, options = {}) {
       'Use somente dados fictícios como Ana Exemplo e Loja Exemplo. Nunca copie nomes de pessoas das respostas no draft.',
       'Cite cada frase de description, body, assistantOverview, assistantSuggestions e cada step.text no grounding do artigo com texto e citação exatos.',
     ].join(' ') },
-    { role: 'user', content: redactSensitiveData(`${requestText(request, existing ? [existing] : [], productContext)}\nGuideId: ${request.guideId}\nPlano aprovado: ${JSON.stringify(options.plan)}\nGuia anterior: ${JSON.stringify(existing ?? null)}`) },
+    { role: 'user', content: redactPromptEvidence(`${requestText(request, existing ? [existing] : [], productContext)}\nGuideId: ${request.guideId}\nPlano aprovado: ${JSON.stringify(options.plan)}\nGuia anterior: ${JSON.stringify(existing ?? null)}`, productContext) },
   ], options), productContext, { request, existing: existing ? [existing] : [] });
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return apiPending(modelJson.reason);
