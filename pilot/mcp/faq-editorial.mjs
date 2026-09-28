@@ -48,12 +48,10 @@ const FAQ_NAVIGATION_VERBS = [
   'abrir', 'clicar', 'tocar', 'selecionar', 'escolher', 'digitar', 'preencher',
   'conferir', 'ver', 'voltar', 'localizar', 'acompanhar', 'aguardar',
 ];
-const FAQ_DESTRUCTIVE_VERBS = [
-  'apagar', 'excluir', 'remover', 'deletar', 'limpar', 'desativar',
-  'desconectar', 'cancelar', 'bloquear', 'resetar', 'zerar',
-];
 const FAQ_ACTION_VERBS = [...new Set([
-  ...FAQ_NAVIGATION_VERBS, ...FAQ_DESTRUCTIVE_VERBS,
+  ...FAQ_NAVIGATION_VERBS,
+  'apagar', 'excluir', 'remover', 'deletar', 'destruir', 'limpar', 'desativar',
+  'desconectar', 'cancelar', 'bloquear', 'resetar', 'zerar',
   'criar', 'adicionar', 'salvar', 'enviar', 'ativar', 'editar', 'importar',
   'exportar', 'publicar', 'agendar', 'configurar', 'cadastrar', 'vincular',
   'transferir', 'finalizar',
@@ -69,24 +67,7 @@ const FAQ_VERB_FORMS = new Map(FAQ_ACTION_VERBS.map((verb) => [verb, new Set([
 ])]));
 const actionVerbs = (text) => [...new Set(words(text).flatMap((word) =>
   [...FAQ_VERB_FORMS].filter(([, forms]) => forms.has(word)).map(([verb]) => verb)))];
-const sameDestructiveAction = (a, b) => a === b
-  || (['excluir', 'remover', 'deletar'].includes(a) && ['excluir', 'remover', 'deletar'].includes(b));
-const unsupportedFaqAction = (text, citedFacts) => {
-  const citedText = citedFacts.map((fact) => `${fact.text ?? ''} ${fact.message ?? ''}`);
-  const destructiveLabels = citedFacts.filter((fact) => fact.kind === 'action').map((fact) => fact.text ?? '');
-  const destructive = actionVerbs(text).filter((verb) => FAQ_DESTRUCTIVE_VERBS.includes(verb));
-  if (destructive.some((verb) => !destructiveLabels.some((label) =>
-    actionVerbs(label).some((labelVerb) => sameDestructiveAction(verb, labelVerb)))))
-    return 'ação destrutiva sem fato de tela';
-  if (destructive.length && /\b(?:todos|todas|tudo)\b/u.test(fold(text))
-    && !destructiveLabels.some((label) => /\b(?:todos|todas|tudo)\b/u.test(fold(label))
-      && actionVerbs(label).some((labelVerb) => destructive.some((verb) => sameDestructiveAction(verb, labelVerb)))))
-    return 'ação destrutiva sem fato de tela';
-  const unsupported = actionVerbs(text).find((verb) => !FAQ_NAVIGATION_VERBS.includes(verb)
-    && !FAQ_DESTRUCTIVE_VERBS.includes(verb)
-    && !citedText.some((source) => actionVerbs(source).includes(verb)));
-  return unsupported ? `ação sem fato de tela: ${unsupported}` : null;
-};
+const FAQ_PROCEDURAL_IMPERATIVE = /\b(?:abra|clique|toque|preencha|digite|escolha|selecione|confira|apague|exclua|destrua|remova|delete|limpe|desative|desconecte|cancele|bloqueie|resete|zere|crie|adicione|salve|envie|ative|edite|importe|exporte|publique|agende|configure|cadastre|vincule|transfira|finalize)\b/iu;
 const neutral = new Set([...FAQ_NEUTRAL_WORDS, ...FAQ_NEUTRAL_VERBS.flatMap(verbForms),
   ...derivedStems.keys(),
   'quero', 'quer', 'querem', 'queria', 'queriam', 'quis', 'quiser', 'quisesse',
@@ -166,26 +147,6 @@ export function deterministicFaqAnswer(request = {}, screenFacts = []) {
     ...supported.map((item) => item.citation)].filter(Boolean);
   return { text: `Na tela **${screen}**, você pode ${list}.`,
     citations: [...new Map(citations.map((cite) => [JSON.stringify(cite), cite])).values()] };
-}
-
-const exactMarkedLabel = (text, label) => ['**', '"', '“', '‘'].some((open) => {
-  const close = open === '“' ? '”' : open === '‘' ? '’' : open;
-  return text.includes(`${open}${label}${close}`);
-});
-const labelFact = (fact) => fact.text && fact.text.length <= 80
-  && (fact.text.length >= 3 || fact.text === '+') && !/[.!?]$/u.test(fact.text.replace(/\.\.\.$/u, ''));
-
-export function markFaqStepLabels(unit, screenFacts = []) {
-  const cited = screenFacts.filter((fact) => labelFact(fact) && fact.repository && unit.citations?.some((cite) =>
-    !cite.source && cite.repository === fact.repository && cite.path === fact.path && cite.sha === fact.sha
-      && cite.lineStart <= fact.lineStart && fact.lineEnd <= cite.lineEnd));
-  let text = unit.text;
-  for (const fact of cited.sort((a, b) => b.text.length - a.text.length)) {
-    if (exactMarkedLabel(text, fact.text)) continue;
-    const index = text.indexOf(fact.text);
-    if (index !== -1) text = `${text.slice(0, index)}**${fact.text}**${text.slice(index + fact.text.length)}`;
-  }
-  return { ...unit, text };
 }
 
 export const hasFaqTaskFacts = (screenFacts) => Array.isArray(screenFacts) && screenFacts.some((fact) =>
@@ -299,6 +260,77 @@ export function adaptScreenFacts(screen = {}) {
   });
 }
 
+export const indexedFaqFacts = (screenFacts = []) => screenFacts.map((fact, index) =>
+  ({ ...fact, id: `f${index + 1}` }));
+
+const FAQ_FACT_ACTIONS = {
+  abrir: new Set(['route', 'destination']), clicar: new Set(['action']),
+  preencher: new Set(['field', 'upload']), selecionar: new Set(['field', 'column']),
+  conferir: new Set(['text', 'state', 'column', 'message', 'validation']),
+};
+const factCitation = ({ repository, path, lineStart, lineEnd, sha }) =>
+  ({ repository, path, lineStart, lineEnd, sha });
+const safeLabel = (value) => normalized(value).replace(/&/gu, '&amp;')
+  .replace(/</gu, '&lt;').replace(/>/gu, '&gt;').replace(/([\\*\[\]])/gu, '\\$1');
+const sentence = (value) => `${value.replace(/[.!?]+$/u, '')}.`;
+
+function structuredFaqStep(step, facts, context, pending, { correction = false } = {}) {
+  if (!step || typeof step !== 'object' || Array.isArray(step)
+    || Object.keys(step).some((key) => !['acao', 'fato', 'resultado', 'observacao'].includes(key))
+    || !FAQ_FACT_ACTIONS[step.acao]?.has(facts.find((fact) => fact.id === step.fato)?.kind)) return null;
+  const fact = facts.find((item) => item.id === step.fato);
+  if (!fact?.text || !fact.repository || !fact.path || !fact.sha || !Number.isInteger(fact.lineStart)) return null;
+  const result = step.resultado == null ? null : facts.find((item) => item.id === step.resultado);
+  if (step.resultado != null && (!result || !['message', 'validation'].includes(result.kind)
+    || !result.text || !result.repository || !result.path || !result.sha)) return null;
+  const label = safeLabel(fact.text);
+  if (!label || label.length > 80) return null;
+  const verb = { abrir: 'Abra', clicar: 'Clique em', preencher: 'Preencha',
+    selecionar: 'Escolha', conferir: 'Confira' }[step.acao];
+  let body = `${verb} **${label}**`;
+  const citations = [factCitation(fact)];
+  if (step.acao === 'preencher' && fact.required === true) {
+    body += ' (obrigatório)';
+    const source = /^(src\/[^:\n]+\.(?:tsx?|jsx?)):(\d+)$/u.exec(fact.validationSource ?? '');
+    const presence = source && facts.find((item) => item.kind === 'field' && item.text === fact.text
+      && item.claimText?.includes('obrigatório') && item.path === source[1]
+      && item.lineStart === Number(source[2]));
+    if (fact.validationSource && !presence) return null;
+    if (presence) citations.push(factCitation(presence));
+  }
+  body = sentence(body);
+  if (result) { body += ` A tela mostra **${safeLabel(result.text)}**.`; citations.push(factCitation(result)); }
+  if (step.observacao != null) {
+    const observation = step.observacao;
+    if (!observation || typeof observation !== 'object' || Array.isArray(observation)
+      || Object.keys(observation).some((key) => !['text', 'citations'].includes(key))
+      || typeof observation.text !== 'string' || !normalized(observation.text)
+      || observation.text.length > 160 || !Array.isArray(observation.citations) || !observation.citations.length
+      || actionVerbs(observation.text).length) return null;
+    const checked = validateFaqSections({ suporte: [observation] }, context);
+    if (!checked.sections.suporte?.length) {
+      pending.push(...checked.pending.filter((item) => item.startsWith('palavra sem fonte:')));
+      return null;
+    }
+    body += ` ${observation.text.trim()}`;
+    citations.push(...observation.citations);
+  }
+  return { text: correction ? body[0].toLocaleLowerCase('pt-BR') + body.slice(1) : body, citations };
+}
+
+function structuredFaqError(error, facts, context, pending) {
+  if (!error || typeof error !== 'object' || Array.isArray(error)
+    || Object.keys(error).some((key) => !['mensagem', 'corrigir'].includes(key))) return null;
+  const fact = facts.find((item) => item.id === error.mensagem);
+  if (!fact || !['validation', 'message'].includes(fact.kind) || !fact.text
+    || !fact.repository || !fact.path || !fact.sha) return null;
+  const correction = error.corrigir == null ? null
+    : structuredFaqStep(error.corrigir, facts, context, pending, { correction: true });
+  if (error.corrigir != null && !correction) return null;
+  return { text: `Se aparecer **${safeLabel(fact.text)}**, ${correction?.text ?? 'confira a mensagem na tela.'}`,
+    citations: [factCitation(fact), ...(correction?.citations ?? [])] };
+}
+
 export function validateFaqSections(sections, context) {
   const citedFacts = (cite) => (context.screenFacts ?? []).filter((fact) =>
     cite.repository === fact.repository && cite.path === fact.path && cite.sha === fact.sha
@@ -306,11 +338,21 @@ export function validateFaqSections(sections, context) {
       && cite.lineStart > 0 && cite.lineEnd >= cite.lineStart && cite.lineEnd - cite.lineStart < 30
       && cite.lineStart <= fact.lineStart && fact.lineEnd <= cite.lineEnd);
   const kept = {}, pending = [];
+  const indexedFacts = indexedFaqFacts(context.screenFacts ?? []);
   for (const key of Object.keys(FAQ_SECTIONS)) {
     const units = sections?.[key] ?? [];
     if (!Array.isArray(units) || !units.length) { pending.push(`seção sem fonte: ${FAQ_SECTIONS[key]}`); continue; }
+    if (key === 'passos' || key === 'erros') {
+      const valid = units.map((unit) => key === 'passos'
+        ? structuredFaqStep(unit, indexedFacts, context, pending)
+        : structuredFaqError(unit, indexedFacts, context, pending)).filter(Boolean);
+      if (valid.length) kept[key] = valid;
+      if (valid.length !== units.length || !valid.length) pending.push(`seção sem fonte válida: ${FAQ_SECTIONS[key]}`);
+      continue;
+    }
     const valid = units.filter((unit) => {
       if (!unit || typeof unit.text !== 'string' || !normalized(unit.text)) return false;
+      if (key !== 'resposta' && FAQ_PROCEDURAL_IMPERATIVE.test(unit.text)) return false;
       if (/\b(?:pedido|sinal agregado|fonte|nao esta descrito|nao estao descritos)\b/u.test(fold(unit.text))) {
         pending.push(`metanarração em ${unit.text}`);
         return false;
@@ -327,7 +369,6 @@ export function validateFaqSections(sections, context) {
           || (fact.required !== false && /\bopciona(?:l|is)\b/iu.test(unit.text))))) return false;
       const citationsValid = unit.citations.every((cite) => {
         if (key === 'duvidas' && cite.source !== 'suporte') return false;
-        if ((key === 'passos' || key === 'erros') && cite.source) return false;
         if (cite.source === 'pedido') return literal(cite.quote, `${context.request?.description ?? ''}\n${context.request?.details ?? ''}`);
         if (cite.source === 'pagina') {
           const page = context.existing?.find((item) => item.path === cite.path);
@@ -338,21 +379,9 @@ export function validateFaqSections(sections, context) {
           || (context.support?.rules ?? []).some((rule) => literal(cite.quote, rule));
         if (cite.source === 'negocio') return BUSINESS_PATH.test(cite.path ?? '')
           && (context.business ?? []).some((item) => item.path === cite.path && literal(cite.quote, item.body));
-        return citedFacts(cite).some((fact) =>
-          (key !== 'erros' || ['validation', 'message'].includes(fact.kind))
-          && (!['passos', 'erros'].includes(key) || (fact.text
-            && unit.text.toLocaleLowerCase('pt-BR').includes(fact.text.toLocaleLowerCase('pt-BR')))));
+        return citedFacts(cite).length > 0;
       });
       if (!citationsValid) return false;
-      const citedStepFacts = unit.citations.flatMap(citedFacts);
-      if (key === 'passos' || key === 'erros') {
-        const actionIssue = unsupportedFaqAction(unit.text, citedStepFacts);
-        if (actionIssue) { pending.push(actionIssue); return false; }
-      }
-      if (key === 'passos' && !citedStepFacts.some((fact) => labelFact(fact) && exactMarkedLabel(unit.text, fact.text))) return false;
-      if (key === 'passos' && /\b(?:obrigatóri[oa]s?|opciona(?:l|is))\b/iu.test(unit.text)
-        && !citedStepFacts.some((fact) => fact.claimText
-          && (/\bobrigatóri[oa]s?\b/iu.test(unit.text) ? /\bobrigatóri[oa]s?\b/iu : /\bopciona(?:l|is)\b/iu).test(fact.claimText))) return false;
       const sources = unit.citations.map((cite) => {
         if (cite.source) return cite.quote;
         return citedFacts(cite).map((fact) => fact.claimText ?? fact.text ?? '').join(' ');
@@ -362,7 +391,7 @@ export function validateFaqSections(sections, context) {
         .map((fact) => fact.text);
       const uncovered = supportedClaim(unit.text, [...sources, ...screenLabels],
         { example: key === 'exemplo', request: context.request,
-          lexical: key !== 'passos' && key !== 'erros' && !(key === 'resposta'
+          lexical: !(key === 'resposta'
             && unit.text === deterministicFaqAnswer(context.request, context.screenFacts)?.text) });
       if (!uncovered.length) return true;
       pending.push(`palavra sem fonte: ${uncovered.join(', ')} em ${unit.text}`);

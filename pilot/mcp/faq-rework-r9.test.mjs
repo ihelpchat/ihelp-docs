@@ -12,8 +12,9 @@ const { validateFaqSections } = faq;
 const unit = (text, citations) => ({ text, citations });
 const check = (key, text, cite = citation) => validateFaqSections({ [key]: [{ text, citations: [cite] }] }, context);
 
-test('passo aceita vocabulário de interface com rótulo exato destacado e fato citado', () => {
-  assert.equal(check('passos', 'Na tela, clique em **Adicionar Contato**; o campo aparece no perfil.').sections.passos?.length, 1);
+test('passo usa o rótulo do fato e recusa prosa livre', () => {
+  assert.equal(validateFaqSections({ passos: [{ acao: 'clicar', fato: 'f1' }] }, context).sections.passos?.[0].text,
+    'Clique em **Adicionar Contato**.');
   assert.equal(check('passos', 'Na tela, clique em Adicionar Contato.').sections.passos, undefined);
   assert.equal(check('passos', 'Clique em **Excluir tudo**.').sections.passos, undefined);
   assert.equal(check('passos', 'Clique em **Adicionar Contato** e suas vendas dobram em 30 dias.').sections.passos, undefined);
@@ -51,16 +52,17 @@ test('resposta direta é construída dos fatos e tarefas sem prosa do modelo', (
   assert.match(robot.text, /você pode criar\./u);
 });
 
-test('rótulo exato sem destaque é destacado antes da validação', () => {
-  const marked = faq.markFaqStepLabels(unit('Clique em Adicionar Contato.', [citation]), [fact]);
-  assert.equal(marked.text, 'Clique em **Adicionar Contato**.');
-  assert.equal(validateFaqSections({ passos: [marked] }, context).sections.passos?.length, 1);
+test('rótulo exato é destacado pelo renderizador', () => {
+  const rendered = validateFaqSections({ passos: [{ acao: 'clicar', fato: 'f1' }] }, context);
+  assert.equal(rendered.sections.passos?.[0].text, 'Clique em **Adicionar Contato**.');
 });
 
-test('unidade de passo do Robô com duas frases usa regra ancorada', () => {
+test('unidade de passo do Robô não aceita segunda frase livre', () => {
   const robot = { ...fact, text: 'Criar novo robô' };
   const result = validateFaqSections({ passos: [unit('Para criar, clique em **Criar novo robô**. Esse comando inicia a criação de um robô.', [citation])] },
     { screenFacts: [robot], request: { topic: 'Robô de atendimento', description: 'Criar um robô.' } });
-  assert.equal(result.sections.passos?.length, 1, result.pending.join('; '));
-  assert.ok(!result.pending.some((item) => item.startsWith('palavra sem fonte:')));
+  assert.equal(result.sections.passos, undefined);
+  const structured = validateFaqSections({ passos: [{ acao: 'clicar', fato: 'f1' }] },
+    { screenFacts: [robot] });
+  assert.equal(structured.sections.passos?.[0].text, 'Clique em **Criar novo robô**.');
 });

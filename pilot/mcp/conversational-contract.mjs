@@ -30,7 +30,8 @@ export function conversationalIssues(article) {
   const steps = numbered.length ? numbered : prose;
   if (Number.isInteger(count) && count >= 1 && count <= 3) {
     const initial = steps.slice(0, count);
-    if (initial.length < count || initial.some((step) => step.length < 20 || !ACTION.test(step)) || new Set(initial.map(normalized)).size !== initial.length) issues.push('assistantInitialSteps exige passos iniciais concretos, suficientes e sem duplicação no body');
+    const minLength = article.contentType === 'faq' ? 12 : 20;
+    if (initial.length < count || initial.some((step) => step.length < minLength || !ACTION.test(step)) || new Set(initial.map(normalized)).size !== initial.length) issues.push('assistantInitialSteps exige passos iniciais concretos, suficientes e sem duplicação no body');
   }
   const suggestions = article.assistantSuggestions;
   if (!Array.isArray(suggestions) || suggestions.length < 1 || suggestions.length > 3 || suggestions.some((item) => typeof item !== 'string' || item.trim().length < 15 || item.trim().length > 100 || !(/\?$/.test(item.trim()) || ACTION.test(item))) || new Set((Array.isArray(suggestions) ? suggestions : []).filter((item) => typeof item === 'string').map(normalized)).size !== suggestions?.length) issues.push('assistantSuggestions precisa ter de 1 a 3 sugestões distintas e acionáveis');

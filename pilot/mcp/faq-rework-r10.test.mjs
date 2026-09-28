@@ -9,9 +9,9 @@ const fact = (text, line, kind = 'action') => ({ kind, text, repository: 'ihelpc
 const cite = (line) => ({ repository: 'ihelpchat/front-react', path: 'src/Fixture.tsx',
   lineStart: line, lineEnd: line, sha });
 const unit = (text, line) => ({ text, citations: [cite(line)] });
-const createStep = unit('Clique em Criar novo robô; na tela, confira Criar novo robô antes de continuar; volte ao botão Criar novo robô se precisar começar a tarefa outra vez.', 2);
-const createStep2 = unit('Confira **Criar novo robô** antes de seguir; procure esse mesmo rótulo na tela e clique nele para abrir a próxima etapa.', 2);
-const createStep3 = unit('Volte à tela anterior e escolha **Criar novo robô** para recomeçar; confira o nome do botão antes de continuar.', 2);
+const createStep = { acao: 'clicar', fato: 'f2' };
+const createStep2 = { acao: 'clicar', fato: 'f2' };
+const createStep3 = { acao: 'clicar', fato: 'f2' };
 const sections = (passos = [], erros = []) => ({ resposta: [], paraQueServe: [], quandoUsar: [],
   passos, exemplo: [], duvidas: [], erros, suporte: [] });
 const request = { topic: 'Robô de atendimento', module: 'Robôs',
@@ -42,8 +42,8 @@ const run = async (replies) => {
 
 test('replay do Robô conserva passos citados do tutorial no único FAQ pedido', async () => {
   const raw = packageOf([article('docs/robo', 'faq', []), article('tutoriais/robo', 'tutorial', [
-    createStep, unit('Digite em Digite o título do robô.', 3),
-    unit('Clique em Salvar.', 4), unit('Clique em Publicar.', 5),
+    createStep, { acao: 'preencher', fato: 'f3' },
+    { acao: 'clicar', fato: 'f4' }, { acao: 'clicar', fato: 'f5' },
   ])]);
   const { result, prompts } = await run([raw]);
   assert.equal(result.status, 'ready', JSON.stringify(result));
@@ -68,11 +68,11 @@ test('tarefa com fatos e sem passo entra no retry uma vez e depois vira pendênc
 test('erro aceita a mensagem exata citada e recusa mensagem inventada', () => {
   const error = fact('O nome é obrigatório', 8, 'validation');
   const ctx = { screenFacts: [...facts, error] };
-  const good = validateFaqSections({ erros: [unit('**O nome é obrigatório**.', 8)] }, ctx);
+  const good = validateFaqSections({ erros: [{ mensagem: 'f8' }] }, ctx);
   assert.equal(good.sections.erros?.length, 1);
-  const helpful = validateFaqSections({ erros: [unit('No cadastro, a tela mostra **O nome é obrigatório** quando apresenta a validação do nome.', 8)] }, ctx);
+  const helpful = validateFaqSections({ erros: [{ mensagem: 'f8', corrigir: { acao: 'preencher', fato: 'f3' } }] }, ctx);
   assert.equal(helpful.sections.erros?.length, 1);
-  const bad = validateFaqSections({ erros: [unit('**O telefone é obrigatório**.', 8)] }, ctx);
+  const bad = validateFaqSections({ erros: [{ mensagem: 'f99' }] }, ctx);
   assert.equal(bad.sections.erros, undefined);
 });
 
@@ -97,9 +97,8 @@ test('Agenda cobra busca, importação e agendamento quando há fatos dessas tar
 });
 
 test('pergunta canônica inválida recebe padrão determinístico', async () => {
-  const steps = [createStep, unit('Clique em **Editar robô** e confira a tela antes de continuar.', 6),
-    unit('Abra **Fluxo** e confira a opção antes de continuar.', 7),
-    unit('Clique em **Publicar** e confira a tela antes de continuar.', 5)];
+  const steps = [createStep, { acao: 'clicar', fato: 'f6' },
+    { acao: 'clicar', fato: 'f7' }, { acao: 'clicar', fato: 'f5' }];
   const invalid = packageOf([article('docs/robo', 'faq', steps)]);
   invalid.articles[0].assistantQuestion = '';
   const { result, calls } = await run([invalid]);
@@ -109,9 +108,8 @@ test('pergunta canônica inválida recebe padrão determinístico', async () => 
 });
 
 test('validateArticle entra na tentativa única para erro editorial não corrigível localmente', async () => {
-  const steps = [createStep, unit('Clique em **Editar robô** e confira a tela antes de continuar.', 6),
-    unit('Abra **Fluxo** e confira a opção antes de continuar.', 7),
-    unit('Clique em **Publicar** e confira a tela antes de continuar.', 5)];
+  const steps = [createStep, { acao: 'clicar', fato: 'f6' },
+    { acao: 'clicar', fato: 'f7' }, { acao: 'clicar', fato: 'f5' }];
   const bad = packageOf([article('docs/robo', 'faq', steps)]);
   bad.articles[0].title = 'X';
   const good = packageOf([article('docs/robo', 'faq', steps)]);

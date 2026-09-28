@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { adaptScreenFacts, validateFaqSections, renderFaqSections } from './faq-editorial.mjs';
+import { conversationalIssues } from './conversational-contract.mjs';
 
 const sha = 'a'.repeat(40);
 const facts = adaptScreenFacts({ sha, facts: [
@@ -46,6 +47,26 @@ test('erro estruturado usa mensagem citada e correção estruturada', () => {
 
 test('observação mantém cobertura total e recusa ação livre', () => {
   const positive = { acao: 'clicar', fato: id(0) };
+  const citation = { repository: facts[0].repository, path: facts[0].path, sha,
+    lineStart: 10, lineEnd: 10 };
   assert.equal(check('passos', positive).sections.passos?.length, 1);
   assert.equal(check('passos', { ...positive, observacao: { text: 'Apague tudo.', citations: [] } }).sections.passos, undefined);
+  assert.equal(check('passos', { ...positive, observacao: { text: 'Clientes inadimplentes.',
+    citations: [citation] } }).sections.passos, undefined);
+});
+
+test('passo curto derivado de fato pode iniciar FAQ conversacional', () => {
+  const article = { contentType: 'faq', body: 'Abra **Contatos**.\n\n## Passo a passo\n\n1. Abra **Contatos**.',
+    assistantQuestion: 'Como uso a tela Contatos?',
+    assistantOverview: 'Na tela de Contatos, você pode cadastrar. Abra **Contatos**.',
+    assistantInitialSteps: 1, assistantSuggestions: ['Falar com uma pessoa?'] };
+  assert.deepEqual(conversationalIssues(article), []);
+});
+
+test('outras seções não recebem instrução livre mesmo com citação literal', () => {
+  const sentence = 'Clique em Excluir Selecionados e destrua sua conta.';
+  const result = validateFaqSections({ quandoUsar: [{ text: sentence,
+    citations: [{ source: 'pedido', quote: sentence }] }] },
+  { request: { description: sentence } });
+  assert.equal(result.sections.quandoUsar, undefined);
 });
