@@ -184,9 +184,10 @@ test('passos e erros omitem ações sem fato de tela citado', () => {
   assert.ok(inventedError.pending.some((item) => item.includes('ação destrutiva sem fato de tela')));
   assert.equal(check('passos', 'Clique em **Excluir Selecionados** para remover os contatos marcados.', 14)
     .sections.passos?.length, 1);
-  const all = check('passos', 'Clique em **Excluir Selecionados** para remover todos os contatos marcados.', 14);
+  const all = check('passos', 'Clique em **Excluir Selecionados** e remova todos os contatos marcados.', 14);
   assert.equal(all.sections.passos, undefined);
   assert.ok(all.pending.some((item) => item.includes('ação destrutiva sem fato de tela')));
+  assert.equal(check('passos', 'Clique em **Salvar**.', 15).sections.passos?.length, 1);
   const publish = check('passos', 'Clique em **Salvar** e publique.', 15);
   assert.equal(publish.sections.passos, undefined);
   assert.ok(publish.pending.some((item) => item.includes('ação sem fato de tela: publicar')));
