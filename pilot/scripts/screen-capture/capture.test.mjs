@@ -11,8 +11,8 @@ import { attachScreenshotsToArticle, screenshotForStep } from '../../mcp/screen-
 const appSha = 'a'.repeat(40);
 const coverage = [{ module: 'Contatos', productRoutes: ['/contact'] }];
 const screenFacts = [
-  { kind: 'action', text: 'Adicionar contato', owner: 'ContactPage', sha: appSha },
-  { kind: 'action', text: 'Salvar contato', owner: 'ContactPage', sha: appSha },
+  { kind: 'action', text: 'Adicionar contato', owner: 'fixture', sha: appSha },
+  { kind: 'action', text: 'Salvar contato', owner: 'fixture', sha: appSha },
 ];
 const steps = [
   { id: 'abrir', role: 'button', label: 'Adicionar contato', route: '/contact', action: 'click' },
