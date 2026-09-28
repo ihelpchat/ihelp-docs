@@ -1,18 +1,23 @@
 // Reuse the same synthetic values that M5.56 checks in API request examples.
-export function valueFor(parameter) {
+export function valueFor(parameter, { typed = false } = {}) {
   const name = String(parameter.name ?? '');
   const type = String(parameter.type ?? 'string').replace(/\?$/u, '');
-  const list = /^(?:List|IEnumerable)\s*<\s*(.+)\s*>$|^(.+)\[\]$/iu.exec(type);
+  const list = /^(?:List|IEnumerable|ICollection|IList)\s*<\s*(.+)\s*>$|^(.+)\[\]$/iu.exec(type);
   if (list) {
     const scalar = (list[1] ?? list[2]).trim();
     if (Object.hasOwn(parameter, 'default') && Array.isArray(parameter.default) && parameter.default.length)
-      return parameter.default.map(String);
-    return /^(?:int|long|double|decimal|float|short|number)$/iu.test(scalar) ? ['1', '2'] : ['exemplo'];
+      return parameter.default.map((item) => valueFor({ ...parameter, type: scalar, default: item }, { typed }));
+    if (/^(?:int|long|double|decimal|float|short|number)$/iu.test(scalar))
+      return [1, 2].map((item) => valueFor({ ...parameter, type: scalar, default: item }, { typed }));
+    return [valueFor({ ...parameter, type: scalar }, { typed })];
   }
   if (Object.hasOwn(parameter, 'default') && parameter.default !== '' && parameter.default !== null)
-    return String(parameter.default);
-  if (/^(?:int|long|double|decimal|float|short|number)$/iu.test(type)) return '1';
-  if (/^bool(?:ean)?$/iu.test(type)) return 'false';
+    return typed && /^(?:int|long|double|decimal|float|short|number)$/iu.test(type) ? Number(parameter.default)
+      : typed && /^bool(?:ean)?$/iu.test(type) ? parameter.default === true || parameter.default === 'true'
+        : String(parameter.default);
+  if (/^(?:int|long|double|decimal|float|short|number)$/iu.test(type)) return typed ? 1 : '1';
+  if (/^bool(?:ean)?$/iu.test(type)) return typed ? false : 'false';
+  if (typed && !/^(?:string|Guid|DateTime(?:Offset)?)$/iu.test(type)) return {};
   if (/(?:^|_)(?:idref)(?:$|_)/iu.test(name) || /idref$/iu.test(name)) return 'id-exemplo-1';
   if (/(?:^|_)(?:id|uuid|contactid)(?:$|_)/iu.test(name) || /id$/iu.test(name)) return 'id-exemplo-1';
   if (/(?:phone|telefone|celular|whatsapp|numero|número)/iu.test(name)) return '5500000000000';
@@ -29,11 +34,7 @@ export function syntheticResponseExample(endpoint) {
   const fields = {};
   for (const field of endpoint.responseFields) {
     const type = String(field.type ?? 'string').replace(/\?$/u, '');
-    const list = type.endsWith('[]');
-    const scalarType = list ? type.slice(0, -2) : type;
-    const raw = valueFor({ ...field, type: scalarType });
-    const value = /^(?:int|long|double|decimal|float|short|number)$/iu.test(scalarType) ? Number(raw)
-      : /^bool(?:ean)?$/iu.test(scalarType) ? raw === 'true' : raw;
+    const value = valueFor(field, { typed: true });
     const path = String(field.path ?? field.name).replace(/^dados(?:\[\])?\./u, '').replace(/^\[\]\./u, '').split('.');
     let target = fields;
     for (const part of path.slice(0, -1)) {
@@ -43,8 +44,8 @@ export function syntheticResponseExample(endpoint) {
     }
     const last = path.at(-1), key = last.replace(/\[\]$/u, '');
     if (path.length === 1 && endpoint.responseFields.some((item) => item.path?.startsWith(`${field.path}[].`) || item.path?.startsWith(`${field.path}.`)))
-      target[key] = last.endsWith('[]') || /^(?:List|IEnumerable)</u.test(type) ? [{}] : {};
-    else target[key] = list ? [value] : value;
+      target[key] = last.endsWith('[]') || /^(?:List|IEnumerable|ICollection|IList)</u.test(type) ? [{}] : {};
+    else target[key] = value;
   }
   const payload = endpoint.responseList ? [fields] : fields;
   return endpoint.responseEnvelope ? { [endpoint.responseEnvelope]: payload } : payload;
