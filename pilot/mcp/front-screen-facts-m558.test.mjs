@@ -539,3 +539,45 @@ test('useController vincula campo ao control do segundo formulário', async () =
   const changed = { ...files, [page]: files[page].replace('control: second.control', 'control: first.control') };
   assert.equal((await run(changed)).facts.find((fact) => fact.kind === 'field')?.required, true);
 });
+
+test('presença reúne schema e JSX sem precedência entre fontes', async () => {
+  const positive = { ...sources, [page]: `export default function ContactPage() {
+    const schema = z.object({ phone: z.string() });
+    const { register } = useForm({ resolver: zodResolver(schema) });
+    return <input {...register('phone')} />;
+  }` };
+  const field = async (files) => (await run(files)).facts.find((fact) => fact.kind === 'field');
+  assert.equal((await field(positive)).required, true);
+  const conflict = { ...positive, [page]: positive[page].replace("{...register('phone')}", "required={false} {...register('phone')}") };
+  const fact = await field(conflict);
+  assert.equal(fact.required, 'unknown');
+  assert.match(fact.note, /evidências conflitantes/u);
+  assert.deepEqual(fact.presenceSources, [`${page}:2`, `${page}:4`]);
+});
+
+test('Controller rules.required reconhece value literal e mensagem', async () => {
+  const source = (required) => ({ ...sources, [page]: `export default function ContactPage() {
+    return <Controller name="phone" rules={{ required: ${required} }} />;
+  }` });
+  const field = async (required) => (await run(source(required))).facts.find((fact) => fact.kind === 'field');
+  assert.equal((await field('{ value: false }')).required, false);
+  assert.equal((await field('{ value: true }')).required, true);
+  assert.equal((await field("'Telefone obrigatório'")).required, true);
+  assert.equal((await field('{ value: false }')).message, undefined);
+});
+
+test('nome efetivo segue a última prop JSX e vínculo usa esse nome', async () => {
+  const first = { ...sources, [page]: `export default function ContactPage() {
+    const schema = z.object({ phone: z.string(), other: z.string().optional() });
+    const { register } = useForm({ resolver: zodResolver(schema) });
+    return <input name="phone" {...register('other')} />;
+  }` };
+  const field = async (files) => (await run(files)).facts.find((fact) => fact.kind === 'field');
+  assert.deepEqual([(await field(first)).name, (await field(first)).required], ['other', false]);
+  const last = { ...first, [page]: first[page].replace('name="phone" {...register(\'other\')}', '{...register(\'other\')} name="phone"') };
+  const fact = await field(last);
+  assert.equal(fact.name, 'phone');
+  assert.equal(fact.required, 'unknown');
+  assert.match(fact.note, /vínculo não provado/u);
+  assert.equal(fact.validationSource, undefined);
+});
