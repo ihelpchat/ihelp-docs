@@ -10,7 +10,9 @@ const VISIBLE = new Set(['label', 'labelText', 'title', 'placeholder', 'aria-lab
 const ACTION = /^(?:button|a|IconButton|MenuItem|MenuButton|Button|ButtonWithIcon|ButtonIconAction)$/iu;
 // Wrappers observed in the read-only front (ITooltip and MiniTooltip are content/types, not wrappers).
 const TOOLTIP_WRAPPERS = new Set(['CustomTooltip', 'Tooltip', 'WrapperTooltip']);
-const FIELD = /^(?:input|select|textarea|Input\w*|Select\w*|Controller)$/u;
+const FIELD = /^(?:input|select|textarea|Input\w*|Select\w*|MultiSelectSystem|Controller)$/u;
+// Only upload components with an explicit byte-sized maxSize contract.
+const UPLOAD_MAX_SIZE = new Set(['Dropzone', 'ReactDropzone', 'FileUpload', 'Upload', 'UploadFile']);
 // Call shapes confirmed in the read-only front: addNotification({title, description});
 // the remaining entries cover the standard feedback APIs accepted by the screen contract.
 const FEEDBACK_CALLS = [
@@ -103,6 +105,32 @@ function addFact(facts, filePath, file, node, kind, values) {
   if (Object.values(fact).some((value) => typeof value === 'string' && containsSensitiveData(value, { detectOpaque: true }))) return;
   facts.push(fact);
 }
+function schemaFields(schema, file, path) {
+  if (schema && ts.isCallExpression(schema) && /^(?:yup|z)\.(?:object|objectOf)$/u.test(schema.expression.getText(file)))
+    schema = schema.arguments[0];
+  if (!schema || !ts.isObjectLiteralExpression(schema)) return new Map();
+  const rules = new Map();
+  for (const property of schema.properties) {
+    if (!ts.isPropertyAssignment(property)) continue;
+    const field = property.name.getText(file).replace(/^['"]|['"]$/gu, '');
+    if (!/^[\w.]{1,80}$/u.test(field)) continue;
+    const rule = { required: 'unknown', source: `${path}:${lineOf(file, property)}` };
+    let expression = property.initializer;
+    while (ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression)) {
+      const method = expression.expression.name.text;
+      if (['optional', 'nullable', 'notRequired'].includes(method)) rule.required = false;
+      if (method === 'required' || (method === 'min' && numeric(expression.arguments[0]) === 1)) {
+        rule.required = true;
+        rule.message = literal(expression.arguments[method === 'min' ? 1 : 0]) ?? rule.message;
+      }
+      if (['min', 'max', 'email', 'matches'].includes(method))
+        rule[method] = method === 'email' ? true : numeric(expression.arguments[0]) ?? literal(expression.arguments[0]) ?? true;
+      expression = expression.expression.expression;
+    }
+    rules.set(field, rule);
+  }
+  return rules;
+}
 function declarations(file) {
   const found = new Map();
   let defaultExport = null;
@@ -152,6 +180,8 @@ function collect(filePath, source, facts, entryName) {
   const imports = new Map();
   const translationKeys = new Map();
   const usedImports = new Set();
+  const linkedImports = new Map();
+  const columnImports = new Map();
   for (const statement of file.statements) if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
     const names = [];
     if (statement.importClause?.name) names.push({ local: statement.importClause.name.text, exported: null });
@@ -181,6 +211,7 @@ function collect(filePath, source, facts, entryName) {
   const root = entryName && (found.get(entryName) ?? (typeof defaultExport === 'string' ? found.get(defaultExport) : defaultExport));
   const visited = new Set();
   let owner = null, title = null;
+  let fieldRules = new Map();
   const reachable = [];
   const emit = (node, kind, values) => addFact(facts, filePath, file, node, kind,
     { ...values, owner, ...(title ? { ownerTitle: title } : {}), subject: subjectOf(owner, title, filePath) });
@@ -234,6 +265,7 @@ function collect(filePath, source, facts, entryName) {
   }
   function renderedMapChildren(node) {
     const scan = (child) => {
+      if (!child) return;
       if (ts.isArrowFunction(child) || ts.isFunctionExpression(child)) return;
       if (ts.isCallExpression(child) && ts.isPropertyAccessExpression(child.expression)
         && child.expression.name.text === 'map') {
@@ -265,6 +297,33 @@ function collect(filePath, source, facts, entryName) {
             && declaration.initializer.expression.getText(file) === 'useCallback'))))) return name;
     }
     return '(inline)';
+  }
+  function rulesFor(node) {
+    const component = ts.isVariableDeclaration(node) ? node.initializer : node;
+    const body = component?.body;
+    if (!body) return new Map();
+    const linked = new Set();
+    const inspect = (child) => {
+      if (child !== body && (ts.isArrowFunction(child) || ts.isFunctionExpression(child)
+        || ts.isFunctionDeclaration(child))) return;
+      if (ts.isCallExpression(child) && /^(?:yupResolver|zodResolver)$/u.test(child.expression.getText(file))
+        && ts.isIdentifier(child.arguments[0])) linked.add(child.arguments[0].text);
+      if (ts.isPropertyAssignment(child) && child.name.getText(file) === 'validationSchema'
+        && ts.isIdentifier(child.initializer)) linked.add(child.initializer.text);
+      if (ts.isJsxAttribute(child) && child.name.text === 'validationSchema'
+        && ts.isJsxExpression(child.initializer) && ts.isIdentifier(child.initializer.expression))
+        linked.add(child.initializer.expression.text);
+      ts.forEachChild(child, inspect);
+    };
+    inspect(body);
+    const rules = new Map();
+    for (const name of linked) {
+      const declaration = found.get(name);
+      let schema = declaration && ts.isVariableDeclaration(declaration) ? declaration.initializer : null;
+      if (!schema) { linkedImports.set(name, owner); continue; }
+      for (const [field, rule] of schemaFields(schema, file, filePath)) rules.set(field, rule);
+    }
+    return rules;
   }
   function visit(node) {
     if (ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)
@@ -303,10 +362,10 @@ function collect(filePath, source, facts, entryName) {
         ?? validActionLabel(attrValue(node, 'title')) ?? body
         ?? validActionLabel(attrValue(node, 'labelText')) ?? validActionLabel(attrValue(node, 'label'))
         ?? tooltipLabel(node);
-      if (actionLabel) for (const property of node.attributes.properties) {
+      if (actionLabel || attrValue(node, 'type') === 'file') for (const property of node.attributes.properties) {
         if (!ts.isJsxAttribute(property) || !/^on[A-Z]/u.test(property.name.text)
           || !ts.isJsxExpression(property.initializer)) continue;
-        walkHandler(property.initializer.expression, actionLabel, 0, new Set());
+        walkHandler(property.initializer.expression, actionLabel ?? tag, 0, new Set());
       }
       if (ACTION.test(tag) || attrValue(node, 'role') === 'button' || handler) {
         const ariaLabel = validActionLabel(attrValue(node, 'aria-label'));
@@ -320,11 +379,32 @@ function collect(filePath, source, facts, entryName) {
       }
       const accept = attrValue(node, 'accept');
       if (accept) emit(attr(node, 'accept'), 'upload', { accept });
-      const fieldName = attrValue(node, 'name');
+      const maxSize = UPLOAD_MAX_SIZE.has(tag) ? numeric(attr(node, 'maxSize')?.initializer?.expression) : null;
+      if (Number.isSafeInteger(maxSize) && maxSize > 0)
+        addFact(facts, filePath, file, attr(node, 'maxSize'), 'uploadLimit',
+          { maxBytes: maxSize, owner: tag, subject: subjectOf(owner, title, filePath) });
+      const register = attr(node, 'register')?.initializer?.expression;
+      const fieldName = attrValue(node, 'name') ?? (register && ts.isCallExpression(register) ? literal(register.arguments[0]) : null);
       if (FIELD.test(tag) && fieldName) {
-        const required = Boolean(attr(node, 'required')) || /\brequired\s*:/u.test(node.getText(file));
+        const requiredAttr = attr(node, 'required');
+        const explicitFalse = requiredAttr?.initializer && ts.isJsxExpression(requiredAttr.initializer)
+          && requiredAttr.initializer.expression?.kind === ts.SyntaxKind.FalseKeyword;
+        const rule = fieldRules.get(fieldName);
+        const controllerRules = tag === 'Controller' ? attr(node, 'rules')?.initializer?.expression : null;
+        const controllerRequired = controllerRules && ts.isObjectLiteralExpression(controllerRules)
+          ? controllerRules.properties.find((item) => ts.isPropertyAssignment(item) && item.name.getText(file) === 'required') : null;
+        const explicitTrue = requiredAttr && (!requiredAttr.initializer
+          || (ts.isJsxExpression(requiredAttr.initializer)
+            && requiredAttr.initializer.expression?.kind === ts.SyntaxKind.TrueKeyword));
+        const required = explicitFalse ? false : explicitTrue ? true
+          : controllerRequired ? (controllerRequired.initializer.kind === ts.SyntaxKind.FalseKeyword ? false : true)
+          : rule?.required ?? 'unknown';
         emit(node, 'field', { name: fieldName,
           ...(attrValue(node, 'label') ? { text: attrValue(node, 'label') } : {}), required,
+          ...(controllerRequired && literal(controllerRequired.initializer) ? { message: literal(controllerRequired.initializer) } : {}),
+          ...(rule?.message ? { message: rule.message } : {}),
+          ...Object.fromEntries(['min', 'max', 'email', 'matches'].filter((key) => rule?.[key] !== undefined).map((key) => [key, rule[key]])),
+          ...(rule ? { validationSource: rule.source } : {}),
           type: attrValue(node, 'type') ?? 'text' });
       }
     }
@@ -332,20 +412,6 @@ function collect(filePath, source, facts, entryName) {
       const call = node.expression.getText(file);
       if (/^(?:translate|t)$/u.test(call) && literal(node.arguments[0]))
         translationKeys.set(literal(node.arguments[0]), { owner, ...(title ? { ownerTitle: title } : {}), subject: subjectOf(owner, title, filePath) });
-      if (/\.(?:required|min)$/u.test(call) && (call.endsWith('.required') || numeric(node.arguments[0]) === 1)) {
-        let parent = node.parent;
-        while (parent && !ts.isPropertyAssignment(parent) && !ts.isSourceFile(parent)) parent = parent.parent;
-        if (parent && ts.isPropertyAssignment(parent)) {
-          const name = parent.name.getText(file).replace(/^['"]|['"]$/gu, '');
-          if (/^[A-Za-z][A-Za-z0-9_]{0,50}$/u.test(name))
-            emit(node, 'field', { name, required: true, type: 'schema' });
-        }
-      }
-    }
-    if (ts.isBinaryExpression(node) && /(?:file|arquivo)\.size\b/iu.test(node.left.getText(file))
-      && [ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken].includes(node.operatorToken.kind)) {
-      const maxBytes = numeric(node.right);
-      if (Number.isSafeInteger(maxBytes) && maxBytes > 0) emit(node, 'uploadLimit', { maxBytes });
     }
     if (ts.isIfStatement(node)) {
       const names = [...new Set(node.expression.getText(file).match(/\b(?:isAdmin|hasAccess|can[A-Z]\w*|\w*Permission|\w*Profile|\w*Role)\b/gu) ?? [])];
@@ -404,6 +470,31 @@ function collect(filePath, source, facts, entryName) {
       if (ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return;
       if (ts.isVariableDeclaration(node) && node.initializer
         && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) return;
+      if (ts.isIfStatement(node) && ts.isBinaryExpression(node.expression)
+        && /^(?:\w+\.)?(?:file|files(?:\[\w+\])?)\.size$/u.test(node.expression.left.getText(file))
+        && [ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken].includes(node.expression.operatorToken.kind)) {
+        const maxBytes = numeric(node.expression.right);
+        const hasReturn = (child) => (ts.isArrowFunction(child) || ts.isFunctionExpression(child)
+          || ts.isFunctionDeclaration(child)) ? false : child.kind === ts.SyntaxKind.ReturnStatement
+          || ts.forEachChild(child, hasReturn) === true;
+        const hasFeedback = (child) => (ts.isArrowFunction(child) || ts.isFunctionExpression(child)
+          || ts.isFunctionDeclaration(child)) ? false : ts.isCallExpression(child)
+          && FEEDBACK_CALLS.some(([pattern]) => pattern.test(child.expression.getText(file)))
+          || ts.forEachChild(child, hasFeedback) === true;
+        if (Number.isSafeInteger(maxBytes) && maxBytes > 0
+          && (hasReturn(node.thenStatement) || hasFeedback(node.thenStatement))) {
+          let message;
+          const findMessage = (child) => {
+            if (message || ts.isArrowFunction(child) || ts.isFunctionExpression(child)) return;
+            if (ts.isCallExpression(child) && FEEDBACK_CALLS.some(([pattern]) => pattern.test(child.expression.getText(file))))
+              message = literal(child.arguments[0]);
+            ts.forEachChild(child, findMessage);
+          };
+          findMessage(node.thenStatement);
+          addFact(facts, filePath, file, node.expression, 'uploadLimit',
+            { maxBytes, ...(message ? { message } : {}), owner: action, subject: subjectOf(owner, title, filePath) });
+        }
+      }
       if (ts.isCallExpression(node)) {
         const call = node.expression.getText(file);
         const feedback = FEEDBACK_CALLS.find(([pattern]) => pattern.test(call));
@@ -457,11 +548,17 @@ function collect(filePath, source, facts, entryName) {
     if (visited.has(node)) continue;
     visited.add(node);
     owner = name;
+    const inspectColumns = (child) => {
+      if (ts.isIdentifier(child) && child.text === 'SYSTEM_COLUMNS') columnImports.set(child.text, owner);
+      ts.forEachChild(child, inspectColumns);
+    };
+    inspectColumns(node);
     const trees = returnedTrees(node);
+    fieldRules = rulesFor(node);
     title = trees.map((tree) => ownerTitle(tree, file)).find(Boolean) ?? null;
     for (const tree of trees) visit(tree);
   }
-  return { file, imports, usedImports, clean, translationKeys };
+  return { file, imports, usedImports, clean, translationKeys, linkedImports, columnImports };
 }
 
 function resolveImport(from, specifier, paths) {
@@ -491,6 +588,56 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
     const parsed = collect(path, source, localFacts, used);
     for (const [key, meta] of parsed.translationKeys) translationKeys.set(key, meta);
     if (!files.includes(path)) { files.push(path); code.push({ path, excerpt: source }); }
+    for (const [name, formOwner] of parsed.linkedImports) {
+      const binding = [...parsed.imports].find(([, names]) => names.some((item) => item.local === name));
+      const target = binding && resolveImport(path, binding[0], allowed);
+      if (!target || files.length >= MAX_FILES) continue;
+      const imported = await readSource(target);
+      total += imported.length;
+      if (total > MAX_CHARS) { pending.push('limite de caracteres dos fatos da tela'); break; }
+      const importFile = ts.createSourceFile(target, imported, ts.ScriptTarget.Latest, true,
+        target.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+      const exported = binding[1].find((item) => item.local === name)?.exported ?? name;
+      const declaration = importFile.statements.filter(ts.isVariableStatement)
+        .flatMap((statement) => statement.declarationList.declarations)
+        .find((item) => ts.isIdentifier(item.name) && item.name.text === exported);
+      const rules = schemaFields(declaration?.initializer, importFile, target);
+      for (const fact of localFacts) if (fact.kind === 'field' && fact.owner === formOwner && rules.has(fact.name)) {
+        const rule = rules.get(fact.name);
+        if (fact.required === 'unknown') fact.required = rule.required;
+        if (rule.message) fact.message = rule.message;
+        fact.validationSource = rule.source;
+        for (const key of ['min', 'max', 'email', 'matches']) if (rule[key] !== undefined) fact[key] = rule[key];
+      }
+      if (!files.includes(target)) { files.push(target); code.push({ path: target, excerpt: imported }); }
+    }
+    for (const [name, formOwner] of parsed.columnImports) {
+      const binding = [...parsed.imports].find(([, names]) => names.some((item) => item.local === name));
+      const target = binding && resolveImport(path, binding[0], allowed);
+      if (!target || files.length >= MAX_FILES) continue;
+      const imported = await readSource(target);
+      total += imported.length;
+      if (total > MAX_CHARS) { pending.push('limite de caracteres dos fatos da tela'); break; }
+      const importFile = ts.createSourceFile(target, imported, ts.ScriptTarget.Latest, true,
+        target.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+      const declaration = importFile.statements.filter(ts.isVariableStatement)
+        .flatMap((statement) => statement.declarationList.declarations)
+        .find((item) => ts.isIdentifier(item.name) && item.name.text === 'SYSTEM_COLUMNS');
+      if (declaration?.initializer && ts.isArrayLiteralExpression(declaration.initializer))
+        for (const element of declaration.initializer.elements) {
+          if (!ts.isObjectLiteralExpression(element)) continue;
+          const prop = (key) => element.properties.find((item) => ts.isPropertyAssignment(item)
+            && item.name.getText(importFile) === key)?.initializer;
+          const label = literal(prop('label'));
+          const key = literal(prop('key'));
+          const required = prop('required');
+          if (label && key && required && [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword].includes(required.kind))
+            addFact(localFacts, target, importFile, element, 'column', { name: key, text: label,
+              required: required.kind === ts.SyntaxKind.TrueKeyword, owner: formOwner,
+              subject: subjectOf(formOwner, null, path) });
+        }
+      if (!files.includes(target)) { files.push(target); code.push({ path: target, excerpt: imported }); }
+    }
     if (depth === 0) {
       const objects = parsed.file.statements.flatMap((statement) => {
         const found = [];

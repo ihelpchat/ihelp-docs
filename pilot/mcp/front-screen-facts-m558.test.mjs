@@ -374,3 +374,60 @@ test('maxSize em prop de upload é limite com dono', async () => {
   assert.equal(fact?.maxBytes, 1048576);
   assert.equal(fact?.owner, 'Dropzone');
 });
+
+test('schema importado e usado via useFormik define campo; import sem uso não define', async () => {
+  const schemaPath = 'src/components/pages/Contacts/schema.ts';
+  const files = { ...sources,
+    [page]: `import { contactSchema } from './schema'; export default function ContactPage() {
+      useFormik({ validationSchema: contactSchema });
+      return <form><input name="phone" label="Telefone" /></form>;
+    }`,
+    [schemaPath]: `export const contactSchema = yup.object({ phone: yup.string().required('Telefone obrigatório') });`,
+  };
+  const field = (await run(files)).facts.find((fact) => fact.kind === 'field' && fact.name === 'phone');
+  assert.equal(field?.required, true);
+  assert.equal(field?.validationSource, `${schemaPath}:1`);
+  const unused = { ...files, [page]: files[page].replace('validationSchema: contactSchema', 'validationSchema: other') };
+  assert.equal((await run(unused)).facts.find((fact) => fact.kind === 'field' && fact.name === 'phone')?.required, 'unknown');
+});
+
+test('files[i].size no handler com return define limite', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const upload = files => { if (files[i].size > 2048) return; };
+    return <input type="file" onChange={upload} />;
+  }` };
+  assert.equal((await run(files)).facts.find((fact) => fact.kind === 'uploadLimit')?.maxBytes, 2048);
+});
+
+test('colunas importadas e usadas no formulário preservam required explícito', async () => {
+  const mapping = 'src/components/pages/Contacts/mapping.ts';
+  const files = { ...sources,
+    [page]: `import { SYSTEM_COLUMNS } from './mapping'; export default function ContactPage() { return <form>{SYSTEM_COLUMNS.map(c => <label>{c.label}</label>)}</form>; }`,
+    [mapping]: `export const SYSTEM_COLUMNS = [ { key: 'Nome', label: 'Nome', required: true }, { key: 'Email', label: 'E-mail', required: false } ];`,
+  };
+  const columns = (await run(files)).facts.filter((fact) => fact.kind === 'column');
+  assert.deepEqual(columns.map((fact) => [fact.name, fact.text, fact.required]),
+    [['Nome', 'Nome', true], ['Email', 'E-mail', false]]);
+  const detached = { ...files, [page]: files[page].replace('SYSTEM_COLUMNS.map', 'OTHER_COLUMNS.map') };
+  assert.deepEqual((await run(detached)).facts.filter((fact) => fact.kind === 'column'), []);
+});
+
+test('Controller rules e required JSX usam evidência explícita', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() { return <form>
+    <Controller name="phone" rules={{ required: 'Telefone obrigatório' }} />
+    <input name="optional" required={false} />
+    <input name="conditional" required={condition} />
+  </form>; }` };
+  const fields = (await run(files)).facts.filter((fact) => fact.kind === 'field');
+  assert.deepEqual(fields.map((fact) => [fact.name, fact.required]),
+    [['phone', true], ['optional', false], ['conditional', 'unknown']]);
+  assert.equal(fields[0].message, 'Telefone obrigatório');
+});
+
+test('limite sem feedback executado nem return não vira fato', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const upload = file => { if (file.size > 1024) { const never = () => alert('Grande'); } };
+    return <input type="file" onChange={upload} />;
+  }` };
+  assert.equal((await run(files)).facts.some((fact) => fact.kind === 'uploadLimit'), false);
+});
