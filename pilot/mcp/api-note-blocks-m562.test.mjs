@@ -30,9 +30,11 @@ async function generate(outputs) {
   const result = await generateContentPackage(process.cwd(), { module: 'api', topic: 'Contatos', confirmations: ['GET /contacts'] }, {
     productContext: { groundingRequired: false, matches: [], code: [], endpoints: [endpoint],
       apiExamples: [{ sections: ['Parâmetros', 'Resposta'], components: ['Params', 'Param', 'Fields', 'Field'] }] },
-    plan: { status: 'ready' }, client: { responses: { create: async () => ({
-      output_text: JSON.stringify(outputs[Math.min(calls++, outputs.length - 1)]), model: 'replay-offline',
-    }) } },
+    plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
+      assert.deepEqual(payload.text.format.schema.properties.articles.items.properties.notas.items.properties.type.enum,
+        ['Como filtrar', 'Paginação e cabeçalhos', 'Quem vê quais contatos', 'Diferenças e cuidados']);
+      return { output_text: JSON.stringify(outputs[Math.min(calls++, outputs.length - 1)]), model: 'replay-offline' };
+    } } },
   });
   return { result, calls };
 }
