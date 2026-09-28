@@ -5,6 +5,7 @@ const site = await startQaSite(new URL('../out/', import.meta.url).pathname, bas
 try {
   process.env.BASE_URL = `${site.url}${basePath}`;
   await import('./ui-smoke.mjs');
+  await import('./visual/site-navigation.mjs');
 } finally {
   await site.close();
 }
