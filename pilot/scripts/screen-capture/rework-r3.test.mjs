@@ -47,6 +47,10 @@ test('captura automática entra no passo da FAQ apesar de bundle e checkout dive
     assert.deepEqual(JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')), manifest);
     const article = screenshots.attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Clique em **Abrir**.' }, manifest, checkoutSha);
     assert.match(article.body, /!\[Tela de Contatos: Abrir\]\(\/img\/mcp\/contatos\/01-abrir\.png\)/u);
+    const mismatched = { ...manifest, entries: [{ ...entry, owner: 'outra-tela.tsx' }] };
+    const factsForArticle = facts('/contact', 'contatos.tsx');
+    assert.doesNotMatch(screenshots.attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Clique em **Abrir**.' },
+      mismatched, checkoutSha, factsForArticle).body, /!\[/u);
     assert.equal(typeof screenshots.screenshotVersionWarnings, 'function');
     assert.match(screenshots.screenshotVersionWarnings([article], manifest).join(' '), /bundle.*checkout.*diverg/iu);
   } finally {

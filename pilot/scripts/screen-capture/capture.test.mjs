@@ -37,8 +37,9 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
     assert.equal(manifest.entries.length, 2);
     assert.equal(manifest.entries[0].route, '/contact');
     assert.equal(manifest.entries[0].file, `/img/mcp/contatos/${plan[0].step}.png`);
-    assert.match(manifest.entries[0].appSha, /^[a-f0-9]{40}$/u);
-    assert.notEqual(manifest.entries[0].appSha, appSha, 'versão deve vir da página, não do chamador');
+    assert.match(manifest.entries[0].bundleSha, /^[a-f0-9]{40}$/u);
+    assert.equal(manifest.entries[0].checkoutSha, appSha);
+    assert.notEqual(manifest.entries[0].bundleSha, appSha, 'versão do bundle vem da página');
     assert.ok(manifest.entries[0].masked.includes('varredura sensível'));
     assert.ok(manifest.entries[0].masked.includes('campo ou conteúdo dinâmico'));
     assert.deepEqual(JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')), manifest);
