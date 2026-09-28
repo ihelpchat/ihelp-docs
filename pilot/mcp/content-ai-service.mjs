@@ -154,7 +154,7 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint], refs = []
   }
   return [...new Set(issues)];
 }
-function referenceIssues(unit, endpoints, articles) {
+function referenceIssues(unit, endpoints, articles, ownerName = '') {
   const issues = [];
   for (const ref of unit.refs ?? []) {
     const target = endpoints.find((item) => publicEndpointId(item) === ref.endpoint);
@@ -165,7 +165,8 @@ function referenceIssues(unit, endpoints, articles) {
       ...(target.route ?? '').split('/').map((segment) => segment.replace(/^\{([^}]+)\}$/u, '$1')),
     ];
     if (!target || !included || !names.some((name) => name.toLowerCase() === ref.name.toLowerCase())
-      || !new RegExp(`(?<![\\p{L}\\p{N}_])${ref.name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\p{N}_])`, 'iu').test(unit.text))
+      || !(new RegExp(`(?<![\\p{L}\\p{N}_])${ref.name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\p{N}_])`, 'iu').test(unit.text)
+        || ownerName.split('.').at(-1)?.toLowerCase() === ref.name.toLowerCase()))
       issues.push(`referência inválida: ${ref.name}`);
   }
   return issues;
@@ -995,7 +996,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       }
       groundingProblems.push(...apiUnitIssues(units, context));
       for (const item of prose.responseDescriptions ?? []) {
-        proseProblems.push(...referenceIssues(item.description, selectable, parsed.articles));
+        proseProblems.push(...referenceIssues(item.description, selectable, parsed.articles, item.name));
         proseProblems.push(...proseIssues({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable, item.description.refs));
         groundingProblems.push(...apiUnitIssues([item.description], context));
       }
