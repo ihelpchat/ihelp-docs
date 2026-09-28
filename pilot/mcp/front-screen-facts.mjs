@@ -7,7 +7,9 @@ export const FRONT_ROUTER = 'src/components/core/components/Router/utils/pagesDa
 const MAX_FILES = 72;
 const MAX_CHARS = 1_000_000;
 const VISIBLE = new Set(['label', 'labelText', 'title', 'placeholder', 'aria-label', 'tooltip']);
-const ACTION = /^(?:button|MenuItem|MenuButton|Button|ButtonWithIcon|ButtonIconAction)$/iu;
+const ACTION = /^(?:button|a|IconButton|MenuItem|MenuButton|Button|ButtonWithIcon|ButtonIconAction)$/iu;
+// Wrappers observed in the read-only front (ITooltip and MiniTooltip are content/types, not wrappers).
+const TOOLTIP_WRAPPERS = new Set(['CustomTooltip', 'Tooltip', 'WrapperTooltip']);
 const FIELD = /^(?:input|select|textarea|Input\w*|Select\w*|Controller)$/u;
 // Call shapes confirmed in the read-only front: addNotification({title, description});
 // the remaining entries cover the standard feedback APIs accepted by the screen contract.
@@ -47,6 +49,22 @@ function attr(node, name) {
   return node.attributes?.properties?.find((item) => ts.isJsxAttribute(item) && item.name.text === name);
 }
 function attrValue(node, name) { return literal(attr(node, name)?.initializer); }
+function tooltipLabel(node) {
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (!ts.isJsxElement(parent) || !TOOLTIP_WRAPPERS.has(jsxName(parent.openingElement))) continue;
+    const wrapper = parent.openingElement;
+    for (const name of ['title', 'content', 'label']) {
+      const value = attrValue(wrapper, name);
+      if (validActionLabel(value)) return validActionLabel(value);
+      const expression = attr(wrapper, name)?.initializer?.expression;
+      if (expression && ts.isConditionalExpression(expression)) {
+        const fallback = validActionLabel(literal(expression.whenFalse)) ?? validActionLabel(literal(expression.whenTrue));
+        if (fallback) return fallback;
+      }
+    }
+  }
+  return null;
+}
 function jsxName(node) { return node.tagName?.getText() ?? ''; }
 function jsxBody(children, file) {
   return children.map((child) => {
@@ -240,19 +258,20 @@ function collect(filePath, source, facts, entryName) {
       const handler = attr(node, 'onClick')?.initializer;
       const children = ts.isJsxOpeningElement(node) && ts.isJsxElement(node.parent) ? node.parent.children : [];
       const body = validActionLabel(jsxBody(children, file));
-      const actionLabel = validActionLabel(attrValue(node, 'aria-label')) ?? body
+      const actionLabel = validActionLabel(attrValue(node, 'aria-label'))
+        ?? validActionLabel(attrValue(node, 'title')) ?? body
         ?? validActionLabel(attrValue(node, 'labelText')) ?? validActionLabel(attrValue(node, 'label'))
-        ?? validActionLabel(attrValue(node, 'title'));
+        ?? tooltipLabel(node);
       if (actionLabel) for (const property of node.attributes.properties) {
         if (!ts.isJsxAttribute(property) || !/^on[A-Z]/u.test(property.name.text)
           || !ts.isJsxExpression(property.initializer)) continue;
         walkHandler(property.initializer.expression, actionLabel, 0, new Set());
       }
-      if (ACTION.test(tag) || /^button$/iu.test(tag)) {
+      if (ACTION.test(tag) || attrValue(node, 'role') === 'button' || handler) {
         const ariaLabel = validActionLabel(attrValue(node, 'aria-label'));
         const title = validActionLabel(attrValue(node, 'title'));
-        const text = ariaLabel ?? body ?? validActionLabel(attrValue(node, 'labelText'))
-          ?? validActionLabel(attrValue(node, 'label')) ?? title;
+        const text = ariaLabel ?? title ?? body ?? validActionLabel(attrValue(node, 'labelText'))
+          ?? validActionLabel(attrValue(node, 'label')) ?? tooltipLabel(node);
         const expression = handler && ts.isJsxExpression(handler) ? handler.expression : null;
         const handlerName = expression && ts.isIdentifier(expression) ? expression.text
           : expression && ts.isArrowFunction(expression) ? expression.body.getText(file).match(/\b([A-Za-z]\w*)\s*\(/u)?.[1] : null;
@@ -319,10 +338,10 @@ function collect(filePath, source, facts, entryName) {
     }
     ts.forEachChild(node, visit);
   }
-  function walkHandler(expression, action, depth, seenHandlers) {
+  function walkHandler(expression, action, depth, seenHandlers, outerLocals = new Map()) {
     if (!expression) return;
     if (ts.isIdentifier(expression)) {
-      const declaration = found.get(expression.text);
+      const declaration = outerLocals.get(expression.text) ?? found.get(expression.text);
       if (!declaration || seenHandlers.has(declaration)) return;
       seenHandlers.add(declaration);
       const value = ts.isVariableDeclaration(declaration) ? declaration.initializer : declaration;
@@ -330,12 +349,32 @@ function collect(filePath, source, facts, entryName) {
         ? value.arguments[0] : value;
       const body = (ts.isFunctionDeclaration(callback) || ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))
         ? callback.body : null;
-      if (body) walkHandler(body, action, depth, seenHandlers);
+      if (body) walkHandler(body, action, depth, seenHandlers, outerLocals);
       return;
     }
+    if (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression) || ts.isFunctionDeclaration(expression))
+      expression = expression.body;
+    if (!expression) return;
+    const locals = new Map(outerLocals);
+    const register = (node) => {
+      if (ts.isFunctionDeclaration(node)) {
+        if (node.name) locals.set(node.name.text, node);
+        return;
+      }
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)
+        && node.initializer && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) {
+        locals.set(node.name.text, node);
+        return;
+      }
+      if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return;
+      ts.forEachChild(node, register);
+    };
+    register(expression);
     const scan = (node) => {
       if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) return;
-      if (ts.isFunctionDeclaration(node) && node !== expression) return;
+      if (ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return;
+      if (ts.isVariableDeclaration(node) && node.initializer
+        && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) return;
       if (ts.isCallExpression(node)) {
         const call = node.expression.getText(file);
         const feedback = FEEDBACK_CALLS.find(([pattern]) => pattern.test(call));
@@ -360,9 +399,25 @@ function collect(filePath, source, facts, entryName) {
         }
         if (call === 'handleSubmit' && depth === 0)
           for (const argument of node.arguments) if (ts.isIdentifier(argument))
-            walkHandler(argument, action, depth, seenHandlers);
+            walkHandler(argument, action, depth, seenHandlers, locals);
         if (depth < 2 && ts.isIdentifier(node.expression) && !feedback)
-          walkHandler(node.expression, action, depth + 1, seenHandlers);
+          walkHandler(node.expression, action, depth + 1, seenHandlers, locals);
+        const promiseCallback = ts.isPropertyAccessExpression(node.expression)
+          && ['then', 'catch', 'finally'].includes(node.expression.name.text);
+        const timerCallback = call === 'setTimeout';
+        for (const argument of node.arguments) {
+          if (promiseCallback || timerCallback) {
+            if (ts.isArrowFunction(argument) || ts.isFunctionExpression(argument) || ts.isIdentifier(argument))
+              walkHandler(argument, action, depth, seenHandlers, locals);
+          }
+          if (/^(?:useMutation|useQuery|mutate|mutateAsync)$/u.test(call) && ts.isObjectLiteralExpression(argument))
+            for (const property of argument.properties) if (ts.isPropertyAssignment(property)
+              && ['onSuccess', 'onError', 'onSettled'].includes(property.name.getText(file)))
+              walkHandler(property.initializer, action, depth, seenHandlers, locals);
+        }
+        scan(node.expression);
+        for (const argument of node.arguments) if (!ts.isArrowFunction(argument) && !ts.isFunctionExpression(argument)) scan(argument);
+        return;
       }
       ts.forEachChild(node, scan);
     };

@@ -253,6 +253,15 @@ test('promise callback executado atribui feedback à ação', async () => {
   assert.equal((await run(files)).facts.some((fact) => fact.kind === 'message' && fact.text === 'Ok' && fact.owner === 'Salvar'), true);
 });
 
+test('callbacks de timer e mutation são alcançados apenas nas APIs permitidas', async () => {
+  const body = `const save = () => { setTimeout(() => toast.success('Timer'), 1); mutate({}, { onSuccess: () => toast.success('Mutation') }); };`;
+  const files = { ...sources, [page]: `export default function ContactPage() { ${body} return <button onClick={save}>Salvar</button>; }` };
+  const facts = (await run(files)).facts;
+  assert.deepEqual(facts.filter((fact) => fact.kind === 'message').map((fact) => fact.text).sort(), ['Mutation', 'Timer']);
+  const unknown = { ...files, [page]: files[page].replace('mutate({},', 'register({},') };
+  assert.deepEqual((await run(unknown)).facts.filter((fact) => fact.kind === 'message').map((fact) => fact.text), ['Timer']);
+});
+
 test('tooltip mais próximo nomeia botão de ícone e liga handler', async () => {
   const files = { ...sources, [page]: `export default function ContactPage() { const handleSave = () => toast.success('Salvo'); return <CustomTooltip title="Salvar"><button onClick={handleSave}><Check /></button></CustomTooltip>; }` };
   const facts = (await run(files)).facts;
