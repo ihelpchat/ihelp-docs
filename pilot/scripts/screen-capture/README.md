@@ -14,3 +14,9 @@ do repositório. No CI, use `GUIDE_QA_AUTHORIZED_EMAIL/PASSWORD` em secrets.
 O host de produção é recusado. A saída fica em `pilot/public/img/mcp/`, ignorada
 pelo Git. Revise os PNGs antes de publicar; screenshots enviados manualmente
 precisam de aprovação de privacidade e têm prioridade no manifesto.
+
+No serviço MCP, `capturar_telas` exige credencial de escrita e recebe página,
+módulo, SHA do app, passos e fatos da tela. O login usa apenas os secrets do
+servidor e grava PNGs e manifesto em `/data/screens/`. `baixar_telas` exige
+autenticação e devolve até quatro PNGs por chamada, com teto de bytes.
+Ao enviar um artigo para PR, o MCP inclui apenas as imagens citadas no corpo.

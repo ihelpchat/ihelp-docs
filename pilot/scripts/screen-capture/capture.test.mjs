@@ -111,6 +111,12 @@ test('serviço MCP captura fixture, baixa imagens e limita volume sem vazar segr
       coverage, env: { GUIDE_QA_AUTHORIZED_PASSWORD: secret },
     });
     assert.equal(result.entries.length, 1);
+    const second = await capturePage({ page: 'robos', module: 'Robôs', appSha,
+      steps: [steps[0]], screenFacts }, {
+      baseUrl: `http://127.0.0.1:${server.address().port}`, root, fixture: true,
+      coverage: [{ module: 'Robôs', productRoutes: ['/contact'] }],
+    });
+    assert.equal(second.entries.length, 2, 'capturar outra página preserva o manifesto anterior');
     const read = await downloadPage('contatos', { root, limit: 1 });
     assert.equal(read.images.length, 1);
     assert.equal(Buffer.from(read.images[0].base64, 'base64').subarray(0, 8).toString('hex'), '89504e470d0a1a0a');

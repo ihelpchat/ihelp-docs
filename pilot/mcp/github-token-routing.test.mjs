@@ -72,7 +72,12 @@ async function exercise(label, readToken) {
   const reached = new Map();
   for (const [name, { config, callback }] of tools) {
     const start = calls.length;
-    const source = name === 'docs_delete_article' ? { ...request, path: 'docs/teste/remocao-isolada' } : request;
+    const source = name === 'docs_delete_article' ? { ...request, path: 'docs/teste/remocao-isolada' }
+      : name === 'capturar_telas' || name === 'baixar_telas'
+        ? { ...request, page: 'contatos', appSha: 'a'.repeat(40),
+          steps: [{ id: 'abrir', role: 'button', label: 'Adicionar contato' }],
+          screenFacts: [{ kind: 'action', text: 'Adicionar contato', owner: 'fixture', sha: 'a'.repeat(40) }] }
+        : request;
     const input = Object.fromEntries(Object.keys(config.inputSchema.shape).filter((key) => key in source).map((key) => [key, source[key]]));
     await callback(config.inputSchema.parse(input));
     reached.set(name, calls.slice(start));

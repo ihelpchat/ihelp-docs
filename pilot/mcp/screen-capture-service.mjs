@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { capturePlan, captureScreens } from '../scripts/screen-capture/capture.mjs';
 
 const slug = /^[a-z0-9][a-z0-9-]{0,79}$/u;
 const MAX_IMAGES = 4;
@@ -12,11 +11,17 @@ export async function capturePage({ page, module, steps, screenFacts, appSha }, 
   baseUrl = process.env.GUIDE_QA_STAGING_URL,
   root = defaultRoot(), fixture = false, env = process.env, coverage,
 } = {}) {
+  const { capturePlan, captureScreens } = await import('../scripts/screen-capture/capture.mjs');
   if (!baseUrl) throw new Error('Destino de QA ausente');
   const matrix = coverage ?? JSON.parse(await readFile(new URL('../architecture/coverage-matrix.json', import.meta.url), 'utf8'));
   const plan = capturePlan({ page, module, steps, screenFacts, appSha, coverage: matrix });
   if (plan.length > 20) throw new Error('Plano excede 20 passos');
-  return captureScreens({ baseUrl, plan, appSha, root, fixture, env });
+  const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8').catch((error) => {
+    if (error.code === 'ENOENT') return '{"version":1,"entries":[]}';
+    throw error;
+  }));
+  if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error('Manifesto de telas inválido');
+  return captureScreens({ baseUrl, plan, appSha, root, fixture, env, manifest });
 }
 
 export async function downloadPage(page, { root = defaultRoot(), limit = MAX_IMAGES } = {}) {

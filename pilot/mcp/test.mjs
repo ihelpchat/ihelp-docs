@@ -54,6 +54,8 @@ try {
   assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
     'atualizar_codigo_produto',
     'atualizar_por_deploy',
+    'baixar_telas',
+    'capturar_telas',
     'criar_guia',
     'docs_audit_content',
     'docs_delete_article',

@@ -11,6 +11,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --include=dev && npm cache clean --force
 
 COPY architecture ./architecture
+COPY lib ./lib
+COPY product-map ./product-map
 COPY content ./content
 COPY public/guides ./public/guides
 COPY deploy-release.json ./public/release.json
