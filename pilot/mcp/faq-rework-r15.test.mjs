@@ -80,3 +80,12 @@ test('placeholder de input só aceita preencher; conferir estado continua válid
   assert.match(renderFaqSections(check('conferir', 'f2').sections), /Confira \*\*Ativo\*\*/u);
   assert.equal(check('conferir', 'f3').sections.passos, undefined);
 });
+
+test('estado com o mesmo rótulo de um botão não vira confira', () => {
+  const facts = adaptScreenFacts({ sha, facts: [
+    { kind: 'state', text: 'Salvar', source: 'src/Robots.tsx:5' },
+    { kind: 'action', text: 'Salvar', source: 'src/Robots.tsx:6' },
+  ] });
+  const result = validateFaqSections({ passos: [{ acao: 'conferir', fato: 'f1' }] }, { screenFacts: facts });
+  assert.equal(result.sections.passos, undefined);
+});
