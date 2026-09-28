@@ -14,6 +14,8 @@ import { contentMaxOutputTokens } from './env-compat.mjs';
 import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 import { guardModelOutput } from './model-output-guard.mjs';
 import { PRODUCT_TERMS } from './product-terms.mjs';
+import { classifyFaqQuestions, loadBusinessContext, selectFaqStyleExamples, adaptScreenFacts,
+  validateFaqSections, renderFaqSections, FAQ_SECTIONS } from './faq-editorial.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
 contentMaxOutputTokens();
@@ -47,6 +49,8 @@ const API_PROSE_UNIT_SCHEMA = { type: 'object', additionalProperties: false, req
 const publicNames = new Set(PRODUCT_TERMS.flatMap((term) => [term, ...term.split(/\s+/u)])
   .map((term) => term.toLocaleLowerCase('pt-BR')));
 const isPublicName = (name) => publicNames.has(name.toLocaleLowerCase('pt-BR'));
+const faqRequested = (request) => request.module !== 'api'
+  && /\bfaq\b|página do faq/iu.test(`${request.topic ?? ''} ${request.description ?? ''} ${request.details ?? ''}`);
 
 function proseIssues(article, endpoint, packageEndpoints = [endpoint], refs = [], globalScope = false) {
   const issues = [];
@@ -438,6 +442,22 @@ const API_PACKAGE_SCHEMA = { ...PACKAGE_SCHEMA, required: ['status', 'summary', 
   properties: { status: PACKAGE_SCHEMA.properties.status,
     summary: { type: 'array', items: API_PROSE_UNIT_SCHEMA }, questions: PACKAGE_SCHEMA.properties.questions,
     articles: { type: 'array', items: API_ARTICLE_SCHEMA } } };
+const FAQ_CITATION_SCHEMA = { anyOf: [CITATION_SCHEMA,
+  { type: 'object', additionalProperties: false, required: ['source', 'quote'],
+    properties: { source: { type: 'string', enum: ['pedido', 'suporte'] }, quote: { type: 'string' } } },
+  { type: 'object', additionalProperties: false, required: ['source', 'path', 'quote'],
+    properties: { source: { type: 'string', enum: ['pagina', 'negocio'] }, path: { type: 'string' }, quote: { type: 'string' } } } ] };
+const FAQ_UNIT_SCHEMA = { type: 'object', additionalProperties: false, required: ['text', 'citations'],
+  properties: { text: { type: 'string' }, citations: { type: 'array', items: FAQ_CITATION_SCHEMA } } };
+const FAQ_ARTICLE_SCHEMA = { type: 'object', additionalProperties: false,
+  required: ['path', 'title', 'description', 'source', 'contentType', 'sections', 'productActions', 'assistantQuestion'],
+  properties: { ...Object.fromEntries(Object.entries(ARTICLE_SCHEMA.properties).filter(([key]) =>
+    !['body', 'grounding', 'assistantOverview', 'assistantInitialSteps', 'assistantSuggestions'].includes(key))),
+    sections: { type: 'object', additionalProperties: false, required: Object.keys(FAQ_SECTIONS),
+      properties: Object.fromEntries(Object.keys(FAQ_SECTIONS).map((key) => [key, { type: 'array', items: FAQ_UNIT_SCHEMA }])) } } };
+const FAQ_PACKAGE_SCHEMA = { type: 'object', additionalProperties: false, required: ['status', 'summary', 'questions', 'articles'],
+  properties: { status: PACKAGE_SCHEMA.properties.status, summary: { type: 'string' },
+    questions: PACKAGE_SCHEMA.properties.questions, articles: { type: 'array', items: FAQ_ARTICLE_SCHEMA } } };
 
 function checkRequest(request) {
   const value = Object.values(request).filter((item) => typeof item === 'string').join('\n');
@@ -525,6 +545,7 @@ function requestText(request, existing, productContext, codeHygiene = {}) {
     `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${redactSensitiveData(item.path)} LINHA ${item.line ?? 'não informada'} SHA ${item.sha ?? item.ref}\n${numberedCode(safeCode(item.excerpt), item.line)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
     request.module === 'api' && productContext.callEvidence?.length ? `TRECHOS INTERNOS ALCANÇADOS (cite arquivo:linha; não publique código):\n${productContext.callEvidence.map((item) => `${item.path}:${item.start}-${item.end}\n${numberedCode(safeCode(item.excerpt), item.start)}`).join('\n\n')}` : '',
     request.module === 'api' ? `FATOS ESTRUTURADOS DE ENDPOINTS (somente public=true é gerável):\n${JSON.stringify(selectedEndpoints)}\nFORMATO REAL DAS PÁGINAS API:\n${JSON.stringify(productContext.apiExamples ?? [])}\nMODELOS DE ESTILO (não são fatos do endpoint pedido):\n${JSON.stringify(productContext.apiStyleExamples ?? [])}` : '',
+    faqRequested(request) ? `FATOS DA TELA (M5.58; ação, rótulo, campo, validação, mensagem e fonte):\n${JSON.stringify(productContext.screenFacts ?? [])}\nCONTEXTO DE NEGÓCIO 🟢 CURADO:\n${JSON.stringify(productContext.businessContext ?? [])}\nMODELOS DE ESTILO FAQ (não são fatos do tema):\n${JSON.stringify(productContext.faqStyleExamples ?? [])}` : '',
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
     `Regras do suporte:\n${productContext.support?.rules?.map((item) => `- ${item}`).join('\n') ?? '- Nenhuma'}`,
     `Matriz de cobertura:\n${productContext.coverage?.map((item) => `- ${item.module}: ${item.coverage}; rotas=${item.productRoutes.join(', ')}; permissão=${item.permission}`).join('\n') ?? '- Nenhuma correspondência'}`,
@@ -648,6 +669,10 @@ async function planContentCore(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpointsFrom(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  if (faqRequested(request)) {
+    productContext.businessContext ??= await loadBusinessContext(root);
+    productContext.faqStyleExamples ??= await selectFaqStyleExamples(`${root}/content/docs/docs`);
+  }
   if (productContext.pending?.some((item) => item.startsWith('endpoint citado não encontrado'))) return groundingPending(productContext);
   if (request.module === 'api' && !productContext.endpoints?.length) return apiPending(productContext.nonPublicEndpoints ? 'endpoint não público: confirmar' : 'endpoints estruturados ausentes');
   if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return apiPending('endpoint não público: confirmar');
@@ -662,10 +687,10 @@ async function planContentCore(root, request, options = {}) {
         'Você é a editora de conteúdo do iHelp. Oriente quem está criando documentação antes de escrever.',
         'O público final acabou de acessar o produto há 30 segundos, está em trial e não recebeu treinamento.',
         'Identifique conflitos, informação ausente, duplicidade e nomes de telas ou botões que precisam ser confirmados.',
-        request.module === 'api' ? 'Use needs_information somente quando faltar método, rota, parâmetro ou campo de primeiro nível da resposta. Outras dúvidas são pendências não bloqueantes. Não invente comportamento.' : 'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
+        request.module === 'api' ? 'Use needs_information somente quando faltar método, rota, parâmetro ou campo de primeiro nível da resposta. Outras dúvidas são pendências não bloqueantes. Não invente comportamento.' : faqRequested(request) ? 'Use needs_information somente quando faltarem fatos para a resposta direta ou o passo a passo principal. Toda outra pergunta é pendência não bloqueante; omita a seção sem fonte. Não invente comportamento.' : 'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
         'Sugira ações no produto somente com rota fornecida ou sustentada pelos detalhes. target é um identificador data-help-id estável, nunca um seletor CSS.',
         request.module === 'api' ? 'Planeje páginas de referência da API. Para tema amplo, foque nos endpoints documented=true. Se o pedido nomeia o caminho de uma página nova para um endpoint público, documented=false não exige pergunta. Não peça dados já presentes nos fatos estruturados. Endpoint sem public=true exige confirmação. responseFields=null não bloqueia: a resposta exibirá nota fixa e pendência.' : 'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
-        request.module === 'api' ? 'Guidance e risks são orientação interna e não precisam de grounding por frase. Nunca são publicados. Podem mencionar métodos e nomes técnicos para orientar a geração; o schema é a única validação desta resposta. A prosa publicada será validada com grounding completo na geração.' : 'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
+        request.module === 'api' ? 'Guidance e risks são orientação interna e não precisam de grounding por frase. Nunca são publicados. Podem mencionar métodos e nomes técnicos para orientar a geração; o schema é a única validação desta resposta. A prosa publicada será validada com grounding completo na geração.' : faqRequested(request) ? 'Guidance e risks são orientação interna e não precisam de grounding por frase. A prosa publicada terá citações em cada unidade.' : 'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Sem evidência para o núcleo, use needs_information.',
       ].join(' '),
     },
     { role: 'user', content: requestText(request, existing, productContext, codeHygiene) },
@@ -678,12 +703,13 @@ async function planContentCore(root, request, options = {}) {
     : { questions: parsed.questions ?? [], discardedQuestions: [] };
   parsed.questions = filtered.questions;
   const classified = request.module === 'api' ? classifyApiQuestions(parsed.questions, productContext.endpoints ?? [])
-    : { blocking: parsed.questions, pending: [] };
-  if (request.module === 'api') parsed.questions = classified.blocking;
-  if (request.module === 'api' && parsed.status === 'needs_information' && !parsed.questions.length) parsed.status = 'ready';
-  else if (request.module === 'api' && classified.blocking.length) parsed.status = 'needs_information';
+    : faqRequested(request) ? classifyFaqQuestions(parsed.questions)
+      : { blocking: parsed.questions, pending: [] };
+  if (request.module === 'api' || faqRequested(request)) parsed.questions = classified.blocking;
+  if ((request.module === 'api' || faqRequested(request)) && parsed.status === 'needs_information' && !parsed.questions.length) parsed.status = 'ready';
+  else if ((request.module === 'api' || faqRequested(request)) && classified.blocking.length) parsed.status = 'needs_information';
   if (parsed.status === 'ready') {
-    const issues = request.module === 'api' ? []
+    const issues = request.module === 'api' || faqRequested(request) ? []
       : groundingIssues(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks']);
     if (issues.length) {
       if (!options.groundingRetryIssues) return planContent(root, request, { ...options, productContext, groundingRetryIssues: issues });
@@ -698,6 +724,10 @@ async function generateContentPackageCore(root, request, options = {}) {
   checkRequest(request);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpointsFrom(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
+  if (faqRequested(request)) {
+    productContext.businessContext ??= await loadBusinessContext(root);
+    productContext.faqStyleExamples ??= await selectFaqStyleExamples(`${root}/content/docs/docs`);
+  }
   let plan = options.plan;
   const withPending = (result) => ({ securityWarnings: [], ...result, pending: [...new Set([...(productContext.pending ?? []), ...(plan?.pending ?? []), ...(result.pending ?? [])])] });
   if (productContext.pending?.some((item) => item.startsWith('endpoint citado não encontrado'))) return groundingPending(productContext);
@@ -726,20 +756,20 @@ async function generateContentPackageCore(root, request, options = {}) {
   const apiSchema = { ...API_PACKAGE_SCHEMA, properties: { ...API_PACKAGE_SCHEMA.properties,
     articles: { type: 'array', items: { ...API_ARTICLE_SCHEMA, properties: { ...API_ARTICLE_SCHEMA.properties,
       endpoint: { type: 'string', enum: selectable.map(publicEndpointId) }, responseDescriptions, parameterDescriptions } } } } };
-  const payload = baseRequest('pacote_documentacao', request.module === 'api' ? apiSchema : PACKAGE_SCHEMA, [
+  const payload = baseRequest('pacote_documentacao', request.module === 'api' ? apiSchema : faqRequested(request) ? FAQ_PACKAGE_SCHEMA : PACKAGE_SCHEMA, [
     {
       role: 'developer',
       content: [
         'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.',
         request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
-        request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
+        request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : faqRequested(request) ? 'Gere uma FAQ em docs/ e, se houver fonte suficiente, um tutorial em tutoriais/. A resposta direta deve ter 45 a 180 caracteres e começar com uma ação. Depois, nesta ordem: para que serve ao negócio; 2 ou 3 casos concretos; passo a passo com rótulos exatos da tela; exemplo fictício completo; dúvidas comuns do suporte; erros comuns com mensagens literais da tela; quando falar com o suporte. Use os três modelos só para estilo, nunca como fatos do tema.' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
         request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations,refs}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations,refs}, também com uma frase por text (ponto e vírgula permitido). Use refs: [] quando não houver referência cruzada. Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros, como cabeçalhos e diferenças entre endpoints.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
-        request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
-        request.module === 'api' ? 'Se faltar método, rota, parâmetros ou autorização, use needs_information e deixe articles vazio. responseFields=null é permitido: a resposta terá nota fixa e pendência.' : 'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
-        request.module === 'api' ? 'A prosa não pode conter método HTTP, caminho, bloco de código, componente JSX nem código inline, exceto nome exato de parâmetro ou campo dos fatos. Nome técnico de outro endpoint do pacote exige refs: [{name,endpoint}] na própria unidade, com endpoint exato do enum; o nome deve ser parâmetro, campo ou segmento da rota desse endpoint. O link para a página referenciada é renderizado automaticamente. O summary mantém escopo global. Descreva cada campo pelo significado e pelo tipo PÚBLICO (texto, número, data e hora, verdadeiro ou falso, lista, objeto), nunca pelo tipo do código, DTO, entity, repository ou service.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
-        request.module === 'api' ? 'Cite cada unidade de summary, description, intro, notas e descrições de campo nas citations da própria unidade. source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. Use os números reais mostrados ao lado do código e cite a faixa mais curta que contém o comportamento, com no máximo 30 linhas. O JSON interno de formato não é fonte. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
+        request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : faqRequested(request) ? 'Preencha assistantQuestion com uma pergunta canônica. Os demais campos do assistente vêm da resposta direta e dos passos validados.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
+        request.module === 'api' ? 'Se faltar método, rota, parâmetros ou autorização, use needs_information e deixe articles vazio. responseFields=null é permitido: a resposta terá nota fixa e pendência.' : faqRequested(request) ? 'Use needs_information e articles vazio só se faltarem fatos para resposta direta ou passo principal. Detalhes de formato, exportação, permissões e erros secundários são pendências: deixe a seção vazia. Não invente.' : 'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
+        request.module === 'api' ? 'A prosa não pode conter método HTTP, caminho, bloco de código, componente JSX nem código inline, exceto nome exato de parâmetro ou campo dos fatos. Nome técnico de outro endpoint do pacote exige refs: [{name,endpoint}] na própria unidade, com endpoint exato do enum; o nome deve ser parâmetro, campo ou segmento da rota desse endpoint. O link para a página referenciada é renderizado automaticamente. O summary mantém escopo global. Descreva cada campo pelo significado e pelo tipo PÚBLICO (texto, número, data e hora, verdadeiro ou falso, lista, objeto), nunca pelo tipo do código, DTO, entity, repository ou service.' : faqRequested(request) ? 'Cada seção é lista de unidades {text,citations}, uma frase por unidade. Use [] quando não houver fonte. Use frases curtas para leitores 60+. Explique jargão como template, API e webhook antes de usar. Exemplo somente com Maria Exemplo e dados sintéticos da função pública de exemplos; nunca invente dados de cliente.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
+        request.module === 'api' ? 'Cite cada unidade de summary, description, intro, notas e descrições de campo nas citations da própria unidade. source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. Use os números reais mostrados ao lado do código e cite a faixa mais curta que contém o comportamento, com no máximo 30 linhas. O JSON interno de formato não é fonte. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : faqRequested(request) ? 'Cite cada unidade nas citations. pedido, pagina, suporte e negocio exigem quote literal de ao menos 12 caracteres. negocio exige path business-context/*.md curado. Fatos da tela exigem repository, path, lineStart, lineEnd e sha exatos do contexto. Rótulos de passos, campos obrigatórios, formatos e mensagens precisam de fatos da tela; suporte só prova a dúvida, não a resposta. Seção sem fonte fica vazia.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].filter(Boolean).join(' '),
     },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`) },
@@ -891,19 +921,53 @@ async function generateContentPackageCore(root, request, options = {}) {
   if (parsed.articles.some((article) => article.source === 'api' || /^api\//u.test(article.path ?? ''))) {
     return withPending(apiPending('página API exige fatos estruturados e módulo api'));
   }
-  const articleIssues = [
-    ...groundingIssues(parsed, groundingContext(productContext, request, existing), ['summary']),
-    ...parsed.articles.flatMap((article) => groundingIssues(article, groundingContext(productContext, request, existing), ['description', 'body', 'assistantOverview', 'assistantSuggestions'])),
-  ];
-  if (articleIssues.length) {
-    if (!options.groundingRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, groundingRetryIssues: articleIssues });
-    return withPending(evidencePending(articleIssues));
+  if (!faqRequested(request)) {
+    const articleIssues = [
+      ...groundingIssues(parsed, groundingContext(productContext, request, existing), ['summary']),
+      ...parsed.articles.flatMap((article) => groundingIssues(article, groundingContext(productContext, request, existing), ['description', 'body', 'assistantOverview', 'assistantSuggestions'])),
+    ];
+    if (articleIssues.length) {
+      if (!options.groundingRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, groundingRetryIssues: articleIssues });
+      return withPending(evidencePending(articleIssues));
+    }
+    const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => ({
+      ...article, productActions: article.productActions.map(normalizeCatalogLabel),
+      ...(request.tangoUrl && article.contentType === 'tutorial' ? { tangoUrl: request.tangoUrl } : {}),
+    }));
+    const invalid = articles.map((article) => {
+      const validation = validateArticle(article);
+      const issues = [...validation.issues, ...article.productActions
+        .filter((action) => !confirmedAction(action, request, productContext))
+        .map((action) => `productActions ${action.id} não confirmada para o pedido e módulo`)];
+      return { path: article.path, valid: issues.length === 0, issues };
+    }).filter(({ valid }) => !valid);
+    if (invalid.length) return withPending({ status: 'needs_information',
+      summary: 'A IA gerou conteúdo que não passou pela validação editorial.',
+      questions: invalid.flatMap(({ path, issues }) => issues.map((issue) => `${path}: ${issue}`)),
+      articles: [], existing, model: response.model });
+    return finalizeGeneratedPages(withPending({ ...safePackage, articles, existing, model: response.model }), request);
   }
-  const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => ({
-    ...article,
-    productActions: article.productActions.map(normalizeCatalogLabel),
-    ...(request.tangoUrl && article.contentType === 'tutorial' ? { tangoUrl: request.tangoUrl } : {}),
-  }));
+  if (!parsed.articles.some((article) => article.contentType === 'faq' && /^docs\//u.test(article.path ?? '')))
+    return withPending(apiPending('FAQ solicitada sem página FAQ em docs/'));
+  const faqContext = { request, existing, support: productContext.support,
+    business: productContext.businessContext,
+    screenFacts: adaptScreenFacts({ facts: productContext.screenFacts, sha: productContext.code?.find((item) => item.role === 'frontend')?.ref }) };
+  const sectionPending = [];
+  const articles = [];
+  for (const prose of parsed.articles) {
+    const result = validateFaqSections(prose.sections, faqContext);
+    sectionPending.push(...result.pending.map((item) => `${prose.path}: ${item}`));
+    if (result.blocking.length) return withPending(apiPending(`${prose.path}: faltam fontes para resposta direta ou passo principal`));
+    const { sections: _sections, ...article } = prose;
+    article.body = renderFaqSections(result.sections);
+    article.description = article.body.split('\n')[0].slice(0, 240);
+    article.assistantOverview = result.sections.resposta.map((unit) => unit.text).join(' ');
+    article.assistantInitialSteps = Math.min(3, result.sections.passos.length);
+    article.assistantSuggestions = ['Falar com uma pessoa?'];
+    article.productActions = article.productActions.map(normalizeCatalogLabel);
+    if (request.tangoUrl && article.contentType === 'tutorial') article.tangoUrl = request.tangoUrl;
+    articles.push(article);
+  }
   const invalid = articles.map((article) => {
     const validation = validateArticle(article);
     const issues = [...validation.issues, ...article.productActions
@@ -919,7 +983,8 @@ async function generateContentPackageCore(root, request, options = {}) {
       articles: [], existing, model: response.model,
     });
   }
-  return finalizeGeneratedPages(withPending({ ...safePackage, articles, existing, model: response.model }), request);
+  return finalizeGeneratedPages(withPending({ ...safePackage, articles, existing, model: response.model,
+    pending: sectionPending }), request);
 }
 
 const GUIDE_SCHEMA = {
