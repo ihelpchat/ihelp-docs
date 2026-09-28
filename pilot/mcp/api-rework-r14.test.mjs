@@ -29,8 +29,8 @@ const onlyA = { verb: 'GET', route: '/api/v2/a', public: true, documented: true,
 const onlyB = { verb: 'GET', route: '/api/v2/b', public: true, documented: true, authorization: 'authenticated', parameters: [{ name: 'onlyB', type: 'string', in: 'query' }], responseFields: [] };
 const unit = (text, refs) => ({ text, citations: [], ...(refs ? { refs } : {}) });
 const base = { status: 'ready', summary: [unit('Use onlyA e onlyB nas respectivas consultas.')], questions: [], articles: [
-  { path: 'api/teste/a', endpoint: 'GET /a', title: 'Página A', description: unit('Consulta os registros disponíveis na primeira página desta referência pública.'), intro: unit('Use onlyA para filtrar.'), notas: [unit('Use onlyB para filtrar.')], responseDescriptions: [], parameterDescriptions: [{ name: 'onlyA', description: unit('Filtro da consulta A.') }] },
-  { path: 'api/teste/b', endpoint: 'GET /b', title: 'Página B', description: unit('Consulta os registros disponíveis na segunda página desta referência pública.'), intro: unit('Use onlyB para filtrar.'), notas: [], responseDescriptions: [], parameterDescriptions: [{ name: 'onlyB', description: unit('Filtro da consulta B.') }] },
+  { path: 'api/teste/a', endpoint: 'GET /a', title: 'Página A', description: unit('Consulta os registros disponíveis na primeira página desta referência pública.'), intro: unit('Use onlyA para filtrar.'), notas: [{ ...unit('Use onlyB para filtrar.'), type: 'Como filtrar' }], responseHeaders: [], responseDescriptions: [], parameterDescriptions: [{ name: 'onlyA', description: unit('Filtro da consulta A.') }] },
+  { path: 'api/teste/b', endpoint: 'GET /b', title: 'Página B', description: unit('Consulta os registros disponíveis na segunda página desta referência pública.'), intro: unit('Use onlyB para filtrar.'), notas: [], responseHeaders: [], responseDescriptions: [], parameterDescriptions: [{ name: 'onlyB', description: unit('Filtro da consulta B.') }] },
 ] };
 async function replay(change) {
   const output = structuredClone(base); change?.(output);

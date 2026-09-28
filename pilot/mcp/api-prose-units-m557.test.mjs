@@ -23,7 +23,7 @@ const summaryText = 'O pacote contém páginas novas da referência de Contatos.
 const base = { status: 'ready', summary: [unit(summaryText, replay.citations.summary)], questions: [], articles: [{
     path: replay.path, endpoint: replay.endpoint, title: replay.title,
     description: unit(replay.description, replay.citations.description), intro: unit(replay.intro, replay.citations.intro),
-    notas: replay.notas.map((text) => unit(text, replay.citations.nota)), responseDescriptions: [
+    notas: replay.notas.map((text) => ({ ...unit(text, replay.citations.nota), type: 'Como filtrar' })), responseHeaders: [], responseDescriptions: [
       { name: 'idRef', description: unit('Identificador de referência do contato.', replay.citations.responseDescription) },
     ],
   }] };

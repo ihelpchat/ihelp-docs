@@ -77,7 +77,7 @@ async function replayResult(lineEnd) {
       path: replay.path, endpoint: replay.endpoint, title: replay.title,
       description: { text: replay.description, citations: replay.citations.description },
       intro: { text: replay.intro, citations: replay.citations.intro },
-      notas: [{ ...unit, citations: [{ ...citation, lineEnd }] }], responseDescriptions: [],
+      notas: [{ ...unit, type: 'Como filtrar', citations: [{ ...citation, lineEnd }] }], responseHeaders: [], responseDescriptions: [],
     }] };
   return generateContentPackage(root, replayRequest, { productContext: replayContext,
     plan: { status: 'ready' }, client: { responses: { create: async () => ({ output_text: JSON.stringify(value), model: 'replay-offline' }) } } });

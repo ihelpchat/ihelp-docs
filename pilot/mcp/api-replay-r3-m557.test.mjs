@@ -17,7 +17,7 @@ const tags = { verb: 'GET', route: '/api/v2/contactTags/getContactsTagByContactI
 const unit = (text) => ({ text, citations: [] });
 const article = (path, endpoint, responseDescriptions = []) => ({ path, endpoint, title: 'Contatos',
   description: unit('Consulta os contatos disponíveis na referência pública da API.'),
-  intro: unit('Use para consultar contatos.'), notas: [], responseDescriptions });
+  intro: unit('Use para consultar contatos.'), notas: [], responseHeaders: [], responseDescriptions });
 const packageOutput = { status: 'ready', summary: [unit('Contatos.')], questions: [], articles: [
   article(source.list.path, 'GET /contacts', [{ name: 'dados[].id', description: {
     ...unit(description), refs: [{ name: 'contactId', endpoint: tags.verb + ' ' + tags.route.replace(/^\/api\/v\d+/u, '') }],
