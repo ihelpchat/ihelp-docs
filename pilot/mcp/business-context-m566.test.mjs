@@ -72,6 +72,36 @@ test('descarta arquivo interno e sem cabeçalho; mutação geral só sem módulo
   }
 });
 
+test('descarta contexto público com dado sensível e registra só arquivo e motivo', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'faq-business-sensitive-'));
+  try {
+    await writeFile(join(directory, 'geral.md'), '🟢 PÚBLICO\nContexto geral.');
+    const cases = [
+      { label: 'host interno', reason: 'host interno', unsafe: 'http://localhost/admin', safe: 'https://ajuda.ihelp.com.br/admin' },
+      { label: 'e-mail', reason: 'dado pessoal', unsafe: 'pessoa@example.com', safe: 'pessoa exemplo' },
+      { label: 'número longo', reason: 'dado pessoal', unsafe: '119876543210', safe: '123456789' },
+      { label: 'token', reason: 'segredo', unsafe: 'sk-proj-abcdefghijklmnopqrstuv', safe: 'chave de exemplo' },
+    ];
+    for (const { label, reason, unsafe, safe } of cases) await t.test(label, async () => {
+      const content = `🟢 PÚBLICO\nInformação de contatos: ${unsafe}.`;
+      await writeFile(join(directory, 'contatos.md'), content);
+      const logs = [];
+      assert.deepEqual((await loadBusinessContext(root, 'Contatos', directory, { log: (message) => logs.push(message) }))
+        .map(({ path }) => path), ['business-context/geral.md'], unsafe);
+      assert.deepEqual(logs, [`Contexto ignorado: contatos.md (${reason})`], unsafe);
+      assert.ok(logs.every((message) => !message.includes(unsafe) && !message.includes(content)), unsafe);
+
+      await writeFile(join(directory, 'contatos.md'), content.replace(unsafe, safe));
+      logs.length = 0;
+      assert.deepEqual((await loadBusinessContext(root, 'Contatos', directory, { log: (message) => logs.push(message) }))
+        .map(({ path }) => path), ['business-context/contatos.md', 'business-context/geral.md'], safe);
+      assert.deepEqual(logs, [], safe);
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('sync privado converte cabeçalho, descarta inválidos e preserva geração anterior sem token', async () => {
   const stateDir = await mkdtemp(join(tmpdir(), 'faq-business-state-'));
   const sourceDir = await mkdtemp(join(tmpdir(), 'faq-business-source-'));
