@@ -1,10 +1,55 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateFreeFaqSections } from './faq-editorial.mjs';
+import { validateFreeFaqSections, judgeClaims, renderFreeFaqSections } from './faq-editorial.mjs';
 import { generateContentPackage } from './content-ai-service.mjs';
+import { mentionsSource } from './source-mention.mjs';
 
 const context = { request: { topic: 'Robô', module: 'Robôs' }, screenFacts: [], existing: [] };
 const sections = (text) => ({ oQueE: [{ text }], passos: [{ tarefa: 'Ativar', passos: [{ text: 'Clique em **Publicar**.' }] }] });
+
+test('atribuição gramatical é recusada nas saídas públicas sem bloquear linguagem comum', () => {
+  const rejected = [
+    'Segundo o conteúdo fornecido, o robô recebe o cliente.',
+    'Conforme o material enviado, o robô recebe o cliente.',
+    'De acordo com as informações disponíveis, o robô recebe o cliente.',
+    'Com base no contexto, o robô recebe o cliente.',
+    'A partir dos dados apresentados, o robô recebe o cliente.',
+    'Pelo que consta em um documento consultado, o robô recebe o cliente.',
+    'Como descrito em texto recebido, o robô recebe o cliente.',
+    'Não há informação sobre o robô.',
+    'As informações disponíveis não explicam o robô.',
+    'Não foi informado como o robô responde.',
+  ];
+  for (const phrase of rejected) {
+    assert.equal(mentionsSource(phrase), true, phrase);
+    const checked = validateFreeFaqSections(sections(phrase), context);
+    assert.deepEqual(checked.sections.oQueE, [], phrase);
+    assert.doesNotMatch(renderFreeFaqSections(checked.sections), /conteúdo fornecido|material enviado|informações disponíveis/iu);
+  }
+  for (const phrase of [
+    'Conforme o plano contratado, o limite muda.',
+    'Segundo passo: clique em **Salvar**.',
+    'De acordo com o horário de atendimento configurado, o robô responde fora do expediente.',
+  ]) assert.equal(mentionsSource(phrase), false, phrase);
+});
+
+test('juiz semântico reescreve uma vez e omite atribuição persistente, sem nova chamada', async () => {
+  const input = { ...sections('A leitura de apoio mostra que o robô recebe o cliente.'),
+    duvidas: [{ text: 'O que li para gerar esta resposta diz que o robô responde.' }] };
+  let calls = 0;
+  const judged = await judgeClaims(input, { ...context, business: [{ module: 'Robôs' }] }, async (claims) => {
+    calls++;
+    return { claims: claims.map((claim) => ({ id: claim.id, status: 'sustentada', reason: '',
+      sourceMention: claim.section === 'oQueE' || claim.section === 'duvidas',
+      rewrite: claim.section === 'oQueE' ? 'O robô recebe o cliente.'
+        : claim.section === 'duvidas' ? 'Conforme o material enviado, o robô responde.' : '' })) };
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual(judged.sections.oQueE, [{ text: 'O robô recebe o cliente.' }]);
+  assert.deepEqual(judged.sections.duvidas, []);
+  assert.match(judged.pending.join(' '), /menção à fonte/u);
+  assert.doesNotMatch(renderFreeFaqSections(judged.sections), /leitura de apoio|o que li|material enviado/iu);
+});
 
 test('replay do revisor: omite atribuição ao contexto em O que é', () => {
   const result = validateFreeFaqSections(sections('Segundo o contexto, o robô recebe o cliente.'), context);
