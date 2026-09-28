@@ -203,7 +203,11 @@ export function validateFaqSections(sections, context) {
           && cite.lineEnd === fact.lineEnd);
         return fact?.claimText ?? fact?.text ?? '';
       });
-      const uncovered = supportedClaim(unit.text, sources, { example: key === 'exemplo', request: context.request });
+      const screenLabels = (context.screenFacts ?? []).filter((fact) => fact.text
+        && fact.text.length <= 80 && !/[.!?]/u.test(fact.text) && hasLabel(unit.text, fact.text))
+        .map((fact) => fact.text);
+      const uncovered = supportedClaim(unit.text, [...sources, ...screenLabels],
+        { example: key === 'exemplo', request: context.request });
       if (!uncovered.length) return true;
       pending.push(`palavra sem fonte: ${uncovered.join(', ')} em ${unit.text}`);
       return false;
