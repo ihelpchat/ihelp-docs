@@ -449,3 +449,8 @@ export function fixedFaqSupportSection(request, screenFacts = []) {
   const location = screen && screen.length <= 80 ? screen : topic;
   return [{ text: `Se não conseguir concluir um passo na tela ${location}, fale com o suporte. Informe qual passo tentou e o que apareceu na tela.`, citations: [] }];
 }
+
+// M5.59 r16: replaced after the RED contract tests.
+export function validateFreeFaqSections() { return { sections: {}, pending: [], blocking: [] }; }
+export async function judgeClaims() { return []; }
+export function renderFreeFaqSections() { return ''; }
