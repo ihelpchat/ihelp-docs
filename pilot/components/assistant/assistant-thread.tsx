@@ -11,6 +11,7 @@ import { clickablesFor, type AssistantReply } from '@/lib/assistant';
 import { supportUrl, supportLink, supportGuideFromPage, supportGuideFromReply } from '@/lib/links';
 import { productActionUrl } from '@/lib/links';
 import { assistantDisplayName } from '@/lib/assistant-name';
+import { GuideActionLink } from '@/components/guide-action-link';
 
 function useCopy() {
   const [copied, setCopied] = useState<string | null>(null);
@@ -130,9 +131,7 @@ function AiMessage({ message, last, compact }: { message: Extract<ChatMessage, {
                   <p>{step.text}</p>
                   {step.image ? <StepVisual image={step.image} /> : null}
                   {clickables.filter((item) => item.slot === 'action' && item.stepIndex === index).map((item) => item.kind === 'link' ? (
-                    <a key={item.href} className="ih-ai-product-action" href={item.href} target="_blank" rel="noreferrer noopener">
-                      {item.label}<ArrowRight aria-hidden="true" />
-                    </a>
+                    <GuideActionLink key={item.href} href={item.href}>{item.label}</GuideActionLink>
                   ) : null)}
                 </div>
               </li>

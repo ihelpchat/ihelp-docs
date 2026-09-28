@@ -133,7 +133,7 @@ const requestedFaqTaskText = (request = {}) => fold([
 export function faqModuleName(request = {}, screenFacts = []) {
   const route = screenFacts.find((fact) => fact.kind === 'route' && fact.route)?.route ?? request.productRoute;
   const menuFact = screenFacts.find((fact) => fact.kind === 'route' && fact.route === route
-    && /(?:components\/ui\/components\/NavBar\/index\.tsx|store\/slices\/tab\/tab\.slice\.ts)$/u.test(fact.path ?? ''));
+    && /(?:components\/ui\/components\/NavBar\/index\.tsx|store\/slices\/tab\/tab\.slice\.ts):\d+$/u.test(fact.source ?? ''));
   return menuFact?.text ?? coverageMatrix.find((item) => item.productRoutes.includes(route))?.module
     ?? coverageMatrix.find((item) => fold(item.module) === fold(request.module))?.module
     ?? null;
