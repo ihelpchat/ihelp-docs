@@ -501,9 +501,9 @@ FREE_FAQ_SCHEMA.properties.articles.items.properties.sections = {
 };
 const FAQ_JUDGE_SCHEMA = { type: 'object', additionalProperties: false, required: ['claims'],
   properties: { claims: { type: 'array', items: { type: 'object', additionalProperties: false,
-    required: ['id', 'status', 'reason', 'sourceMention', 'rewrite'], properties: { id: { type: 'string' },
+    required: ['id', 'status', 'reason', 'sourceMention'], properties: { id: { type: 'string' },
       status: { type: 'string', enum: ['sustentada', 'a confirmar', 'contradiz a fonte'] },
-      reason: { type: 'string' }, sourceMention: { type: 'boolean' }, rewrite: { type: 'string' } } } } } };
+      reason: { type: 'string' }, sourceMention: { type: 'boolean' } } } } } };
 
 function checkRequest(request) {
   const value = Object.values(request).filter((item) => typeof item === 'string').join('\n');
@@ -1180,7 +1180,7 @@ async function generateContentPackageCore(root, request, options = {}) {
           facts: faqContext.screenFacts, business: faqContext.business, support: faqContext.support,
           pages: existing, prints: productContext.printManifest ?? [] };
           const judgeResponse = await modelResponse(options, baseRequest('juiz_faq', FAQ_JUDGE_SCHEMA, [
-            { role: 'developer', content: 'Julgue CADA frase da página com as fontes. Retorne exatamente um item por id, na ordem. Classifique como sustentada, a confirmar ou contradiz a fonte. Para cada frase, responda também sourceMention: a frase atribui o conteúdo a material ou fonte, ou fala da própria geração? Se sim, forneça em rewrite uma única redação sem a atribuição, preservando apenas a afirmação factual; caso contrário, use rewrite vazio. Suporte mostra dúvidas, mas não prova a resposta. Modelos de estilo não são fonte. Se faltar contexto de negócio para uma afirmação de negócio, marque a confirmar. Não omita frase. Dê motivo curto para pendência ou contradição.' },
+            { role: 'developer', content: 'Julgue CADA frase da página com as fontes. Retorne exatamente um item por id, na ordem. Classifique como sustentada, a confirmar ou contradiz a fonte. Para cada frase, responda também sourceMention: a frase atribui o conteúdo a material ou fonte, ou fala da própria geração? Não reescreva frases; o código remove atribuições destacáveis e omite as demais. Suporte mostra dúvidas, mas não prova a resposta. Modelos de estilo não são fonte. Se faltar contexto de negócio para uma afirmação de negócio, marque a confirmar. Dê motivo curto para pendência ou contradição.' },
             { role: 'user', content: redactPromptEvidence(JSON.stringify({ claims, sources }), productContext) },
           ], options), productContext, { request, existing });
           const parsedJudge = parseModelJson(judgeResponse);

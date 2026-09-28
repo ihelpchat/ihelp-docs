@@ -638,7 +638,6 @@ export async function judgeClaims(sections, context, provider) {
     if (!verdict || !['sustentada', 'a confirmar', 'contradiz a fonte'].includes(verdict.status)
       || typeof verdict.reason !== 'string' || verdict.reason.length > 500
       || (verdict.sourceMention !== undefined && typeof verdict.sourceMention !== 'boolean')
-      || (verdict.rewrite !== undefined && typeof verdict.rewrite !== 'string')
       || statuses.has(claim.id))
       throw new Error('juiz: claims inválidas');
     statuses.set(claim.id, verdict);
@@ -649,14 +648,18 @@ export async function judgeClaims(sections, context, provider) {
     const text = splitClaims(unit.text).flatMap((phrase) => {
       const claim = claims[cursor++], verdict = statuses.get(claim.id);
       if (verdict.sourceMention) {
-        const rewrite = verdict.rewrite?.trim() ?? '';
-        if (!rewrite || splitClaims(rewrite).length !== 1 || mentionsSource(rewrite)
-          || rigidFaqIssue(rewrite, context)) {
-          pending.push(`${phrase} — menção à fonte; reescrita inválida`);
+        const introductory = phrase.match(/^(segundo|conforme|de acordo com|com base (?:em|no|na|nos|nas)|a partir (?:de|do|da|dos|das)|pelo que consta em|como (?:indicado|descrito|mencionado) em)\s+([^,]+),\s*(.+)$/iu);
+        const prefix = phrase.match(/^(.+?)\s+mostra que\s+(.+)$/iu);
+        const candidate = introductory && mentionsSource(`${introductory[1]} ${introductory[2]}`)
+          ? introductory[3] : prefix && mentionsSource(`Segundo ${prefix[1]}`) ? prefix[2] : '';
+        const withoutAttribution = candidate.charAt(0).toLocaleUpperCase('pt-BR') + candidate.slice(1);
+        if (!withoutAttribution || splitClaims(withoutAttribution).length !== 1
+          || mentionsSource(withoutAttribution) || rigidFaqIssue(withoutAttribution, context)) {
+          pending.push(`${phrase} — frase omitida: mencionava a fonte`);
           return [];
         }
-        pending.push(`${phrase} — menção à fonte; reescrita sem atribuição`);
-        phrase = rewrite;
+        pending.push(`${phrase} — menção à fonte; atribuição removida`);
+        phrase = withoutAttribution;
       }
       const noBusiness = !context.business?.some((item) => item.module === context.request?.module)
         && ['oQueE', 'paraQueServe', 'casosDeUso'].includes(key);
