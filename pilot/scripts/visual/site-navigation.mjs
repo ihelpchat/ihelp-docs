@@ -8,7 +8,7 @@ const baseUrl = process.env.BASE_URL;
 assert.ok(baseUrl, 'BASE_URL necessário para o teste visual');
 const browser = await launch();
 try {
-  for (const [name, viewport] of Object.entries({ desktop: { width: 1440, height: 900 }, mobile: { width: 390, height: 844 } })) {
+  for (const [name, viewport] of Object.entries({ desktop: { width: 1440, height: 900 }, desktop1280: { width: 1280, height: 900 }, mobile: { width: 390, height: 844 } })) {
     const page = await browser.newPage({ viewport });
     try {
       await page.goto(`${baseUrl}/docs/sobre-o-sistema/agenda-de-contatos/`, { waitUntil: 'networkidle' });
@@ -40,8 +40,8 @@ try {
           `${name}: ${key} ${metrics[key]?.font}px fora de ${min}–${max}px (produção ${production}px)`);
       }
       assert.ok(metrics.body?.font >= 16, `${name}: corpo ${metrics.body?.font}px < 16px`);
-      assert.ok(metrics.search?.width >= (name === 'desktop' ? 150 : 36), `${name}: busca não visível`);
-      if (name === 'desktop') {
+      assert.ok(metrics.search?.width >= (name !== 'mobile' ? 150 : 36), `${name}: busca não visível`);
+      if (name !== 'mobile') {
         assert.ok(metrics.searchText?.width > 70, 'desktop: texto da busca oculto');
         assert.ok(metrics.searchText?.width + 0.5 >= metrics.searchText?.scrollWidth,
           `desktop: placeholder cortado (${metrics.searchText?.width}px < ${metrics.searchText?.scrollWidth}px)`);
@@ -65,5 +65,5 @@ try {
       assert.ok(metrics.launcher?.height >= 44, `${name}: botão flutuante abaixo de 44px`);
     } finally { await page.close(); }
   }
-  console.log('Navegação visual: Agenda de Contatos desktop 1440 e mobile 390 passou.');
+  console.log('Navegação visual: Agenda de Contatos desktop 1440/1280 e mobile 390 passou.');
 } finally { await browser.close(); }
