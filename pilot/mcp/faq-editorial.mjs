@@ -137,6 +137,34 @@ export function markFaqStepLabels(unit, screenFacts = []) {
 export const hasFaqTaskFacts = (screenFacts) => Array.isArray(screenFacts) && screenFacts.some((fact) =>
   ['action', 'field', 'upload', 'validation', 'destination'].includes(fact.kind) && fact.text);
 
+// A requested task is covered only by a validated step citing one of its screen facts.
+const FAQ_TASKS = [
+  ['buscar', /\bbusc/u, /\bbusc|\bfiltro|limpar filtros/u],
+  ['cadastrar', /\bcadastr/u, /\bcadastr|\badicionar contato/u],
+  ['criar', /\bcri(?:ar|e|ando)\b/u, /\bcriar novo|\bdigite o titulo/u],
+  ['editar', /\bedit/u, /\bedit/u],
+  ['carteirizar', /\bcarteiriz|\bvincul|\bresponsav/u, /\bproprietario|\bdepartamento|\busuario/u],
+  ['agendar', /\bagend/u, /\bagend/u],
+  ['importar', /\bimport/u, /\bimport|\.csv|\.xlsx|\.xls/u],
+  ['exportar', /\bexport/u, /\bexport/u],
+  ['montar fluxo', /\bmontar.{0,20}\bfluxo/u, /\bfluxo|\bbloco|\bopcoes/u],
+  ['ativar', /\bativ/u, /\bpublicar|\bativ/u],
+];
+
+export function missingFaqTaskSteps(request = {}, screenFacts = [], steps = []) {
+  const asked = fold((request.details ?? request.description ?? '').split(/\bcobrir\b/iu).at(-1));
+  return FAQ_TASKS.flatMap(([task, requested, visible]) => {
+    if (!requested.test(asked)) return [];
+    const relevant = screenFacts.filter((fact) => fact.text && visible.test(fold(`${fact.text} ${fact.subject ?? ''}`))
+      && ['action', 'field', 'upload', 'destination', 'text'].includes(fact.kind));
+    if (!relevant.length) return [];
+    const covered = steps.some((step) => step.citations?.some((cite) => relevant.some((fact) =>
+      !cite.source && cite.repository === fact.repository && cite.path === fact.path && cite.sha === fact.sha
+        && cite.lineStart <= fact.lineStart && fact.lineEnd <= cite.lineEnd)));
+    return covered ? [] : [`tarefa sem passo: ${task}`];
+  });
+}
+
 export function classifyFaqQuestions(questions = [], _request = {}, screenFacts = null) {
   const blocking = [], pending = [];
   const hasTaskFacts = hasFaqTaskFacts(screenFacts);
@@ -276,7 +304,7 @@ export function validateFaqSections(sections, context) {
         .map((fact) => fact.text);
       const uncovered = supportedClaim(unit.text, [...sources, ...screenLabels],
         { example: key === 'exemplo', request: context.request,
-          lexical: key !== 'passos' && !(key === 'resposta'
+          lexical: key !== 'passos' && key !== 'erros' && !(key === 'resposta'
             && unit.text === deterministicFaqAnswer(context.request, context.screenFacts)?.text) });
       if (!uncovered.length) return true;
       pending.push(`palavra sem fonte: ${uncovered.join(', ')} em ${unit.text}`);

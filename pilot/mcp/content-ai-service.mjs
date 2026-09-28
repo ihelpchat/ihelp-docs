@@ -16,7 +16,7 @@ import { guardModelOutput } from './model-output-guard.mjs';
 import { PRODUCT_TERMS } from './product-terms.mjs';
 import { classifyFaqQuestions, hasFaqTaskFacts, loadBusinessContext, selectFaqStyleExamples, adaptScreenFacts,
   validateFaqSections, renderFaqSections, fixedFaqSupportSection, deterministicFaqAnswer,
-  markFaqStepLabels, FAQ_SECTIONS } from './faq-editorial.mjs';
+  markFaqStepLabels, missingFaqTaskSteps, FAQ_SECTIONS } from './faq-editorial.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
 contentMaxOutputTokens();
@@ -52,6 +52,8 @@ const publicNames = new Set(PRODUCT_TERMS.flatMap((term) => [term, ...term.split
 const isPublicName = (name) => publicNames.has(name.toLocaleLowerCase('pt-BR'));
 const faqRequested = (request) => request.module !== 'api'
   && /\bfaq\b|página do faq/iu.test(`${request.topic ?? ''} ${request.description ?? ''} ${request.details ?? ''}`);
+const faqMultipleTypesRequested = (request) => /\b(?:faq\s+e\s+tutorial|tutorial\s+e\s+faq|dois\s+artigos|duas\s+p[aá]ginas)\b/iu
+  .test(`${request.description ?? ''} ${request.details ?? ''}`);
 
 function proseIssues(article, endpoint, packageEndpoints = [endpoint], refs = [], globalScope = false) {
   const issues = [];
@@ -721,9 +723,9 @@ async function planContentCore(root, request, options = {}) {
         'O público final acabou de acessar o produto há 30 segundos, está em trial e não recebeu treinamento.',
         'Identifique conflitos, informação ausente, duplicidade e nomes de telas ou botões que precisam ser confirmados.',
         'Não pergunte o que os FATOS DA TELA já respondem; cite o fato.',
-        request.module === 'api' ? 'Use needs_information somente quando faltar método, rota, parâmetro ou campo de primeiro nível da resposta. Outras dúvidas são pendências não bloqueantes. Não invente comportamento.' : faqRequested(request) ? 'O núcleo do FAQ é a resposta direta e o passo a passo de pelo menos UMA tarefa pedida com fatos de tela. Se outra tarefa pedida não tiver fatos, omita sua seção e registre pendência; não bloqueie as demais. Use needs_information só quando NENHUMA tarefa pedida tiver fatos de tela. Não invente comportamento.' : 'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
+        request.module === 'api' ? 'Use needs_information somente quando faltar método, rota, parâmetro ou campo de primeiro nível da resposta. Outras dúvidas são pendências não bloqueantes. Não invente comportamento.' : faqRequested(request) ? 'O núcleo do FAQ é a resposta direta e um passo para CADA tarefa pedida com fatos de tela. Se uma tarefa não tiver fatos, registre pendência; não bloqueie as demais. Use needs_information só quando NENHUMA tarefa pedida tiver fatos de tela. Não invente comportamento.' : 'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
         'Sugira ações no produto somente com rota fornecida ou sustentada pelos detalhes. target é um identificador data-help-id estável, nunca um seletor CSS.',
-        request.module === 'api' ? 'Planeje páginas de referência da API. Para tema amplo, foque nos endpoints documented=true. Se o pedido nomeia o caminho de uma página nova para um endpoint público, documented=false não exige pergunta. Não peça dados já presentes nos fatos estruturados. Endpoint sem public=true exige confirmação. responseFields=null não bloqueia: a resposta exibirá nota fixa e pendência.' : 'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
+        request.module === 'api' ? 'Planeje páginas de referência da API. Para tema amplo, foque nos endpoints documented=true. Se o pedido nomeia o caminho de uma página nova para um endpoint público, documented=false não exige pergunta. Não peça dados já presentes nos fatos estruturados. Endpoint sem public=true exige confirmação. responseFields=null não bloqueia: a resposta exibirá nota fixa e pendência.' : faqRequested(request) ? 'Planeje uma página FAQ completa. Só planeje um tutorial separado se o pedido solicitar explicitamente mais de um tipo de artigo.' : 'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
         request.module === 'api' ? 'Guidance e risks são orientação interna e não precisam de grounding por frase. Nunca são publicados. Podem mencionar métodos e nomes técnicos para orientar a geração; o schema é a única validação desta resposta. A prosa publicada será validada com grounding completo na geração.' : faqRequested(request) ? 'Guidance e risks são orientação interna e não precisam de grounding por frase. A prosa publicada terá citações em cada unidade.' : 'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Sem evidência para o núcleo, use needs_information.',
       ].join(' '),
     },
@@ -800,7 +802,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       content: [
         'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.',
         request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
-        request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : faqRequested(request) ? 'Gere uma FAQ em docs/ e, se houver fonte suficiente, um tutorial em tutoriais/. Deixe resposta direta vazia: ela será montada dos fatos e tarefas do pedido. Depois, nesta ordem: para que serve ao negócio; 2 ou 3 casos concretos; passo a passo com rótulos exatos da tela em negrito ou aspas; exemplo fictício completo; dúvidas comuns do suporte; erros comuns com mensagens literais da tela. Deixe suporte vazio: essa seção vem de um modelo fixo. Use os três modelos só para estilo, nunca como fatos do tema.' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
+        request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : faqRequested(request) ? 'Gere UMA página FAQ em docs/ com todas as tarefas cobertas por fatos da tela. Só gere tutorial separado se o pedido pedir explicitamente mais de um tipo. Deixe resposta direta vazia: ela será montada dos fatos e tarefas do pedido. Depois, nesta ordem: para que serve ao negócio; 2 ou 3 casos concretos; passo a passo com rótulos exatos da tela em negrito ou aspas; exemplo fictício completo; dúvidas comuns do suporte; erros comuns com mensagens literais da tela. Uma tarefa com fatos de tela precisa de ao menos um passo, mesmo se outras tarefas não tiverem fonte. Erros comuns exigem mensagem de validação literal citada; não invente mensagem. Deixe suporte vazio: essa seção vem de um modelo fixo. Use os três modelos só para estilo, nunca como fatos do tema.' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
         request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations,refs}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations,refs}, também com uma frase por text (ponto e vírgula permitido). Use refs: [] quando não houver referência cruzada. Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros, como cabeçalhos e diferenças entre endpoints.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
@@ -832,6 +834,17 @@ async function generateContentPackageCore(root, request, options = {}) {
     }
   }
   if (!Array.isArray(parsed.articles)) return withPending(apiPending('schema de artigos inválido'));
+  if (faqRequested(request) && !faqMultipleTypesRequested(request)) {
+    const faq = parsed.articles.find((article) => article.contentType === 'faq' && /^docs\//u.test(article.path ?? ''));
+    if (faq) {
+      if (!faq.sections?.passos?.length) {
+        const tutorial = parsed.articles.find((article) => article.contentType === 'tutorial');
+        if (tutorial?.sections?.passos?.length) faq.sections.passos = tutorial.sections.passos;
+      }
+      parsed.articles = [faq];
+      safePackage.articles = parsed.articles;
+    }
+  }
   if (request.module === 'api' && !parsed.articles.length) return withPending(apiPending('nenhuma página de API gerada'));
   if (request.module === 'api') {
     if (!productContext.apiExamples?.length) return withPending(apiPending('formato da referência API indisponível'));
@@ -998,13 +1011,17 @@ async function generateContentPackageCore(root, request, options = {}) {
     const steps = (prose.sections?.passos ?? []).map((unit) => markFaqStepLabels(unit, faqContext.screenFacts));
     const result = validateFaqSections({ ...prose.sections, resposta: direct ? [direct] : [],
       passos: steps, suporte: [] }, faqContext);
+    const missingTasks = missingFaqTaskSteps(request, faqContext.screenFacts, result.sections.passos ?? []);
     sectionPending.push(...result.pending.filter((item) => !item.includes(FAQ_SECTIONS.suporte))
-      .map((item) => `${prose.path}: ${item}`));
+      .map((item) => `${prose.path}: ${/Para que serve|Quando usar|Exemplo/u.test(item)
+        ? `seção sem fonte de negócio: ${item}` : item}`));
     const uncovered = result.pending.filter((item) => item.startsWith('palavra sem fonte:') || item.startsWith('metanarração'));
-    if (uncovered.length && !options.faqRetryIssues) return generateContentPackage(root, request, {
-      ...options, productContext, plan, faqRetryIssues: uncovered.map((item) => `${prose.path}: ${item}`),
+    if ((uncovered.length || missingTasks.length) && !options.faqRetryIssues) return generateContentPackage(root, request, {
+      ...options, productContext, plan, faqRetryIssues: [...uncovered, ...missingTasks].map((item) => `${prose.path}: ${item}`),
     });
-    if (result.blocking.length) return withPending(apiPending(`${prose.path}: faltam fontes para resposta direta ou passo principal${uncovered.length ? `; ${uncovered.join('; ')}` : ''}`));
+    sectionPending.push(...missingTasks.map((item) => `${prose.path}: ${item}`));
+    if (result.blocking.length) return withPending({ ...apiPending(`${prose.path}: faltam fontes para resposta direta ou passo principal${uncovered.length ? `; ${uncovered.join('; ')}` : ''}`),
+      pending: sectionPending });
     const { sections: _sections, ...article } = prose;
     article.body = renderFaqSections({ ...result.sections,
       suporte: fixedFaqSupportSection(request, faqContext.screenFacts) });
