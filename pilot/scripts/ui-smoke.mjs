@@ -73,10 +73,6 @@ async function assertFaqGuideShortcut(page, label) {
     return { top: box.top + parseFloat(style.top), height: box.height - parseFloat(style.top) - parseFloat(style.bottom),
       background: style.backgroundColor };
   });
-  assert.ok(faqBox && guideBox && guideBox.height >= 44, `${label}: selo do guia precisa de alvo de 44px`);
-  assert.ok(Math.abs(faqBox.y - guideVisual.top) < 2 && Math.abs(faqBox.height - guideVisual.height) < 2,
-    `${label}: selos devem ficar lado a lado no mesmo tamanho visual`);
-  assert.equal(guideVisual.background, 'rgb(220, 252, 231)', `${label}: fundo visual do selo ausente`);
   assert.equal(await action.count(), 1, `${label}: link secundário do módulo ausente`);
   assert.match(await action.getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/configuracoes\/channel\?ihelpGuide=abrir-canais$/);
   const shortcut = await page.evaluate(() => {
@@ -88,24 +84,25 @@ async function assertFaqGuideShortcut(page, label) {
     document.querySelector('.ih-article').append(reference);
     const styles = (element) => {
       const style = getComputedStyle(element);
-      return Object.fromEntries(['color', 'backgroundColor', 'borderTopColor', 'borderTopWidth',
-        'borderRadius', 'fontSize', 'fontWeight', 'minHeight', 'paddingTop', 'paddingRight',
-        'paddingBottom', 'paddingLeft'].map((key) => [key, style[key]]));
+      return Object.fromEntries(['color', 'backgroundColor', 'borderTopColor', 'borderTopStyle',
+        'borderTopWidth', 'borderRadius', 'fontSize', 'fontWeight', 'minHeight',
+        'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+        'textDecorationLine'].map((key) => [key, style[key]]));
     };
     const result = { guideClass: guide?.className, guide: styles(guide),
       assistant: styles(reference.querySelector('a')),
-      secondary: { color: getComputedStyle(secondary).color,
-        decoration: getComputedStyle(secondary).textDecorationLine,
-        height: secondary.getBoundingClientRect().height,
-        bodyColor: getComputedStyle(document.querySelector('.ih-prose')).color } };
+      article: styles(secondary), articleHeight: secondary.getBoundingClientRect().height };
     reference.remove();
     return result;
   });
   assert.match(shortcut.guideClass, /ih-ai-product-action/u, `${label}: botão do guia não usa o componente da Claricia`);
   assert.deepEqual(shortcut.guide, shortcut.assistant, `${label}: estilos computados do guia diferem da Claricia`);
-  assert.notEqual(shortcut.secondary.color, shortcut.secondary.bodyColor, `${label}: link secundário não tem cor de link`);
-  assert.match(shortcut.secondary.decoration, /underline/u, `${label}: link secundário não parece clicável`);
-  if (label === 'mobile') assert.ok(shortcut.secondary.height >= 44, 'link secundário precisa de alvo de 44px no celular');
+  assert.deepEqual(shortcut.article, shortcut.assistant, `${label}: chip do artigo difere do assistente`);
+  if (label === 'mobile') assert.ok(shortcut.articleHeight >= 44, 'chip do artigo precisa de alvo de 44px no celular');
+  assert.ok(faqBox && guideBox && guideBox.height >= 44, `${label}: selo do guia precisa de alvo de 44px (altura ${guideBox?.height})`);
+  assert.ok(Math.abs(faqBox.y - guideVisual.top) < 2 && Math.abs(faqBox.height - guideVisual.height) < 2,
+    `${label}: selos devem ficar lado a lado no mesmo tamanho visual`);
+  assert.equal(guideVisual.background, 'rgb(220, 252, 231)', `${label}: fundo visual do selo ausente`);
   await assertNoHorizontalOverflow(page, `${label} atalho FAQ`);
   await page.screenshot({ path: `/tmp/ihelp-faq-guide-${label}.png`, fullPage: true });
 }
