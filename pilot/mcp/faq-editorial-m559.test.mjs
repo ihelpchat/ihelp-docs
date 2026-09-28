@@ -135,10 +135,12 @@ test('few-shot usa três páginas e reage à edição', async () => {
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test('contexto público sob a raiz pilot chega ao prompt e pode ser citado', async () => {
+test('contexto privado configurado chega ao prompt e pode ser citado', async () => {
   const root = await mkdtemp(join(tmpdir(), 'faq-pilot-'));
+  const oldBusinessDir = process.env.BUSINESS_CONTEXT_DIR;
   try {
     await mkdir(join(root, 'architecture', 'business-context'), { recursive: true });
+    process.env.BUSINESS_CONTEXT_DIR = join(root, 'architecture', 'business-context');
     await writeFile(join(root, 'architecture', 'business-context', 'contatos.md'),
       '🟢 PÚBLICO\nOrganizar contatos evita retrabalho da equipe.');
     await writeFile(join(root, 'architecture', 'business-context', 'robos.md'),
@@ -160,7 +162,11 @@ test('contexto público sob a raiz pilot chega ao prompt e pode ser citado', asy
     assert.equal(validateFaqSections({ paraQueServe: [unit('Organizar contatos evita retrabalho.', [
       { source: 'negocio', path: 'business-context/contatos.md', quote: 'Organizar contatos evita retrabalho da equipe.' },
     ])] }, { business: context.businessContext }).sections.paraQueServe?.length, 1);
-  } finally { await rm(root, { recursive: true, force: true }); }
+  } finally {
+    if (oldBusinessDir === undefined) delete process.env.BUSINESS_CONTEXT_DIR;
+    else process.env.BUSINESS_CONTEXT_DIR = oldBusinessDir;
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('SHA do front com dez dígitos consecutivos chega íntegro ao prompt e ao passo', async () => {
@@ -251,8 +257,10 @@ test('afirmações de negócio exigem números, promessa e todas as palavras sus
 
 test('negócio começa vazio e fatos da tela mantêm proveniência', async () => {
   const root = await mkdtemp(join(tmpdir(), 'faq-business-'));
+  const oldBusinessDir = process.env.BUSINESS_CONTEXT_DIR;
   try {
     await mkdir(join(root, 'architecture', 'business-context'), { recursive: true });
+    process.env.BUSINESS_CONTEXT_DIR = join(root, 'architecture', 'business-context');
     await writeFile(join(root, 'architecture', 'business-context', 'README.md'), 'Formato público');
     assert.deepEqual(await loadBusinessContext(root), []);
     await writeFile(join(root, 'architecture', 'business-context', 'publico.md'), '🟢 PÚBLICO\nA equipe ganha tempo.');
@@ -261,7 +269,11 @@ test('negócio começa vazio e fatos da tela mantêm proveniência', async () =>
     const facts = adaptScreenFacts({ facts: [{ kind: 'action', text: 'Adicionar Contato', source: 'src/Contact.tsx:12', subject: 'cadastro contato' }], sha: 'a'.repeat(40) });
     assert.equal(facts[0].lineStart, 12);
     assert.equal(facts[0].text, 'Adicionar Contato');
-  } finally { await rm(root, { recursive: true, force: true }); }
+  } finally {
+    if (oldBusinessDir === undefined) delete process.env.BUSINESS_CONTEXT_DIR;
+    else process.env.BUSINESS_CONTEXT_DIR = oldBusinessDir;
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('passo exige id de fato e erro exige mensagem validada', () => {

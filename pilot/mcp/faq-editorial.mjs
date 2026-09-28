@@ -1,12 +1,13 @@
-import { readFile, readdir, lstat } from 'node:fs/promises';
+import { readFile, readdir, lstat, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { redactSensitiveData, containsSensitiveData } from './sensitive-data.mjs';
+import { redactSensitiveData, containsSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 import { valueFor } from './api-synthetic-example.mjs';
 import { FAQ_NEUTRAL_WORDS, FAQ_NEUTRAL_VERBS } from './faq-neutral-words.mjs';
 import { faqStem } from './faq-portuguese-stem.mjs';
 import coverageMatrix from '../architecture/coverage-matrix.json' with { type: 'json' };
 import { plainMarkdownText } from './faq-mdx-safety.mjs';
+import { mentionsSource } from './source-mention.mjs';
 
 export const FAQ_SECTIONS = {
   resposta: 'Resposta direta', paraQueServe: 'Para que serve', quandoUsar: 'Quando usar',
@@ -130,6 +131,11 @@ const citeOf = ({ repository, path, lineStart, lineEnd, sha }) =>
 const requestedFaqTaskText = (request = {}) => fold([
   request.topic, request.description, request.details,
 ].filter(Boolean).join(' '));
+const requestedFaqOperationalText = (request = {}) => fold([
+  request.topic,
+  String(request.description ?? '').replace(/^\s*criar\s+(?:a\s+)?(?:página|faq|guia|documentação)\b/iu, ''),
+  request.details,
+].filter(Boolean).join(' '));
 
 export function faqModuleName(request = {}, screenFacts = []) {
   const route = screenFacts.find((fact) => fact.kind === 'route' && fact.route)?.route ?? request.productRoute;
@@ -218,7 +224,7 @@ const FAQ_TASKS = [
 ];
 
 export function faqTasksWithoutFacts(request = {}, screenFacts = []) {
-  const asked = requestedFaqTaskText(request);
+  const asked = requestedFaqOperationalText(request);
   return FAQ_TASKS.flatMap(([task, requested, visible]) => requested.test(asked)
     && !screenFacts.some((fact) => fact.text && visible.test(fold(`${fact.text} ${fact.subject ?? ''}`))
       && ['action', 'field', 'upload', 'destination', 'text'].includes(fact.kind))
@@ -226,7 +232,7 @@ export function faqTasksWithoutFacts(request = {}, screenFacts = []) {
 }
 
 export function missingFaqTaskSteps(request = {}, screenFacts = [], steps = []) {
-  const asked = requestedFaqTaskText(request);
+  const asked = requestedFaqOperationalText(request);
   return FAQ_TASKS.flatMap(([task, requested, visible]) => {
     if (!requested.test(asked)) return [];
     const relevant = screenFacts.filter((fact) => fact.text && visible.test(fold(`${fact.text} ${fact.subject ?? ''}`))
@@ -240,14 +246,15 @@ export function missingFaqTaskSteps(request = {}, screenFacts = [], steps = []) 
 }
 
 export function missingFreeFaqTaskSteps(request = {}, screenFacts = [], tasks = []) {
-  const asked = requestedFaqTaskText(request);
+  const asked = requestedFaqOperationalText(request);
   return FAQ_TASKS.flatMap(([task, requested, visible]) => {
     if (!requested.test(asked)) return [];
     const relevant = screenFacts.filter((fact) => fact.text && visible.test(fold(`${fact.text} ${fact.subject ?? ''}`))
       && ['action', 'field', 'upload', 'destination', 'text'].includes(fact.kind));
-    if (!relevant.length) return [];
     const covered = tasks.some((entry) => requested.test(fold(entry.tarefa ?? ''))
-      && entry.passos?.some((step) => relevant.some((fact) => hasLabel(step.text ?? '', fact.text))));
+      && entry.passos?.some((step) => relevant.length
+        ? relevant.some((fact) => hasLabel(step.text ?? '', fact.text))
+        : String(step.text ?? '').trim().length > 0));
     return covered ? [] : [`tarefa sem passo: ${task}`];
   });
 }
@@ -266,20 +273,33 @@ export function classifyFaqQuestions(questions = [], _request = {}, screenFacts 
   return { blocking, pending };
 }
 
-export async function loadBusinessContext(pilotRoot, module) {
-  const directory = join(pilotRoot, 'architecture', 'business-context');
-  if (!(await lstat(directory).catch(() => null))?.isDirectory()) return [];
+export async function loadBusinessContext(pilotRoot, module, directory = process.env.BUSINESS_CONTEXT_DIR, { log = () => {} } = {}) {
+  if (!directory) return [];
+  if (!(await stat(directory).catch(() => null))?.isDirectory()) return [];
   const names = await readdir(directory).catch(() => []);
   const result = [];
   const moduleSlug = module && fold(module).replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '');
   for (const name of names.sort()) {
     const path = `business-context/${name}`;
-    if (!BUSINESS_PATH.test(path) || (moduleSlug && name !== `${moduleSlug}.md`)) continue;
+    if (!BUSINESS_PATH.test(path) || (moduleSlug && name !== 'geral.md' && name !== `${moduleSlug}.md`)) continue;
     const absolute = join(directory, name);
     if (!(await lstat(absolute)).isFile()) continue;
     const body = await readFile(absolute, 'utf8');
-    if (!/^🟢\s*PÚBLICO\b/mu.test(body) || /🟡|🔴|\b(?:INTERNO|CONFIDENCIAL)\b/iu.test(body)
-      || containsSensitiveData(body, { detectOpaque: true })) continue;
+    if (!/^🟢\s*PÚBLICO\b/mu.test(body)) {
+      log(`Contexto ignorado: ${name} (sem cabeçalho público)`);
+      continue;
+    }
+    if (/🟡|🔴|\b(?:INTERNO|CONFIDENCIAL)\b/iu.test(body)) {
+      log(`Contexto ignorado: ${name} (conteúdo interno)`);
+      continue;
+    }
+    if (containsSensitiveData(body, { detectOpaque: true })) {
+      const kinds = sensitiveKinds(body, { detectOpaque: true });
+      const reason = kinds.internal ? 'host interno' : kinds.personal ? 'dado pessoal'
+        : kinds.credential ? 'segredo' : 'dado sensível';
+      log(`Contexto ignorado: ${name} (${reason})`);
+      continue;
+    }
     result.push({ path, module, body: redactSensitiveData(body) });
   }
   return result;
@@ -430,7 +450,11 @@ export function validateFaqSections(sections, context) {
           ? structuredFaqStep(unit, indexedFacts, context, pending)
           : structuredFaqError(unit, indexedFacts, context, pending) };
       })
-        .filter((item) => item.rendered);
+        .filter((item) => {
+          if (!mentionsSource(item.rendered?.text)) return Boolean(item.rendered);
+          pending.push(`${FAQ_SECTIONS[key]}: menção à fonte`);
+          return false;
+        });
       if (valid.length) {
         if (key === 'passos') {
           const distinct = [];
@@ -455,6 +479,7 @@ export function validateFaqSections(sections, context) {
     }
     const valid = units.filter((unit) => {
       if (!unit || typeof unit.text !== 'string' || !normalized(unit.text)) return false;
+      if (mentionsSource(unit.text)) { pending.push(`${FAQ_SECTIONS[key]}: menção à fonte`); return false; }
       if (key !== 'resposta' && FAQ_PROCEDURAL_IMPERATIVE.test(unit.text)) return false;
       if (/\b(?:pedido|sinal agregado|fonte|nao esta descrito|nao estao descritos)\b/u.test(fold(unit.text))) {
         pending.push(`metanarração em ${unit.text}`);
@@ -584,17 +609,44 @@ const cleanFaqMeta = (text, pending) => splitClaims(text).filter((phrase) => {
 }).join(' ');
 export const trimFaqLabels = (text) => text.replace(/\*\*([^*\n]+)\*\*/gu, (_match, label) => `**${label.trim()}**`);
 
+function publishedStepEvidence(text, context, task, expectedLabel) {
+  const requestedModule = singular(fold(context.request?.module ?? ''));
+  const taskVerb = words(task).find((word) => !['como', 'de', 'do', 'da', 'o', 'a'].includes(word));
+  if (!requestedModule || !taskVerb) return false;
+  const labelKeys = [...String(text).matchAll(/\*\*([^*\n]+)\*\*/gu)]
+    .map((match) => fold(match[1].replace(/[“”"']/gu, '').trim()));
+  if (!labelKeys.length) return false;
+  if (expectedLabel && !labelKeys.includes(fold(expectedLabel.replace(/[“”"']/gu, '').trim()))) return false;
+  return (context.existing ?? []).some((page) => {
+    if (!page.title || !(String(text).includes(page.title) || page.path && String(text).includes(page.path))) return false;
+    const pageModule = page.module ? singular(fold(page.module)) : null;
+    if (pageModule ? pageModule !== requestedModule
+      : !words(`${page.title} ${page.path ?? ''}`).some((word) => singular(word) === requestedModule)) return false;
+    const sections = String(page.body ?? '').split(/(?=^#{1,6}\s+)/mu);
+    const relevant = sections.filter((section) => {
+      const heading = section.match(/^#{1,6}\s+(.+)$/mu)?.[1] ?? (sections.length === 1 ? page.title : '');
+      return words(heading).some((word) => faqStem(word) === faqStem(taskVerb));
+    });
+    return relevant.some((section) => labelKeys.every((label) => [...section.matchAll(/\*\*([^*\n]+)\*\*/gu)]
+      .some((match) => fold(match[1].replace(/[“”"']/gu, '').trim()) === label)));
+  });
+}
+
 function rigidFaqIssue(text, context, { useCase = false } = {}) {
   if (String(text).includes('→')) return 'caso de uso com seta';
   const labels = [...String(text).matchAll(/\*\*([^*\n]+)\*\*/gu)].map((match) => match[1]);
   const labelKey = (value) => fold(String(value).replace(/[“”"']/gu, '').trim());
   const known = new Set((context.screenFacts ?? []).map((fact) => labelKey(fact.text)));
   const pages = new Set((context.existing ?? []).map((page) => labelKey(page.title)));
+  const citedPages = (context.existing ?? []).filter((page) => page.title
+    && (String(text).includes(page.title) || page.path && String(text).includes(page.path)));
   for (const label of labels) {
     if (useCase && String(text).startsWith(`**${label}**`) && /[.!?]$/u.test(label)) continue;
     const before = String(text).slice(0, String(text).indexOf(`**${label}**`));
     const pageReference = pages.has(labelKey(label)) && /\b(?:consulte|veja|leia|guia|página)\b/iu.test(before.slice(-100));
-    if (!known.has(labelKey(label)) && !pageReference) return `rótulo inexistente: ${label}`;
+    const publishedLabel = context.taskHeading && citedPages.length
+      && publishedStepEvidence(text, context, context.taskHeading, label);
+    if (!known.has(labelKey(label)) && !pageReference && !publishedLabel) return `rótulo inexistente: ${label}`;
   }
   const outsideLabels = String(text).replace(/\*\*[^*\n]+\*\*/gu, ' ');
   if (destructiveVerbs(outsideLabels).length) return 'ação destrutiva fora de rótulo da tela';
@@ -621,15 +673,18 @@ export function validateFreeFaqSections(sections, context = {}) {
         if (!task || typeof task.tarefa !== 'string' || !Array.isArray(task.passos)) return [];
         const heading = task.tarefa.replace(/^#+\s*/u, '').trim();
         const headingIssue = !/^[\p{L}\p{N}() ,\/-]{1,80}$/u.test(heading)
-          ? 'título de tarefa inválido' : rigidFaqIssue(heading, context);
+          ? 'título de tarefa inválido' : mentionsSource(heading) ? 'menção à fonte' : rigidFaqIssue(heading, context);
         if (headingIssue) { pending.push(`${heading}: ${headingIssue}`); return []; }
-        if (faqTasksWithoutFacts(context.request, context.screenFacts).some((name) => fold(name) === fold(heading))) {
+        const citedPublishedPage = task.passos.some((unit) => publishedStepEvidence(unit?.text ?? '', context, heading));
+        if (!citedPublishedPage && faqTasksWithoutFacts(context.request, context.screenFacts).some((name) => fold(name) === fold(heading))) {
           pending.push(`tarefa sem fatos de tela: ${heading}`);
           return [];
         }
         const steps = task.passos.flatMap((unit) => {
-          const text = typeof unit?.text === 'string' ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
-          const issue = text ? rigidFaqIssue(text, context) : 'passo vazio';
+          const sourceMention = mentionsSource(unit?.text);
+          const text = typeof unit?.text === 'string' && !sourceMention ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
+          const issue = sourceMention ? 'menção à fonte' : text
+            ? rigidFaqIssue(text, { ...context, taskHeading: heading }) : 'passo vazio';
           if (issue) { pending.push(`${task.tarefa}: ${issue}`); return []; }
           return [{ ...unit, text }];
         });
@@ -639,8 +694,10 @@ export function validateFreeFaqSections(sections, context = {}) {
       continue;
     }
     kept[key] = (sections?.[key] ?? []).flatMap((unit) => {
-      const text = typeof unit?.text === 'string' ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
-      const issue = text ? rigidFaqIssue(text, context, { useCase: key === 'casosDeUso' }) : 'frase vazia';
+      const sourceMention = mentionsSource(unit?.text);
+      const text = typeof unit?.text === 'string' && !sourceMention ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
+      const issue = sourceMention ? 'menção à fonte' : text
+        ? rigidFaqIssue(text, context, { useCase: key === 'casosDeUso' }) : 'frase vazia';
       if (issue) { pending.push(`${FREE_FAQ_SECTIONS[key]}: ${issue}`); return []; }
       return [{ ...unit, text }];
     });
@@ -662,27 +719,47 @@ export async function judgeClaims(sections, context, provider) {
   for (const claim of claims) {
     const verdict = answer.claims.find((item) => item.id === claim.id);
     if (!verdict || !['sustentada', 'a confirmar', 'contradiz a fonte'].includes(verdict.status)
-      || typeof verdict.reason !== 'string' || verdict.reason.length > 500 || statuses.has(claim.id))
+      || typeof verdict.reason !== 'string' || verdict.reason.length > 500
+      || (verdict.sourceMention !== undefined && typeof verdict.sourceMention !== 'boolean')
+      || statuses.has(claim.id))
       throw new Error('juiz: claims inválidas');
     statuses.set(claim.id, verdict);
   }
   const pending = [], contradictions = [];
   let cursor = 0;
-  const mark = (unit, key) => ({ ...unit, text: splitClaims(unit.text).map((phrase) => {
-    const claim = claims[cursor++], verdict = statuses.get(claim.id);
-    const noBusiness = !context.business?.some((item) => item.module === context.request?.module)
-      && ['oQueE', 'paraQueServe', 'casosDeUso'].includes(key);
-    const status = noBusiness && verdict.status === 'sustentada' ? 'a confirmar' : verdict.status;
-    if (status === 'sustentada') return phrase;
-    const reason = noBusiness && verdict.status === 'sustentada' ? 'Contexto de negócio ausente' : verdict.reason;
-    pending.push(`${phrase} — ${reason}`);
-    if (status === 'contradiz a fonte') contradictions.push({ text: phrase, reason });
-    return `<AConfirmar>${phrase}</AConfirmar>`;
-  }).join(' ') });
+  const mark = (unit, key) => {
+    const text = splitClaims(unit.text).flatMap((phrase) => {
+      const claim = claims[cursor++], verdict = statuses.get(claim.id);
+      if (verdict.sourceMention) {
+        const introductory = phrase.match(/^(segundo|conforme|de acordo com|com base (?:em|no|na|nos|nas)|a partir (?:de|do|da|dos|das)|pelo que consta em|como (?:indicado|descrito|mencionado) em)\s+([^,]+),\s*(.+)$/iu);
+        const prefix = phrase.match(/^(.+?)\s+mostra que\s+(.+)$/iu);
+        const candidate = introductory && mentionsSource(`${introductory[1]} ${introductory[2]}`)
+          ? introductory[3] : prefix && mentionsSource(`Segundo ${prefix[1]}`) ? prefix[2] : '';
+        const withoutAttribution = candidate.charAt(0).toLocaleUpperCase('pt-BR') + candidate.slice(1);
+        if (!withoutAttribution || splitClaims(withoutAttribution).length !== 1
+          || mentionsSource(withoutAttribution) || rigidFaqIssue(withoutAttribution, context)) {
+          pending.push(`${phrase} — frase omitida: mencionava a fonte`);
+          return [];
+        }
+        pending.push(`${phrase} — menção à fonte; atribuição removida`);
+        phrase = withoutAttribution;
+      }
+      const noBusiness = !context.business?.some((item) => item.module === context.request?.module)
+        && ['oQueE', 'paraQueServe', 'casosDeUso'].includes(key);
+      const status = noBusiness && verdict.status === 'sustentada' ? 'a confirmar' : verdict.status;
+      if (status === 'sustentada') return [phrase];
+      const reason = noBusiness && verdict.status === 'sustentada' ? 'Contexto de negócio ausente' : verdict.reason;
+      pending.push(`${phrase} — ${reason}`);
+      if (status === 'contradiz a fonte') contradictions.push({ text: phrase, reason });
+      return [`<AConfirmar>${phrase}</AConfirmar>`];
+    }).join(' ');
+    return text ? { ...unit, text } : null;
+  };
   const result = {};
   for (const [key] of Object.entries(FREE_FAQ_SECTIONS)) result[key] = key === 'passos'
-    ? (sections.passos ?? []).map((task) => ({ ...task, passos: task.passos.map((unit) => mark(unit, key)) }))
-    : (sections[key] ?? []).map((unit) => mark(unit, key));
+    ? (sections.passos ?? []).map((task) => ({ ...task, passos: task.passos.map((unit) => mark(unit, key)).filter(Boolean) }))
+      .filter((task) => task.passos.length)
+    : (sections[key] ?? []).map((unit) => mark(unit, key)).filter(Boolean);
   return { sections: result, pending, contradictions,
     verdicts: claims.map((claim) => ({ text: claim.text, ...statuses.get(claim.id) })) };
 }

@@ -21,6 +21,7 @@ import { opaqueId } from './opaque-id.mjs';
 import { authenticate, requestIdentity } from './access-control.mjs';
 import { assistantRouterModel, assistantRouterEffort, conversationsRetentionDays, mcpCredentialsFromEnv, envCompatibility, productCheckoutRefreshHours } from './env-compat.mjs';
 import { readProductCheckoutState, restoreProductCheckouts, initializeProductCheckouts } from './product-checkouts.mjs';
+import { syncBusinessContext } from './business-context-sync.mjs';
 
 const credentials = mcpCredentialsFromEnv();
 if (!credentials.length) throw new Error('Configure DOCS_MCP_CREDENTIALS ou DOCS_MCP_API_KEY antes de iniciar o MCP');
@@ -34,6 +35,29 @@ const root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname;
 const stateDir = process.env.MCP_STATE_DIR ?? '/data';
 const hasExternalCheckouts = Boolean(process.env[envCompatibility.localCheckouts.frontend] || process.env[envCompatibility.localCheckouts.backend]);
 const checkoutToken = process.env[envCompatibility.githubReadToken.current];
+if (!process.env.BUSINESS_CONTEXT_DIR) {
+  const businessDirectory = join(stateDir, 'business-context/current');
+  // A cópia no volume continua disponível quando o token de leitura não está configurado.
+  try {
+    await readFile(join(businessDirectory, 'geral.md'));
+    process.env.BUSINESS_CONTEXT_DIR = businessDirectory;
+  } catch { /* ainda não há geração privada */ }
+  if (checkoutToken && process.env.RAILWAY_ENVIRONMENT_NAME) {
+    let syncingBusiness = false;
+    const refreshBusiness = async () => {
+      if (syncingBusiness) return;
+      syncingBusiness = true;
+      try {
+        const result = await syncBusinessContext({ stateDir, token: checkoutToken });
+        if (result.status === 'available') process.env.BUSINESS_CONTEXT_DIR = result.directory;
+      } catch { /* sem contexto, o juiz mantém a confirmar */ }
+      finally { syncingBusiness = false; }
+    };
+    await refreshBusiness();
+    const refresh = setInterval(refreshBusiness, 36 * 60 * 60_000);
+    refresh.unref();
+  }
+}
 let productContext = { status: 'unavailable', reason: 'GITHUB_READ_TOKEN ausente' };
 let syncingProduct = false;
 async function refreshProductContext() {
