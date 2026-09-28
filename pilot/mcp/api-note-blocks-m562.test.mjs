@@ -12,6 +12,9 @@ const endpoint = { verb: 'GET', route: '/api/v2/contacts', public: true, documen
     { name: 'responsibleUserIds', type: 'List<int>', in: 'query', required: false },
     { name: 'linkedToMe', type: 'bool', in: 'query', required: false },
     { name: 'showAll', type: 'bool', in: 'query', required: false },
+    { name: 'page', type: 'int', in: 'query', required: false },
+    { name: 'limit', type: 'int', in: 'query', required: false },
+    { name: 'searchData', type: 'string', in: 'query', required: false, enumValues: ['9969'] },
     { name: 'export', type: 'bool', in: 'query', required: false },
   ], responseFields: [], responseHeaders: [
     { name: 'Total-Pages', source: 'Controllers/ContactsController.cs:12' },
@@ -58,6 +61,23 @@ test('Buscar contatos: quatro blocos na ordem fixa, tabela, query inteira e aute
   assert.match(body, /\| `Total-Pages` \| Conta os contatos/u);
   assert.match(body, /\| `Total-Pages-Exported` \| Conta os contatos/u);
   assert.ok(body.indexOf('## Autenticação') < body.indexOf('## Parâmetros'));
+});
+
+test('queries de um ou mais pares ficam em uma crase sem afetar identificadores soltos', async () => {
+  const cases = [
+    ['showAll=false', '`showAll=false`'],
+    ['page=1&limit=20', '`page=1&limit=20`'],
+    ['?searchData=9969', '`?searchData=9969`'],
+    ['Use showAll=false para filtrar.', 'Use `showAll=false` para filtrar.'],
+    ['O parâmetro showAll é opcional.', 'O parâmetro `showAll` é opcional.'],
+  ];
+  for (const [input, expected] of cases) {
+    const sample = structuredClone(output);
+    sample.articles[0].notas[3].text = input;
+    const { result } = await generate([sample]);
+    assert.equal(result.status, 'ready', `${input}: ${result.summary}`);
+    assert.ok(result.articles[0].body.includes(expected), `${input}: ${result.articles[0].body}`);
+  }
 });
 
 test('nota sem tipo aciona uma nova tentativa e continua recusada se persistir', async () => {
