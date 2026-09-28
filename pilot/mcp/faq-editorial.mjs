@@ -6,6 +6,7 @@ import { valueFor } from './api-synthetic-example.mjs';
 import { FAQ_NEUTRAL_WORDS, FAQ_NEUTRAL_VERBS } from './faq-neutral-words.mjs';
 import { faqStem } from './faq-portuguese-stem.mjs';
 import coverageMatrix from '../architecture/coverage-matrix.json' with { type: 'json' };
+import { plainMarkdownText } from './faq-mdx-safety.mjs';
 
 export const FAQ_SECTIONS = {
   resposta: 'Resposta direta', paraQueServe: 'Para que serve', quandoUsar: 'Quando usar',
@@ -189,7 +190,7 @@ export function faqSubtitle(sections, request = {}, screenFacts = []) {
   const first = sections.oQueE?.[0]?.text ?? '';
   const sentence = splitClaims(first)[0];
   if (sentence && !sentence.includes('<AConfirmar>') && !sentence.includes('</AConfirmar>')) {
-    return replaceModuleTerminology(sentence, faqModuleName(request, screenFacts));
+    return plainMarkdownText(replaceModuleTerminology(sentence, faqModuleName(request, screenFacts)));
   }
   const direct = deterministicFaqAnswer(request, screenFacts)?.text;
   const actions = direct?.match(/você pode (.+)\.$/u)?.[1];

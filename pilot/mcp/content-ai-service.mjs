@@ -1,8 +1,5 @@
 import OpenAI from 'openai';
-import { compile, run } from '@mdx-js/mdx';
-import * as jsxRuntime from 'react/jsx-runtime';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { plainMarkdownText, validateFaqMdx } from './faq-mdx-safety.mjs';
 import { searchContent, validateArticle, renderArticle } from './content-service.mjs';
 import { getIhelpContext } from './product-context-service.mjs';
 import { readArticle } from './editorial-standard.mjs';
@@ -370,21 +367,7 @@ function finalizeGeneratedPages(result, request, factsByPath = new Map()) {
   return finalizeSecurityResponse(result, securityWarnings);
 }
 export async function validateRenderedFaq(body) {
-  let html;
-  try {
-    const compiled = await compile(body, { outputFormat: 'function-body' });
-    const { default: Content } = await run(compiled, jsxRuntime);
-    html = renderToStaticMarkup(createElement(Content, { components: {
-      AConfirmar: ({ children }) => createElement('span', null, children),
-      ProductAction: () => null,
-      TutorialCard: () => null,
-    } }));
-  } catch (error) {
-    throw new Error(`MDX inválido na montagem: ${error.message}`);
-  }
-  const visible = html.replace(/<[^>]+>/gu, '');
-  if (/\*\*|__|`/u.test(visible)) throw new Error('marcador de formatação solto no MDX renderizado');
-  return visible;
+  return validateFaqMdx(body);
 }
 export function normalizeCatalogLabel(action) {
   return resolveCatalogAction(action) ?? action;
@@ -1108,8 +1091,9 @@ async function generateContentPackageCore(root, request, options = {}) {
         const firstStep = (display.passos.flatMap((task) => task.passos).find((step) =>
           /\b(?:abra|acesse|clique|escolha|selecione|confira|verifique|corrija|configure|crie|digite|insira|envie|importe|pesquise|revise|localize|inicie|conclua|adicione)\b/iu.test(step.text))?.text ?? '')
           .replace(/<\/?AConfirmar>/gu, '');
-        article.assistantOverview = trimFaqLabels(replaceModuleTerminology((firstStep.length >= 45 ? firstStep
-          : `${article.description} ${firstStep}`.trim()).slice(0, 200), menuModule));
+        const plainStep = plainMarkdownText(replaceModuleTerminology(firstStep, menuModule));
+        article.assistantOverview = trimFaqLabels((plainStep.length >= 45 ? plainStep
+          : `${article.description} ${plainStep}`.trim()).slice(0, 200));
         article.assistantInitialSteps = firstStep ? 1 : 0;
         article.assistantSuggestions = ['Falar com uma pessoa?'];
         article.productActions = article.productActions.map(normalizeCatalogLabel);
