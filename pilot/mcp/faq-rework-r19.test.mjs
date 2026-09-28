@@ -19,8 +19,9 @@ test('pedido completo exige ativar o robô mesmo com details genérico', () => {
 
 test('topic Buscar/Exportar relatórios alimenta plano, completude e resposta', () => {
   const request = { topic: 'Buscar/Exportar relatórios', description: 'Guia para iniciantes.', details: 'Passos simples.' };
-  const facts = [fact('Buscar relatório', 4), fact('Exportar relatório', 5)];
-  assert.deepEqual(faqTasksWithoutFacts(request, facts.slice(0, 1)), ['Exportar']);
+  const facts = [{ ...fact('Relatórios', 3), kind: 'route' },
+    fact('Buscar relatório', 4), fact('Exportar relatório', 5)];
+  assert.deepEqual(faqTasksWithoutFacts(request, facts.slice(0, 2)), ['Exportar']);
   assert.deepEqual(missingFreeFaqTaskSteps(request, facts, [
     { tarefa: 'Buscar', passos: [{ text: 'Clique em **Buscar relatório**.' }] },
   ]), ['tarefa sem passo: exportar']);

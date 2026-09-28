@@ -124,12 +124,17 @@ function supportedClaim(text, sources, { example = false, request = {}, lexical 
 const citeOf = ({ repository, path, lineStart, lineEnd, sha }) =>
   ({ repository, path, lineStart, lineEnd, sha });
 
+// Keep task extraction consistent for the plan, the direct answer and both completeness gates.
+const requestedFaqTaskText = (request = {}) => fold([
+  request.topic, request.description, request.details,
+].filter(Boolean).join(' '));
+
 // The direct answer is assembled from requested tasks backed by screen facts.
 export function deterministicFaqAnswer(request = {}, screenFacts = []) {
   const screenFact = screenFacts.find((fact) => fact.kind === 'route' && fact.text)
     ?? screenFacts.find((fact) => fact.text && hasLabel(fact.text, request.topic));
   const screen = screenFact?.kind === 'route' ? screenFact.text : screenFact ? request.topic : null;
-  const asked = fold(`${request.description ?? ''} ${request.details ?? ''}`);
+  const asked = requestedFaqTaskText(request);
   const verbs = [
     [/\bbusc/u, /\bbusc/u, 'buscar'],
     [/\bcadastr/u, /\b(?:cadastr|cri|adicion)/u, 'cadastrar'],
@@ -175,7 +180,7 @@ const FAQ_TASKS = [
 ];
 
 export function faqTasksWithoutFacts(request = {}, screenFacts = []) {
-  const asked = fold((request.details ?? request.description ?? '').split(/\bcobrir\b/iu).at(-1));
+  const asked = requestedFaqTaskText(request);
   return FAQ_TASKS.flatMap(([task, requested, visible]) => requested.test(asked)
     && !screenFacts.some((fact) => fact.text && visible.test(fold(`${fact.text} ${fact.subject ?? ''}`))
       && ['action', 'field', 'upload', 'destination', 'text'].includes(fact.kind))
@@ -183,7 +188,7 @@ export function faqTasksWithoutFacts(request = {}, screenFacts = []) {
 }
 
 export function missingFaqTaskSteps(request = {}, screenFacts = [], steps = []) {
-  const asked = fold((request.details ?? request.description ?? '').split(/\bcobrir\b/iu).at(-1));
+  const asked = requestedFaqTaskText(request);
   return FAQ_TASKS.flatMap(([task, requested, visible]) => {
     if (!requested.test(asked)) return [];
     const relevant = screenFacts.filter((fact) => fact.text && visible.test(fold(`${fact.text} ${fact.subject ?? ''}`))
@@ -197,7 +202,7 @@ export function missingFaqTaskSteps(request = {}, screenFacts = [], steps = []) 
 }
 
 export function missingFreeFaqTaskSteps(request = {}, screenFacts = [], tasks = []) {
-  const asked = fold((request.details ?? request.description ?? '').split(/\bcobrir\b/iu).at(-1));
+  const asked = requestedFaqTaskText(request);
   return FAQ_TASKS.flatMap(([task, requested, visible]) => {
     if (!requested.test(asked)) return [];
     const relevant = screenFacts.filter((fact) => fact.text && visible.test(fold(`${fact.text} ${fact.subject ?? ''}`))
