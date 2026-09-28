@@ -361,11 +361,11 @@ button {
 
 .ih-header-search {
   display: flex;
-  flex: 1 1 160px;
+  flex: 0 0 234px;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  max-width: 230px;
+  max-width: 234px;
   height: 34px;
   padding: 0 10px 0 11px;
   color: var(--ih-slate-500);
@@ -3742,7 +3742,7 @@ button {
   height: 44px;
   padding: 0 16px 0 14px;
   color: #fdfffc;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 600;
   border: 0;
   border-radius: 999px;
@@ -5817,17 +5817,16 @@ button {
   }
 }
 
-/* Alvos de toque continuam amplos; texto de navegação segue a escala do site. */
-.ih-header .ih-brand, .ih-header .ih-nav-link, .ih-header .ih-header-search,
-.ih-header .ih-header-cta, .ih-header .ih-menu-button, .ih-sidebar .ih-side-all,
-.ih-sidebar .ih-side-group-toggle, .ih-sidebar .ih-side-link,
-.ih-sidebar .ih-side-promo a, .ih-toc .ih-toc-link, .ih-toc .ih-toc-ask,
-.ih-breadcrumb a, .ih-prose h2 a { min-height: 44px; }
-/* Leitura e ações principais mantêm o piso para o público 60+. */
-.ih-header .ih-header-cta, .ih-sidebar .ih-side-promo a,
-.ih-toc .ih-toc-ask, .ih-feedback .ih-button,
-.ih-prose .ih-product-action small { font-size: 16px; }
+/* Texto de leitura mantém o piso; chamadas acompanham a escala de produção. */
 .ih-prose { font-size: 16px; }
-.ih-feedback .ih-button { min-height: 44px; }
+.ih-prose .ih-product-action small { font-size: 12px; }
 .ih-breadcrumb a, .ih-prose h2 a { display: inline-flex; align-items: center; }
 .ih-ai-drawer .ih-tech-mark span, .ih-ai-drawer .ih-tech-mark strong { font-size: 16px; }
+
+@media (pointer: coarse), (max-width: 1019px) {
+  .ih-header .ih-brand, .ih-header .ih-nav-link, .ih-header .ih-header-search,
+  .ih-header .ih-header-cta, .ih-header .ih-menu-button, .ih-sidebar .ih-side-all,
+  .ih-sidebar .ih-side-group-toggle, .ih-sidebar .ih-side-link,
+  .ih-sidebar .ih-side-promo a, .ih-toc .ih-toc-link, .ih-toc .ih-toc-ask,
+  .ih-breadcrumb a, .ih-prose h2 a, .ih-feedback .ih-button { min-height: 44px; }
+}
