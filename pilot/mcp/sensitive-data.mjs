@@ -133,7 +133,8 @@ export function sensitiveKinds(value, { detectOpaque = false } = {}) {
   return {
     personal: matchesAny(text, PERSONAL) || numericMatches(text).length > 0,
     credential: redactCredentialGrammar(text) !== text || matchesAny(text, CREDENTIALS) || credentialPairs(text).length > 0 || (detectOpaque && opaqueSequences(text).length > 0),
-    internal: /🟡|🔴|\b(?:INTERNO|CONFIDENCIAL)\b|\b(?:interno|confidencial)\s*:/u.test(mapped),
+    internal: /🟡|🔴|\b(?:INTERNO|CONFIDENCIAL)\b|\b(?:interno|confidencial)\s*:/u.test(mapped)
+      || (detectOpaque && /\b(?:[a-z0-9-]+\.)+(?:local|internal|lan|corp|intranet|localdomain)\b|\blocalhost\b/iu.test(mapped)),
     control: mixedAlphabet || /[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text),
   };
 }

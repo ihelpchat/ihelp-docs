@@ -9,10 +9,11 @@ const tokens = (value) => [...String(value).matchAll(TOKEN)].map((match) => ({ t
 const key = (items) => items.map((item) => item.text).join('\u0000');
 const privateEvidence = (context) => [
   ...context?.callEvidence ?? [],
+  ...context?.screenCode ?? [],
   ...context?.matches ?? [],
 ].filter((item) => typeof item.excerpt === 'string'
   && !/(?:^|\/)\w*Controller\.cs$/iu.test(item.path ?? '')
-  && (context?.callEvidence?.includes(item) || /\.cs$/iu.test(item.path ?? '')))
+  && (context?.callEvidence?.includes(item) || context?.screenCode?.includes(item) || /\.cs$/iu.test(item.path ?? '')))
   .map((item) => sanitizeCodeForModel(item.excerpt).text);
 
 function evidenceWindows(context) {

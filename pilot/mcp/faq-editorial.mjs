@@ -17,6 +17,11 @@ const literal = (quote, source) => normalized(quote).length >= 12
   && normalized(source).toLocaleLowerCase('pt-BR').includes(normalized(quote).toLocaleLowerCase('pt-BR'));
 const fold = (value) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLocaleLowerCase('pt-BR');
 const words = (value) => fold(value).match(/[a-z]+|\d+/gu) ?? [];
+const hasLabel = (text, label) => {
+  const inText = words(text), fromLabel = words(label);
+  return fromLabel.length > 0 && inText.some((word, index) => word === fromLabel[0]
+    && fromLabel.every((part, offset) => inText[index + offset] === part));
+};
 const singular = (word) => word.endsWith('oes') || word.endsWith('aes') ? `${word.slice(0, -3)}ao`
   : word.endsWith('ais') ? `${word.slice(0, -3)}al`
     : word.endsWith('eis') ? `${word.slice(0, -3)}el`
@@ -114,9 +119,16 @@ export function adaptScreenFacts(screen = {}) {
       'validation', 'message', 'destination', 'guard', 'text', 'state'].includes(fact.kind)) return [];
     const base = { ...fact, repository: fact.repository ?? 'ihelpchat/front-react',
       path: match[1], lineStart: Number(match[2]), lineEnd: Number(match[2]), sha: fact.sha ?? screen.sha };
+    const qualifier = fact.required === true ? 'obrigatório' : fact.required === false ? 'opcional' : null;
+    const presence = /^(src\/[^:\n]+\.(?:tsx?|jsx?)):(\d+)$/u.exec(fact.validationSource ?? fact.source ?? '');
+    if (['field', 'column'].includes(fact.kind) && fact.text)
+      base.claimText = qualifier && fact.validationSource === undefined ? `${fact.text} ${qualifier}` : fact.text;
     const message = /^(src\/[^:\n]+\.(?:tsx?|jsx?)):(\d+)$/u.exec(fact.validationSource ?? fact.source ?? '');
-    return [base, ...(fact.kind === 'field' && fact.message && message ? [{ ...base, kind: 'message',
-      text: fact.message, path: message[1], lineStart: Number(message[2]), lineEnd: Number(message[2]) }] : [])];
+    return [base, ...(qualifier && fact.kind === 'field' && fact.validationSource && presence ? [{ ...base,
+      claimText: `${fact.text} ${qualifier}${fact.message ? ` ${fact.message}` : ''}`,
+      path: presence[1], lineStart: Number(presence[2]), lineEnd: Number(presence[2]) }] : []),
+    ...(fact.kind === 'field' && fact.message && message ? [{ ...base, kind: 'message',
+      text: fact.message, claimText: fact.message, path: message[1], lineStart: Number(message[2]), lineEnd: Number(message[2]) }] : [])];
   });
 }
 
@@ -131,6 +143,12 @@ export function validateFaqSections(sections, context) {
       if (key === 'exemplo' && !unit.text.includes(valueFor({ name: 'nome' }))) return false;
       if ((key === 'paraQueServe' || key === 'quandoUsar')
         && !unit.citations.some((cite) => ['negocio', 'pagina', 'pedido'].includes(cite.source))) return false;
+      // M5.58 represents missing or conflicting presence evidence as unknown.
+      // Neither a support quote nor a validation message may override that state.
+      if ((context.screenFacts ?? []).some((fact) => ['field', 'column'].includes(fact.kind)
+        && fact.text && hasLabel(unit.text, fact.text)
+        && ((fact.required !== true && /\bobrigatóri[oa]s?\b/iu.test(unit.text))
+          || (fact.required !== false && /\bopciona(?:l|is)\b/iu.test(unit.text))))) return false;
       const citationsValid = unit.citations.every((cite) => {
         if (key === 'duvidas' && cite.source !== 'suporte') return false;
         if ((key === 'passos' || key === 'erros') && cite.source) return false;
@@ -154,9 +172,10 @@ export function validateFaqSections(sections, context) {
       if (!citationsValid) return false;
       const sources = unit.citations.map((cite) => {
         if (cite.source) return cite.quote;
-        return (context.screenFacts ?? []).find((fact) => cite.repository === fact.repository
+        const fact = (context.screenFacts ?? []).find((fact) => cite.repository === fact.repository
           && cite.path === fact.path && cite.sha === fact.sha && cite.lineStart === fact.lineStart
-          && cite.lineEnd === fact.lineEnd)?.text ?? '';
+          && cite.lineEnd === fact.lineEnd);
+        return fact?.claimText ?? fact?.text ?? '';
       });
       const uncovered = supportedClaim(unit.text, sources, { example: key === 'exemplo' });
       if (!uncovered.length) return true;
