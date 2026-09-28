@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { extractScreenFacts } from './front-screen-facts.mjs';
 import { canReadFrontFile } from './local-product-context.mjs';
 import { publicProductContext } from './product-context-service.mjs';
@@ -598,4 +599,57 @@ test('schema importado também conflita com required JSX', async () => {
   assert.equal(fact.required, 'unknown');
   assert.match(fact.note, /evidências conflitantes/u);
   assert.deepEqual(fact.presenceSources, [`${page}:3`, `${schemaPath}:1`]);
+});
+
+test('porta de saída é obrigatória para os fatos do extrator', () => {
+  const source = readFileSync(new URL('./front-screen-facts.mjs', import.meta.url), 'utf8');
+  const extractor = source.slice(source.indexOf('export async function extractScreenFacts('), source.indexOf('// Closed vocabulary'));
+  assert.match(extractor, /facts:\s*finalizeScreenFacts\(facts, pending\)/u);
+  assert.equal((extractor.match(/facts:\s*(?!\[\])/gu) ?? []).length, 1);
+});
+
+test('mensagem de schema importado é barrada na saída, prompt e contexto público', async () => {
+  const schemaPath = 'src/components/pages/Contacts/schema.ts';
+  const token = 'sk-proj-test12345678901234567890';
+  const schema = (message) => ({ ...sources,
+    [page]: `import { schema } from './schema'; export default function ContactPage() {
+      const { register } = useForm({ resolver: yupResolver(schema) });
+      return <input {...register('phone')} label="Telefone" />;
+    }`,
+    [schemaPath]: `export const schema = yup.object({ phone: yup.string().required('${message}') });`,
+  });
+  const unsafe = await run(schema(`Authorization: Bearer ${token}`));
+  const publicContext = publicProductContext({ screenFacts: unsafe.facts, code: [] });
+  let prompt;
+  await planContent(new URL('../', import.meta.url).pathname,
+    { topic: 'Contato', module: 'Contatos', description: 'Cadastro de contato.' }, {
+      productContext: { groundingRequired: true, code: [{ available: true }], matches: [],
+        screenFacts: unsafe.facts, support: { categories: [], rules: [] }, coverage: [] },
+      client: { responses: { create: async (input) => {
+        prompt = JSON.stringify(input);
+        return { output_text: JSON.stringify({ status: 'needs_information', guidance: '',
+          risks: [], suggestedActions: [], grounding: [], questions: [] }) };
+      } } },
+    });
+  for (const output of [unsafe.facts, prompt, publicContext])
+    assert.doesNotMatch(JSON.stringify(output), /sk-proj-test12345678901234567890/u);
+  assert.ok(unsafe.pending.includes('valor sensível omitido em fato de tela'));
+  assert.ok(unsafe.facts.some((fact) => fact.kind === 'field' && fact.name === 'phone'));
+  const safe = await run(schema('Telefone obrigatório'));
+  assert.equal(safe.facts.find((fact) => fact.kind === 'field' && fact.name === 'phone')?.message, 'Telefone obrigatório');
+});
+
+test('toast com e-mail e destino com host interno são omitidos; textos comuns passam', async () => {
+  const pageSource = `export default function ContactPage() {
+    const save = () => { toast.success('Contato cliente@empresa.com'); navigate('https://db.internal/contact'); };
+    return <button onClick={save}>Salvar</button>;
+  }`;
+  const unsafe = await run({ ...sources, [page]: pageSource });
+  assert.doesNotMatch(JSON.stringify(unsafe.facts), /cliente@empresa\.com|db\.internal/u);
+  assert.ok(unsafe.pending.includes('valor sensível omitido em fato de tela'));
+  const safe = await run({ ...sources, [page]: pageSource
+    .replace('Contato cliente@empresa.com', 'Contato salvo')
+    .replace('https://db.internal/contact', '/contact/detail') });
+  assert.ok(safe.facts.some((fact) => fact.kind === 'message' && fact.text === 'Contato salvo'));
+  assert.ok(safe.facts.some((fact) => fact.kind === 'destination' && fact.route === '/contact/detail'));
 });
