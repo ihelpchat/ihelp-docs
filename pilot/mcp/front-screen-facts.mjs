@@ -134,6 +134,8 @@ function ownerTitle(node, file) {
   let title = null;
   const scan = (child) => {
     if (title) return;
+    if (ts.isArrowFunction(child) || ts.isFunctionExpression(child) || ts.isFunctionDeclaration(child)
+      || ts.isMethodDeclaration(child)) return;
     if (ts.isJsxOpeningElement(child) || ts.isJsxSelfClosingElement(child)) {
       title = attrValue(child, 'title') ?? null;
     }
@@ -230,9 +232,48 @@ function collect(filePath, source, facts, entryName) {
       && ts.isIdentifier(node.initializer)) render(node.initializer.text);
     ts.forEachChild(node, renderExpression);
   }
+  function renderedMapChildren(node) {
+    const scan = (child) => {
+      if (ts.isArrowFunction(child) || ts.isFunctionExpression(child)) return;
+      if (ts.isCallExpression(child) && ts.isPropertyAccessExpression(child.expression)
+        && child.expression.name.text === 'map') {
+        for (const argument of child.arguments) {
+          if (!ts.isArrowFunction(argument) && !ts.isFunctionExpression(argument)) continue;
+          for (const tree of returnedTrees(argument)) if (jsxValue(tree)) visit(tree);
+        }
+      }
+      ts.forEachChild(child, scan);
+    };
+    scan(node);
+  }
+  function handlerNameOf(expression) {
+    if (ts.isIdentifier(expression)) return expression.text;
+    if (!ts.isArrowFunction(expression)) return null;
+    let body = expression.body;
+    if (ts.isBlock(body)) {
+      if (body.statements.length !== 1 || !ts.isExpressionStatement(body.statements[0])) return '(inline)';
+      body = body.statements[0].expression;
+    }
+    while (ts.isParenthesizedExpression(body)) body = body.expression;
+    if (ts.isCallExpression(body) && ts.isIdentifier(body.expression)) {
+      const name = body.expression.text;
+      const declaration = found.get(name);
+      if (declaration && (ts.isFunctionDeclaration(declaration)
+        || (ts.isVariableDeclaration(declaration) && (ts.isArrowFunction(declaration.initializer)
+          || ts.isFunctionExpression(declaration.initializer)
+          || (ts.isCallExpression(declaration.initializer)
+            && declaration.initializer.expression.getText(file) === 'useCallback'))))) return name;
+    }
+    return '(inline)';
+  }
   function visit(node) {
+    if (ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)
+      || ts.isMethodDeclaration(node)) return;
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) render(jsxName(node).split('.')[0]);
-    if (ts.isJsxExpression(node)) renderExpression(node.expression);
+    if (ts.isJsxExpression(node)) {
+      renderExpression(node.expression);
+      if (!ts.isJsxAttribute(node.parent)) renderedMapChildren(node.expression);
+    }
     if (ts.isJsxExpression(node) && node.expression && ts.isIdentifier(node.expression)) {
       const local = found.get(node.expression.text);
       if (local && ts.isVariableDeclaration(local) && jsxValue(local.initializer)) render(node.expression.text);
@@ -273,8 +314,7 @@ function collect(filePath, source, facts, entryName) {
         const text = ariaLabel ?? title ?? body ?? validActionLabel(attrValue(node, 'labelText'))
           ?? validActionLabel(attrValue(node, 'label')) ?? tooltipLabel(node);
         const expression = handler && ts.isJsxExpression(handler) ? handler.expression : null;
-        const handlerName = expression && ts.isIdentifier(expression) ? expression.text
-          : expression && ts.isArrowFunction(expression) ? expression.body.getText(file).match(/\b([A-Za-z]\w*)\s*\(/u)?.[1] : null;
+        const handlerName = expression ? handlerNameOf(expression) : null;
         if (text && handlerName) emit(node, 'action', { text, handler: handlerName,
           ...(body ? { body } : {}), ...(ariaLabel ? { ariaLabel } : {}), ...(title ? { title } : {}) });
       }
@@ -292,17 +332,6 @@ function collect(filePath, source, facts, entryName) {
       const call = node.expression.getText(file);
       if (/^(?:translate|t)$/u.test(call) && literal(node.arguments[0]))
         translationKeys.set(literal(node.arguments[0]), { owner, ...(title ? { ownerTitle: title } : {}), subject: subjectOf(owner, title, filePath) });
-      if (/^(?:toast(?:\.[A-Za-z]+)?|confirm|window\.confirm)$/u.test(call)) {
-        const text = literal(node.arguments[0]);
-        if (text) emit(node, 'message', { text });
-      }
-      if (/^(?:addNotification|notify)$/u.test(call) && node.arguments[0] && ts.isObjectLiteralExpression(node.arguments[0])) {
-        for (const prop of node.arguments[0].properties) if (ts.isPropertyAssignment(prop)
-          && ['title', 'description'].includes(prop.name.getText(file))) {
-          const text = literal(prop.initializer);
-          if (text) emit(prop, 'message', { text });
-        }
-      }
       if (/\.(?:required|min)$/u.test(call) && (call.endsWith('.required') || numeric(node.arguments[0]) === 1)) {
         let parent = node.parent;
         while (parent && !ts.isPropertyAssignment(parent) && !ts.isSourceFile(parent)) parent = parent.parent;

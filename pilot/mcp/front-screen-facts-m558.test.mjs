@@ -12,7 +12,7 @@ const modal = 'src/components/pages/Contacts/Modal.tsx';
 const sources = {
   [router]: `import ContactPage from '../../../../pages/Contacts';\nconst pages = [{ path: '/contact', element: <ContactPage /> }];`,
   [page]: `import Modal from './Modal';\nexport default function ContactPage() { return <><button onClick={open}>Adicionar Contato</button><Modal /></>; }`,
-  [modal]: `import ContactPage from './index';\nexport default function Modal() { return <><input name="nome" aria-label="Nome" required /><input type="file" accept=".csv,.xlsx" />{toast.success('Contato criado')}</>; }`,
+  [modal]: `import ContactPage from './index';\nexport default function Modal() { return <><input name="nome" aria-label="Nome" required /><input type="file" accept=".csv,.xlsx" /><button onClick={() => toast.success('Contato criado')}>Criar</button></>; }`,
   'src/components/pages/Other/index.tsx': `export default () => <button>Segredo fora da cadeia</button>`,
 };
 const run = (files = sources) => extractScreenFacts({ route: '/contact', paths: Object.keys(files),
@@ -290,6 +290,15 @@ test('arrow inline executando toast diretamente atribui feedback à ação', asy
     [['Salvar', '(inline)']]);
   assert.deepEqual(facts.filter((fact) => fact.kind === 'message').map((fact) => [fact.text, fact.owner]),
     [['Ok', 'Salvar']]);
+});
+
+test('JSX de função aninhada não executada não vira texto visível', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    return <button onClick={() => { const never = () => <span title="Falso">Oculto</span>; }}>Salvar</button>;
+  }` };
+  const facts = (await run(files)).facts;
+  assert.equal(facts.some((fact) => fact.text === 'Falso' || fact.text === 'Oculto'), false);
+  assert.equal(facts.find((fact) => fact.kind === 'action')?.ownerTitle, undefined);
 });
 
 test('arrow inline delegando a função local usa o nome e o feedback da função', async () => {
