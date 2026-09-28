@@ -40,7 +40,8 @@ try {
           `${name}: ${key} ${metrics[key]?.font}px fora de ${min}–${max}px (produção ${production}px)`);
       }
       assert.ok(metrics.body?.font >= 16, `${name}: corpo ${metrics.body?.font}px < 16px`);
-      assert.ok(metrics.search?.width >= (name !== 'mobile' ? 150 : 36), `${name}: busca não visível`);
+      assert.ok(metrics.search?.width >= (name !== 'mobile' ? 150 : 44), `${name}: busca abaixo de 44px de largura`);
+      assert.ok(metrics.product?.font >= 16, `${name}: descrição da ação ${metrics.product?.font}px < 16px`);
       if (name !== 'mobile') {
         assert.equal(metrics.searchText?.text,
           process.env.NEXT_PUBLIC_ASSISTANT_URL ? 'Buscar ou perguntar' : 'Buscar na documentação',
@@ -49,6 +50,7 @@ try {
         assert.ok(metrics.searchText?.width + 0.5 >= metrics.searchText?.scrollWidth,
           `desktop: placeholder cortado (${metrics.searchText?.width}px < ${metrics.searchText?.scrollWidth}px)`);
         for (const [key, production] of Object.entries(reference.desktop1440.fontPx)) {
+          if (key === 'product') continue; // texto de leitura tem piso próprio de 16px
           assert.ok(metrics[key]?.font >= production - 1 && metrics[key]?.font <= production + 1,
             `desktop: ${key} ${metrics[key]?.font}px fora da escala de produção ${production}px`);
         }
@@ -66,6 +68,18 @@ try {
       assert.ok(metrics.search?.height >= (name === 'mobile' ? 44 : 34), `${name}: busca abaixo da altura esperada`);
       assert.match(metrics.launcher?.text ?? '', /^Claricia.*assistente virtual$/, `${name}: subtítulo ausente no botão flutuante`);
       assert.ok(metrics.launcher?.height >= 44, `${name}: botão flutuante abaixo de 44px`);
+      if (name === 'mobile') {
+        await page.goto(`${baseUrl}/docs/principais-duvidas/`, { waitUntil: 'networkidle' });
+        if (process.env.NAVIGATION_PROBE_CSS) await page.addStyleTag({ content: process.env.NAVIGATION_PROBE_CSS });
+        await page.screenshot({ path: '/tmp/m5-65-principais-duvidas-mobile.png', fullPage: true });
+        const other = await page.evaluate(() => {
+          const search = document.querySelector('.ih-header-search')?.getBoundingClientRect();
+          const product = document.querySelector('.ih-product-action small');
+          return { searchWidth: search?.width, searchHeight: search?.height, productFont: product && parseFloat(getComputedStyle(product).fontSize) };
+        });
+        assert.ok(other.searchWidth >= 44 && other.searchHeight >= 44, `mobile: busca em Principais dúvidas ${other.searchWidth} × ${other.searchHeight}px`);
+        assert.ok(other.productFont >= 16, `mobile: descrição em Principais dúvidas ${other.productFont}px < 16px`);
+      }
     } finally { await page.close(); }
   }
   console.log('Navegação visual: Agenda de Contatos desktop 1440/1280 e mobile 390 passou.');
