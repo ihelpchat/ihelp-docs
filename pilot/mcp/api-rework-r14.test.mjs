@@ -48,10 +48,11 @@ test('refs válido autoriza referência cruzada e renderiza link', async () => {
   assert.equal(result.status, 'ready', result.summary);
   assert.match(result.articles[0].body, /\[Página B\]\(\/api\/teste\/b\)/u);
 });
-test('refs para endpoint sem o nome é recusado', async () => {
+test('refs para endpoint sem o nome são corrigidos quando o destino é único', async () => {
   const result = await replay((output) => { output.articles[0].notas[0].refs = [{ name: 'onlyB', endpoint: 'GET /a' }]; });
-  assert.equal(result.status, 'needs_information');
-  assert.match(result.summary, /referência inválida: onlyB/u);
+  assert.equal(result.status, 'ready', result.summary);
+  assert.match(result.articles[0].body, /\[Página B\]\(\/api\/teste\/b\)/u);
+  assert.deepEqual(result.internalRepairs, [{ name: 'onlyB', from: 'GET /a', endpoint: 'GET /b' }]);
 });
 test('summary do pacote mantém escopo global', async () => {
   const result = await replay((output) => { output.articles[0].notas = []; });
