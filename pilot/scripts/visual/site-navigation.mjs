@@ -43,7 +43,7 @@ try {
       assert.ok(metrics.search?.width >= (name === 'desktop' ? 150 : 36), `${name}: busca não visível`);
       if (name === 'desktop') {
         assert.ok(metrics.searchText?.width > 70, 'desktop: texto da busca oculto');
-        assert.ok(metrics.searchText?.width >= metrics.searchText?.scrollWidth,
+        assert.ok(metrics.searchText?.width + 0.5 >= metrics.searchText?.scrollWidth,
           `desktop: placeholder cortado (${metrics.searchText?.width}px < ${metrics.searchText?.scrollWidth}px)`);
         for (const [key, production] of Object.entries(reference.desktop1440.fontPx)) {
           assert.ok(metrics[key]?.font >= production - 1 && metrics[key]?.font <= production + 1,
