@@ -630,7 +630,7 @@ function publishedStepEvidence(text, context, task, expectedLabel) {
   });
 }
 
-function rigidFaqIssue(text, context, { useCase = false } = {}) {
+function rigidFaqIssue(text, context, { useCase = false, proseLead = false } = {}) {
   if (String(text).includes('→')) return 'caso de uso com seta';
   const labels = [...String(text).matchAll(/\*\*([^*\n]+)\*\*/gu)].map((match) => match[1]);
   const labelKey = (value) => fold(String(value).replace(/[“”"']/gu, '').trim());
@@ -639,7 +639,7 @@ function rigidFaqIssue(text, context, { useCase = false } = {}) {
   const citedPages = (context.existing ?? []).filter((page) => page.title
     && (String(text).includes(page.title) || page.path && String(text).includes(page.path)));
   for (const label of labels) {
-    if (useCase && String(text).startsWith(`**${label}**`) && /[.!?]$/u.test(label)) continue;
+    if ((useCase || proseLead) && String(text).startsWith(`**${label}**`) && /[.!?]$/u.test(label)) continue;
     const before = String(text).slice(0, String(text).indexOf(`**${label}**`));
     const pageReference = pages.has(labelKey(label)) && /\b(?:consulte|veja|leia|guia|página)\b/iu.test(before.slice(-100));
     const publishedLabel = context.taskHeading && citedPages.length
@@ -695,7 +695,7 @@ export function validateFreeFaqSections(sections, context = {}) {
       const sourceMention = mentionsSource(unit?.text);
       const text = typeof unit?.text === 'string' && !sourceMention ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
       const issue = sourceMention ? 'menção à fonte' : text
-        ? rigidFaqIssue(text, context, { useCase: key === 'casosDeUso' }) : 'frase vazia';
+        ? rigidFaqIssue(text, context, { useCase: key === 'casosDeUso', proseLead: key === 'duvidas' || key === 'erros' }) : 'frase vazia';
       if (issue) { pending.push(`${FREE_FAQ_SECTIONS[key]}: ${issue}`); return []; }
       if (key === 'duvidas' && !faqQuestionAnswered(text)) {
         pending.push(`Dúvidas comuns: pergunta sem resposta: ${text}`);
@@ -709,7 +709,7 @@ export function validateFreeFaqSections(sections, context = {}) {
 }
 
 const faqQuestionAnswered = (text) => {
-  const parts = splitClaims(text);
+  const parts = splitClaims(String(text).replace(/\*\*([^*]+)\*\*/gu, '$1'));
   const question = parts.findIndex((part) => part.endsWith('?'));
   return question < 0 || parts.slice(question + 1).some((part) => part.replace(/<\/?AConfirmar>/gu, '').trim());
 };
