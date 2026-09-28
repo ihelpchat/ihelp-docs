@@ -89,3 +89,15 @@ test('estado com o mesmo rótulo de um botão não vira confira', () => {
   const result = validateFaqSections({ passos: [{ acao: 'conferir', fato: 'f1' }] }, { screenFacts: facts });
   assert.equal(result.sections.passos, undefined);
 });
+
+test('texto condicional dentro de botão é ação; status condicional continua estado', async () => {
+  const page = 'src/components/pages/Robots/index.tsx';
+  const sources = {
+    [FRONT_ROUTER]: `import Robots from '../../../../pages/Robots';\nconst pages = [{ path: '/bot', title: 'Bot', element: <Robots /> }];`,
+    [page]: `export default function Robots() { return <><ButtonIconAction type="submit">{busy ? 'Salvando...' : 'Salvar'}</ButtonIconAction><span>{active ? 'Ativo' : 'Inativo'}</span></>; }`,
+  };
+  const screen = await extractScreenFacts({ route: '/bot', paths: Object.keys(sources),
+    readSource: async (path) => sources[path], sha });
+  assert.equal(screen.facts.find((fact) => fact.text === 'Salvar')?.kind, 'action');
+  assert.equal(screen.facts.find((fact) => fact.text === 'Ativo')?.kind, 'state');
+});
