@@ -36,14 +36,14 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
     let manifest = await captureScreens({ baseUrl, plan, fixture: true, root });
     assert.equal(manifest.entries.length, 2);
     assert.equal(manifest.entries[0].route, '/contact');
-    assert.equal(manifest.entries[0].file, `/img/mcp/contatos/${plan[0].step}.png`);
+    assert.match(manifest.entries[0].file, new RegExp(`^/img/mcp/contatos/${plan[0].step}\\.automatic\\.[a-f0-9]{64}\\.png$`, 'u'));
     assert.match(manifest.entries[0].bundleSha, /^[a-f0-9]{40}$/u);
     assert.equal(manifest.entries[0].checkoutSha, appSha);
     assert.notEqual(manifest.entries[0].bundleSha, appSha, 'versão do bundle vem da página');
     assert.ok(manifest.entries[0].masked.includes('varredura sensível'));
     assert.ok(manifest.entries[0].masked.includes('campo ou conteúdo dinâmico'));
     assert.deepEqual(JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')), manifest);
-    const png = await readFile(join(root, `contatos/${plan[0].step}.png`));
+    const png = await readFile(join(root, 'contatos', manifest.entries[0].file.split('/').at(-1)));
     assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
     assert.ok(png.length > 500);
     const browser = await launch();
@@ -134,17 +134,17 @@ test('serviço MCP captura fixture, baixa imagens e limita volume sem vazar segr
     assert.equal(Buffer.from(read.images[0].base64, 'base64').subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
     assert.doesNotMatch(JSON.stringify(read), /senha-super|cliente@exemplo/u);
     const selected = await imagesUsedByArticles([
-      { path: 'docs/contatos', body: '![Tela de Contatos](/img/mcp/contatos/01-abrir-contato.png)' },
+      { path: 'docs/contatos', body: `![Tela de Contatos](${read.entries[0].file})` },
       { path: 'docs/robos', body: 'Sem print nesta página.' },
     ], { root });
-    assert.deepEqual(selected.map((image) => image.file), ['pilot/public/img/mcp/contatos/01-abrir-contato.png']);
+    assert.deepEqual(selected.map((image) => image.file), [`pilot/public${read.entries[0].file}`]);
     assert.equal(selected[0].base64, read.images[0].base64);
     await assert.rejects(downloadPage('contatos', { root, limit: 5 }), /Consulta de telas inválida/u);
     await assert.rejects(downloadPage('../contatos', { root }), /Consulta de telas inválida/u);
-    await writeFile(join(root, 'contatos/01-abrir-contato.png'), Buffer.concat([
+    await writeFile(join(root, 'contatos', read.entries[0].file.split('/').at(-1)), Buffer.concat([
       Buffer.from(read.images[0].base64, 'base64'), Buffer.alloc(2 * 1024 * 1024),
     ]));
-    await assert.rejects(downloadPage('contatos', { root }), /excedem o teto/u);
+    await assert.rejects(downloadPage('contatos', { root }), /Integridade da imagem divergente/u);
   } finally {
     await new Promise((ok) => server.close(ok));
     await rm(root, { recursive: true, force: true });

@@ -34,7 +34,7 @@ test('mesmo plano interno com Excluir é fotografado sem clique', async () => {
         route: '/contact', action: 'click', alt: 'Botão Excluir contato', appSha: sha }] });
     assert.equal(manifest.entries.length, 1);
     assert.equal(clicks, 0);
-    assert.equal((await readFile(join(root, 'contatos/excluir.png'))).subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+    assert.equal((await readFile(join(root, 'contatos', manifest.entries[0].file.split('/').at(-1)))).subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(root, { recursive: true, force: true });
@@ -68,7 +68,7 @@ test('upload revisado e captura compartilham manifesto do gerador; upload preval
     assert.doesNotMatch(attachScreenshotsToArticle({ path: 'docs/contatos', body: 'Clique em Excluir contato.' }, manifest).body, /!\[/u);
     manifest = await approvePage({ page: 'contatos', step: step.step, token: 'admin-token-de-teste-com-mais-de-24', approvedBy: 'revisor' },
       { root, env: { SCREEN_CAPTURE_ADMIN_TOKEN: 'admin-token-de-teste-com-mais-de-24' } });
-    assert.deepEqual(await readFile(join(root, 'contatos', `${step.step}.png`)), png);
+    assert.deepEqual(await readFile(join(root, 'contatos', manifest.entries.find((entry) => entry.source === 'upload').file.split('/').at(-1))), png);
     const article = attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Clique em Excluir contato.' }, manifest);
     assert.match(article.body, /!\[Botão Excluir contato revisado\]/u);
   } finally {

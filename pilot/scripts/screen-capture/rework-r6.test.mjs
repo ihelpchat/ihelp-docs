@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { screenshotFile } from '../../mcp/screenshot-files.mjs';
 import { capturePlan, captureScreens, masksCoverSensitive } from './capture.mjs';
 import { attachScreenshotsToArticle } from '../../mcp/screen-capture-manifest.mjs';
 import { launch } from '../visual/measure.mjs';
@@ -34,11 +35,12 @@ test('imagem de Robôs entra após o passo do plano, nunca na introdução', asy
   const body = await readFile(new URL('../../content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx', import.meta.url), 'utf8');
   const [step] = capturePlan({ page: 'robo-de-atendimento', module: 'Robôs', faqBody: body,
     coverage: [{ module: 'Robôs', productRoutes: ['/bot'] }], screenFacts: [fact('Robôs', '/bot')] });
+  const file = screenshotFile(step.page, step.step, 'automatic', Buffer.from('fixture'), 'png');
   const manifest = { version: 1, entries: [{ ...step, source: 'automatic', masked: [], bundleSha: sha,
-    file: `/img/mcp/${step.page}/${step.step}.png` }] };
+    sha256: file.split('.')[2], file }] };
   const article = attachScreenshotsToArticle({ path: 'docs/robo-de-atendimento', body }, manifest, sha,
     [fact('Robôs', '/bot')]);
-  const imageAt = article.body.split('\n').findIndex((line) => line.includes(`](/img/mcp/${step.page}/${step.step}.png)`));
+  const imageAt = article.body.split('\n').findIndex((line) => line.includes(`](${file})`));
   assert.ok(imageAt > step.line);
   assert.match(article.body.split('\n')[imageAt - 2], /^1\. No menu do iHelp, abra \*\*Robôs\*\*/u);
 });
@@ -91,7 +93,7 @@ test('texto inserido depois do overlay nunca sai legível no PNG', async () => {
       assert.match(manifest.pending.join(' '), /print descartado/u);
       return;
     }
-    const png = await readFile(join(root, 'contatos/abrir.png'));
+    const png = await readFile(join(root, 'contatos', manifest.entries[0].file.split('/').at(-1)));
     const browser = await launch();
     try {
       const page = await browser.newPage();

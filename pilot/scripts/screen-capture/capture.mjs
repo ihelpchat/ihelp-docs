@@ -6,6 +6,7 @@ import { assertAllowedTarget } from '../guide-proof.mjs';
 import { containsSensitiveData } from '../../mcp/sensitive-data.mjs';
 import { credentialsFromEnv } from '../guide-proof.mjs';
 import { isUnsafeCaptureAction } from '../../mcp/faq-editorial.mjs';
+import { screenshotFile, screenshotHash, writeScreenshot } from '../../mcp/screenshot-files.mjs';
 
 const slug = /^[a-z0-9][a-z0-9-]{0,79}$/u;
 const sha = /^[a-f0-9]{40}$/u;
@@ -105,15 +106,14 @@ export async function addUploadedScreenshot({ manifest, page, step, file, bytes,
   const signature = image.subarray(0, 8).toString('hex');
   const extension = signature === '89504e470d0a1a0a' ? 'png' : image.subarray(0, 3).toString('hex') === 'ffd8ff' ? 'jpg' : null;
   if (!extension || image.length > 2 * 1024 * 1024) throw new Error('Upload precisa ser PNG/JPEG de até 2 MiB');
-  const destination = join(root, 'pending', page, `${step}.${extension}`);
-  await mkdir(join(root, 'pending', page), { recursive: true });
-  await writeFile(destination, image);
+  const imageFile = screenshotFile(page, step, 'upload', image, extension);
+  await writeScreenshot(root, { page, step, source: 'upload', file: imageFile, sha256: screenshotHash(image) }, image);
   const previous = chooseScreenshot(manifest, page, step);
   manifest.entries = manifest.entries.filter((entry) => entry.page !== page || entry.step !== step || entry.source !== 'upload');
   manifest.entries.push({ page, step, label: previous?.label ?? label ?? null, route: previous?.route ?? route ?? null,
     owner: previous?.owner ?? null, checkoutSha: previous?.checkoutSha ?? null,
     listIndex: previous?.listIndex ?? null, line: previous?.line ?? null,
-    file: `/img/mcp/${page}/${step}.${extension}`, alt, bundleSha: null, source: 'upload', status: 'pending', masked: [] });
+    file: imageFile, sha256: screenshotHash(image), alt, bundleSha: null, source: 'upload', status: 'pending', masked: [] });
   await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;
 }
@@ -289,9 +289,7 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         uploaded.route = step.route;
         uploaded.owner = step.owner;
         uploaded.checkoutSha = step.checkoutSha;
-        continue;
       }
-      const image = checkedPath(step.page, step.step);
       if (currentRoute !== step.route) {
         await page.goto(`${target.url}${step.route}`, { waitUntil: 'domcontentloaded' });
         currentRoute = step.route;
@@ -324,19 +322,20 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         }
       } finally { await cdp.detach(); }
       if (!captured) {
-        await rm(join(root, step.page, `${step.step}.png`), { force: true });
         manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step || entry.source !== 'automatic');
         manifest.pending = [...new Set([...(manifest.pending ?? []), `print descartado: destaque fora da imagem ou dado sensível sem máscara em ${step.route}`])];
         continue;
       }
-      await writeFile(join(root, step.page, `${step.step}.png`), captured.bytes);
+      const image = screenshotFile(step.page, step.step, 'automatic', captured.bytes, 'png');
+      const sha256 = screenshotHash(captured.bytes);
+      await writeScreenshot(root, { page: step.page, step: step.step, source: 'automatic', file: image, sha256 }, captured.bytes);
       const mask = captured.mask;
       if (step.action === 'click' && !isUnsafeCaptureAction(step.label)
         && /^(?:abrir|ver|mostrar|acessar)\b/iu.test(step.label)) await control.click();
       manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step || entry.source !== 'automatic');
       manifest.entries.push({ page: step.page, step: step.step, label: step.label, route: step.route,
         listIndex: step.listIndex, line: step.line,
-        owner: step.owner, file: image, alt: step.alt, bundleSha, checkoutSha: step.checkoutSha,
+        owner: step.owner, file: image, sha256, alt: step.alt, bundleSha, checkoutSha: step.checkoutSha,
         source: 'automatic', masked: [...new Set(mask.map((item) => item.reason))] });
     }
     await mkdir(root, { recursive: true });

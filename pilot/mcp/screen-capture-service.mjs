@@ -1,8 +1,9 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { searchLocalProductContext } from './local-product-context.mjs';
 import { screenshotForStep } from './screen-capture-manifest.mjs';
+import { readScreenshot, screenshotLocation } from './screenshot-files.mjs';
 
 const slug = /^[a-z0-9][a-z0-9-]{0,79}$/u;
 const MAX_IMAGES = 4;
@@ -85,14 +86,10 @@ export async function approvePage({ page, step, token, approvedBy }, { root = de
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8'));
   if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error('Manifesto de telas inválido');
   const entry = manifest.entries.find((item) => item.page === page && item.step === step && item.source === 'upload' && item.status === 'pending');
-  if (!entry || !entry.file?.startsWith(`/img/mcp/${page}/${step}.`)) throw new Error('Upload pendente ausente');
-  const extension = entry.file.endsWith('.png') ? 'png' : entry.file.endsWith('.jpg') ? 'jpg' : null;
-  if (!extension) throw new Error('Upload pendente inválido');
-  const bytes = await readFile(join(root, 'pending', page, `${step}.${extension}`));
+  if (!entry) throw new Error('Upload pendente ausente');
+  const { bytes, extension } = await readScreenshot(root, entry);
   if (bytes.length > MAX_IMAGE_BYTES || extension === 'png' && bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'
     || extension === 'jpg' && bytes.subarray(0, 3).toString('hex') !== 'ffd8ff') throw new Error('Upload pendente inválido');
-  await mkdir(join(root, page), { recursive: true });
-  await rename(join(root, 'pending', page, `${step}.${extension}`), join(root, page, `${step}.${extension}`));
   entry.status = 'approved'; entry.approvedBy = approvedBy; entry.approvedAt = new Date().toISOString();
   entry.masked = ['revisão humana'];
   await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest, null, 2));
@@ -111,13 +108,12 @@ export async function downloadPage(page, { root = defaultRoot(), limit = MAX_IMA
   if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error('Manifesto de telas inválido');
   const eligible = manifest.entries.filter((entry) => entry.page === page && slug.test(entry.step)
     && (entry.source !== 'upload' || entry.status === 'approved')
-    && (entry.file === `/img/mcp/${page}/${entry.step}.png` || entry.file === `/img/mcp/${page}/${entry.step}.jpg`));
+    && (() => { try { screenshotLocation(root, entry); return true; } catch { return false; } })());
   const entries = eligible.filter((entry) => screenshotForStep(manifest, page, entry.step) === entry).slice(0, limit);
   let total = 0;
   const images = [];
   for (const entry of entries) {
-    const extension = entry.file.endsWith('.jpg') ? 'jpg' : 'png';
-    const bytes = await readFile(join(root, page, `${entry.step}.${extension}`));
+    const { bytes, extension } = await readScreenshot(root, entry);
     total += bytes.length;
     if (bytes.length > MAX_IMAGE_BYTES || total > MAX_TOTAL_BYTES) throw new Error('Imagens excedem o teto da chamada');
     if (extension === 'png' ? bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'
@@ -137,12 +133,16 @@ export async function imagesUsedByArticles(articles, { root = defaultRoot() } = 
   for (const article of articles) {
     const page = article.path?.split('/').at(-1);
     if (!slug.test(page ?? '')) continue;
-    for (const match of article.body.matchAll(/!\[[^\]\n]+\]\((\/img\/mcp\/([a-z0-9-]+)\/([a-z0-9-]+)\.(png|jpg))\)/gu)) {
-      const [, file, imagePage, step, extension] = match;
+    for (const match of article.body.matchAll(/!\[[^\]\n]+\]\((\/img\/mcp\/([a-z0-9-]+)\/([^\s)]+))\)/gu)) {
+      const [, file, imagePage, name] = match;
+      const parsed = /^([a-z0-9][a-z0-9-]{0,79})\.(?:automatic|upload)\.[a-f0-9]{64}\.(?:png|jpg)$/u.exec(name);
+      if (!parsed) throw new Error('Referência de imagem inválida');
+      const step = parsed[1];
       if (imagePage !== page || !slug.test(step)) throw new Error('Imagem fora da página do artigo');
-      if (screenshotForStep(manifest, page, step)?.file !== file)
+      const entry = screenshotForStep(manifest, page, step);
+      if (entry?.file !== file)
         throw new Error('Imagem citada sem captura aprovada');
-      const bytes = await readFile(join(root, page, `${step}.${extension}`));
+      const { bytes, extension } = await readScreenshot(root, entry);
       if (bytes.length > MAX_IMAGE_BYTES || (extension === 'png' ? bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'
         : bytes.subarray(0, 3).toString('hex') !== 'ffd8ff'))
         throw new Error('Imagem citada inválida ou grande demais');

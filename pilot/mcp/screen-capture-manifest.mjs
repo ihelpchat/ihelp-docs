@@ -1,6 +1,7 @@
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { screenshotLocation } from './screenshot-files.mjs';
 
 export async function loadScreenshotManifest(_root) {
   try {
@@ -19,7 +20,7 @@ const normalized = (value) => value.normalize('NFD').replace(/\p{Diacritic}/gu, 
 export function screenshotForStep(manifest, page, step) {
   if (!manifest || !Array.isArray(manifest.entries)) return null;
   const matches = manifest.entries.filter((entry) => entry.page === page && entry.step === step
-    && (entry.file === `/img/mcp/${page}/${step}.png` || entry.file === `/img/mcp/${page}/${step}.jpg`)
+    && (() => { try { screenshotLocation('', entry); return true; } catch { return false; } })()
     && (entry.source !== 'upload' || entry.status === 'approved')
     && (entry.source === 'upload' || /^[a-f0-9]{40}$/u.test(entry.bundleSha ?? entry.appSha ?? ''))
     && typeof entry.alt === 'string' && !containsSensitiveData(entry.alt));

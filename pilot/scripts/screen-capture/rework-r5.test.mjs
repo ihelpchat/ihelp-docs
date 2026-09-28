@@ -48,7 +48,7 @@ test('texto direto com filho e value de input ficam opacos no PNG', async () => 
     const manifest = await captureScreens({ baseUrl: `http://127.0.0.1:${server.address().port}`, fixture: true, root,
       plan: [{ page: 'contatos', step: 'abrir', role: 'button', label: 'Abrir', route: '/', action: 'none', alt: 'Abrir', owner: 'fixture', checkoutSha: sha }] });
     assert.ok(manifest.entries[0].masked.includes('varredura sensível'));
-    const png = await readFile(join(root, 'contatos/abrir.png'));
+    const png = await readFile(join(root, 'contatos', manifest.entries[0].file.split('/').at(-1)));
     const browser = await launch();
     try {
       const page = await browser.newPage();

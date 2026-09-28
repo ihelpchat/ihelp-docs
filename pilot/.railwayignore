@@ -1,4 +1,4 @@
-# O MCP e o site staging usam Dockerfiles distintos; ambos precisam dos artefatos públicos.
+# railway up envia apenas o contexto do MCP; o site staging usa tarball separado.
 app
 components
 out
@@ -8,4 +8,7 @@ release-dist
 node_modules
 .drafts
 coverage
+public/videos
+public/img
+public/brand
 *.tsbuildinfo

@@ -2,15 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { productSparseFolders, searchLocalProductContext } from './local-product-context.mjs';
 import { syncProductCheckouts } from './product-checkouts.mjs';
-import { addUploadedScreenshot } from '../scripts/screen-capture/capture.mjs';
+import { addUploadedScreenshot, captureScreens } from '../scripts/screen-capture/capture.mjs';
 import { approvePage, imagesUsedByArticles } from './screen-capture-service.mjs';
 import { attachScreenshotsToArticle, screenshotForStep } from './screen-capture-manifest.mjs';
 import { validateRailwayDockerContext } from './railway-docker-context.mjs';
+import { screenshotFile, readScreenshot } from './screenshot-files.mjs';
 
 const appSha = 'a'.repeat(40);
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -41,7 +43,7 @@ test('sparse real mantém todo arquivo fixo e entrega fatos de tela após sync',
     const stateDir = join(root, 'state');
     await syncProductCheckouts({ stateDir, token: 'synthetic-token', repositories });
     const checkout = join(stateDir, 'checkouts/current/front');
-    process.env.PRODUCT_LOCAL_CHECKOUT = checkout;
+    process.env.PRODUCT_LOCAL_CHECKOUT = await import('node:fs/promises').then(({ realpath }) => realpath(checkout));
     assert.ok(productSparseFolders('frontend').includes('src/translate'), 'pasta da tradução precisa estar no sparse');
     assert.match(await readFile(join(checkout, 'src/translate/pt.ts'), 'utf8'), /Adicionar Contato/u);
     const context = await searchLocalProductContext('Agenda de Contatos', 'Contatos', { repositoryIds: ['frontend'], cache: false });
@@ -60,24 +62,55 @@ test('cada origem mantém bytes próprios; upload pendente e recaptura não troc
   const env = { SCREEN_CAPTURE_ADMIN_TOKEN: 'synthetic-admin-token-1234567890' };
   try {
     await mkdir(join(root, page), { recursive: true });
-    await writeFile(join(root, page, `${step}.png`), A);
+    const automaticFile = screenshotFile(page, step, 'automatic', A, 'png');
+    await writeFile(join(root, page, automaticFile.split('/').at(-1)), A);
     let manifest = { version: 1, entries: [{ page, step, label: 'Abrir', route: '/', owner: 'fixture',
-      line: 0, listIndex: 0, file: `/img/mcp/${page}/${step}.png`, sha256: digest(A),
+      line: 0, listIndex: 0, file: automaticFile, sha256: digest(A),
       alt: 'Tela automática', source: 'automatic', checkoutSha: appSha, bundleSha: appSha }] };
     await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest));
     await addUploadedScreenshot({ manifest, page, step, bytes: B, alt: 'Tela aprovada', root });
     manifest = await approvePage({ page, step, token: env.SCREEN_CAPTURE_ADMIN_TOKEN, approvedBy: 'user:fixture' }, { root, env });
     assert.equal(screenshotForStep(manifest, page, step)?.source, 'upload');
-    assert.equal((await readFile(join(root, page, `${step}.png`))).equals(A), true, 'aprovação não sobrescreve automático');
+    assert.equal((await readScreenshot(root, manifest.entries.find((entry) => entry.source === 'automatic'))).bytes.equals(A), true, 'aprovação não sobrescreve automático');
     await addUploadedScreenshot({ manifest, page, step, bytes: C, alt: 'Tela pendente', root });
     assert.equal(screenshotForStep(manifest, page, step)?.source, 'automatic');
     const article = attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Abrir' }, manifest, appSha);
     const used = await imagesUsedByArticles([article], { root });
     assert.equal(Buffer.from(used[0].base64, 'base64').equals(A), true, 'PR leva bytes da entrada selecionada');
     assert.equal(screenshotForStep(manifest, page, step)?.sha256, digest(A));
-    await writeFile(join(root, page, `${step}.png`), B);
+    await writeFile(join(root, page, automaticFile.split('/').at(-1)), B);
     await assert.rejects(imagesUsedByArticles([article], { root }), /hash|integridade/iu, 'leitura confere hash do manifesto');
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('recaptura depois da aprovação preserva upload e volta ao automático quando outro upload fica pendente', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm563-recapture-'));
+  const server = createServer((_request, response) => response.end('<button>Abrir</button>'));
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  const page = 'contatos'; const step = '01-abrir';
+  const plan = [{ page, step, label: 'Abrir', route: '/', role: 'button', action: 'none',
+    alt: 'Tela automática', owner: 'fixture', checkoutSha: appSha, line: 0, listIndex: 0 }];
+  const env = { SCREEN_CAPTURE_ADMIN_TOKEN: 'synthetic-admin-token-1234567890' };
+  try {
+    let manifest = await captureScreens({ baseUrl: `http://127.0.0.1:${server.address().port}`, fixture: true, root, plan });
+    const first = manifest.entries[0];
+    await addUploadedScreenshot({ manifest, page, step, bytes: png('B'), alt: 'Tela aprovada', root });
+    manifest = await approvePage({ page, step, token: env.SCREEN_CAPTURE_ADMIN_TOKEN, approvedBy: 'user:fixture' }, { root, env });
+    const approved = screenshotForStep(manifest, page, step);
+    manifest = await captureScreens({ baseUrl: `http://127.0.0.1:${server.address().port}`, fixture: true, root, plan, manifest });
+    assert.equal(screenshotForStep(manifest, page, step)?.file, approved.file);
+    assert.equal((await readScreenshot(root, approved)).bytes.equals(png('B')), true);
+    assert.equal((await readScreenshot(root, first)).bytes.length > 100, true);
+    await addUploadedScreenshot({ manifest, page, step, bytes: png('C'), alt: 'Tela pendente', root });
+    const selected = screenshotForStep(manifest, page, step);
+    assert.equal(selected?.source, 'automatic');
+    const article = attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Abrir' }, manifest, appSha);
+    const used = await imagesUsedByArticles([article], { root });
+    assert.equal(Buffer.from(used[0].base64, 'base64').equals((await readScreenshot(root, selected)).bytes), true);
+  } finally {
+    await new Promise((done) => server.close(done));
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('railway up inclui COPY e transfere menos de 20 MiB sem assets do site', async () => {

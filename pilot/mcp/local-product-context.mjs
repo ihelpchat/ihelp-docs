@@ -12,6 +12,7 @@ import { readCsharpEndpoints, collectCsharpErrors } from '../lib/csharp-endpoint
 import { traceCsharpCalls } from '../lib/csharp-call-chain.mjs';
 import { routeMatches } from './api-route-match.mjs';
 import { extractScreenFacts, FRONT_ROUTER } from './front-screen-facts.mjs';
+import { FRONT_FIXED_PATHS } from './front-fixed-paths.mjs';
 
 const run = promisify(execFile);
 const SOURCE = /\.(?:ts|tsx|js|jsx|cs)$/iu;
@@ -30,7 +31,8 @@ const fileCache = new Map();
 const controllerCache = new Map();
 const SOURCES = Object.freeze({
   frontend: { repository: 'ihelpchat/front-react', role: 'frontend', env: envCompatibility.localCheckouts.frontend,
-    folders: ['src/components', 'src/pages', 'src/features', 'src/routes'] },
+    folders: ['src/components', 'src/pages', 'src/features', 'src/routes',
+      ...Object.values(FRONT_FIXED_PATHS).map((path) => dirname(path))] },
   backend: { repository: 'ihelpchat/olah-ihelp', role: 'backend', env: envCompatibility.localCheckouts.backend,
     folders: ['Controllers', 'Comzada.Application/Controllers', 'ihelp.PublicApi',
       'Comzada.Application/Services', 'Comzada.Application/Repositories', 'Comzada.Application/Data',
@@ -100,7 +102,7 @@ export function isAllowedSourcePath(path, role = 'frontend', includeApiDto = fal
 export function canReadFrontFile(path) {
   return typeof path === 'string' && path.startsWith('src/') && /\.tsx?$/u.test(path)
     && !path.includes('\\') && !path.split('/').some((part) => !part || part === '.' || part === '..')
-    && (isAllowedSourcePath(path, 'frontend') || path === FRONT_ROUTER || path === 'src/translate/pt.ts');
+    && (isAllowedSourcePath(path, 'frontend') || Object.values(FRONT_FIXED_PATHS).includes(path));
 }
 
 function pathRelevance(path, terms, moduleTerms) {
