@@ -282,19 +282,25 @@ test('plano da Agenda sai ready quando só pergunta detalhes secundários', asyn
 
 test('FAQ reescreve uma vez a palavra sem fonte e bloqueia núcleo ainda descoberto', async () => {
   const sha = 'a'.repeat(40);
-  const fact = { kind: 'action', text: 'Adicionar Contato', source: 'src/Contact.tsx:12',
-    repository: 'ihelpchat/front-react', sha };
-  const citation = { repository: fact.repository, path: 'src/Contact.tsx', lineStart: 12, lineEnd: 12, sha };
-  const valid = unit('Clique em Adicionar Contato.', [citation]);
-  const invalid = unit('Clique em Adicionar Contato e suas vendas dobram em 30 dias.', [citation]);
-  const packageFor = (core) => ({ status: 'ready', summary: 'FAQ.', questions: [], articles: [{
+  const direct = 'Abra Contatos no menu e clique em Adicionar Contato para cadastrar uma pessoa da sua lista.';
+  const steps = [
+    'Abra Contatos no menu lateral e localize Adicionar Contato antes de iniciar um novo cadastro.',
+    'Clique em Adicionar Contato e preencha os campos mostrados na tela para iniciar o cadastro.',
+    'Confira as informações de Adicionar Contato antes de avançar e volte à lista para localizar o cadastro.',
+  ];
+  const facts = [direct, ...steps].map((text, index) => ({ kind: 'text', text,
+    source: `src/Contact.tsx:${index + 12}`, repository: 'ihelpchat/front-react', sha }));
+  const citation = (line) => ({ repository: facts[0].repository, path: 'src/Contact.tsx',
+    lineStart: line, lineEnd: line, sha });
+  const packageFor = (bad) => ({ status: 'ready', summary: 'FAQ.', questions: [], articles: [{
     path: 'docs/sobre-o-sistema/contatos-novos', title: 'Contatos novos', description: 'FAQ.',
     source: 'produto', contentType: 'faq', productActions: [], assistantQuestion: 'Como cadastrar?',
-    sections: { resposta: [core], passos: [core] },
+    sections: { resposta: [unit(bad ? `${direct.slice(0, -1)} e suas vendas dobram em 30 dias.` : direct, [citation(12)])],
+      passos: steps.map((text, index) => unit(text, [citation(index + 13)])) },
   }] });
   const context = { groundingRequired: true, code: [{ available: true, role: 'frontend', ref: sha,
-    repository: fact.repository }], matches: [{ ...citation, line: 12, ref: sha, excerpt: '12: Adicionar Contato' }],
-    screenFacts: [fact], support: { categories: [], rules: [] }, coverage: [], pending: [],
+    repository: facts[0].repository }], matches: [{ ...citation(12), line: 12, ref: sha, excerpt: '12: Adicionar Contato' }],
+    screenFacts: facts, support: { categories: [], rules: [] }, coverage: [], pending: [],
     businessContext: [], faqStyleExamples: [] };
   for (const corrected of [true, false]) {
     let calls = 0;
@@ -304,12 +310,12 @@ test('FAQ reescreve uma vez a palavra sem fonte e bloqueia núcleo ainda descobe
         productContext: context, plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
           calls++;
           if (calls === 2) retryPromptSeen = JSON.stringify(payload.input).includes('palavra sem fonte:');
-          return { model: 'fixture', output_text: JSON.stringify(packageFor(calls === 2 && corrected ? valid : invalid)) };
+          return { model: 'fixture', output_text: JSON.stringify(packageFor(calls === 1 || !corrected)) };
         } } },
       });
     assert.equal(calls, 2);
     assert.ok(retryPromptSeen);
-    assert.equal(result.status, 'needs_information'); // O texto curto ainda não atinge o mínimo editorial.
+    assert.equal(result.status, corrected ? 'ready' : 'needs_information');
     if (!corrected) assert.ok(result.questions.some((item) => item.includes('faltam fontes')));
   }
 });
