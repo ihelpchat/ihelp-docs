@@ -1,0 +1,68 @@
+{
+  "agendaPlan": {
+    "status": "needs_information",
+    "guidance": "Prepare uma página curta, fácil de consultar pelo WhatsApp e escrita para quem nunca usou o iHelp. Organize-a como: FAQ breve; tutorial completo dividido em buscar, cadastrar, editar, atribuir responsável, agendar mensagem, importar e exportar; passos guiados dentro do produto; e navegação com links relacionados. Para buscar, explique o campo “Buscar contato...” e os filtros “Tag”, “Departamento” e “Usuário”; se não aparecer resultado, a tela oferece “Limpar filtros”. Para cadastrar, informe que nome e telefone são obrigatórios e que o formulário inclui também e-mail, data de nascimento e tags, sem declarar esses últimos obrigatórios. Para editar, use o nome confirmado “Editar contato”. Na atribuição, prefira explicar o termo da interface “Proprietário do Contato” e esclareça que o usuário é opcional, sem afirmar efeitos sobre distribuição de atendimentos. Não escreva ainda um passo a passo completo de agendamento ou exportação: faltam os controles e resultados dessas ações. Na importação, é possível documentar a seleção de arquivo CSV, XLSX ou XLS, a escolha da linha de cabeçalhos, o mapeamento dos campos, a conferência e o início da importação; não prometa regras de telefone, deduplicação ou validação do resultado sem confirmação. Não duplique o procedimento de exportação do celular: encaminhe para o artigo existente. O material sobre planilhas de campanhas é sobre outro uso; só o relacione se confirmar que o formato também se aplica à importação de contatos. Exclua vídeo do escopo.",
+    "questions": [
+      "Para agendar uma mensagem: qual sequência de telas e campos aparece depois de clicar em “Agendamento” e quais botões concluem ou cancelam?",
+      "Para exportar: onde fica a opção na tela Contatos, qual é o nome exibido, quais formatos/campos são exportados e como o arquivo é baixado?",
+      "Na importação de contatos, telefone é obrigatório para o arquivo? A tela de mapeamento o marca como opcional, enquanto o cadastro individual exige telefone. Como funcionam números internacionais, duplicidades e validação/resultado da importação?",
+      "Confirme se “Mais opções” é o botão que abre importar e exportar e quais rótulos aparecem nesse menu. O rótulo conhecido “Mais opções” é um aria-label, não prova por si só o conteúdo do menu.",
+      "Na tela de detalhes, atribuir “Proprietário do Contato” a um departamento e/ou usuário muda o responsável pelo atendimento, a carteira do contato ou ambos? Há restrições conforme o perfil?",
+      "O artigo “Meu histórico de conversas será perdido?” foi fornecido duas vezes com o mesmo conteúdo. Confirmar se a repetição é apenas duplicidade editorial e manter uma única referência."
+    ],
+    "risks": [
+      "O passo a passo principal não pode cobrir com segurança agendamento nem exportação sem confirmar controles, campos e resultado; inventá-los pode levar uma pessoa iniciante a uma ação errada.",
+      "Há uma diferença a validar antes de explicar importação: o mapeamento identifica “Nome” como obrigatório e “Telefone” como não obrigatório, mas no cadastro individual o telefone é obrigatório. Não transformar um desses fatos em regra geral do outro fluxo.",
+      "“Carteirizar” é o termo do pedido; a interface observada chama a área de atribuição “Proprietário do Contato”. Usar os dois sem explicar a equivalência pode confundir, e o efeito operacional do vínculo não está confirmado.",
+      "Há possibilidade de duplicidade editorial: o conteúdo sobre histórico de conversas aparece repetido. Os links sobre exportar contatos do celular e preparar planilha de campanhas são relacionados, mas não comprovam o fluxo de exportação ou o formato da importação de contatos.",
+      "Nomes a confirmar antes da publicação: opções do menu “Mais opções”, controles e botões do fluxo de exportação e do agendamento, e se “Agendamento” é o rótulo que a pessoa verá na tela em todos os casos."
+    ],
+    "suggestedActions": [],
+    "grounding": []
+  },
+  "robotInitial": {
+    "status": "ready",
+    "whenUse": {
+      "text": "Use um Menu de opções quando quiser apresentar escolhas ao cliente e ligar cada escolha a um caminho do fluxo.",
+      "citations": [
+        {
+          "source": "pagina",
+          "path": "/docs/sobre-o-sistema/menu-de-opcoes-do-robo",
+          "quote": "Crie escolhas no Menu de opções e conecte cada caminho do robô a outro bloco ou ação."
+        }
+      ]
+    }
+  },
+  "robotRetry": {
+    "status": "ready",
+    "purpose": {
+      "text": "O Robô de atendimento é um chatbot que responde e distribui os atendimentos.",
+      "citations": [
+        {
+          "source": "pedido",
+          "quote": "chatbot que responde e distribui os atendimentos"
+        }
+      ]
+    },
+    "whenUse": {
+      "text": "Use um Menu de opções quando quiser oferecer escolhas como “Vendas” e “Suporte”.",
+      "citations": [
+        {
+          "source": "pagina",
+          "path": "/docs/sobre-o-sistema/menu-de-opcoes-do-robo",
+          "quote": "com a escolha que o cliente verá, como “Vendas” ou “Suporte”."
+        }
+      ]
+    },
+    "example": {
+      "text": "Maria Exemplo vê as opções “Vendas” e “Suporte” e escolhe “Suporte”.",
+      "citations": [
+        {
+          "source": "pagina",
+          "path": "/docs/sobre-o-sistema/menu-de-opcoes-do-robo",
+          "quote": "com a escolha que o cliente verá, como “Vendas” ou “Suporte”."
+        }
+      ]
+    }
+  }
+}

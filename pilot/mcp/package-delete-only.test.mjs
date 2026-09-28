@@ -37,7 +37,7 @@ globalThis.fetch = async (url, init = {}) => {
 };
 
 try {
-  for (const path of ['docs/contatos/cpf12345678909', 'docs/contatos/contato11987654321x']) {
+  for (const path of ['docs/contatos/cpf-12345678909', 'docs/contatos/contato-11987654321-x']) {
     await assert.rejects(submitContentPackage(root, [], 'pull_request', 'user:tester', [path]), /dado pessoal/i);
     assert.equal(fetchCount, 0, 'delete com dado sensível não pode acessar GitHub');
   }
