@@ -774,6 +774,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`) },
     ...(options.retryIssues ? [retryPrompt(options.retryIssues)] : []),
+    ...(options.faqRetryIssues ? [retryPrompt(options.faqRetryIssues)] : []),
   ], options);
   const apiPages = request.module === 'api' ? await generateApiPages(options, payload, productContext, selectable) : null;
   const response = apiPages ? { model: apiPages.model, output_text: JSON.stringify(apiPages.parsed) }
@@ -957,7 +958,11 @@ async function generateContentPackageCore(root, request, options = {}) {
   for (const prose of parsed.articles) {
     const result = validateFaqSections(prose.sections, faqContext);
     sectionPending.push(...result.pending.map((item) => `${prose.path}: ${item}`));
-    if (result.blocking.length) return withPending(apiPending(`${prose.path}: faltam fontes para resposta direta ou passo principal`));
+    const uncovered = result.pending.filter((item) => item.startsWith('palavra sem fonte:'));
+    if (uncovered.length && !options.faqRetryIssues) return generateContentPackage(root, request, {
+      ...options, productContext, plan, faqRetryIssues: uncovered.map((item) => `${prose.path}: ${item}`),
+    });
+    if (result.blocking.length) return withPending(apiPending(`${prose.path}: faltam fontes para resposta direta ou passo principal${uncovered.length ? `; ${uncovered.join('; ')}` : ''}`));
     const { sections: _sections, ...article } = prose;
     article.body = renderFaqSections(result.sections);
     article.description = article.body.split('\n')[0].slice(0, 240);

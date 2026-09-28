@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { parse } from 'yaml';
 import { redactSensitiveData, containsSensitiveData } from './sensitive-data.mjs';
 import { valueFor } from './api-synthetic-example.mjs';
+import { FAQ_NEUTRAL_WORDS } from './faq-neutral-words.mjs';
 
 export const FAQ_SECTIONS = {
   resposta: 'Resposta direta', paraQueServe: 'Para que serve', quandoUsar: 'Quando usar',
@@ -15,26 +16,39 @@ const normalized = (value) => String(value ?? '').replace(/\s+/gu, ' ').trim();
 const literal = (quote, source) => normalized(quote).length >= 12
   && normalized(source).toLocaleLowerCase('pt-BR').includes(normalized(quote).toLocaleLowerCase('pt-BR'));
 const fold = (value) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLocaleLowerCase('pt-BR');
-const words = (value) => fold(value).match(/[a-z]+/gu) ?? [];
-const STOP = new Set('a as o os um uma uns umas de da do das dos e em no na nos nas por para pela pelo pelas pelos com que se isso este esta esse essa ao aos ou seu sua suas seus mais como quando onde entre'.split(' '));
-const contentWords = (value) => words(value).filter((word) => word.length > 2 && !STOP.has(word));
-const root = (word) => word.length > 5 ? word.slice(0, 5) : word.replace(/s$/u, '');
+const words = (value) => fold(value).match(/[a-z]+|\d+/gu) ?? [];
+const singular = (word) => word.endsWith('oes') || word.endsWith('aes') ? `${word.slice(0, -3)}ao`
+  : word.endsWith('ais') ? `${word.slice(0, -3)}al`
+    : word.endsWith('eis') ? `${word.slice(0, -3)}el`
+      : word.length > 3 && word.endsWith('s') ? word.slice(0, -1) : word;
+const neutral = new Set(FAQ_NEUTRAL_WORDS.map((word) => singular(fold(word))));
+const contentWords = (value) => words(value).filter((word) => word.length > 2 && !neutral.has(singular(word)));
 const PROMISES = ['aumenta', 'reduz', 'garante', 'dobra', 'sempre', 'nunca', 'melhor', 'economiza'];
 const numbers = (value) => String(value ?? '').match(/(?:R\$|US\$|€|\$)?\s*\d+(?:[.,]\d+)*(?:\s*%|\s*(?:dias?|horas?|minutos?|meses?|anos?))?/giu) ?? [];
 const properNames = (value) => [...String(value ?? '').matchAll(/\p{L}+/gu)]
   .filter((match) => /\p{Ll}\p{Lu}/u.test(match[0]) || (match.index !== 0 && /^\p{Lu}/u.test(match[0])))
   .map((match) => fold(match[0]));
 
-function supportedClaim(text, sources) {
-  const evidence = fold(sources.join(' '));
-  if (numbers(text).some((number) => !sources.some((source) => fold(source).includes(fold(number).trim())))) return false;
-  if (properNames(text).some((name) => !evidence.includes(name))) return false;
-  if (PROMISES.some((word) => words(text).some((token) => root(token) === root(word))
-    && !words(evidence).some((token) => root(token) === root(word)))) return false;
-  if (/mais vendas/iu.test(text) && !/mais vendas/iu.test(evidence)) return false;
-  const terms = contentWords(text);
-  const cited = new Set(contentWords(evidence).map(root));
-  return !terms.length || terms.filter((term) => cited.has(root(term))).length / terms.length >= 0.5;
+const syntheticEvidence = ['nome', 'email', 'telefone', 'id', 'numero', 'data', 'searchData']
+  .map((name) => valueFor({ name })).join(' ');
+
+// Ponto único para um verificador semântico futuro; hoje a decisão é extrativa.
+function supportedClaim(text, sources, { example = false } = {}) {
+  const evidence = [...sources, ...(example ? [syntheticEvidence] : [])].join(' ');
+  const cited = new Set(words(evidence).map(singular));
+  const uncovered = [...new Set(contentWords(text).filter((word) => !cited.has(singular(word))))];
+  // Números, nomes e promessas obedecem à mesma cobertura total, inclusive nas seções centrais.
+  if (numbers(text).some((number) => ![...sources, ...(example ? [syntheticEvidence] : [])]
+    .some((source) => fold(source).includes(fold(number).trim())))) {
+    for (const number of numbers(text)) if (!uncovered.includes(fold(number).trim())) uncovered.push(fold(number).trim());
+  }
+  if (properNames(text).some((name) => !fold(evidence).includes(name))) {
+    for (const name of properNames(text)) if (!fold(evidence).includes(name) && !uncovered.includes(name)) uncovered.push(name);
+  }
+  if (PROMISES.some((word) => words(text).includes(word) && !words(evidence).includes(word))) {
+    for (const word of PROMISES) if (words(text).includes(word) && !words(evidence).includes(word) && !uncovered.includes(word)) uncovered.push(word);
+  }
+  return uncovered;
 }
 
 export function classifyFaqQuestions(questions = []) {
@@ -138,15 +152,15 @@ export function validateFaqSections(sections, context) {
             && unit.text.toLocaleLowerCase('pt-BR').includes(fact.text.toLocaleLowerCase('pt-BR')))));
       });
       if (!citationsValid) return false;
-      if (!['paraQueServe', 'quandoUsar', 'exemplo', 'duvidas'].includes(key)) return true;
       const sources = unit.citations.map((cite) => {
         if (cite.source) return cite.quote;
         return (context.screenFacts ?? []).find((fact) => cite.repository === fact.repository
           && cite.path === fact.path && cite.sha === fact.sha && cite.lineStart === fact.lineStart
           && cite.lineEnd === fact.lineEnd)?.text ?? '';
       });
-      if (supportedClaim(unit.text, sources)) return true;
-      pending.push(`afirmação sem sustentação: ${unit.text}`);
+      const uncovered = supportedClaim(unit.text, sources, { example: key === 'exemplo' });
+      if (!uncovered.length) return true;
+      pending.push(`palavra sem fonte: ${uncovered.join(', ')} em ${unit.text}`);
       return false;
     });
     if (valid.length) kept[key] = valid;
