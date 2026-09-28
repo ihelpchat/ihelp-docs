@@ -1,3 +1,4 @@
+import { apiProseFixture } from './api-prose-test-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateContentPackage } from './content-ai-service.mjs';
@@ -20,19 +21,19 @@ const context = { groundingRequired: false, matches: [], code: [], endpoints: fa
 async function run(change = () => {}, changedContext = context) {
   const response = structuredClone(positive);
   change(response);
-  let schema;
+  const schemas = [];
   const result = await generateContentPackage(process.cwd(), request, { productContext: changedContext, plan: { status: 'ready' },
     client: { responses: { create: async (payload) => {
-      schema = payload.text.format.schema;
-      return { output_text: JSON.stringify(response), model: 'simulado' };
+      schemas.push(payload.text.format.schema);
+      return { output_text: JSON.stringify(apiProseFixture(response)), model: 'simulado' };
     } } } });
-  return { result, schema };
+  return { result, schemas };
 }
 
 test('três páginas novas escolhem fatos distintos e renderizam método, rota e parâmetro', async () => {
-  const { result, schema } = await run();
+  const { result, schemas } = await run();
   assert.equal(result.status, 'ready', result.questions?.join('; '));
-  assert.deepEqual(schema.properties.articles.items.properties.endpoint.enum, ids);
+  assert.deepEqual(schemas[0].properties.articles.items.properties.endpoint.enum, [ids[0]]);
   assert.deepEqual(result.articles.map((article) => [article.path, article.method, article.endpoint]),
     paths.map((path, index) => [path, 'GET', ids[index].slice(4)]));
   for (const [index, name] of ['page', 'IdRef', 'contactId'].entries()) {

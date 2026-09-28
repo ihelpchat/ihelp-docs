@@ -8,6 +8,26 @@ import { envCompatibility, githubReadToken } from './env-compat.mjs';
 import { parse } from 'yaml';
 const CACHE_MS = 5 * 60_000;
 export const MAX_API_CODE_CHARS = 30_000;
+export async function selectApiStyleExamples(docsRoot) {
+  const pages = (await readdir(docsRoot, { recursive: true }).catch(() => []))
+    .filter((path) => path.endsWith('.mdx')).sort();
+  const examples = [];
+  for (const page of pages) {
+    const raw = await readFile(join(docsRoot, page), 'utf8');
+    const front = raw.match(/^---\n([\s\S]*?)\n---/u);
+    if (!front) continue;
+    const fields = parse(front[1]);
+    if (fields?.source !== 'api' || !fields.method || !fields.endpoint) continue;
+    const prose = raw.slice(front[0].length).replace(/```[\s\S]*?```/gu, '')
+      .replace(/<[^>]+>/gu, '').replace(/^\s*[\[\]{}",:0-9]+\s*$/gmu, '').trim();
+    const sections = [...prose.matchAll(/^## /gmu)].length;
+    const notes = [...prose.matchAll(/^##?\s+(?:nota|atenção|erros?|dicas?|campos relevantes)/gimu)].length;
+    const titles = [...prose.matchAll(/^##?\s+(.+)$/gmu)].map((match) => match[1]);
+    examples.push({ path: `api/${page.replace(/\.mdx$/u, '')}`, sections, notes,
+      style: redactSensitiveData(`Introdução: ${String(fields.description ?? '').slice(0, 240)}\nSeções: ${titles.join(' | ').slice(0, 600)}`) });
+  }
+  return examples.sort((a, b) => b.sections - a.sections || b.notes - a.notes || a.path.localeCompare(b.path)).slice(0, 3);
+}
 const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|cs)$/;
 const PINNED_PATHS = new Set([
   'src/components/core/components/Router/utils/pagesData.tsx',
@@ -240,6 +260,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
     nonPublicEndpoints,
     pending,
     apiExamples,
+    apiStyleExamples: normalize(module) === 'api' ? await selectApiStyleExamples(join(provided.publicReferenceRoot ?? root, 'content/docs/api')) : [],
     matches: [...contextCode.flatMap((source) => source.matches.map((match) => ({ ...match, repository: source.repository, ref: source.ref, role: source.role }))),
       ...endpoints.filter((item) => item.documented || item.explicit).flatMap((item) => [item, ...item.parameters, ...(item.responseFields ?? [])]
         .map((fact) => ({ repository: 'ihelpchat/olah-ihelp', role: 'backend',

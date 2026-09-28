@@ -86,23 +86,104 @@ const lineOf = (source, at) => source.slice(0, at).split('\n').length;
 const camel = (name) => name[0].toLowerCase() + name.slice(1);
 function dtoFields(dtoSources, type) {
   for (const { file, source } of dtoSources) {
-    const clean = neutralizeCsharp(source);
+    const { neutralized: clean, tokens: items } = scanCsharp(source);
     const declaration = new RegExp(`\\b(?:class|record)\\s+${type}\\b`, 'u').exec(clean);
     if (!declaration) continue;
-    const body = clean.slice(declaration.index).split(/\n\s*\}\s*(?:;|$)/u)[0];
+    const opening = items.findIndex((item) => item.at >= declaration.index + declaration[0].length && item.value === '{');
+    if (opening < 0) continue;
+    let closing = opening + 1, nesting = 1;
+    for (; closing < items.length && nesting; closing++) {
+      if (items[closing].value === '{') nesting++;
+      if (items[closing].value === '}') nesting--;
+    }
+    if (nesting) continue;
+    const start = items[opening].at + 1;
+    const body = clean.slice(start, items[closing - 1].at);
+    let cursor = opening + 1, depth = 1;
     return [...body.matchAll(/\bpublic\s+([\w<>?,\[\]]+)\s+(\w+)\s*\{\s*get\s*;[^}]*\}\s*(?:=\s*([^;]+);)?/gu)]
+      .filter((match) => {
+        const at = start + match.index;
+        while (cursor < closing - 1 && items[cursor].at < at) {
+          if (items[cursor].value === '{') depth++;
+          if (items[cursor].value === '}') depth--;
+          cursor++;
+        }
+        return depth === 1;
+      })
       .map((match) => {
-        const original = source.slice(declaration.index + match.index, declaration.index + match.index + match[0].length);
+        const original = source.slice(start + match.index, start + match.index + match[0].length);
         const initializer = match[3] === undefined ? undefined : original.slice(match[0].indexOf('=') + 1, -1).trim();
         const value = initializer && (/^-?\d+(?:\.\d+)?$/u.test(initializer) ? Number(initializer)
           : /^(?:true|false)$/u.test(initializer) ? initializer === 'true'
             : /^"[^"\n]*"$/u.test(initializer) ? initializer.slice(1, -1)
               : /^new\s+List<\w+>\s*\(\s*\)$/u.test(initializer) ? [] : undefined);
-        return { name: camel(match[2]), type: match[1], source: `${file}:${lineOf(source, declaration.index + match.index)}`,
+        return { name: camel(match[2]), type: match[1], source: `${file}:${lineOf(source, start + match.index)}`,
           ...(value !== undefined ? { default: value } : {}) };
       });
   }
   return [];
+}
+function childDtoType(type) {
+  const clean = String(type ?? '').replace(/\?$/u, '').trim();
+  const list = /^(?:List|IEnumerable|ICollection|IReadOnlyList)<\s*([A-Za-z_]\w*)\s*>$/u.exec(clean);
+  const name = list?.[1] ?? (/^[A-Za-z_]\w*$/u.test(clean) ? clean : null);
+  if (!name || /^(?:string|bool|boolean|int|long|short|double|decimal|float|Guid|DateTime|DateTimeOffset|object)$/iu.test(name)) return null;
+  return { name, list: Boolean(list) };
+}
+
+function expandedResponseFields(dtoSources, fields, prefix) {
+  const result = [], pending = [];
+  for (const field of fields) {
+    const path = `${prefix}${field.name}`;
+    result.push({ ...field, path });
+    const child = childDtoType(field.type);
+    if (!child) continue;
+    const nested = dtoFields(dtoSources, child.name);
+    if (!nested.length) { pending.push(`tipo aninhado não resolvido: ${child.name} (${path})`); continue; }
+    result.push(...nested.map((item) => ({ ...item, path: `${path}${child.list ? '[]' : ''}.${item.name}` })));
+  }
+  return { fields: result, pending };
+}
+
+export function collectCsharpErrors(controllerSource, endpoint, reachedMethods = []) {
+  const clean = neutralizeCsharp(controllerSource);
+  const action = resolveCsharpAction(controllerSource, endpoint.file, endpoint);
+  const signature = action && [...clean.matchAll(new RegExp(`\\b${action.method}\\s*\\([^)]*\\)\\s*\\{`, 'gu'))]
+    .find((match) => match.index === action.actionAt);
+  let body = '';
+  if (signature) {
+    const start = signature.index + signature[0].lastIndexOf('{');
+    let depth = 0, end = start;
+    for (; end < clean.length; end++) {
+      if (clean[end] === '{') depth++;
+      if (clean[end] === '}' && --depth === 0) { end++; break; }
+    }
+    body = controllerSource.slice(start, end);
+  }
+  const errors = [];
+  const add = (status, message, when) => {
+    if (!errors.some((item) => item.status === status && item.message === message)) errors.push({ status, message, when });
+  };
+  const catchMessage = /catch\s*\(\s*Exception\s+(\w+)\s*\)\s*\{\s*return\s+BadRequest\s*\(\s*ResponseHttp\.ToReturn\s*\(\s*\1\.Message\s*\)\s*\)/u.test(body);
+  if (catchMessage) add(400, 'Mensagem de erro', 'Exceção capturada pela action; corpo em ResponseHttp.ToReturn.');
+  for (const method of reachedMethods) {
+    if (!catchMessage) break;
+    for (const match of String(method.excerpt ?? '').matchAll(/\bthrow\s+new\s+(?:[A-Za-z_]\w*)?Exception\s*\(\s*"([^"\n]*)"\s*\)/gu))
+      add(400, match[1], 'Quando o serviço retorna esta falha.');
+  }
+  for (const match of body.matchAll(/\b(NotFound|Unauthorized|Forbid|StatusCode)\s*\(\s*(\d{3})?/gu)) {
+    const status = ({ NotFound: 404, Unauthorized: 401, Forbid: 403 })[match[1]] ?? Number(match[2]);
+    if (status) add(status, '—', `Resposta explícita da action (${match[1]}).`);
+  }
+  if ((endpoint.authorization ?? endpoint.policy) !== 'anonymous') add(401, 'Token ausente, inválido ou expirado', 'Autenticação exigida.');
+  return errors;
+}
+export function resolveCsharpAction(source, file, endpoint) {
+  if (!endpoint?.verb || !endpoint?.route || !Array.isArray(endpoint.actionParameterNames)) return null;
+  const matches = readCsharpEndpoints(source, file, {}).filter((item) => item.verb === endpoint.verb
+    && item.route.toLowerCase() === endpoint.route.toLowerCase()
+    && JSON.stringify(item.actionParameterNames) === JSON.stringify(endpoint.actionParameterNames));
+  return matches.length === 1 ? matches[0] : null;
 }
 function signatureParameters(items, route, dtoSources, file, source) {
   const groups = [];
@@ -125,6 +206,26 @@ function signatureParameters(items, route, dtoSources, file, source) {
     return fields.length ? fields.map((field) => ({ ...field, in: location, dtoType: type, owner: name }))
       : [{ name: camel(name), type, in: location, owner: name, source: `${file}:${lineOf(source, words.at(-1).at)}` }];
   });
+}
+function actionSignatureNames(items) {
+  const groups = [];
+  let group = [], depth = 0;
+  for (const token of items) {
+    if (['<', '[', '('].includes(token.value)) depth++;
+    if (['>', ']', ')'].includes(token.value)) depth--;
+    if (token.value === ',' && depth === 0) { groups.push(group); group = []; }
+    else group.push(token);
+  }
+  if (group.length) groups.push(group);
+  return groups.map((part) => {
+    let nested = 0;
+    for (let i = 0; i < part.length; i++) {
+      if (['<', '[', '('].includes(part[i].value)) nested++;
+      if (['>', ']', ')'].includes(part[i].value)) nested--;
+      if (part[i].value === '=' && nested === 0) return part.slice(0, i).filter((token) => token.kind === 'word').at(-1)?.value;
+    }
+    return part.filter((token) => token.kind === 'word').at(-1)?.value;
+  }).filter(Boolean);
 }
 
 function assignedPaths(body, parameterNames) {
@@ -208,7 +309,72 @@ function actionBodyOf(source, items, start) {
   return '';
 }
 
-export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
+function simpleType(type) {
+  const value = String(type ?? '').replace(/\s|\?/gu, '');
+  if (/^(?:List|IEnumerable)<|\[\]$/u.test(value)) return 'list';
+  if (/^string$/iu.test(value)) return 'string';
+  if (/^(?:int|long|short|double|decimal|float)$/iu.test(value)) return 'number';
+  if (/^bool$/iu.test(value)) return 'boolean';
+  return null;
+}
+
+function callArguments(body, open) {
+  const parts = [];
+  let start = open + 1, depth = 1;
+  for (let i = start; i < body.length; i++) {
+    if (body[i] === '(') depth++;
+    else if (body[i] === ')' && --depth === 0) {
+      if (body.slice(start, i).trim()) parts.push(body.slice(start, i).trim());
+      return parts;
+    } else if (body[i] === ',' && depth === 1) {
+      parts.push(body.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  return null;
+}
+
+function argumentType(argument, actionBody, signature) {
+  if (/^@?"/u.test(argument)) return 'string';
+  if (/^-?\d+(?:\.\d+)?$/u.test(argument)) return 'number';
+  if (/^(?:true|false)$/u.test(argument)) return 'boolean';
+  if (/^new\s+(?:List|IEnumerable)<|^new\s*\[|^\[\s*\]/u.test(argument)) return 'list';
+  if (!/^[A-Za-z_]\w*$/u.test(argument)) return null;
+  const declared = /\b((?:List|IEnumerable)\s*<[^>]+>|[A-Za-z_]\w*(?:\[\])?)\s+([A-Za-z_]\w*)\s*(?:[,)=;]|$)/gu;
+  const declarations = [...signature.matchAll(declared), ...actionBody.matchAll(declared)];
+  return simpleType(declarations.filter((match) => match[2] === argument).at(-1)?.[1]);
+}
+
+function serviceResponse(body, controllerSource, serviceSources, signature = '') {
+  const wrapped = body.match(/\breturn\s+Ok\s*\(\s*ResponseHttp\.ToReturn\s*\(\s*([A-Za-z_]\w*)\s*\)\s*\)/u);
+  const direct = body.match(/\breturn\s+Ok\s*\(\s*([A-Za-z_]\w*)\s*\)/u);
+  if (!wrapped && !direct) return null;
+  const value = (wrapped ?? direct)[1];
+  const assignment = new RegExp(`\\b(?:var|[A-Za-z_]\\w*)\\s+${value}\\s*=\\s*await\\s+(_[A-Za-z_]\\w*)\\.([A-Za-z_]\\w*)\\s*\\(`, 'u').exec(body);
+  if (!assignment) return null;
+  const receiver = assignment[1], method = assignment[2];
+  const args = callArguments(body, assignment.index + assignment[0].length - 1);
+  if (!args) return null;
+  const type = neutralizeCsharp(controllerSource).match(new RegExp(`\\b(?:private|protected|public)\\s+(?:readonly\\s+)?([A-Za-z_]\\w*)\\s+${receiver}\\s*;`, 'u'))?.[1];
+  if (!type) return null;
+  const allowedTypes = new Set([type, type.startsWith('I') ? type.slice(1) : `I${type}`]);
+  const declarations = serviceSources.filter(({ file }) => allowedTypes.has(file.split('/').at(-1).replace(/\.cs$/u, '')))
+    .flatMap(({ source, file }) => [...neutralizeCsharp(source).matchAll(new RegExp(`\\b(Task\\s*<\\s*(?:(?:List|IEnumerable)\\s*<\\s*)?[A-Za-z_]\\w*\\s*>\\s*>|Task\\s*<\\s*[A-Za-z_]\\w*\\s*>|IEnumerable\\s*<\\s*[A-Za-z_]\\w*\\s*>)\\s+${method}\\s*\\(`, 'gu'))]
+    .map((match) => ({ type: match[1].replace(/\s+/gu, ''), args: callArguments(neutralizeCsharp(source), match.index + match[0].length - 1),
+      source: `${file}:${lineOf(source, match.index)}` })));
+  let candidates = declarations.filter((item) => item.args?.length === args.length);
+  const known = args.map((argument) => argumentType(argument, body, signature));
+  for (let i = 0; i < known.length; i++) if (known[i])
+    candidates = candidates.filter((item) => simpleType(item.args[i].replace(/\s+[A-Za-z_]\w*$/u, '')) === known[i]);
+  const distinct = [...new Set(candidates.map((item) => item.type.replace(/^Task</u, '').replace(/>$/u, '')))];
+  if (distinct.length !== 1) return null;
+  const returnType = distinct[0];
+  const list = /^(?:List|IEnumerable)</u.test(returnType);
+  const inner = returnType.replace(/^(?:List|IEnumerable)</u, '').replace(/>$/u, '');
+  return /^\w+$/u.test(inner) ? { type: inner, list, envelope: Boolean(wrapped) } : null;
+}
+
+export function readCsharpEndpoints(source, file, { dtoSources = [], serviceSources = [] } = {}) {
   const { tokens: t, neutralized: clean } = scanCsharp(source);
   const endpoints = [];
   let pending = [];
@@ -262,6 +428,7 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       let end = i + 1, nesting = 1;
       while (end < t.length && nesting) { if (t[end].value === '(') nesting++; if (t[end].value === ')') nesting--; end++; }
       const location = `${file}:${lineOf(source, t[i - 1].at)}`;
+      const actionParameterNames = actionSignatureNames(t.slice(i + 1, end - 1));
       const routeSource = `${file}:${lineOf(source, attr(controller.attrs, 'Route')?.at ?? http.at)}`;
       const verbSource = `${file}:${lineOf(source, http.at)}`;
       const authorizationAttribute = attr(pending, 'AllowAnonymous') ?? attr(controller.attrs, 'AllowAnonymous')
@@ -291,11 +458,19 @@ export function readCsharpEndpoints(source, file, { dtoSources = [] } = {}) {
       const declaredResultType = responseTypeOf(declaration, pending);
       const resultType = declaredResultType === 'IActionResult' || !declaredResultType
         ? okResponseType(actionBody) : declaredResultType;
-      const fields = resultType ? dtoFields(dtoSources, resultType) : [];
-      const responseFields = fields.length ? fields : null;
-      const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : [];
-      endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
-        ...(reference ? { controllerRoute, parameters, serverAssigned, responseFields, responseType: resultType, pending: responsePending, optionalAlias, optionalAliases, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resultType].filter(Boolean))], source: verbSource,
+      const service = !resultType ? serviceResponse(actionBodyOf(source, t, end), source, serviceSources,
+        source.slice(t[i].at, t[end - 1]?.at ?? t[i].at)) : null;
+      const resolvedType = resultType ?? service?.type ?? null;
+      const fields = resolvedType ? dtoFields(dtoSources, resolvedType) : [];
+      const expandedFields = fields.length ? expandedResponseFields(dtoSources, fields,
+        service?.envelope ? `dados${service.list ? '[]' : ''}.` : service?.list ? '[].' : '') : null;
+      const responseFields = expandedFields?.fields ?? null;
+      const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : expandedFields.pending;
+      endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route,
+        actionLine: lineOf(source, t[i - 1].at), actionAt: t[i - 1].at, actionParameterNames, policy, name: policy,
+        ...(reference ? { controllerRoute, parameters, serverAssigned, responseFields, responseType: resolvedType,
+          responseEnvelope: service?.envelope ? 'dados' : null, responseList: service?.list ?? false,
+          pending: responsePending, optionalAlias, optionalAliases, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resolvedType].filter(Boolean))], source: verbSource,
           routeSource, actionRouteSource: verbSource, verbSource, authorizationSource, authorization: policy } : {}) });
       pending = [];
     }

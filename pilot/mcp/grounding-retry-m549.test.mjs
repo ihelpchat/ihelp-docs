@@ -1,3 +1,4 @@
+import { apiProseFixture } from './api-prose-test-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { planContent, generateContentPackage, validateGroundedOutput } from './content-ai-service.mjs';
@@ -103,7 +104,7 @@ test('prosa de API rejeitada é gerada uma segunda vez com a recusa no prompt', 
   const result = await generateContentPackage(process.cwd(), request, { productContext: packageContext,
     plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
       calls.push(payload);
-      return { output_text: JSON.stringify(packageResponse(calls.length === 1 ? bad : citation)), model: 'simulado' };
+      return { output_text: JSON.stringify(apiProseFixture(packageResponse(calls.length === 1 ? bad : citation))), model: 'simulado' };
     } } } });
   assert.equal(result.status, 'ready', result.summary);
   assert.equal(calls.length, 2);
@@ -118,7 +119,7 @@ test('summary do pacote rejeitado também aciona uma única nova geração', asy
       calls.push(payload);
       const value = packageResponse(citation);
       value.grounding[0].citations = [bad];
-      return { output_text: JSON.stringify(value), model: 'simulado' };
+      return { output_text: JSON.stringify(apiProseFixture(value)), model: 'simulado' };
     } } } });
   assert.equal(result.status, 'needs_evidence');
   assert.equal(calls.length, 2);
@@ -133,7 +134,7 @@ test('plano de API sem citação na orientação segue para geração', async ()
       const value = calls.length === 1
         ? { ...plan(citation), grounding: [], guidance: 'Oriente a criação das páginas de contatos.' }
         : packageResponse(citation);
-      return { output_text: JSON.stringify(value), model: 'simulado' };
+      return { output_text: JSON.stringify(apiProseFixture(value)), model: 'simulado' };
     } } } });
   assert.equal(result.status, 'ready', result.summary);
   assert.equal(calls.length, 2, 'a geração deve acontecer após o plano');
@@ -168,7 +169,7 @@ test('plano de API com `GET` e nomes sem fato chega à geração', async () => {
       calls.push(1);
       return { output_text: JSON.stringify(calls.length === 1
         ? { ...plan(citation), grounding: [], guidance: 'Documente `GET` e o campo segredoInterno.', risks: ['Confira `tokenMestre`.'] }
-        : packageResponse(citation)), model: 'simulado' };
+        : apiProseFixture(packageResponse(citation))), model: 'simulado' };
     } } } });
   assert.equal(result.status, 'ready', result.summary);
   assert.equal(calls.length, 2);
@@ -183,7 +184,7 @@ for (const [description, expected] of [
       plan: { status: 'ready' }, client: { responses: { create: async () => {
         const value = packageResponse(citation);
         value.articles[0].description = description;
-        return { output_text: JSON.stringify(value), model: 'simulado' };
+        return { output_text: JSON.stringify(apiProseFixture(value)), model: 'simulado' };
       } } } });
     assert.equal(result.status, 'needs_information');
     assert.match(result.summary, expected);
@@ -227,7 +228,7 @@ test('prosa de API gerada sem citação continua bloqueada com motivo', async ()
     plan: { status: 'ready' }, client: { responses: { create: async () => {
       const value = packageResponse(citation);
       value.articles[0].grounding = [];
-      return { output_text: JSON.stringify(value), model: 'simulado' };
+      return { output_text: JSON.stringify(apiProseFixture(value)), model: 'simulado' };
     } } } });
   assert.equal(result.status, 'needs_evidence');
   assert.match(result.summary, /frase sem citação: Consulte os contatos/);

@@ -1,3 +1,4 @@
+import { apiProseFixture } from './api-prose-test-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -14,7 +15,7 @@ const context = {
   callEvidence: [sql, method].map((excerpt, index) => ({ path: `Comzada.Service/ServicesMySQL/Part${index}.cs`, start: 1, end: 1, excerpt })),
 };
 const plan = (guidance) => ({ status: 'ready', guidance, questions: [], risks: [], suggestedActions: [], grounding: [] });
-const client = (output) => ({ responses: { create: async () => ({ output_text: JSON.stringify(output), model: 'simulado' }) } });
+const client = (output) => ({ responses: { create: async () => ({ output_text: JSON.stringify(apiProseFixture(output)), model: 'simulado' }) } });
 
 test('SQL do callEvidence ecoado no guidance é omitido e avisado', async () => {
   const result = await planContent(root, request, { productContext: context, client: client(plan(`Confira ${sql} antes de publicar.`)) });
@@ -80,7 +81,7 @@ test('página com SQL não fica ready nem pode ser gravada', async () => {
 test('plano, pacote e guia usam o único guard na saída do provider', async () => {
   const source = await readFile(new URL('./content-ai-service.mjs', import.meta.url), 'utf8');
   assert.equal((source.match(/client\.responses\.create\(/gu) ?? []).length, 1);
-  assert.equal((source.match(/modelResponse\(/gu) ?? []).length, 4);
+  assert.equal((source.match(/modelResponse\(/gu) ?? []).length, 5);
   assert.equal((source.match(/guardModelOutput\(/gu) ?? []).length, 1);
   for (const operation of [
     () => planContent(root, request, { productContext: context, client: client(plan(sql)) }),
