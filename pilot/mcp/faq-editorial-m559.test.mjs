@@ -159,6 +159,36 @@ test('citação aceita faixa curta contendo o fato da tela', () => {
     { ...cite, lineStart: 15, lineEnd: 16 }])] }, { screenFacts: facts }).sections.passos, undefined);
 });
 
+test('passos e erros omitem ações sem fato de tela citado', () => {
+  const sha = 'a'.repeat(40);
+  const facts = adaptScreenFacts({ sha, facts: [
+    { kind: 'action', text: 'Criar novo robô', source: 'src/Robot.tsx:12' },
+    { kind: 'validation', text: 'O nome é obrigatório', source: 'src/Robot.tsx:13' },
+    { kind: 'action', text: 'Excluir Selecionados', source: 'src/Robot.tsx:14' },
+    { kind: 'action', text: 'Salvar', source: 'src/Robot.tsx:15' },
+  ] });
+  const cite = (line) => ({ repository: 'ihelpchat/front-react', path: 'src/Robot.tsx',
+    lineStart: line, lineEnd: line, sha });
+  const check = (key, sentence, line) => validateFaqSections({ [key]: [unit(sentence, [cite(line)])] },
+    { screenFacts: facts });
+  assert.equal(check('passos', 'Clique em **Criar novo robô**.', 12).sections.passos?.length, 1);
+  const inventedStep = check('passos', 'Clique em **Criar novo robô** e apague todos os robôs.', 12);
+  assert.equal(inventedStep.sections.passos, undefined);
+  assert.ok(inventedStep.pending.some((item) => item.includes('ação destrutiva sem fato de tela')));
+  assert.equal(check('erros', '**O nome é obrigatório**.', 13).sections.erros?.length, 1);
+  const inventedError = check('erros', '**O nome é obrigatório**: apague todos os robôs e tente de novo.', 13);
+  assert.equal(inventedError.sections.erros, undefined);
+  assert.ok(inventedError.pending.some((item) => item.includes('ação destrutiva sem fato de tela')));
+  assert.equal(check('passos', 'Clique em **Excluir Selecionados** para remover os contatos marcados.', 14)
+    .sections.passos?.length, 1);
+  const all = check('passos', 'Clique em **Excluir Selecionados** para remover todos os contatos marcados.', 14);
+  assert.equal(all.sections.passos, undefined);
+  assert.ok(all.pending.some((item) => item.includes('ação destrutiva sem fato de tela')));
+  const publish = check('passos', 'Clique em **Salvar** e publique.', 15);
+  assert.equal(publish.sections.passos, undefined);
+  assert.ok(publish.pending.some((item) => item.includes('ação sem fato de tela: publicar')));
+});
+
 test('quote exige ao menos 12 caracteres', () => {
   const context = { request: { description: 'Contatos bons ajudam a equipe.' } };
   const check = (quote) => validateFaqSections({ resposta: [unit('Abra Contatos.', [
