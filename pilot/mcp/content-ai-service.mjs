@@ -1037,7 +1037,8 @@ async function generateContentPackageCore(root, request, options = {}) {
     const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => attachScreenshotsToArticle({
       ...article, productActions: article.productActions.map(normalizeCatalogLabel),
       ...(request.tangoUrl && article.contentType === 'tutorial' ? { tangoUrl: request.tangoUrl } : {}),
-    }, screenCaptureManifest, productContext.code?.find((item) => item.role === 'frontend')?.ref));
+    }, screenCaptureManifest, productContext.code?.find((item) => item.role === 'frontend')?.ref,
+    productContext.screenFacts ?? []));
     const invalid = articles.map((article) => {
       const validation = validateArticle(article);
       const issues = [...validation.issues, ...article.productActions
@@ -1170,7 +1171,7 @@ async function generateContentPackageCore(root, request, options = {}) {
   }
   for (let index = 0; index < articles.length; index++)
     articles[index] = attachScreenshotsToArticle(articles[index], screenCaptureManifest,
-      productContext.code?.find((item) => item.role === 'frontend')?.ref);
+      productContext.code?.find((item) => item.role === 'frontend')?.ref, productContext.screenFacts ?? []);
   const invalid = articles.map((article) => {
     const validation = validateArticle(article);
     const issues = [...validation.issues, ...article.productActions
@@ -1258,7 +1259,7 @@ export async function generateCanonicalGuide(root, request, options = {}) {
     || article.productActions.some((action) => !confirmedAction(action, request, productContext))) return evidencePending();
   const screenCaptureManifest = options.screenCaptureManifest ?? await loadScreenshotManifest(root);
   return finalizeGeneratedPages({ status: 'ready', articles: [attachScreenshotsToArticle(article, screenCaptureManifest,
-    productContext.code?.find((item) => item.role === 'frontend')?.ref)],
+    productContext.code?.find((item) => item.role === 'frontend')?.ref, productContext.screenFacts ?? [])],
     ...(parsed.internalCodeEcho ? { internalCodeEcho: parsed.internalCodeEcho } : {}) }, request);
 }
 

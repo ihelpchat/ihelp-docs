@@ -18,19 +18,21 @@ export function capturePlan({ page, module, tasks = [], coverage, screenFacts })
   const entry = coverage.find((item) => item.module === module);
   if (!entry) throw new Error('Módulo ausente da coverage matrix');
   const routes = entry.productRoutes.filter((route) => routePattern.test(route) && !route.includes(':'));
-  const selected = screenFacts.filter((fact) => ['action', 'field'].includes(fact.kind)
+  const eligible = screenFacts.filter((fact) => ['action', 'field'].includes(fact.kind)
     && fact.owner && sha.test(fact.sha ?? '') && typeof fact.text === 'string'
     && fact.text.length <= 160 && !/[\[\]\n\r]/u.test(fact.text) && !containsSensitiveData(fact.text)
-    && (!fact.route || routes.includes(fact.route))
-    && (!tasks.length || tasks.some((task) => `${fact.text} ${fact.subject ?? ''}`.toLocaleLowerCase('pt-BR')
-      .includes(task.toLocaleLowerCase('pt-BR')))));
+    && (!fact.route || routes.includes(fact.route)));
+  const selected = tasks.length ? tasks.map((task) => eligible.find((fact) =>
+    fact.text.toLocaleLowerCase('pt-BR') === task.toLocaleLowerCase('pt-BR')) ?? eligible.find((fact) =>
+    `${fact.text} ${fact.subject ?? ''}`.toLocaleLowerCase('pt-BR').includes(task.toLocaleLowerCase('pt-BR'))))
+    .filter((fact, index, ordered) => fact && ordered.indexOf(fact) === index) : eligible;
   if (!routes.length || !selected.length) throw new Error('Nenhum fato da tela confirmado para captura');
   return selected.slice(0, 20).map((fact, index) => {
     const step = `${String(index + 1).padStart(2, '0')}-${fact.text.normalize('NFD').replace(/\p{Diacritic}/gu, '')
       .toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '').slice(0, 55)}`;
     const label = fact.text;
     return { page, step, role: fact.kind === 'field' ? 'textbox' : 'button', label,
-      route: fact.route ?? routes[0], alt: `Tela de ${module}: ${label}`,
+      route: fact.route ?? routes[0], owner: fact.owner, checkoutSha: fact.sha, alt: `Tela de ${module}: ${label}`,
       action: fact.kind === 'action' && /^(?:abrir|ver|mostrar|acessar)\b/iu.test(label)
         && !isUnsafeCaptureAction(label) ? 'click' : 'none' };
   });
@@ -60,7 +62,8 @@ export async function addUploadedScreenshot({ manifest, page, step, file, bytes,
   const previous = chooseScreenshot(manifest, page, step);
   manifest.entries = manifest.entries.filter((entry) => entry.page !== page || entry.step !== step);
   manifest.entries.push({ page, step, label: previous?.label ?? label ?? null, route: previous?.route ?? route ?? null,
-    file: image, alt, appSha: null, source: 'upload', masked: ['revisão humana'] });
+    owner: previous?.owner ?? null, checkoutSha: previous?.checkoutSha ?? null,
+    file: image, alt, bundleSha: null, source: 'upload', masked: ['revisão humana'] });
   await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;
 }
@@ -98,24 +101,26 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
     const page = await context.newPage();
     if (!fixture && !storageState) await login(page, target.url, credentialsFromEnv(env).authorized);
     let currentRoute = null;
-    let appSha = null;
+    let bundleSha = null;
     for (const step of plan) {
       const uploaded = chooseScreenshot(manifest, step.page, step.step);
       if (uploaded?.source === 'upload') {
+        if (uploaded.label && uploaded.label !== step.label || uploaded.route && uploaded.route !== step.route
+          || uploaded.owner && uploaded.owner !== step.owner) throw new Error('Upload não corresponde ao fato da tela');
         uploaded.label = step.label;
         uploaded.route = step.route;
+        uploaded.owner = step.owner;
+        uploaded.checkoutSha = step.checkoutSha;
         continue;
       }
       const image = checkedPath(step.page, step.step);
       if (currentRoute !== step.route) {
         await page.goto(`${target.url}${step.route}`, { waitUntil: 'domcontentloaded' });
         currentRoute = step.route;
-        if (!appSha) {
-          const bundle = await page.locator('script[src]').evaluateAll((nodes) => nodes.map((node) => node.src)
-            .find((url) => new URL(url).origin === location.origin && /\.js(?:\?|$)/u.test(url)) ?? null);
-          const content = bundle ? Buffer.from(await (await page.request.get(bundle)).body()) : Buffer.from(await page.content());
-          appSha = createHash('sha1').update(content).digest('hex');
-        }
+        const bundle = await page.locator('script[src]').evaluateAll((nodes) => nodes.map((node) => node.src)
+          .find((url) => new URL(url).origin === location.origin && /\.js(?:\?|$)/u.test(url)) ?? null);
+        const content = bundle ? Buffer.from(await (await page.request.get(bundle)).body()) : Buffer.from(await page.content());
+        bundleSha = createHash('sha1').update(content).digest('hex');
       }
       const current = new URL(page.url());
       if (current.origin !== target.url || current.pathname !== step.route && !current.pathname.startsWith(`${step.route}/`))
@@ -179,7 +184,8 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         && /^(?:abrir|ver|mostrar|acessar)\b/iu.test(step.label)) await control.click();
       manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step);
       manifest.entries.push({ page: step.page, step: step.step, label: step.label, route: step.route,
-        file: image, alt: step.alt, appSha, source: 'automatic', masked: [...new Set(mask.map((item) => item.reason))] });
+        owner: step.owner, file: image, alt: step.alt, bundleSha, checkoutSha: step.checkoutSha,
+        source: 'automatic', masked: [...new Set(mask.map((item) => item.reason))] });
     }
     await mkdir(root, { recursive: true });
     await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest, null, 2));

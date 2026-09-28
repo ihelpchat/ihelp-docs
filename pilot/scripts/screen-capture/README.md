@@ -1,11 +1,13 @@
 # Captura das telas do FAQ
 
 `node scripts/screen-capture/run.mjs pedido.json` recebe `page`, `module` e,
-opcionalmente, `tasks` (nomes das tarefas a capturar). O servidor monta o plano
+opcionalmente, `tasks` (rótulos dos passos aprovados na ordem do FAQ). O servidor monta o plano
 dos fatos da tela da cópia de leitura do front. Não recebe passos, rótulos,
 `owner`, `screenFacts` ou SHA do chamador. Apenas controles de abertura ou
 navegação podem receber clique; ações de gravação e destrutivas são fotografadas
-sem clique. O manifesto registra o hash do bundle da homologação.
+sem clique. O manifesto registra separadamente o SHA-1 do bundle da homologação
+e o SHA Git do checkout do front, além da rota, dono e rótulo do fato da tela.
+Divergência de SHA gera aviso na PR, sem descartar o print.
 `uploads` locais podem listar `{page, step, file, alt, approved: true}` após
 revisão humana do PNG. O `step` vem do manifesto ou do plano gerado; o upload
 prevalece sobre a captura automática.

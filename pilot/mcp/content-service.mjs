@@ -12,6 +12,7 @@ import { guideSchema } from '../architecture/conversation-v1.mjs';
 import { assertPublicSubmit } from './public-submit-gate.mjs';
 import { finalizeSecurityResponse } from './security-review.mjs';
 import { imagesUsedByArticles } from './screen-capture-service.mjs';
+import { loadScreenshotManifest, screenshotVersionWarnings } from './screen-capture-manifest.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -398,6 +399,7 @@ function safeArticleList(articles, deletes = []) {
 
 async function createPackagePullRequest(items, deletes, actor, beforePull, options = {}) {
   const screenshots = await imagesUsedByArticles(items.map(({ article }) => article));
+  const screenshotWarnings = screenshotVersionWarnings(items.map(({ article }) => article), await loadScreenshotManifest());
   const repository = process.env.GITHUB_REPOSITORY ?? 'ihelpchat/ihelp-docs';
   const base = options.base ?? process.env.GITHUB_BASE_BRANCH ?? 'main';
   const [owner, repo] = repository.split('/');
@@ -408,7 +410,8 @@ async function createPackagePullRequest(items, deletes, actor, beforePull, optio
   const baseBody = options.body ?? `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`;
   const marked = items.filter(({ article }) => article.body.includes('<AConfirmar>'));
   const warnedBody = marked.length ? `${baseBody}\n\n## Pendências a confirmar\n\n${marked.map(({ article }) => `- ${article.path}: contém afirmações marcadas como a confirmar; revisão humana obrigatória antes da publicação.`).join('\n')}` : baseBody;
-  const body = options.securityWarnings?.length ? `${warnedBody}\n\n## Atenção de segurança\n\n${options.securityWarnings.map((warning) => `- ${warning}`).join('\n')}` : warnedBody;
+  const versionBody = screenshotWarnings.length ? `${warnedBody}\n\n## Prints a revisar\n\n${screenshotWarnings.map((warning) => `- ${warning}`).join('\n')}` : warnedBody;
+  const body = options.securityWarnings?.length ? `${versionBody}\n\n## Atenção de segurança\n\n${options.securityWarnings.map((warning) => `- ${warning}`).join('\n')}` : versionBody;
   rejectSensitive(`${title}\n${body}`);
   const branch = options.branch ?? `docs/ia-pacote-${Date.now()}`;
   if (options.branch && !/^docs\/deploy-[a-z0-9-]+-[a-f0-9]{16}$/.test(branch)) throw new SubmitArticleError('INVALID_BRANCH', 'Branch determinística inválida');
