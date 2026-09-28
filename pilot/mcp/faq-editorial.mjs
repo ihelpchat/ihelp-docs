@@ -247,7 +247,7 @@ export function adaptScreenFacts(screen = {}, coverage = []) {
       'validation', 'message', 'destination', 'guard', 'text', 'state'].includes(fact.kind)) return [];
     const menuFallback = fact.kind === 'route' && !fact.routeTitle
       ? coverage.find((item) => item.productRoutes?.includes(fact.route))?.module : null;
-    const base = { ...fact, ...(menuFallback ? { text: menuFallback } : {}),
+    const base = { ...fact, ...(menuFallback ? { routeTitle: fact.text, text: menuFallback } : {}),
       repository: fact.repository ?? 'ihelpchat/front-react',
       path: match[1], lineStart: Number(match[2]), lineEnd: Number(match[2]), sha: fact.sha ?? screen.sha };
     const qualifier = fact.required === true ? 'obrigatório' : fact.required === false ? 'opcional' : null;

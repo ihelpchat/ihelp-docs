@@ -1071,6 +1071,13 @@ async function generateContentPackageCore(root, request, options = {}) {
       ? firstStep : `${directText} ${firstStep}`.trim().slice(0, 200);
     article.assistantInitialSteps = result.sections.passos.length ? 1 : 0;
     article.assistantSuggestions = ['Falar com uma pessoa?'];
+    for (const fact of faqContext.screenFacts) if (fact.kind === 'route' && fact.routeTitle
+      && fact.routeTitle !== fact.text && typeof article.assistantQuestion === 'string') {
+      const before = article.assistantQuestion, at = before.indexOf(fact.routeTitle);
+      if (at >= 0 && !/[\p{L}\p{N}]/u.test(before[at - 1] ?? '')
+        && !/[\p{L}\p{N}]/u.test(before[at + fact.routeTitle.length] ?? ''))
+        article.assistantQuestion = before.slice(0, at) + fact.text + before.slice(at + fact.routeTitle.length);
+    }
     if (!validCanonicalQuestion(article.assistantQuestion)) {
       const screen = faqContext.screenFacts.find((fact) => fact.kind === 'route' && fact.text)?.text
         ?? request.module ?? prose.title ?? request.topic;
