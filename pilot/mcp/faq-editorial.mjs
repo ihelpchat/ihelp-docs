@@ -270,7 +270,7 @@ export const indexedFaqFacts = (screenFacts = []) => screenFacts.map((fact, inde
 const FAQ_FACT_ACTIONS = {
   abrir: new Set(['route', 'destination']), clicar: new Set(['action']),
   preencher: new Set(['field', 'upload']), selecionar: new Set(['field', 'column']),
-  conferir: new Set(['text', 'state', 'column', 'message', 'validation']),
+  conferir: new Set(['state', 'message', 'validation']),
 };
 const factCitation = ({ repository, path, lineStart, lineEnd, sha }) =>
   ({ repository, path, lineStart, lineEnd, sha });
@@ -360,7 +360,7 @@ export function validateFaqSections(sections, context) {
             const identity = `${unit.acao}:${fact?.kind}:${fact?.route ?? ''}:${fact?.text ?? ''}`;
             if (identity === lastStep) continue;
             if (unit.acao === 'abrir') {
-              const screen = fact?.route ?? fact?.text;
+              const screen = fact?.text;
               if (screen === opened) continue;
               opened = screen;
             }
