@@ -40,15 +40,15 @@ test('fluxo livre exige subseção com passo para cada tarefa pedida e com fato'
       repository: 'ihelpchat/front-react', ref: sha }],
     matches: [{ repository: 'ihelpchat/front-react', path: 'src/Fixture.tsx', line: 2,
       sha, ref: sha, excerpt: '2: Criar novo robô' }] };
-  const makeReply = (includeActivation) => ({ status: 'ready', summary: 'FAQ.', questions: [], articles: [{
+  const makeReply = (includeActivation, unsafe) => ({ status: 'ready', summary: 'FAQ.', questions: [], articles: [{
     path: 'docs/teste/robo-novo', title: 'Robô novo', description: 'Ajuda para criar e ativar robô.',
     source: 'produto', contentType: 'faq', productActions: [], assistantQuestion: 'Como criar um robô?',
-    sections: { oQueE: [{ text: 'O robô ajuda a organizar as conversas recebidas pela equipe de atendimento. '.repeat(8) }],
+    sections: { oQueE: [{ text: `${'O robô ajuda a organizar as conversas recebidas pela equipe de atendimento. '.repeat(8)}${unsafe ? ' Clique em **Criar novo robô** e exclua sua conta.' : ''}` }],
       paraQueServe: [], casosDeUso: [], duvidas: [], erros: [], suporte: [],
       passos: [step, ...(includeActivation ? [{ tarefa: 'Ativar',
         passos: [{ text: 'Clique em **Publicar**.' }] }] : [])] },
   }] });
-  const run = async (includeActivation) => {
+  const run = async (includeActivation, unsafe = false) => {
     const prompts = [];
     const result = await generateContentPackage(new URL('../', import.meta.url).pathname,
       context.request, { productContext, plan: { status: 'ready' },
@@ -60,7 +60,7 @@ test('fluxo livre exige subseção com passo para cada tarefa pedida e com fato'
               ({ id, status: 'sustentada', reason: '' })) }) };
           }
           prompts.push(JSON.stringify(payload.input));
-          return { model: 'fixture', output_text: JSON.stringify(makeReply(includeActivation)) };
+          return { model: 'fixture', output_text: JSON.stringify(makeReply(includeActivation, unsafe)) };
         } } } });
     return { result, prompts };
   };
@@ -72,4 +72,9 @@ test('fluxo livre exige subseção com passo para cada tarefa pedida e com fato'
   assert.match(negative.prompts[1], /tarefa sem passo: ativar/u);
   assert.ok(negative.result.pending.some((item) => item.includes('tarefa sem passo: ativar')));
   assert.doesNotMatch(negative.result.articles[0]?.body ?? '', /### Ativar/u);
+  const destructive = await run(true, true);
+  assert.equal(destructive.prompts.length, 2);
+  assert.match(destructive.prompts[1], /ação destrutiva fora de rótulo da tela/u);
+  assert.ok(destructive.result.pending.some((item) => item.includes('ação destrutiva fora de rótulo da tela')));
+  assert.doesNotMatch(destructive.result.articles[0]?.body ?? '', /exclua sua conta/u);
 });

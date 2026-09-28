@@ -86,7 +86,7 @@ test('replay Robô: segunda geração recebe novo julgamento com os mesmos fatos
           oQueE: [{ text: 'O robô recebe a primeira mensagem do cliente.' }],
           paraQueServe: [{ text: 'Ajuda a equipe a organizar o atendimento.' }],
           casosDeUso: [{ text: 'Quando chegam pedidos fora do horário → monte uma resposta → o cliente recebe orientação.' }],
-          passos: [{ tarefa: 'Cadastrar', passos: [{ text: generated === 1
+          passos: [{ tarefa: 'Criar', passos: [{ text: generated === 1
             ? 'Na tela **Robôs**, clique em **Criar novo robô**.'
             : 'Clique em **Criar novo robô**.' }] }] };
         return { model: 'fixture', output_text: JSON.stringify({ status: 'ready', summary: 'FAQ.', questions: [],
