@@ -9,6 +9,9 @@ import { generateContentPackage, planContent } from './content-ai-service.mjs';
 import { FAQ_NEUTRAL_WORDS } from './faq-neutral-words.mjs';
 
 const unit = (text, citations) => ({ text, citations });
+const distinctActions = ['Adicionar Contato', 'Abrir Cadastro de Contato', 'Selecionar Departamento do Contato',
+  'Escolher Atendente Responsável', 'Conferir Dados do Contato', 'Salvar Novo Contato',
+  'Voltar à Lista de Contatos', 'Localizar Contato Cadastrado'];
 test('FAQ só bloqueia dúvida sobre resposta direta ou passo principal', () => {
   const result = classifyFaqQuestions([
     'Como entrar na tela de Contatos para cadastrar?',
@@ -319,15 +322,9 @@ test('pacote FAQ fica ready com dúvida secundária pendente e seção sem fonte
   const citation = (line) => ({ repository: 'ihelpchat/front-react', path: 'src/Contact.tsx', lineStart: line, lineEnd: line, sha });
   const sections = Object.fromEntries(['resposta', 'paraQueServe', 'quandoUsar', 'passos', 'exemplo', 'duvidas', 'erros', 'suporte'].map((key) => [key, []]));
   const direct = 'Abra Contatos no menu e clique em Adicionar Contato para cadastrar uma pessoa da sua lista.';
-  const steps = [
-    'Abra Contatos no menu lateral e localize Adicionar Contato antes de iniciar um novo cadastro.',
-    'Clique em Adicionar Contato e preencha os campos mostrados na tela para iniciar o cadastro.',
-    'Confira as informações de Adicionar Contato antes de avançar e volte à lista para localizar o cadastro.',
-    'Confirme o cadastro na tela de Contatos.',
-    'Volte à lista de Contatos para encontrar a pessoa.',
-  ];
+  const steps = distinctActions;
   sections.resposta = [unit(direct, [citation(12)])];
-  sections.passos = steps.map((_, index) => ({ acao: 'clicar', fato: `f${index % 3 + 3}` }));
+  sections.passos = steps.map((_, index) => ({ acao: 'clicar', fato: `f${index + 3}` }));
   const reply = { status: 'ready', summary: 'Página pronta.', questions: [], articles: [{
     path: 'docs/sobre-o-sistema/contatos-novos', title: 'Contatos novos', description: 'Descrição gerada pelo modelo.',
     source: 'produto', contentType: 'faq', sections, productActions: [],
@@ -336,7 +333,7 @@ test('pacote FAQ fica ready com dúvida secundária pendente e seção sem fonte
   const context = { groundingRequired: true,
     matches: [{ ...citation(12), line: 12, ref: sha, excerpt: '12: Adicionar Contato' }],
     code: [{ available: true, role: 'frontend', ref: sha, repository: 'ihelpchat/front-react' }],
-    screenFacts: [{ kind: 'route', text: 'Contatos', source: 'src/Contact.tsx:11', sha }, ...[direct, ...steps].map((text, index) => ({ kind: 'action', text: 'Adicionar Contato',
+    screenFacts: [{ kind: 'route', text: 'Contatos', source: 'src/Contact.tsx:11', sha }, ...[direct, ...steps].map((text, index) => ({ kind: 'action', text: index ? text : 'Adicionar Contato',
       property: 'translate', owner: 'ContactPage', subject: 'contato',
       source: `src/Contact.tsx:${index + 12}`, repository: 'ihelpchat/front-react', sha }))],
     support: { categories: [], rules: [] }, coverage: [], pending: [], businessContext: [], faqStyleExamples: [] };
@@ -385,14 +382,8 @@ test('plano da Agenda sai ready quando só pergunta detalhes secundários', asyn
 test('FAQ ignora resposta direta livre do modelo', async () => {
   const sha = 'a'.repeat(40);
   const direct = 'Abra Contatos no menu e clique em Adicionar Contato para cadastrar uma pessoa da sua lista.';
-  const steps = [
-    'Abra Contatos no menu lateral e localize Adicionar Contato antes de iniciar um novo cadastro.',
-    'Clique em Adicionar Contato e preencha os campos mostrados na tela para iniciar o cadastro.',
-    'Confira as informações de Adicionar Contato antes de avançar e volte à lista para localizar o cadastro.',
-    'Confirme o cadastro na tela de Contatos.',
-    'Volte à lista de Contatos para encontrar a pessoa.',
-  ];
-  const facts = [{ kind: 'route', text: 'Contatos', source: 'src/Contact.tsx:11', sha }, ...[direct, ...steps].map((text, index) => ({ kind: 'action', text: 'Adicionar Contato',
+  const steps = distinctActions;
+  const facts = [{ kind: 'route', text: 'Contatos', source: 'src/Contact.tsx:11', sha }, ...[direct, ...steps].map((text, index) => ({ kind: 'action', text: index ? text : 'Adicionar Contato',
     property: 'translate', owner: 'ContactPage', subject: 'contato',
     source: `src/Contact.tsx:${index + 12}`, repository: 'ihelpchat/front-react', sha }))];
   const citation = (line) => ({ repository: 'ihelpchat/front-react', path: 'src/Contact.tsx',
@@ -401,7 +392,7 @@ test('FAQ ignora resposta direta livre do modelo', async () => {
     path: 'docs/sobre-o-sistema/contatos-novos', title: 'Contatos novos', description: 'FAQ.',
     source: 'produto', contentType: 'faq', productActions: [], assistantQuestion: 'Como cadastrar?',
     sections: { resposta: [unit(bad ? `${direct.slice(0, -1)} e suas vendas dobram em 30 dias.` : direct, [citation(12)])],
-      passos: steps.map((_, index) => ({ acao: 'clicar', fato: `f${index % 3 + 3}` })) },
+      passos: steps.map((_, index) => ({ acao: 'clicar', fato: `f${index + 3}` })) },
   }] });
   const context = { groundingRequired: true, code: [{ available: true, role: 'frontend', ref: sha,
     repository: 'ihelpchat/front-react' }], matches: [{ ...citation(12), line: 12, ref: sha, excerpt: '12: Adicionar Contato' }],
