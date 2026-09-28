@@ -165,3 +165,17 @@ test('ready sem passos também recebe a tentativa explícita de núcleo', async 
   assert.equal(result.status, 'needs_information');
   assert.ok(result.pending.some((item) => item.includes('modelo recusou com fatos disponíveis')));
 });
+
+test('fato de tela alheio à tarefa não força nova tentativa', async () => {
+  const unrelated = structuredClone(context);
+  unrelated.screenFacts = [{ kind: 'action', text: 'Visualizar', source: 'src/Fixture.tsx:8' }];
+  let calls = 0;
+  const result = await generateContentPackage(new URL('../', import.meta.url).pathname, request,
+    { productContext: unrelated, plan: { status: 'ready' }, client: { responses: {
+      create: async () => { calls++; return { model: 'fixture', output_text: JSON.stringify({
+        status: 'needs_information', summary: 'Faltam fatos da tarefa.', questions: [], articles: [],
+      }) }; },
+    } } });
+  assert.equal(result.status, 'needs_information');
+  assert.equal(calls, 1);
+});
