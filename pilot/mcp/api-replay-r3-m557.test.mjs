@@ -53,7 +53,7 @@ test('resp-5 corrige refs de parâmetros únicos e entrega as três páginas', a
     value.articles[0].endpoint = 'GET /contacts/{letter}';
     value.articles[0].responseDescriptions[0].description.refs[0].endpoint = 'GET /contacts/{letter}';
     value.articles[0].responseDescriptions.push({ name: 'dados[].idRef', description: {
-      ...unit('Identificador usado na consulta de detalhes: idRef.'),
+      ...unit('Identificador de referência do contato, em texto; é usado na consulta de detalhes.'),
       refs: [{ name: 'idRef', endpoint: 'GET /contacts/{letter}' }],
     } });
     value.articles.splice(1, 0, article('api/contatos/detalhes', 'GET /contacts/details/{IdRef}'));
