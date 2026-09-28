@@ -101,7 +101,7 @@ test('uso JSX após template interpolado continua visível ao lexer', async () =
   assert.equal((await run(files)).files.includes(modal), true);
 });
 
-test('ação usa aria-label canônico e texto JSX completo quando não há aria-label', async () => {
+test('ação prioriza aria-label e title próprios antes do texto JSX', async () => {
   const button = '<button onClick={remove} aria-label="Excluir selecionados" title="Excluir contatos marcados">Excluir Selecionados ({n})</button>';
   const files = { ...sources, [page]: sources[page].replace('<Modal />', `${button}<Modal />`) };
   const withAria = (await run(files)).facts.filter((fact) => fact.kind === 'action' && fact.handler === 'remove');
@@ -111,7 +111,7 @@ test('ação usa aria-label canônico e texto JSX completo quando não há aria-
   assert.equal(withAria[0].title, 'Excluir contatos marcados');
   const withoutAria = (await run({ ...files, [page]: files[page].replace(' aria-label="Excluir selecionados"', '') }))
     .facts.filter((fact) => fact.kind === 'action' && fact.handler === 'remove');
-  assert.deepEqual(withoutAria.map((fact) => fact.text), ['Excluir Selecionados (…)']);
+  assert.deepEqual(withoutAria.map((fact) => fact.text), ['Excluir contatos marcados']);
 });
 
 test('rótulo JSX cortado não publica ação', async () => {
