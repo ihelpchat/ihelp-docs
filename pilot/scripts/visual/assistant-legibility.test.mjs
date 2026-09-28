@@ -6,6 +6,26 @@ const probeTimeout = parseProbeTimeout(process.env);
 
 const probes = [
   {
+    name: 'navegação desktop fora da escala de produção',
+    css: '@media (min-width: 1020px) and (pointer: fine) { .ih-side-link { font-size: 16px !important } }',
+    expected: /desktop.*ih-side-link.*fora da escala de produção/,
+  },
+  {
+    name: 'texto de leitura pequeno no celular',
+    css: '@media (max-width: 640px) { .ih-prose p { font-size: 12px !important } }',
+    expected: /mobile.*ih-prose.*fonte 12px < 16px/,
+  },
+  {
+    name: 'alvo de toque pequeno no celular',
+    css: '@media (max-width: 640px) { .ih-ai-launcher { min-height: 20px !important; height: 20px !important; padding: 0 !important } }',
+    expected: /mobile.*ih-ai-launcher.*altura 20\.0px < 44px/,
+  },
+  {
+    name: 'texto de leitura pequeno no desktop',
+    css: '@media (min-width: 1020px) { .ih-prose p { font-size: 12px !important } }',
+    expected: /desktop.*ih-prose.*fonte 12px < 16px/,
+  },
+  {
     name: 'focus sem hover',
     css: '.ih-ai-human-action:focus { background: #fff } .ih-ai-human-action:hover { background: #c5482b }',
     expected: /ih-ai-human-action.*contraste/,
