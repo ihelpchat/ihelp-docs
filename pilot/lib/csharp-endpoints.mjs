@@ -147,7 +147,9 @@ function expandedResponseFields(dtoSources, fields, prefix) {
 
 export function collectCsharpErrors(controllerSource, endpoint, reachedMethods = []) {
   const clean = neutralizeCsharp(controllerSource);
-  const signature = new RegExp(`\\b${endpoint.method}\\s*\\([^)]*\\)\\s*\\{`, 'u').exec(clean);
+  const action = resolveCsharpAction(controllerSource, endpoint.file, endpoint);
+  const signature = action && [...clean.matchAll(new RegExp(`\\b${action.method}\\s*\\([^)]*\\)\\s*\\{`, 'gu'))]
+    .find((match) => match.index === action.actionAt);
   let body = '';
   if (signature) {
     const start = signature.index + signature[0].lastIndexOf('{');
@@ -176,6 +178,13 @@ export function collectCsharpErrors(controllerSource, endpoint, reachedMethods =
   if ((endpoint.authorization ?? endpoint.policy) !== 'anonymous') add(401, 'Token ausente, inválido ou expirado', 'Autenticação exigida.');
   return errors;
 }
+export function resolveCsharpAction(source, file, endpoint) {
+  if (!endpoint?.verb || !endpoint?.route || !Array.isArray(endpoint.actionParameterNames)) return null;
+  const matches = readCsharpEndpoints(source, file, {}).filter((item) => item.verb === endpoint.verb
+    && item.route.toLowerCase() === endpoint.route.toLowerCase()
+    && JSON.stringify(item.actionParameterNames) === JSON.stringify(endpoint.actionParameterNames));
+  return matches.length === 1 ? matches[0] : null;
+}
 function signatureParameters(items, route, dtoSources, file, source) {
   const groups = [];
   let group = [], depth = 0;
@@ -197,6 +206,26 @@ function signatureParameters(items, route, dtoSources, file, source) {
     return fields.length ? fields.map((field) => ({ ...field, in: location, dtoType: type, owner: name }))
       : [{ name: camel(name), type, in: location, owner: name, source: `${file}:${lineOf(source, words.at(-1).at)}` }];
   });
+}
+function actionSignatureNames(items) {
+  const groups = [];
+  let group = [], depth = 0;
+  for (const token of items) {
+    if (['<', '[', '('].includes(token.value)) depth++;
+    if (['>', ']', ')'].includes(token.value)) depth--;
+    if (token.value === ',' && depth === 0) { groups.push(group); group = []; }
+    else group.push(token);
+  }
+  if (group.length) groups.push(group);
+  return groups.map((part) => {
+    let nested = 0;
+    for (let i = 0; i < part.length; i++) {
+      if (['<', '[', '('].includes(part[i].value)) nested++;
+      if (['>', ']', ')'].includes(part[i].value)) nested--;
+      if (part[i].value === '=' && nested === 0) return part.slice(0, i).filter((token) => token.kind === 'word').at(-1)?.value;
+    }
+    return part.filter((token) => token.kind === 'word').at(-1)?.value;
+  }).filter(Boolean);
 }
 
 function assignedPaths(body, parameterNames) {
@@ -399,6 +428,7 @@ export function readCsharpEndpoints(source, file, { dtoSources = [], serviceSour
       let end = i + 1, nesting = 1;
       while (end < t.length && nesting) { if (t[end].value === '(') nesting++; if (t[end].value === ')') nesting--; end++; }
       const location = `${file}:${lineOf(source, t[i - 1].at)}`;
+      const actionParameterNames = actionSignatureNames(t.slice(i + 1, end - 1));
       const routeSource = `${file}:${lineOf(source, attr(controller.attrs, 'Route')?.at ?? http.at)}`;
       const verbSource = `${file}:${lineOf(source, http.at)}`;
       const authorizationAttribute = attr(pending, 'AllowAnonymous') ?? attr(controller.attrs, 'AllowAnonymous')
@@ -436,7 +466,8 @@ export function readCsharpEndpoints(source, file, { dtoSources = [], serviceSour
         service?.envelope ? `dados${service.list ? '[]' : ''}.` : service?.list ? '[].' : '') : null;
       const responseFields = expandedFields?.fields ?? null;
       const responsePending = responseFields === null ? [`campos de resposta não verificáveis: ${http.name.slice(4).toUpperCase()} ${route}`] : expandedFields.pending;
-      endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route, policy, name: policy,
+      endpoints.push({ controller: controller.name, method, verb: http.name.slice(4).toUpperCase(), route,
+        actionLine: lineOf(source, t[i - 1].at), actionAt: t[i - 1].at, actionParameterNames, policy, name: policy,
         ...(reference ? { controllerRoute, parameters, serverAssigned, responseFields, responseType: resolvedType,
           responseEnvelope: service?.envelope ? 'dados' : null, responseList: service?.list ?? false,
           pending: responsePending, optionalAlias, optionalAliases, dtoTypes: [...new Set([...rawParameters.flatMap(({ type, dtoType }) => [type, dtoType]), resolvedType].filter(Boolean))], source: verbSource,

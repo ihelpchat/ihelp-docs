@@ -40,25 +40,29 @@ const API_GROUNDING_SCHEMA = { type: 'array', items: {
       properties: { source: { type: 'string', enum: ['pagina'] }, path: { type: 'string' }, quote: { type: 'string' } } },
   ] } } },
 } };
-const API_PROSE_UNIT_SCHEMA = { type: 'object', additionalProperties: false, required: ['text', 'citations'],
-  properties: { text: { type: 'string' }, citations: API_GROUNDING_SCHEMA.items.properties.citations } };
+const API_PROSE_UNIT_SCHEMA = { type: 'object', additionalProperties: false, required: ['text', 'citations', 'refs'],
+  properties: { text: { type: 'string' }, citations: API_GROUNDING_SCHEMA.items.properties.citations,
+    refs: { type: 'array', items: { type: 'object', additionalProperties: false,
+      required: ['name', 'endpoint'], properties: { name: { type: 'string' }, endpoint: { type: 'string' } } } } } };
 const publicNames = new Set(PRODUCT_TERMS.flatMap((term) => [term, ...term.split(/\s+/u)])
   .map((term) => term.toLocaleLowerCase('pt-BR')));
 const isPublicName = (name) => publicNames.has(name.toLocaleLowerCase('pt-BR'));
 
-function proseIssues(article, endpoint, packageEndpoints = [endpoint]) {
+function proseIssues(article, endpoint, packageEndpoints = [endpoint], refs = [], globalScope = false) {
   const issues = [];
-  const parameters = packageEndpoints.flatMap((item) => item.parameters ?? []);
-  const parameterNames = new Set(parameters.map((field) => field.name));
+  const parameters = (globalScope ? packageEndpoints : [endpoint]).flatMap((item) => item.parameters ?? []);
+  const referencedParameters = refs.flatMap((ref) => packageEndpoints.filter((item) => publicEndpointId(item) === ref.endpoint)
+    .flatMap((item) => (item.parameters ?? []).filter((field) => field.name.toLowerCase() === ref.name.toLowerCase()).map((field) => field.name)));
+  const parameterNames = new Set([...parameters.map((field) => field.name), ...referencedParameters]);
   const fieldNames = new Set([...parameters.filter((field) => field.in === 'body'),
     ...(endpoint.responseFields ?? [])]
     .map((field) => field.name));
   const headerNames = new Set(['Authorization', 'Content-Type']);
-  const names = new Set([...parameterNames, ...fieldNames, ...headerNames]
+  const names = new Set([...parameterNames, ...fieldNames, ...headerNames, ...refs.map((ref) => ref.name)]
     .map((name) => name.toLocaleLowerCase('pt-BR')));
-  const inlineNames = new Set([...parameterNames, ...fieldNames]
+  const inlineNames = new Set([...parameterNames, ...fieldNames, ...refs.map((ref) => ref.name)]
     .map((name) => name.toLocaleLowerCase('pt-BR')));
-  for (const route of packageEndpoints.flatMap((item) =>
+  for (const route of (globalScope ? packageEndpoints : [endpoint]).flatMap((item) =>
     [item.route, ...(item.optionalAliases ?? (item.optionalAlias ? [item.optionalAlias] : []))])) {
     for (const segment of (route ?? '').split('/')) {
       if (segment) names.add(segment.replace(/^\{([^}]+)\}$/u, '$1').toLocaleLowerCase('pt-BR'));
@@ -67,6 +71,11 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint]) {
   const token = '[\\p{L}\\p{N}_][\\p{L}\\p{N}_-]*';
   const labelledNames = new RegExp(`\\b(campos?|parâmetros?|propriedades?|atributos?|chaves?|headers?|cabeçalhos?)\\s+(?:(?:o|a|os|as|um|uma|de|do|da|dos|das|no|na|em)\\s+)*((?:\\x60?${token}\\x60?)(?:\\s*(?:,|\\be\\b)\\s*\\x60?${token}\\x60?)*)`, 'giu');
   const tokens = new RegExp(token, 'gu');
+  const foreign = new Set(packageEndpoints.flatMap((item) => item === endpoint ? [] : [
+    ...(item.parameters ?? []).map((field) => field.name), ...(item.responseFields ?? []).map((field) => field.name),
+    ...(item.route ?? '').split('/').map((segment) => segment.replace(/^\{([^}]+)\}$/u, '$1')),
+  ]).filter((name) => /\p{Ll}\p{Lu}|\p{L}_\p{L}|(?=.*\p{L})(?=.*\d)/u.test(name))
+    .map((name) => name.toLocaleLowerCase('pt-BR')));
   for (const value of [article.title, article.description, article.intro, ...article.notas]) {
     if (typeof value !== 'string') { issues.push('prosa inválida'); continue; }
     const typeIssue = internalTypeIssue(value);
@@ -96,12 +105,39 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint]) {
       }
     }
     for (const [name] of value.matchAll(tokens)) {
+      if (!globalScope && foreign.has(name.toLocaleLowerCase('pt-BR')) && !names.has(name.toLocaleLowerCase('pt-BR')))
+        issues.push(`nome de outro endpoint sem referência: ${name}`);
       const identifier = /\p{Ll}\p{Lu}|\p{L}_\p{L}/u.test(name)
         || (/\p{L}/u.test(name) && /\d/u.test(name));
-      if (identifier && !names.has(name.toLocaleLowerCase('pt-BR')) && !isPublicName(name)) issues.push(`nome técnico sem fato: ${name}`);
+      if (identifier && !names.has(name.toLocaleLowerCase('pt-BR')) && !isPublicName(name)
+        && !foreign.has(name.toLocaleLowerCase('pt-BR'))) issues.push(`nome técnico sem fato: ${name}`);
     }
   }
   return [...new Set(issues)];
+}
+function referenceIssues(unit, endpoints, articles) {
+  const issues = [];
+  for (const ref of unit.refs ?? []) {
+    const target = endpoints.find((item) => publicEndpointId(item) === ref.endpoint);
+    const included = articles.some((item) => item.endpoint === ref.endpoint);
+    const names = target && [
+      ...(target.parameters ?? []).map((field) => field.name),
+      ...(target.responseFields ?? []).flatMap((field) => [field.name, responseFieldPath(target, field)]),
+      ...(target.route ?? '').split('/').map((segment) => segment.replace(/^\{([^}]+)\}$/u, '$1')),
+    ];
+    if (!target || !included || !names.some((name) => name.toLowerCase() === ref.name.toLowerCase())
+      || !new RegExp(`(?<![\\p{L}\\p{N}_])${ref.name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\p{N}_])`, 'iu').test(unit.text))
+      issues.push(`referência inválida: ${ref.name}`);
+  }
+  return issues;
+}
+function renderUnit(unit, articles, endpoints) {
+  const text = markFactNames(unit.text, endpoints);
+  const links = [...new Set((unit.refs ?? []).map((ref) => ref.endpoint))].map((id) => {
+    const target = articles.find((item) => item.endpoint === id);
+    return `[${target.title.replace(/[\[\]()]/gu, '')}](/${target.path})`;
+  });
+  return links.length ? `${text.replace(/[.!?]$/u, '')} (${links.join(', ')}).` : text;
 }
 function markFactNames(text, endpoints) {
   const names = [...new Set(endpoints.flatMap((endpoint) => [
@@ -132,8 +168,11 @@ function apiSchemaIssue(article) {
   const extra = Object.keys(article).find((key) => !allowed.has(key));
   if (extra) return `campo da IA não permitido: ${extra}`;
   const unit = (value) => value && typeof value === 'object' && !Array.isArray(value)
-    && Object.keys(value).every((key) => ['text', 'citations'].includes(key))
-    && typeof value.text === 'string' && Array.isArray(value.citations);
+    && Object.keys(value).every((key) => ['text', 'citations', 'refs'].includes(key))
+    && typeof value.text === 'string' && Array.isArray(value.citations)
+    && (value.refs === undefined || Array.isArray(value.refs) && value.refs.every((ref) => ref && typeof ref === 'object'
+      && Object.keys(ref).every((key) => ['name', 'endpoint'].includes(key))
+      && typeof ref.name === 'string' && typeof ref.endpoint === 'string'));
   if (typeof article.path !== 'string' || typeof article.endpoint !== 'string' || typeof article.title !== 'string'
     || !unit(article.description) || !unit(article.intro)
     || !Array.isArray(article.notas) || !article.notas.every(unit)) return 'schema de prosa inválido';
@@ -627,12 +666,12 @@ async function generateContentPackageCore(root, request, options = {}) {
         'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.',
         request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
         request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
-        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations}, também com uma frase por text (ponto e vírgula permitido). Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros, como cabeçalhos e diferenças entre endpoints.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
+        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations,refs}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations,refs}, também com uma frase por text (ponto e vírgula permitido). Use refs: [] quando não houver referência cruzada. Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros, como cabeçalhos e diferenças entre endpoints.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
         request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
         request.module === 'api' ? 'Se faltar método, rota, parâmetros ou autorização, use needs_information e deixe articles vazio. responseFields=null é permitido: a resposta terá nota fixa e pendência.' : 'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
-        request.module === 'api' ? 'A prosa não pode conter método HTTP, caminho, bloco de código, componente JSX nem código inline, exceto nome exato de parâmetro ou campo dos fatos. Descreva cada campo pelo significado e pelo tipo PÚBLICO (texto, número, data e hora, verdadeiro ou falso, lista, objeto), nunca pelo tipo do código, DTO, entity, repository ou service.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
+        request.module === 'api' ? 'A prosa não pode conter método HTTP, caminho, bloco de código, componente JSX nem código inline, exceto nome exato de parâmetro ou campo dos fatos. Nome técnico de outro endpoint do pacote exige refs: [{name,endpoint}] na própria unidade, com endpoint exato do enum; o nome deve ser parâmetro, campo ou segmento da rota desse endpoint. O link para a página referenciada é renderizado automaticamente. O summary mantém escopo global. Descreva cada campo pelo significado e pelo tipo PÚBLICO (texto, número, data e hora, verdadeiro ou falso, lista, objeto), nunca pelo tipo do código, DTO, entity, repository ou service.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
         request.module === 'api' ? 'Cite cada unidade de summary, description, intro, notas e descrições de campo nas citations da própria unidade. source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. Use os números reais mostrados ao lado do código e cite a faixa mais curta que contém o comportamento, com no máximo 30 linhas. O JSON interno de formato não é fonte. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].filter(Boolean).join(' '),
     },
@@ -665,15 +704,20 @@ async function generateContentPackageCore(root, request, options = {}) {
       const endpoint = selectable.find((item) => publicEndpointId(item) === prose.endpoint);
       if (!endpoint || apiSchemaIssue(prose)) continue;
       const units = [prose.description, prose.intro, ...prose.notas];
-      proseProblems.push(...proseIssues({ title: prose.title, description: prose.description.text,
-        intro: prose.intro.text, notas: prose.notas.map((item) => item.text) }, endpoint, selectable));
+      proseProblems.push(...proseIssues({ title: prose.title, description: '', intro: '', notas: [] }, endpoint, selectable));
+      for (const unit of units) {
+        proseProblems.push(...referenceIssues(unit, selectable, parsed.articles));
+        proseProblems.push(...proseIssues({ title: '', description: unit.text, intro: '', notas: [] }, endpoint, selectable, unit.refs));
+      }
       groundingProblems.push(...apiUnitIssues(units, context));
       for (const item of prose.responseDescriptions ?? []) {
-        proseProblems.push(...proseIssues({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable));
+        proseProblems.push(...referenceIssues(item.description, selectable, parsed.articles));
+        proseProblems.push(...proseIssues({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable, item.description.refs));
         groundingProblems.push(...apiUnitIssues([item.description], context));
       }
       for (const item of prose.parameterDescriptions ?? []) {
-        proseProblems.push(...proseIssues({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable));
+        proseProblems.push(...referenceIssues(item.description, selectable, parsed.articles));
+        proseProblems.push(...proseIssues({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable, item.description.refs));
         groundingProblems.push(...apiUnitIssues([item.description], context));
       }
       for (const parameter of endpoint.parameters.filter((item) => item.in !== 'route' || item.required !== false)) {
@@ -682,7 +726,8 @@ async function generateContentPackageCore(root, request, options = {}) {
       }
     }
     proseProblems.push(...proseIssues({ title: safePackage.summary, description: '', intro: '', notas: [] },
-      { parameters: [], responseFields: selectable.flatMap((item) => item.responseFields ?? []) }, selectable));
+      { parameters: [], responseFields: selectable.flatMap((item) => item.responseFields ?? []) }, selectable, [], true));
+    for (const unit of parsed.summary) proseProblems.push(...referenceIssues(unit, selectable, parsed.articles));
     groundingProblems.push(...apiUnitIssues(parsed.summary, context));
     const retryIssues = [...new Set([...proseProblems, ...groundingProblems,
       ...(!options.retryIssues ? missingParameterDescriptions : [])])];
@@ -721,13 +766,13 @@ async function generateContentPackageCore(root, request, options = {}) {
       for (const item of prose.responseDescriptions ?? []) {
         if (!endpoint.responseFields?.some((field) => responseFieldPath(endpoint, field) === item.name) || described.has(item.name))
           return withPending(apiPending(`descrição de campo sem fato: ${item.name}`));
-        described.set(item.name, item.description.text);
+        described.set(item.name, renderUnit(item.description, parsed.articles, selectable));
       }
       const describedParameters = new Map();
       for (const item of prose.parameterDescriptions ?? []) {
         if (!endpoint.parameters.some((parameter) => parameter.name === item.name) || describedParameters.has(item.name))
           return withPending(apiPending(`descrição de parâmetro sem fato: ${item.name}`));
-        describedParameters.set(item.name, item.description.text);
+        describedParameters.set(item.name, renderUnit(item.description, parsed.articles, selectable));
       }
       const requestedRoute = explicitEndpointsFrom(request).find((item) => item.verb === endpoint.verb
         && [endpoint.route, ...(endpoint.optionalAliases ?? [])].some((route) =>
@@ -746,10 +791,10 @@ async function generateContentPackageCore(root, request, options = {}) {
       pending.push(...technical.pending);
       pending.push(...(endpoint.responseFields ?? []).filter((field) => !described.has(responseFieldPath(endpoint, field)))
         .map((field) => `descrição de resposta sem fonte: ${responseFieldPath(endpoint, field)}`));
-      const body = [prose.intro.text, ...prose.notas.map((item) => item.text)]
-        .filter(Boolean).map((text) => markFactNames(text, selectable)).concat(technical.body).join('\n\n');
+      const body = [prose.intro, ...prose.notas].filter((unit) => unit.text)
+        .map((unit) => renderUnit(unit, parsed.articles, selectable)).concat(technical.body).join('\n\n');
       const article = { path: prose.path, title: prose.title,
-        description: markFactNames(prose.description.text, selectable),
+        description: renderUnit(prose.description, parsed.articles, selectable),
         source: technical.source, contentType: technical.contentType, method: technical.method,
         endpoint: technical.endpoint, body, productActions: [] };
       const validation = validateArticle(article);

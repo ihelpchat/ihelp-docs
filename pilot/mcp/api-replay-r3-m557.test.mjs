@@ -19,7 +19,9 @@ const article = (path, endpoint, responseDescriptions = []) => ({ path, endpoint
   description: unit('Consulta os contatos disponíveis na referência pública da API.'),
   intro: unit('Use para consultar contatos.'), notas: [], responseDescriptions });
 const packageOutput = { status: 'ready', summary: [unit('Contatos.')], questions: [], articles: [
-  article(source.list.path, 'GET /contacts', [{ name: 'dados[].id', description: unit(description) }]),
+  article(source.list.path, 'GET /contacts', [{ name: 'dados[].id', description: {
+    ...unit(description), refs: [{ name: 'contactId', endpoint: tags.verb + ' ' + tags.route.replace(/^\/api\/v\d+/u, '') }],
+  } }]),
   article(source.tags.path, source.tags.endpoint),
 ] };
 async function replay(mutate = () => {}, endpoints = [list, tags]) {
@@ -34,15 +36,16 @@ async function replay(mutate = () => {}, endpoints = [list, tags]) {
   });
 }
 
-test('resp-2 aceita contactId de outro endpoint selecionado do pacote', async () => {
+test('resp-2 aceita contactId com referência explícita ao endpoint de tags', async () => {
   const result = await replay();
   assert.equal(result.status, 'ready', result.summary);
   assert.match(result.articles[0].body, /usado como contactId na consulta de tags/u);
+  assert.match(result.articles[0].body, /\[Contatos\]\(\/api\/contatos\/buscar-tags-do-contato\)/u);
 });
 
 test('nome público WhatsApp é aceito na descrição de campo', async () => {
   const result = await replay((value) => { value.articles[0].responseDescriptions[0].description.text =
-    'Campo textual de WhatsApp.'; });
+    'Campo textual de WhatsApp.'; value.articles[0].responseDescriptions[0].description.refs = []; });
   assert.equal(result.status, 'ready', result.summary);
 });
 
@@ -86,7 +89,7 @@ test('resp-2 com um único nome inventado recusa por falta de fato', async () =>
 test('resp-2 sem endpoint de tags recusa contactId', async () => {
   const result = await replay(() => {}, [list]);
   assert.equal(result.status, 'needs_information');
-  assert.match(result.summary, /nome técnico sem fato: contactId/u);
+  assert.match(result.summary, /referência inválida: contactId/u);
 });
 
 test('rótulo tipado aceita parâmetro de outra página, mas não chama campo de parâmetro', async () => {

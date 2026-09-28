@@ -1,5 +1,5 @@
 // Static, bounded reader. It never executes product code.
-import { tokens, neutralizeCsharp } from './csharp-endpoints.mjs';
+import { tokens, neutralizeCsharp, resolveCsharpAction } from './csharp-endpoints.mjs';
 export const MAX_CALL_DEPTH = 3;
 export const MAX_CALL_METHODS = 12;
 
@@ -77,7 +77,7 @@ function declarations(source, path) {
     const brace = lex[close].at, end = blockEnd(clean, brace), start = lex[i].at;
     const owners = classes.filter((cls) => cls.start < start && end <= cls.end);
     if (!owners.length) continue;
-    methods.push({ method, path, start: lineOf(source, start), end: lineOf(source, end - 1),
+    methods.push({ method, path, start: lineOf(source, start), methodAt: lex[open - 1].at, end: lineOf(source, end - 1),
       body: clean.slice(brace, end), excerpt: source.slice(start, end), fields, classes: owners,
       parameters: clean.slice(lex[open].at + 1, lex[close - 1].at),
       returnType: clean.slice(start, lex[open - 1].at).trim()
@@ -93,7 +93,9 @@ export function traceCsharpCalls(sources, paths, endpoint) {
   const declarationsByPath = allowed.map((path) => declarations(sources[path] ?? '', path));
   const index = declarationsByPath.flatMap((item) => item.methods);
   const declaredClasses = new Set(declarationsByPath.flatMap((item) => item.classes.map((cls) => cls.name)));
-  const controller = index.find((item) => item.path === endpoint.file && item.method === endpoint.method);
+  const action = resolveCsharpAction(sources[endpoint.file] ?? '', endpoint.file, endpoint);
+  const controller = action && index.find((item) => item.path === endpoint.file
+    && item.methodAt === action.actionAt && item.method === action.method);
   const methods = [], pending = [], seen = new Set(), neededTypes = new Set();
   function calls(body) {
     const lex = tokens(body), result = [];
