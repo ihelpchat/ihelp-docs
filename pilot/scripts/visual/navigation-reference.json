@@ -10,5 +10,11 @@
     "tocTitle": 11,
     "toc": 12,
     "nav": 13
+  },
+  "desktop1440": {
+    "tocSingleLineHeight": 27.4,
+    "sideLinkHeight": 32,
+    "sideGroupHeight": 34,
+    "fontPx": { "support": 13, "ask": 12, "launcher": 13, "feedback": 13, "product": 12 }
   }
 }
