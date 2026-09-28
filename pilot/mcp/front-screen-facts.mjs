@@ -115,26 +115,24 @@ function schemaFields(schema, file, path) {
     if (!ts.isPropertyAssignment(property)) continue;
     const field = property.name.getText(file).replace(/^['"]|['"]$/gu, '');
     if (!/^[\w.]{1,80}$/u.test(field)) continue;
-    const rule = { required: 'unknown', source: `${path}:${lineOf(file, property)}` };
+    const rule = { required: zod, source: `${path}:${lineOf(file, property)}` };
     let expression = property.initializer;
     let presenceSeen = false;
     while (ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression)) {
       const method = expression.expression.name.text;
-      if (!presenceSeen && ['optional', 'nullable', 'notRequired', 'nullish'].includes(method)) {
+      if (!presenceSeen && (zod ? ['optional', 'nullish', 'default', 'catch'] : ['optional', 'notRequired']).includes(method)) {
         rule.required = false;
         presenceSeen = true;
       }
-      if (!presenceSeen && (['required', 'nonNullable', 'defined'].includes(method)
-        || (method === 'min' && numeric(expression.arguments[0]) === 1))) {
+      if (!presenceSeen && !zod && ['required', 'defined'].includes(method)) {
         rule.required = true;
-        rule.message = literal(expression.arguments[method === 'min' ? 1 : 0]) ?? rule.message;
+        rule.message = literal(expression.arguments[0]) ?? rule.message;
         presenceSeen = true;
       }
       if (['min', 'max', 'email', 'matches'].includes(method))
         rule[method] = method === 'email' ? true : numeric(expression.arguments[0]) ?? literal(expression.arguments[0]) ?? true;
       expression = expression.expression.expression;
     }
-    if (zod && !presenceSeen) rule.required = true;
     rules.set(field, rule);
   }
   return rules;
@@ -330,16 +328,18 @@ function collect(filePath, source, facts, entryName) {
       if (ts.isCallExpression(child) && /^(?:useForm|useFormik)$/u.test(child.expression.getText(file))) {
         const schema = schemaOf(child);
         if (schema) {
-          const form = { schema, registers: new Set(), controls: new Set() };
+          const form = { schema, registers: new Set(), controls: new Set(), submitters: new Set(), formik: child.expression.getText(file) === 'useFormik' };
           const declaration = child.parent;
           if (ts.isVariableDeclaration(declaration)) {
             if (ts.isIdentifier(declaration.name)) {
               form.registers.add(`${declaration.name.text}.register`);
               form.controls.add(`${declaration.name.text}.control`);
+              form.submitters.add(`${declaration.name.text}.handleSubmit`);
             } else if (ts.isObjectBindingPattern(declaration.name)) for (const element of declaration.name.elements) {
               const property = element.propertyName?.getText(file) ?? element.name.getText(file);
               if (property === 'register') form.registers.add(element.name.getText(file));
               if (property === 'control') form.controls.add(element.name.getText(file));
+              if (property === 'handleSubmit') form.submitters.add(element.name.getText(file));
             }
           }
           formList.push(form);
@@ -390,9 +390,14 @@ function collect(filePath, source, facts, entryName) {
       const expression = attr(parent.openingElement, 'validationSchema')?.initializer?.expression;
       return expression && ts.isIdentifier(expression) ? expression.text : null;
     }
-    if (forms.length !== 1) return null;
-    for (let parent = node.parent; parent; parent = parent.parent)
-      if (ts.isJsxElement(parent) && jsxName(parent.openingElement) === 'form') return forms[0].schema;
+    for (let parent = node.parent; parent; parent = parent.parent) {
+      if (!ts.isJsxElement(parent) || jsxName(parent.openingElement) !== 'form') continue;
+      const submit = attr(parent.openingElement, 'onSubmit')?.initializer?.expression;
+      const matches = forms.filter((form) => submit && (form.formik
+        ? form.submitters.has(submit.getText(file))
+        : ts.isCallExpression(submit) && form.submitters.has(submit.expression.getText(file))));
+      return matches.length === 1 ? matches[0].schema : null;
+    }
     return null;
   }
   function visit(node) {
