@@ -479,7 +479,7 @@ function clientOf(options) {
   return new OpenAI({ apiKey });
 }
 
-async function modelResponse(options, payload, productContext) {
+async function modelResponse(options, payload, productContext, publicSources = {}) {
   const client = clientOf(options);
   let response;
   if (options.client && !options.budget) response = await client.responses.create(payload);
@@ -493,7 +493,7 @@ async function modelResponse(options, payload, productContext) {
   if (!parsed.ok) return response;
   const mode = payload.text.format.name === 'pacote_documentacao' ? 'package'
     : payload.text.format.name === 'guia_canonico' ? 'guide' : 'internal';
-  const guarded = guardModelOutput(parsed.value, productContext, mode);
+  const guarded = guardModelOutput(parsed.value, { ...productContext, ...publicSources }, mode);
   return { ...response, output_text: JSON.stringify(guarded.value) };
 }
 
@@ -700,7 +700,7 @@ async function planContentCore(root, request, options = {}) {
     },
     { role: 'user', content: requestText(request, existing, productContext, codeHygiene) },
     ...(options.groundingRetryIssues ? [retryPrompt(options.groundingRetryIssues)] : []),
-  ], options), productContext);
+  ], options), productContext, { request, existing });
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return { ...apiPending(modelJson.reason), pending: productContext.pending ?? [] };
   const parsed = modelJson.value;
@@ -787,7 +787,7 @@ async function generateContentPackageCore(root, request, options = {}) {
   ], options);
   const apiPages = request.module === 'api' ? await generateApiPages(options, payload, productContext, selectable) : null;
   const response = apiPages ? { model: apiPages.model, output_text: JSON.stringify(apiPages.parsed) }
-    : await modelResponse(options, payload, productContext);
+    : await modelResponse(options, payload, productContext, { request, existing });
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return withPending(apiPending(modelJson.reason));
   const parsed = modelJson.value;
@@ -1049,7 +1049,7 @@ export async function generateCanonicalGuide(root, request, options = {}) {
       'Cite cada frase de description, body, assistantOverview, assistantSuggestions e cada step.text no grounding do artigo com texto e citação exatos.',
     ].join(' ') },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing ? [existing] : [], productContext)}\nGuideId: ${request.guideId}\nPlano aprovado: ${JSON.stringify(options.plan)}\nGuia anterior: ${JSON.stringify(existing ?? null)}`) },
-  ], options), productContext);
+  ], options), productContext, { request, existing: existing ? [existing] : [] });
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return apiPending(modelJson.reason);
   const parsed = modelJson.value;

@@ -792,12 +792,13 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
         const walk = (node) => { if (ts.isObjectLiteralExpression(node)) found.push(node); ts.forEachChild(node, walk); };
         walk(statement); return found;
       });
-      const wanted = normalized(module || topic);
+      const wanted = [module, topic].map(normalized).filter((value) => value.length >= 4);
       const entry = objects.find((node) => {
         const path = node.properties.find((prop) => ts.isPropertyAssignment(prop) && prop.name.getText(parsed.file) === 'path');
         const title = node.properties.find((prop) => ts.isPropertyAssignment(prop) && prop.name.getText(parsed.file) === 'title');
-        return route ? literal(path?.initializer) === route : wanted.length >= 4
-          && normalized(literal(title?.initializer)).includes(wanted);
+        const name = normalized(literal(title?.initializer));
+        return route ? literal(path?.initializer) === route : name.length >= 4
+          && wanted.some((value) => name.includes(value) || value.includes(name));
       });
       if (!entry) break;
       route = literal(entry.properties.find((prop) => ts.isPropertyAssignment(prop)

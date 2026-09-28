@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { guardModelOutput } from './model-output-guard.mjs';
 import { searchLocalProductContext } from './local-product-context.mjs';
+import { getIhelpContext } from './product-context-service.mjs';
 
 test('rótulo público coincidente com back não é eco; serviço privado e SQL continuam bloqueados', () => {
   const label = 'Nome do contato Telefone do contato E-mail do contato';
@@ -23,6 +24,22 @@ test('rótulo público coincidente com back não é eco; serviço privado e SQL 
   assert.equal(privateResult.internalCodeEcho, 1);
   const sql = guardModelOutput({ articles: [{ body: `SELECT ${label} FROM contacts` }] }, context, 'package');
   assert.equal(sql.value.status, 'needs_information');
+});
+
+test('pedido, página, suporte e negócio também liberam somente sua frase pública', () => {
+  const phrase = 'Organizar clientes da equipe evita perder tempo no atendimento';
+  const privateContext = { callEvidence: [{ path: 'ExampleService.cs', excerpt: phrase }] };
+  for (const source of [
+    { request: { description: phrase } },
+    { existing: [{ body: phrase }] },
+    { support: { categories: [{ guidance: phrase }] } },
+    { businessContext: [{ body: phrase }] },
+  ]) {
+    const result = guardModelOutput({ articles: [{ body: phrase }] }, { ...privateContext, ...source }, 'package');
+    assert.equal(result.value.status, undefined, JSON.stringify(source));
+    assert.equal(result.internalCodeEcho, 0);
+  }
+  assert.equal(guardModelOutput({ articles: [{ body: phrase }] }, privateContext, 'package').value.status, 'needs_information');
 });
 
 test('rotas da matriz trazem Contatos e Robôs; título cobre módulo fora da matriz; ausente vira pendência', async () => {
@@ -52,10 +69,15 @@ test('rotas da matriz trazem Contatos e Robôs; título cobre módulo fora da ma
       const result = await searchLocalProductContext(topic, module, { repositoryIds: ['frontend'], cache: false });
       assert.equal(result.code[0].available, true, result.code[0].reason);
       assert.ok(result.code[0].screenFacts.some((fact) => fact.text === expected), `${module}: fato da rota`);
-      assert.ok(result.code[0].screenFacts.some((fact) => fact.kind === 'route' && fact.route === route), `${module}: rota`);
+      assert.ok(result.code[0].screenFiles.some((file) => file.toLowerCase().includes(module === 'Contatos' ? 'contacts' : module === 'Robôs' ? 'robots' : 'inventory')), `${module}: rota ${route}`);
     }
+    const byTopic = await searchLocalProductContext('Consultar Estoque', 'Módulo Novo', { repositoryIds: ['frontend'], cache: false });
+    assert.ok(byTopic.code[0].screenFacts.some((fact) => fact.text === 'Adicionar Produto'), 'fallback pelo tema');
     const missing = await searchLocalProductContext('Criar seção', 'Módulo Inexistente', { repositoryIds: ['frontend'], cache: false });
     assert.ok(missing.code[0].screenPending.some((item) => item.includes('tela não identificada para Módulo Inexistente')));
+    const publicContext = await getIhelpContext(new URL('../', import.meta.url).pathname, 'Criar seção', 'Módulo Inexistente',
+      { requireLocal: true, repositoryIds: ['frontend'] });
+    assert.ok(publicContext.pending.some((item) => item.includes('tela não identificada para Módulo Inexistente')));
   } finally {
     if (previous === undefined) delete process.env.PRODUCT_LOCAL_CHECKOUT;
     else process.env.PRODUCT_LOCAL_CHECKOUT = previous;
