@@ -74,6 +74,7 @@ try {
         assert.ok(metrics.sideLink?.height >= 44 && metrics.sideGroup?.height >= 44, 'mobile: menu abaixo de 44px');
         assert.ok(metrics.feedback?.height >= 44, 'mobile: feedback abaixo de 44px');
         await assertMobileTargets(page, 'Agenda de Contatos');
+        await page.locator('.ih-menu-button').click();
         await page.locator('.ih-prose h2').first().hover();
         await assertMobileTargets(page, 'Agenda de Contatos com título em foco');
       }
