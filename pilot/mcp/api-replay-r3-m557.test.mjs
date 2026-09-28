@@ -17,7 +17,7 @@ const tags = { verb: 'GET', route: '/api/v2/contactTags/getContactsTagByContactI
 const unit = (text) => ({ text, citations: [] });
 const article = (path, endpoint, responseDescriptions = []) => ({ path, endpoint, title: 'Contatos',
   description: unit('Consulta os contatos disponíveis na referência pública da API.'),
-  intro: unit('Use para consultar contatos.'), notas: [], responseDescriptions });
+  intro: unit('Use para consultar contatos.'), notas: [], responseHeaders: [], responseDescriptions });
 const packageOutput = { status: 'ready', summary: [unit('Contatos.')], questions: [], articles: [
   article(source.list.path, 'GET /contacts', [{ name: 'dados[].id', description: {
     ...unit(description), refs: [{ name: 'contactId', endpoint: tags.verb + ' ' + tags.route.replace(/^\/api\/v\d+/u, '') }],
@@ -41,6 +41,41 @@ test('resp-2 aceita contactId com referência explícita ao endpoint de tags', a
   assert.equal(result.status, 'ready', result.summary);
   assert.match(result.articles[0].body, /usado como contactId na consulta de tags/u);
   assert.match(result.articles[0].body, /\[Contatos\]\(\/api\/contatos\/buscar-tags-do-contato\)/u);
+});
+
+test('resp-5 corrige refs de parâmetros únicos e entrega as três páginas', async () => {
+  const detail = { verb: 'GET', route: '/api/v2/contacts/details/{IdRef}', public: true, documented: true,
+    authorization: 'authenticated', parameters: [{ name: 'IdRef', type: 'string', in: 'route' }], responseFields: [] };
+  const listed = { ...list, route: '/api/v2/contacts/{letter}',
+    parameters: [{ name: 'letter', type: 'string', in: 'route' }],
+    responseFields: [{ name: 'id', type: 'int' }, { name: 'idRef', type: 'string' }] };
+  const result = await replay((value) => {
+    value.articles[0].endpoint = 'GET /contacts/{letter}';
+    value.articles[0].responseDescriptions[0].description.refs[0].endpoint = 'GET /contacts/{letter}';
+    value.articles[0].responseDescriptions.push({ name: 'dados[].idRef', description: {
+      ...unit('Identificador de referência do contato, em texto; é usado na consulta de detalhes.'),
+      refs: [{ name: 'idRef', endpoint: 'GET /contacts/{letter}' }],
+    } });
+    value.articles.splice(1, 0, article('api/contatos/detalhes', 'GET /contacts/details/{IdRef}'));
+  }, [listed, detail, tags]);
+  assert.equal(result.status, 'ready', result.summary);
+  assert.equal(result.articles.length, 3);
+  assert.match(result.articles[0].body, /\/api\/contatos\/buscar-tags-do-contato/u);
+  assert.match(result.articles[0].body, /\/api\/contatos\/detalhes/u);
+  assert.deepEqual(result.internalRepairs.map(({ name, endpoint }) => [name, endpoint]), [
+    ['contactId', 'GET /contactTags/getContactsTagByContactId/{contactId}'],
+    ['idRef', 'GET /contacts/details/{IdRef}'],
+  ]);
+});
+
+test('ref com nome presente em dois endpoints continua recusada', async () => {
+  const other = { ...tags, route: '/api/v2/contacts/other/{contactId}' };
+  const result = await replay((value) => {
+    value.articles.push(article('api/contatos/outra-consulta', 'GET /contacts/other/{contactId}'));
+    value.articles[0].responseDescriptions[0].description.refs[0].endpoint = 'GET /contacts';
+  }, [list, tags, other]);
+  assert.equal(result.status, 'needs_information');
+  assert.match(result.summary, /referência inválida: contactId/u);
 });
 
 test('nome público WhatsApp é aceito na descrição de campo', async () => {

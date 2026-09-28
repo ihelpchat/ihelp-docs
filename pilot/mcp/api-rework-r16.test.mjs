@@ -53,7 +53,7 @@ test('três páginas são geradas isoladamente; corte repete só uma e respeita 
         return { status: 'incomplete', output_text: '', model: 'fixture' };
       return { output_text: JSON.stringify({ status: 'ready', summary: [unit('Referência de exemplo.')], questions: [], articles: [
         { path: `api/exemplo/${name}`, endpoint: `GET /${name}`, title: `Página ${name}`,
-          description: unit('Consulta os dados disponíveis neste endpoint público.'), intro: unit('Use para consultar os dados.'), notas: [] },
+          description: unit('Consulta os dados disponíveis neste endpoint público.'), intro: unit('Use para consultar os dados.'), notas: [], responseHeaders: [] },
       ] }), model: 'fixture' };
     } } },
   });
@@ -77,7 +77,7 @@ test('corte persistente deixa pendência local e preserva as outras páginas', a
       if (name === 'b') return { status: 'incomplete', output_text: '', model: 'fixture' };
       return { output_text: JSON.stringify({ status: 'ready', summary: [unit('Referência de exemplo.')], questions: [], articles: [
         { path: `api/exemplo/${name}`, endpoint: `GET /${name}`, title: `Página ${name}`,
-          description: unit('Consulta os dados disponíveis neste endpoint público.'), intro: unit('Use para consultar os dados.'), notas: [] },
+          description: unit('Consulta os dados disponíveis neste endpoint público.'), intro: unit('Use para consultar os dados.'), notas: [], responseHeaders: [] },
       ] }), model: 'fixture' };
     } } },
   });
@@ -102,7 +102,7 @@ test('teto global impede chamadas adicionais mesmo com páginas ainda elegíveis
       const name = facts[0].route.split('/').at(-1);
       return { output_text: JSON.stringify({ status: 'ready', summary: [unit('Referência de exemplo.')], questions: [], articles: [
         { path: `api/exemplo/${name}`, endpoint: `GET /${name}`, title: `Página ${name}`,
-          description: unit('Consulta os dados disponíveis neste endpoint público.'), intro: unit('Use para consultar os dados.'), notas: [] },
+          description: unit('Consulta os dados disponíveis neste endpoint público.'), intro: unit('Use para consultar os dados.'), notas: [], responseHeaders: [] },
       ] }), model: 'fixture' };
     } } },
   });

@@ -83,7 +83,7 @@ const endpoint = { verb: 'GET', route: '/api/v2/contacts', public: true, documen
 const unit = (text) => ({ text, citations: [] });
 const article = () => ({ path: 'api/contatos/listar', endpoint: 'GET /contacts', title: 'Listar contatos',
   description: unit('Lista os contatos disponíveis para consulta na API pública.'), intro: unit('Consulte os contatos disponíveis.'),
-  notas: [unit('departmentIds e page aceitam filtros na consulta; os departamentos permanecem opcionais.')],
+  notas: [{ ...unit('departmentIds e page aceitam filtros na consulta; os departamentos permanecem opcionais.'), type: 'Como filtrar' }], responseHeaders: [],
   responseDescriptions: [], parameterDescriptions: [
     { name: 'linkedToMe', description: unit('Restringe aos contatos vinculados ao usuário autenticado.') },
     { name: 'page', description: unit('Escolhe a página da lista.') },
@@ -129,7 +129,8 @@ test('palavra comum factual recebe crase apenas após marcador de campo', async 
   const fact = { ...endpoint, responseFields: [{ name: 'contato', type: 'string' }] };
   const prose = article();
   prose.intro = unit('A resposta apresenta os dados do contato.');
-  prose.notas = [unit('O campo contato identifica o registro.'), unit('Informe departmentIds para filtrar.')];
+  prose.notas = [{ ...unit('O campo contato identifica o registro.'), type: 'Diferenças e cuidados' },
+    { ...unit('Informe departmentIds para filtrar.'), type: 'Como filtrar' }];
   prose.responseDescriptions = [{ name: 'contato', description: unit('Identifica o contato retornado.') }];
   const generated = await generateContentPackage(process.cwd(), { module: 'api', topic: 'Contatos', confirmations: ['GET /contacts'] }, {
     productContext: { groundingRequired: false, matches: [], code: [], endpoints: [fact],
