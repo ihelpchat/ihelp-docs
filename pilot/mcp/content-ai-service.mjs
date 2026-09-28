@@ -16,6 +16,7 @@ import { guardModelOutput } from './model-output-guard.mjs';
 import { PRODUCT_TERMS } from './product-terms.mjs';
 import { attachScreenshotsToArticle, loadScreenshotManifest } from './screen-capture-manifest.mjs';
 import { validCanonicalQuestion } from './conversational-contract.mjs';
+import { mentionsSource } from './source-mention.mjs';
 import { classifyFaqQuestions, hasFaqTaskFacts, loadBusinessContext, selectFaqStyleExamples, adaptScreenFacts,
   validateFaqSections, renderFaqSections, fixedFaqSupportSection, deterministicFaqAnswer,
   missingFaqTaskSteps, FAQ_SECTIONS } from './faq-editorial.mjs';
@@ -42,7 +43,7 @@ const API_GROUNDING_SCHEMA = { type: 'array', items: {
   properties: { text: { type: 'string' }, citations: { type: 'array', items: { anyOf: [
     CITATION_SCHEMA,
     { type: 'object', additionalProperties: false, required: ['source', 'quote'],
-      properties: { source: { type: 'string', enum: ['pedido'] }, quote: { type: 'string' } } },
+      properties: { source: { type: 'string', enum: ['pedido', 'negocio'] }, quote: { type: 'string' } } },
     { type: 'object', additionalProperties: false, required: ['source', 'path', 'quote'],
       properties: { source: { type: 'string', enum: ['pagina'] }, path: { type: 'string' }, quote: { type: 'string' } } },
   ] } } },
@@ -89,6 +90,7 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint], refs = []
     .map((name) => name.toLocaleLowerCase('pt-BR')));
   for (const value of [article.title, article.description, article.intro, ...article.notas]) {
     if (typeof value !== 'string') { issues.push('prosa inválida'); continue; }
+    if (mentionsSource(value)) issues.push('menção à fonte');
     const typeIssue = internalTypeIssue(value);
     if (typeIssue) issues.push(typeIssue);
     for (const term of value.matchAll(/\b(?:DTO|entity|repository|service)\b/giu))
@@ -236,7 +238,11 @@ function groundingIssues(output, context, fields) {
     if (typeof claim.text !== 'string' || !lines.includes(claim.text)) issues.push('citação sem frase correspondente');
     if (!Array.isArray(claim.citations) || !claim.citations.length) { issues.push(`frase sem citação: ${claim.text ?? ''}`); continue; }
     for (const citation of claim.citations) {
-      if (citation?.source === 'pedido') {
+      if (citation?.source === 'negocio') {
+        if (context.module !== 'api' || !literalSegments(citation.quote ?? '',
+          (context.businessContext ?? []).map((item) => item.body)))
+          issues.push(`não é trecho literal do contexto de negócio: ${citation.quote ?? ''}`);
+      } else if (citation?.source === 'pedido') {
         if (context.module !== 'api' || !literalSegments(citation.quote ?? '', [context.request?.details, context.request?.description]))
           issues.push(`não é trecho literal do pedido: ${citation.quote ?? ''}`);
       } else if (citation?.source === 'pagina') {
@@ -263,10 +269,12 @@ function groundingIssues(output, context, fields) {
   return [...new Set(issues)];
 }
 
-function apiUnitIssues(units, context) {
+function apiUnitIssues(units, context, { businessAllowed = false } = {}) {
   return units.flatMap((unit) => {
     const text = unit.text.trim();
     if (proseSegments(text).length !== 1) return [`uma frase por item: ${text.slice(0, 80)}`];
+    if (!businessAllowed && unit.citations?.some((citation) => citation.source === 'negocio'))
+      return [`contexto de negócio fora das notas: ${text}`];
     const issues = groundingIssues({ text, grounding: [{ text, citations: unit.citations }] }, context, ['text']);
     if (!issues.length) return [];
     if (!unit.citations?.length) return issues;
@@ -299,6 +307,13 @@ function evidenceIndex(context) {
 
 function groundingContext(productContext, request, existing) {
   return { ...productContext, module: request.module, request, existing };
+}
+
+async function apiBusinessContext(root, request) {
+  const apiModule = String(request.topic ?? '').replace(/^(?:referência\s+(?:da\s+)?)?api\s+(?:de\s+|do\s+|da\s+)?/iu, '').trim();
+  const files = await Promise.all([loadBusinessContext(root, apiModule || 'api-publica'),
+    loadBusinessContext(root, 'api-publica')]);
+  return [...new Map(files.flat().map((item) => [item.path, item])).values()];
 }
 
 function requestedApiPaths(request) {
@@ -487,9 +502,9 @@ FREE_FAQ_SCHEMA.properties.articles.items.properties.sections = {
 };
 const FAQ_JUDGE_SCHEMA = { type: 'object', additionalProperties: false, required: ['claims'],
   properties: { claims: { type: 'array', items: { type: 'object', additionalProperties: false,
-    required: ['id', 'status', 'reason'], properties: { id: { type: 'string' },
+    required: ['id', 'status', 'reason', 'sourceMention'], properties: { id: { type: 'string' },
       status: { type: 'string', enum: ['sustentada', 'a confirmar', 'contradiz a fonte'] },
-      reason: { type: 'string' } } } } } };
+      reason: { type: 'string' }, sourceMention: { type: 'boolean' } } } } } };
 
 function checkRequest(request) {
   const value = Object.values(request).filter((item) => typeof item === 'string').join('\n');
@@ -605,7 +620,7 @@ function requestText(request, existing, productContext, codeHygiene = {}) {
     `Contexto dos codebases:\n${productContext.matches.length ? productContext.matches.map((item) => `REPOSITÓRIO ${item.repository}@${item.ref} (${item.role})\nARQUIVO ${redactSensitiveData(item.path)} LINHA ${item.line ?? 'não informada'} SHA ${item.sha ?? item.ref}\n${numberedCode(safeCode(item.excerpt), item.line)}`).join('\n\n') : '- Indisponível ou sem correspondências'}`,
     productContext.screenFacts?.length ? `FATOS DA TELA (texto visível, sem código; cite arquivo:linha e SHA):\n${JSON.stringify(productContext.screenFacts)}` : '',
     request.module === 'api' && productContext.callEvidence?.length ? `TRECHOS INTERNOS ALCANÇADOS (cite arquivo:linha; não publique código):\n${productContext.callEvidence.map((item) => `${item.path}:${item.start}-${item.end}\n${numberedCode(safeCode(item.excerpt), item.start)}`).join('\n\n')}` : '',
-    request.module === 'api' ? `FATOS ESTRUTURADOS DE ENDPOINTS (somente public=true é gerável):\n${JSON.stringify(selectedEndpoints)}\nFORMATO REAL DAS PÁGINAS API:\n${JSON.stringify(productContext.apiExamples ?? [])}\nMODELOS DE ESTILO (não são fatos do endpoint pedido):\n${JSON.stringify(productContext.apiStyleExamples ?? [])}` : '',
+    request.module === 'api' ? `FATOS ESTRUTURADOS DE ENDPOINTS (somente public=true é gerável):\n${JSON.stringify(selectedEndpoints)}\nCONTEXTO DE NEGÓCIO 🟢 (apoio para notas; não publicar o nome do arquivo):\n${JSON.stringify((productContext.businessContext ?? []).map(({ body }) => ({ body })))}\nFORMATO REAL DAS PÁGINAS API:\n${JSON.stringify(productContext.apiExamples ?? [])}\nMODELOS DE ESTILO (não são fatos do endpoint pedido):\n${JSON.stringify(productContext.apiStyleExamples ?? [])}` : '',
     faqRequested(request) ? `FATOS DA TELA (use os rótulos exatos em negrito nos passos):\n${JSON.stringify(adaptScreenFacts({ facts: productContext.screenFacts ?? [], sha: productContext.code?.find((item) => item.role === 'frontend')?.ref }, productContext.coverage))}\nCONTEXTO DE NEGÓCIO 🟢 CURADO DO MÓDULO:\n${JSON.stringify(productContext.businessContext ?? [])}\nMODELOS DE ESTILO FAQ (não são fatos do tema):\n${JSON.stringify(productContext.faqStyleExamples ?? [])}` : '',
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
     `Regras do suporte:\n${productContext.support?.rules?.map((item) => `- ${item}`).join('\n') ?? '- Nenhuma'}`,
@@ -734,6 +749,7 @@ async function planContentCore(root, request, options = {}) {
     productContext.businessContext ??= await loadBusinessContext(root, request.module);
     productContext.faqStyleExamples ??= await selectFaqStyleExamples(`${root}/content/docs/docs`);
   }
+  if (request.module === 'api') productContext.businessContext ??= await apiBusinessContext(root, request);
   if (productContext.pending?.some((item) => item.startsWith('endpoint citado não encontrado'))) return groundingPending(productContext);
   if (request.module === 'api' && !productContext.endpoints?.length) return apiPending(productContext.nonPublicEndpoints ? 'endpoint não público: confirmar' : 'endpoints estruturados ausentes');
   if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return apiPending('endpoint não público: confirmar');
@@ -795,6 +811,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     productContext.businessContext ??= await loadBusinessContext(root, request.module);
     productContext.faqStyleExamples ??= await selectFaqStyleExamples(`${root}/content/docs/docs`);
   }
+  if (request.module === 'api') productContext.businessContext ??= await apiBusinessContext(root, request);
   let plan = options.plan;
   const withPending = (result) => ({ securityWarnings: [], ...result, pending: [...new Set([...(productContext.pending ?? []), ...(plan?.pending ?? []), ...(options.faqCarryPending ?? []), ...(result.pending ?? [])])] });
   if (productContext.pending?.some((item) => item.startsWith('endpoint citado não encontrado'))) return groundingPending(productContext);
@@ -830,14 +847,15 @@ async function generateContentPackageCore(root, request, options = {}) {
         request.module === 'api' || !faqRequested(request) ? 'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.'
           : 'Escreva o FAQ com os fatos da tela e a experiência do cliente. Afirmações sem fonte serão marcadas pelo juiz para revisão.',
         request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
+        faqRequested(request) ? `Cada tarefa pedida precisa de seção própria com passos úteis: ${missingFreeFaqTaskSteps(request, [], []).map((item) => item.replace('tarefa sem passo: ', '')).join(', ')}. Não trate criar ou editar como substitutos de montar o fluxo. Siga os controles internos do editor e dos formulários até o resultado visível. Para passos, use fatos da tela ou uma página publicada citada explicitamente; o rótulo exato precisa existir na fonte. Se faltar fonte, deixe a tarefa como pendência, sem inventar.` : '',
         request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : faqRequested(request) ? 'Gere UMA página FAQ em docs/. Escreva livremente como atendente experiente para cliente 60+, com frases naturais e curtas. Em sections inclua O que é em 2–3 frases, Para que serve com ganho, Casos de uso em tópicos (situação → ação → resultado), Passo a passo por tarefa (Buscar, Cadastrar, Editar, Responsável, Importar, Agendar conforme o pedido e fatos), Dúvidas comuns, Erros comuns e o que fazer. Cada passo é texto livre, com rótulos exatos da tela em negrito. Deixe suporte vazio; o sistema adiciona a seção fixa. Use modelos só para estilo, nunca como fatos. Se faltar contexto de negócio, ainda escreva as seções de negócio: o juiz marcará a confirmar.' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
-        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations,refs}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations,refs}, também com uma frase por text (ponto e vírgula permitido). Use refs: [] quando não houver referência cruzada. Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros, como cabeçalhos e diferenças entre endpoints.' : faqRequested(request) ? 'Em passos use objetos {tarefa,passos:[{text}]}, com um ### por tarefa. Escreva instruções completas, na ordem da tela, sem repetir abertura do mesmo menu. Tarefa pedida sem fatos da tela não vira seção; registre-a como pendência para a PR. Em Casos de uso use 2 ou 3 itens {text}, cada um com situação, ação e resultado. Não gere print se não houver manifesto. Nenhuma estrutura acao/fato da versão antiga.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
+        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations,refs}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations,refs}, também com uma frase por text (ponto e vírgula permitido). Use refs: [] quando não houver referência cruzada. Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros, como cabeçalhos e diferenças entre endpoints.' : faqRequested(request) ? 'Em passos use objetos {tarefa,passos:[{text}]}, com um ### por tarefa. Escreva instruções completas, na ordem da tela, sem repetir abertura do mesmo menu. Tarefa pedida sem fatos da tela nem página publicada citada não vira seção; registre-a como pendência para a PR. Em Casos de uso use 2 ou 3 itens {text}, cada um com situação, ação e resultado. Não gere print se não houver manifesto. Nenhuma estrutura acao/fato da versão antiga.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
         request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : faqRequested(request) ? 'Preencha assistantQuestion com uma pergunta canônica. Os demais campos do assistente vêm da resposta direta e dos passos validados.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
         request.module === 'api' ? 'Se faltar método, rota, parâmetros ou autorização, use needs_information e deixe articles vazio. responseFields=null é permitido: a resposta terá nota fixa e pendência.' : faqRequested(request) ? 'Use needs_information só quando não houver fatos para o passo principal. Afirmações de negócio sem fonte podem ser escritas: o juiz as marcará a confirmar. Verbo destrutivo só pode aparecer dentro de rótulo exato da tela em negrito, nunca em texto livre.' : 'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
         request.module === 'api' ? 'A prosa não pode conter método HTTP, caminho, bloco de código, componente JSX nem código inline, exceto nome exato de parâmetro ou campo dos fatos. Nome técnico de outro endpoint do pacote exige refs: [{name,endpoint}] na própria unidade, com endpoint exato do enum; o nome deve ser parâmetro, campo ou segmento da rota desse endpoint. O link para a página referenciada é renderizado automaticamente. O summary mantém escopo global. Descreva cada campo pelo significado e pelo tipo PÚBLICO (texto, número, data e hora, verdadeiro ou falso, lista, objeto), nunca pelo tipo do código, DTO, entity, repository ou service.' : faqRequested(request) ? 'Cada seção é lista de objetos {text}; passos é lista de tarefas. O juiz semântico avaliará cada frase com pedido, fatos da tela, contexto de negócio, sinais de suporte, páginas publicadas e manifesto de prints. Escreva como pessoa do suporte, sem jargão inexplicado, sem dados reais, sem código interno. Na página nunca fale das fontes, do pedido nem do material; dúvidas sobre confirmação, suposições e lacunas vão somente para pendencias da PR. Explique a ação diretamente. Tire espaços de dentro das bordas de **rótulos em negrito**. Não apague uma seção útil só por falta de fonte.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
-        request.module === 'api' ? 'Cite cada unidade de summary, description, intro, notas e descrições de campo nas citations da própria unidade. source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. Use os números reais mostrados ao lado do código e cite a faixa mais curta que contém o comportamento, com no máximo 30 linhas. O JSON interno de formato não é fonte. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : faqRequested(request) ? 'Rótulos em negrito precisam corresponder exatamente a fatos da tela. Não ponha em negrito o nome de um botão citado por uma página publicada se ele não estiver nos FATOS DA TELA; deixe a frase em texto comum para avaliação do juiz. Título de guia publicado pode ser link, sem negrito. Ação destrutiva precisa de fato de ação com o mesmo verbo. O juiz classifica sustentada, a confirmar ou contradiz a fonte. O time resolve pendências na prévia.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
+        request.module === 'api' ? 'Cite cada unidade de summary, description, intro, notas e descrições de campo nas citations da própria unidade. source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Nas notas de negócio, source: "negocio" pode citar trecho literal do contexto de negócio curado com quote, sem path; jamais mencione arquivo ou fonte na prosa publicada. Cada quote deve ter pelo menos 12 caracteres. Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. Use os números reais mostrados ao lado do código e cite a faixa mais curta que contém o comportamento, com no máximo 30 linhas. O JSON interno de formato não é fonte. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : faqRequested(request) ? 'Rótulos em negrito precisam corresponder exatamente a fatos da tela ou a rótulos literais de uma página publicada citada explicitamente no passo. Não invente rótulos. Título de guia publicado pode ser link, sem negrito. Ação destrutiva precisa de fato de ação com o mesmo verbo. O juiz classifica sustentada, a confirmar ou contradiz a fonte. O time resolve pendências na prévia.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].filter(Boolean).join(' '),
     },
     { role: 'user', content: redactPromptEvidence(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`, productContext) },
@@ -881,6 +899,64 @@ async function generateContentPackageCore(root, request, options = {}) {
     }
   }
   if (!Array.isArray(parsed.articles)) return withPending(apiPending('schema de artigos inválido'));
+  const sourcePending = [];
+  if (faqRequested(request)) {
+    const affected = mentionsSource(parsed.summary) || parsed.articles.some((article) =>
+      [article.title, article.description, article.assistantQuestion, article.assistantOverview,
+        ...(article.assistantSuggestions ?? [])].some(mentionsSource)
+      || Object.values(article.sections ?? {}).some((items) => Array.isArray(items) && items.some((item) =>
+        mentionsSource(item?.text) || mentionsSource(item?.tarefa)
+        || item?.passos?.some((step) => mentionsSource(step.text)))));
+    if (affected && !options.faqRetryIssues) return generateContentPackage(root, request, { ...options,
+      productContext, plan, faqRetryIssues: ['menção à fonte'] });
+    if (affected) {
+      if (mentionsSource(parsed.summary)) { parsed.summary = 'Página pronta para revisão.'; sourcePending.push('summary: menção à fonte'); }
+      for (const article of parsed.articles) {
+        for (const field of ['description', 'assistantOverview', 'assistantSuggestions'])
+          if ((Array.isArray(article[field]) ? article[field] : [article[field]]).some(mentionsSource))
+            sourcePending.push(`${article.path}: menção à fonte em ${field}`);
+        if (mentionsSource(article.title)) { article.title = mentionsSource(request.topic) ? 'Guia do iHelp' : request.topic; sourcePending.push(`${article.path}: menção à fonte no título`); }
+        if (mentionsSource(article.assistantQuestion)) { article.assistantQuestion = `Como uso ${article.title}?`; sourcePending.push(`${article.path}: menção à fonte em assistantQuestion`); }
+      }
+      safePackage.summary = parsed.summary;
+    }
+  }
+  if (request.module === 'api') {
+    const citedSource = (unit) => mentionsSource(typeof unit === 'string' ? unit : unit?.text);
+    const affected = parsed.articles.some((article) => citedSource(article.title)
+      || [article.description, article.intro, ...(article.notas ?? []),
+        ...(article.responseDescriptions ?? []).map((item) => item.description),
+        ...(article.parameterDescriptions ?? []).map((item) => item.description)].some(citedSource))
+      || (parsed.summary ?? []).some(citedSource);
+    if (affected && !options.retryIssues) return generateContentPackage(root, request, { ...options,
+      productContext, plan, retryIssues: ['menção à fonte'] });
+    if (affected) {
+      for (const article of parsed.articles) {
+        if (citedSource(article.title)) {
+          sourcePending.push(`${article.path}: menção à fonte no título`);
+          article.title = `Referência de ${mentionsSource(request.topic) ? 'API do iHelp' : request.topic}`;
+        }
+        for (const field of ['description', 'intro']) if (citedSource(article[field])) {
+          sourcePending.push(`${article.path}: menção à fonte em ${field}`);
+          article[field] = { ...article[field], text: 'Consulte os dados deste endpoint.' };
+        }
+        for (const field of ['notas', 'responseDescriptions', 'parameterDescriptions']) {
+          const units = article[field] ?? [];
+          article[field] = units.filter((item) => {
+            const unsafe = citedSource(field === 'notas' ? item : item.description);
+            if (unsafe) sourcePending.push(`${article.path}: menção à fonte em ${field}`);
+            return !unsafe;
+          });
+        }
+      }
+      parsed.summary = parsed.summary.filter((item) => {
+        const unsafe = citedSource(item);
+        if (unsafe) sourcePending.push('summary: menção à fonte');
+        return !unsafe;
+      });
+      safePackage.summary = parsed.summary.map((unit) => unit.text).join(' ');
+    }
+  }
   if (faqRequested(request) && !faqMultipleTypesRequested(request)) {
     const faq = parsed.articles.find((article) => article.contentType === 'faq' && /^docs\//u.test(article.path ?? ''));
     if (faq) {
@@ -915,7 +991,8 @@ async function generateContentPackageCore(root, request, options = {}) {
         proseProblems.push(...referenceIssues(unit, selectable, parsed.articles));
         proseProblems.push(...proseIssues({ title: '', description: unit.text, intro: '', notas: [] }, endpoint, selectable, unit.refs));
       }
-      groundingProblems.push(...apiUnitIssues(units, context));
+      groundingProblems.push(...apiUnitIssues([prose.description, prose.intro], context),
+        ...apiUnitIssues(prose.notas, context, { businessAllowed: true }));
       for (const item of prose.responseDescriptions ?? []) {
         proseProblems.push(...referenceIssues(item.description, selectable, parsed.articles));
         proseProblems.push(...proseIssues({ title: '', description: item.description.text, intro: '', notas: [] }, endpoint, selectable, item.description.refs));
@@ -1020,7 +1097,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       && !apiPages?.pending.some((item) => item.startsWith(`${id}:`)));
     if (withoutPage) return withPending(apiPending(`endpoint sem página: ${withoutPage}`));
     return finalizeGeneratedPages(withPending({ ...safePackage, articles, discardedQuestions: plan.discardedQuestions ?? [],
-      pending: [...new Set([...(productContext.pending ?? []), ...pending, ...(apiPages?.pending ?? [])])], existing, model: response.model }), request, factsByPath);
+      pending: [...new Set([...(productContext.pending ?? []), ...pending, ...(apiPages?.pending ?? []), ...sourcePending])], existing, model: response.model }), request, factsByPath);
   }
   if (parsed.articles.some((article) => article.source === 'api' || /^api\//u.test(article.path ?? ''))) {
     return withPending(apiPending('página API exige fatos estruturados e módulo api'));
@@ -1057,7 +1134,7 @@ async function generateContentPackageCore(root, request, options = {}) {
   const faqContext = { request, existing, support: productContext.support,
     business: productContext.businessContext,
     screenFacts: adaptScreenFacts({ facts: productContext.screenFacts, sha: productContext.code?.find((item) => item.role === 'frontend')?.ref }, productContext.coverage) };
-  const sectionPending = [];
+  const sectionPending = [...sourcePending];
   const articles = [];
   for (const prose of parsed.articles) {
     if (!prose.sections?.passos?.some((item) => item?.acao)) {
@@ -1067,6 +1144,8 @@ async function generateContentPackageCore(root, request, options = {}) {
       if ((missingTasks.length || destructiveIssues.length) && !options.faqRetryIssues)
         return generateContentPackage(root, request, { ...options, productContext, plan,
           faqRetryIssues: [...missingTasks, ...destructiveIssues].map((item) => `${prose.path}: ${item}`) });
+      if (missingTasks.length) return withPending({ ...apiPending(`${prose.path}: ${missingTasks.join('; ')}`),
+        pending: [...checked.pending, ...missingTasks] });
       if (checked.blocking.length) {
         if (!options.faqRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan,
           faqRetryIssues: checked.blocking });
@@ -1104,7 +1183,7 @@ async function generateContentPackageCore(root, request, options = {}) {
           facts: faqContext.screenFacts, business: faqContext.business, support: faqContext.support,
           pages: existing, prints: productContext.printManifest ?? [] };
           const judgeResponse = await modelResponse(options, baseRequest('juiz_faq', FAQ_JUDGE_SCHEMA, [
-            { role: 'developer', content: 'Julgue CADA frase da página com as fontes. Retorne exatamente um item por id, na ordem. Classifique como sustentada, a confirmar ou contradiz a fonte. Suporte mostra dúvidas, mas não prova a resposta. Modelos de estilo não são fonte. Se faltar contexto de negócio para uma afirmação de negócio, marque a confirmar. Não omita frase. Dê motivo curto para pendência ou contradição.' },
+            { role: 'developer', content: 'Julgue CADA frase da página com as fontes. Retorne exatamente um item por id, na ordem. Classifique como sustentada, a confirmar ou contradiz a fonte. Para cada frase, responda também sourceMention: a frase atribui o conteúdo a material ou fonte, ou fala da própria geração? Não reescreva frases; o código remove atribuições destacáveis e omite as demais. Suporte mostra dúvidas, mas não prova a resposta. Modelos de estilo não são fonte. Se faltar contexto de negócio para uma afirmação de negócio, marque a confirmar. Dê motivo curto para pendência ou contradição.' },
             { role: 'user', content: redactPromptEvidence(JSON.stringify({ claims, sources }), productContext) },
           ], options), productContext, { request, existing });
           const parsedJudge = parseModelJson(judgeResponse);
@@ -1173,6 +1252,19 @@ async function generateContentPackageCore(root, request, options = {}) {
     articles[index] = attachScreenshotsToArticle(articles[index], screenCaptureManifest,
       productContext.code?.find((item) => item.role === 'frontend')?.ref, productContext.screenFacts ?? []);
   const invalid = articles.map((article) => {
+    for (const field of ['description', 'assistantQuestion', 'assistantOverview']) if (mentionsSource(article[field])) {
+      sectionPending.push(`${article.path}: menção à fonte em ${field}`);
+      article[field] = field === 'assistantQuestion' ? 'Como uso o iHelp?' : 'Passos para usar o iHelp.';
+    }
+    article.assistantSuggestions = (article.assistantSuggestions ?? []).filter((text) => {
+      if (!mentionsSource(text)) return true;
+      sectionPending.push(`${article.path}: menção à fonte em assistantSuggestions`);
+      return false;
+    });
+    if (mentionsSource(article.body)) {
+      article.body = article.body.split(/\n\n/u).filter((text) => !mentionsSource(text)).join('\n\n');
+      sectionPending.push(`${article.path}: menção à fonte no corpo`);
+    }
     const validation = validateArticle(article);
     const issues = [...validation.issues, ...article.productActions
       .filter((action) => !confirmedAction(action, request, productContext))
