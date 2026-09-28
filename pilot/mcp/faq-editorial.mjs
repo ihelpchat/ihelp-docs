@@ -1,4 +1,4 @@
-import { readFile, readdir, lstat } from 'node:fs/promises';
+import { readFile, readdir, lstat, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 import { redactSensitiveData, containsSensitiveData } from './sensitive-data.mjs';
@@ -228,15 +228,15 @@ export function classifyFaqQuestions(questions = [], _request = {}, screenFacts 
   return { blocking, pending };
 }
 
-export async function loadBusinessContext(pilotRoot, module) {
-  const directory = join(pilotRoot, 'architecture', 'business-context');
-  if (!(await lstat(directory).catch(() => null))?.isDirectory()) return [];
+export async function loadBusinessContext(pilotRoot, module, directory = process.env.BUSINESS_CONTEXT_DIR) {
+  if (!directory) return [];
+  if (!(await stat(directory).catch(() => null))?.isDirectory()) return [];
   const names = await readdir(directory).catch(() => []);
   const result = [];
   const moduleSlug = module && fold(module).replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '');
   for (const name of names.sort()) {
     const path = `business-context/${name}`;
-    if (!BUSINESS_PATH.test(path) || (moduleSlug && name !== `${moduleSlug}.md`)) continue;
+    if (!BUSINESS_PATH.test(path) || (moduleSlug && name !== 'geral.md' && name !== `${moduleSlug}.md`)) continue;
     const absolute = join(directory, name);
     if (!(await lstat(absolute)).isFile()) continue;
     const body = await readFile(absolute, 'utf8');
