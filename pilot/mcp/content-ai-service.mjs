@@ -44,6 +44,13 @@ const API_PROSE_UNIT_SCHEMA = { type: 'object', additionalProperties: false, req
   properties: { text: { type: 'string' }, citations: API_GROUNDING_SCHEMA.items.properties.citations,
     refs: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: ['name', 'endpoint'], properties: { name: { type: 'string' }, endpoint: { type: 'string' } } } } } };
+const NOTE_TYPES = ['Como filtrar', 'Paginação e cabeçalhos', 'Quem vê quais contatos', 'Diferenças e cuidados'];
+const API_NOTE_SCHEMA = { ...API_PROSE_UNIT_SCHEMA, required: [...API_PROSE_UNIT_SCHEMA.required, 'type'],
+  properties: { ...API_PROSE_UNIT_SCHEMA.properties, type: { type: 'string', enum: NOTE_TYPES } } };
+const API_RESPONSE_HEADER_SCHEMA = { type: 'object', additionalProperties: false,
+  required: ['name', 'meaning', 'when'], properties: {
+    name: { type: 'string' }, meaning: API_PROSE_UNIT_SCHEMA, when: API_PROSE_UNIT_SCHEMA,
+  } };
 const publicNames = new Set(PRODUCT_TERMS.flatMap((term) => [term, ...term.split(/\s+/u)])
   .map((term) => term.toLocaleLowerCase('pt-BR')));
 const isPublicName = (name) => publicNames.has(name.toLocaleLowerCase('pt-BR'));
@@ -89,7 +96,10 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint], refs = []
     const path = value.match(/\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_{}-]+)*/u);
     if (path) issues.push(`caminho proibido: ${path[0]}`);
     for (const code of value.matchAll(/`([^`\n]+)`/gu)) {
-      if (!inlineNames.has(code[1].toLocaleLowerCase('pt-BR'))) issues.push(`código inline proibido: ${code[0]}`);
+      const query = /^(?:[\p{L}_][\p{L}\p{N}_]*=[^&`\s]+)(?:&[\p{L}_][\p{L}\p{N}_]*=[^&`\s]+)+$/u.test(code[1]);
+      const queryNames = query ? code[1].split('&').map((part) => part.split('=')[0]) : [];
+      if (query ? !queryNames.every((name) => inlineNames.has(name.toLocaleLowerCase('pt-BR')))
+        : !inlineNames.has(code[1].toLocaleLowerCase('pt-BR'))) issues.push(`código inline proibido: ${code[0]}`);
     }
     const method = value.match(/\b(?:GET|POST|PUT|PATCH|DELETE)\b/iu);
     if (method) issues.push(`método proibido na prosa: ${method[0]}`);
@@ -151,8 +161,9 @@ function markFactNames(text, endpoints) {
     'erro', 'erros', 'canal', 'canais', 'campo', 'campos', 'lista', 'listas', 'tipo', 'tipos',
     'valor', 'valores', 'total', 'pagina', 'página', 'paginas', 'páginas', 'ativo', 'ativa',
     'estado', 'status', 'departamento', 'departamentos', 'telefone', 'email', 'endereco', 'endereço']);
-  return String(text).split(/(`[^`]*`)/u).map((segment) => {
+  return String(text).split(/(`[^`]*`|[\p{L}_][\p{L}\p{N}_]*=[^\s&`,;.!?]+(?:&[\p{L}_][\p{L}\p{N}_]*=[^\s&`,;.!?]+)+)/u).map((segment) => {
     if (segment.startsWith('`')) return segment;
+    if (/^[\p{L}_][\p{L}\p{N}_]*=[^\s&`,;.!?]+(?:&[\p{L}_][\p{L}\p{N}_]*=[^\s&`,;.!?]+)+$/u.test(segment)) return '`' + segment + '`';
     return segment.replace(/(?<![\p{L}\p{N}_])([\p{L}_][\p{L}\p{N}_]*)(?![\p{L}\p{N}_])/gu,
       (match, name, offset) => {
         if (!facts.has(name)) return name;
@@ -164,7 +175,7 @@ function markFactNames(text, endpoints) {
 }
 function apiSchemaIssue(article) {
   if (!article || typeof article !== 'object' || Array.isArray(article)) return 'schema de prosa inválido';
-  const allowed = new Set(['path', 'endpoint', 'title', 'description', 'intro', 'notas', 'responseDescriptions', 'parameterDescriptions']);
+  const allowed = new Set(['path', 'endpoint', 'title', 'description', 'intro', 'notas', 'responseHeaders', 'responseDescriptions', 'parameterDescriptions']);
   const extra = Object.keys(article).find((key) => !allowed.has(key));
   if (extra) return `campo da IA não permitido: ${extra}`;
   const unit = (value) => value && typeof value === 'object' && !Array.isArray(value)
@@ -175,7 +186,12 @@ function apiSchemaIssue(article) {
       && typeof ref.name === 'string' && typeof ref.endpoint === 'string'));
   if (typeof article.path !== 'string' || typeof article.endpoint !== 'string' || typeof article.title !== 'string'
     || !unit(article.description) || !unit(article.intro)
-    || !Array.isArray(article.notas) || !article.notas.every(unit)) return 'schema de prosa inválido';
+    || !Array.isArray(article.notas) || !article.notas.every((note) => note && typeof note === 'object'
+      && !Array.isArray(note) && unit(Object.fromEntries(Object.entries(note).filter(([key]) => key !== 'type')))
+      && Object.hasOwn(note, 'type') && NOTE_TYPES.includes(note.type))) return 'tipo de nota ausente ou inválido';
+  if (!Array.isArray(article.responseHeaders) || !article.responseHeaders.every((header) => header
+    && typeof header.name === 'string' && /^[A-Za-z][A-Za-z0-9-]*$/u.test(header.name)
+    && unit(header.meaning) && unit(header.when))) return 'cabeçalhos de resposta inválidos';
   if (!/^api\/[a-z0-9][a-z0-9/-]*$/u.test(article.path)) return `path API inválido: ${article.path}`;
   if (article.responseDescriptions !== undefined && (!Array.isArray(article.responseDescriptions)
     || !article.responseDescriptions.every((item) => typeof item?.name === 'string' && unit(item?.description)))) return 'descrições de resposta inválidas';
@@ -429,9 +445,10 @@ const PACKAGE_SCHEMA = {
 };
 const API_ARTICLE_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['path', 'endpoint', 'title', 'description', 'intro', 'notas', 'responseDescriptions', 'parameterDescriptions'],
+  required: ['path', 'endpoint', 'title', 'description', 'intro', 'notas', 'responseHeaders', 'responseDescriptions', 'parameterDescriptions'],
   properties: { path: { type: 'string' }, endpoint: { type: 'string', enum: [] }, title: { type: 'string' }, description: API_PROSE_UNIT_SCHEMA,
-    intro: API_PROSE_UNIT_SCHEMA, notas: { type: 'array', items: API_PROSE_UNIT_SCHEMA },
+    intro: API_PROSE_UNIT_SCHEMA, notas: { type: 'array', items: API_NOTE_SCHEMA },
+    responseHeaders: { type: 'array', items: API_RESPONSE_HEADER_SCHEMA },
     responseDescriptions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: ['name', 'description'], properties: { name: { type: 'string' }, description: API_PROSE_UNIT_SCHEMA } } },
     parameterDescriptions: { type: 'array', items: { type: 'object', additionalProperties: false,
@@ -738,7 +755,7 @@ async function generateContentPackageCore(root, request, options = {}) {
         'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.',
         request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
         request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
-        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations,refs}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations,refs}, também com uma frase por text (ponto e vírgula permitido). Use refs: [] quando não houver referência cruzada. Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros, como cabeçalhos e diferenças entre endpoints.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
+        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations,refs}, com uma frase por item; description, intro e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations,refs}, também com uma frase por text (ponto e vírgula permitido). Cada nota exige type do enum fechado: Como filtrar, Paginação e cabeçalhos, Quem vê quais contatos, Diferenças e cuidados. Use refs: [] quando não houver referência cruzada. Cabeçalhos de resposta vão somente em responseHeaders, cada item com name, meaning e when; meaning e when são unidades citadas {text,citations,refs}. Não repita esses cabeçalhos em notas. Autenticação é renderizada dos fatos em seção fixa; não escreva nota de autenticação. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros e diferenças entre endpoints.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
         request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
@@ -778,9 +795,16 @@ async function generateContentPackageCore(root, request, options = {}) {
     const apiRetryEndpoints = new Set();
     for (const prose of parsed.articles) {
       const endpoint = selectable.find((item) => publicEndpointId(item) === prose.endpoint);
-      if (!endpoint || apiSchemaIssue(prose)) continue;
+      if (!endpoint) continue;
       const before = proseProblems.length + groundingProblems.length + missingParameterDescriptions.length;
+      const schemaIssue = apiSchemaIssue(prose);
+      if (schemaIssue) { proseProblems.push(schemaIssue); apiRetryEndpoints.add(prose.endpoint); continue; }
       const units = [prose.description, prose.intro, ...prose.notas];
+      for (const header of prose.responseHeaders) units.push(header.meaning, header.when);
+      if (prose.notas.some((note) => /\b(?:requer|exige|obrigat[oó]ria?)\s+autentica[çc][aã]o|token\s+(?:Bearer|ausente|inv[aá]lido|expirado)/iu.test(note.text)))
+        proseProblems.push('autenticação deve ficar na seção fixa');
+      if (new Set(prose.responseHeaders.map((header) => header.name.toLowerCase())).size !== prose.responseHeaders.length)
+        proseProblems.push('cabeçalho de resposta repetido');
       proseProblems.push(...proseIssues({ title: prose.title, description: '', intro: '', notas: [] }, endpoint, selectable));
       for (const unit of units) {
         proseProblems.push(...referenceIssues(unit, selectable, parsed.articles));
@@ -876,8 +900,18 @@ async function generateContentPackageCore(root, request, options = {}) {
       pending.push(...technical.pending);
       pending.push(...(endpoint.responseFields ?? []).filter((field) => !described.has(responseFieldPath(endpoint, field)))
         .map((field) => `descrição de resposta sem fonte: ${responseFieldPath(endpoint, field)}`));
-      const body = [prose.intro, ...prose.notas].filter((unit) => unit.text)
-        .map((unit) => renderUnit(unit, parsed.articles, selectable)).concat(technical.body).join('\n\n');
+      const noteBlocks = NOTE_TYPES.map((type) => {
+        const notes = prose.notas.filter((note) => note.type === type && note.text);
+        const table = type === 'Paginação e cabeçalhos' && prose.responseHeaders.length
+          ? `| Cabeçalho | O que significa | Quando aparece |\n|---|---|---|\n${prose.responseHeaders.map((header) =>
+            `| \`${header.name}\` | ${renderUnit(header.meaning, parsed.articles, selectable).replace(/\|/gu, '\\|')} | ${renderUnit(header.when, parsed.articles, selectable).replace(/\|/gu, '\\|')} |`).join('\n')}` : '';
+        const content = [...notes.map((note) => renderUnit(note, parsed.articles, selectable)), table].filter(Boolean);
+        return content.length ? `### ${type}\n\n${content.join('\n\n')}` : '';
+      }).filter(Boolean);
+      const body = [renderUnit(prose.intro, parsed.articles, selectable), ...noteBlocks,
+        technical.body.replace(/^Requer autenticação\. Envie `Authorization: Bearer \$IHELP_TOKEN`\./u,
+          '## Autenticação\n\nRequer autenticação. Envie `Authorization: Bearer $IHELP_TOKEN`.')]
+        .filter(Boolean).join('\n\n');
       const article = { path: prose.path, title: prose.title,
         description: renderUnit(prose.description, parsed.articles, selectable),
         source: technical.source, contentType: technical.contentType, method: technical.method,
