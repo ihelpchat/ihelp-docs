@@ -987,6 +987,9 @@ async function generateContentPackageCore(root, request, options = {}) {
     context.citationRegistry = citationRegistry;
     const internalCitations = [];
     const citationIdProblems = [];
+    const headerUnits = new Set(parsed.articles.flatMap((article) =>
+      (article.responseHeaders ?? []).flatMap((header) => [header.meaning, header.when])));
+    const rejectedHeaderUnits = new Set();
     const citedUnits = [...parsed.summary, ...parsed.articles.flatMap((article) => [
       article.description, article.intro, ...(article.notas ?? []),
       ...(article.responseHeaders ?? []).flatMap((header) => [header.meaning, header.when]),
@@ -997,7 +1000,8 @@ async function generateContentPackageCore(root, request, options = {}) {
       if (!unit || !Array.isArray(unit.citations)) continue;
       const original = unit.citations;
       const resolved = resolveApiCitationIds(original, citationRegistry, unit.text);
-      citationIdProblems.push(...resolved.issues);
+      if (headerUnits.has(unit) && resolved.issues.length) rejectedHeaderUnits.add(unit);
+      else citationIdProblems.push(...resolved.issues);
       unit.citations = resolved.citations;
       if (original.some((id) => typeof id === 'string'))
         internalCitations.push({ text: unit.text, ids: original, citations: resolved.citations });
@@ -1007,6 +1011,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     const missingParameterDescriptions = [];
     const internalRepairs = [];
     const notePending = [];
+    const rejectedHeaders = new Set();
     const apiRetryEndpoints = new Set();
     for (const prose of parsed.articles) {
       const endpoint = selectable.find((item) => publicEndpointId(item) === prose.endpoint);
@@ -1016,7 +1021,15 @@ async function generateContentPackageCore(root, request, options = {}) {
       if (schemaIssue) { proseProblems.push(schemaIssue); apiRetryEndpoints.add(prose.endpoint); continue; }
       normalizeHeaderNotes(prose, notePending);
       const units = [prose.description, prose.intro, ...prose.notas];
-      for (const header of prose.responseHeaders) units.push(header.meaning, header.when);
+      for (const header of prose.responseHeaders) {
+        const headerIssues = [header.meaning, header.when].flatMap((unit) => [
+          ...referenceIssues(unit, selectable, parsed.articles),
+          ...proseIssues({ title: '', description: unit.text, intro: '', notas: [] }, endpoint, selectable, unit.refs),
+          ...apiUnitIssues([unit], context),
+        ]);
+        if (headerIssues.length || rejectedHeaderUnits.has(header.meaning) || rejectedHeaderUnits.has(header.when))
+          rejectedHeaders.add(header);
+      }
       for (const unit of units)
         repairApiRefs(unit, selectable, parsed.articles, internalRepairs);
       for (const item of [...(prose.responseDescriptions ?? []), ...(prose.parameterDescriptions ?? [])])
@@ -1124,10 +1137,20 @@ async function generateContentPackageCore(root, request, options = {}) {
       pending.push(...technical.pending);
       pending.push(...(endpoint.responseFields ?? []).filter((field) => !described.has(responseFieldPath(endpoint, field)))
         .map((field) => `descrição de resposta sem fonte: ${responseFieldPath(endpoint, field)}`));
+      const descriptions = new Map(prose.responseHeaders.map((header) => [header.name, header]));
+      const factualHeaders = (endpoint.responseHeaders ?? []).map((fact) => {
+        const description = descriptions.get(fact.name);
+        if (description && !rejectedHeaders.has(description)) return description;
+        pending.push(`descrever cabeçalho ${fact.name}`);
+        return { name: fact.name,
+          meaning: { text: `Cabeçalho ${fact.name}; descrição a confirmar.`, citations: [], refs: [] },
+          when: { text: typeof fact.condition === 'string' && fact.condition.trim()
+            ? fact.condition : 'a confirmar', citations: [], refs: [] } };
+      });
       const noteBlocks = NOTE_TYPES.map((type) => {
         const notes = prose.notas.filter((note) => note.type === type && note.text);
-        const table = type === 'Paginação e cabeçalhos' && prose.responseHeaders.length
-          ? `| Cabeçalho | O que significa | Quando aparece |\n|---|---|---|\n${prose.responseHeaders.map((header) =>
+        const table = type === 'Paginação e cabeçalhos' && factualHeaders.length
+          ? `| Cabeçalho | O que significa | Quando aparece |\n|---|---|---|\n${factualHeaders.map((header) =>
             `| \`${header.name}\` | ${renderUnit(header.meaning, parsed.articles, selectable).replace(/\|/gu, '\\|')} | ${renderUnit(header.when, parsed.articles, selectable).replace(/\|/gu, '\\|')} |`).join('\n')}` : '';
         const content = [...notes.map((note) => renderUnit(note, parsed.articles, selectable)), table].filter(Boolean);
         return content.length ? `### ${type}\n\n${content.join('\n\n')}` : '';
