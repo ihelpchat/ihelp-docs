@@ -91,6 +91,26 @@ test('cabeçalho escrito na nota exige tabela na nova tentativa', async () => {
   assert.match(result.summary, /cabeçalhos de resposta devem ficar na tabela/u);
 });
 
+test('nota que só repete cabeçalhos presentes na tabela é omitida com pendência interna', async () => {
+  const repeated = structuredClone(output);
+  repeated.articles[0].notas[2].text = 'Total-Pages conta os contatos que atendem aos filtros. Total-Pages-Exported conta os contatos devolvidos.';
+  const { result, calls } = await generate([repeated]);
+  assert.equal(calls, 1);
+  assert.equal(result.status, 'ready', result.summary);
+  assert.doesNotMatch(result.articles[0].body, /Total-Pages conta os contatos/u);
+  assert.match(result.articles[0].body, /\| `Total-Pages` \|/u);
+  assert.match(result.pending.join('; '), /nota.*cabeçalho.*omitida/iu);
+});
+
+test('nota mista preserva assunto independente e remove a frase de cabeçalho', async () => {
+  const mixed = structuredClone(output);
+  mixed.articles[0].notas[2].text = 'Total-Pages conta os contatos filtrados. A consulta aceita filtros combinados.';
+  const { result } = await generate([mixed]);
+  assert.equal(result.status, 'ready', result.summary);
+  assert.match(result.articles[0].body, /A consulta aceita filtros combinados/u);
+  assert.doesNotMatch(result.articles[0].body, /Total-Pages conta os contatos filtrados/u);
+});
+
 test('cabeçalho inventado é recusado mesmo quando tem formato válido', async () => {
   const invalid = structuredClone(output);
   invalid.articles[0].responseHeaders[0].name = 'X-Admin-Override';
