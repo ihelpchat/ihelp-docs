@@ -74,7 +74,7 @@ test('contexto público sob a raiz pilot chega ao prompt e pode ser citado', asy
       code: [{ available: true, repository: 'ihelpchat/front-react', ref: 'a'.repeat(40), role: 'frontend' }],
       screenFacts: [], support: { categories: [], rules: [] }, coverage: [], pending: [] };
     let prompt = '';
-    await planContent(root, { topic: 'Contatos', module: 'Contatos', description: 'Cadastrar contatos.' }, {
+    await planContent(root, { topic: 'Contatos', module: 'Contatos', description: 'Criar FAQ para cadastrar contatos.' }, {
       productContext: context, client: { responses: { create: async (payload) => {
         prompt = payload.input[1].content;
         return { model: 'fixture', output_text: JSON.stringify({ status: 'ready', guidance: '', questions: [],
