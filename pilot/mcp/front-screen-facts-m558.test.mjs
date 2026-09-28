@@ -431,3 +431,78 @@ test('limite sem feedback executado nem return não vira fato', async () => {
   }` };
   assert.equal((await run(files)).facts.some((fact) => fact.kind === 'uploadLimit'), false);
 });
+
+test('último modificador de presença vence nos dois sentidos', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const schema = yup.object({ phone: yup.string().optional().required('Obrigatório') });
+    useForm({ resolver: yupResolver(schema) });
+    return <form><input name="phone" /></form>;
+  }` };
+  const field = async (input) => (await run(input)).facts.find((fact) => fact.kind === 'field');
+  assert.equal((await field(files)).required, true);
+  const reversed = { ...files, [page]: files[page].replace("optional().required('Obrigatório')", "required('Obrigatório').optional()") };
+  assert.equal((await field(reversed)).required, false);
+});
+
+test('dois useForm com register distintos mantêm sua própria regra', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const yes = yup.object({ phone: yup.string().required('Obrigatório') });
+    const no = yup.object({ phone: yup.string().notRequired() });
+    const { register: r1 } = useForm({ resolver: yupResolver(yes) });
+    const { register: r2 } = useForm({ resolver: yupResolver(no) });
+    return <><form><input {...r1('phone')} /></form><form><input {...r2('phone')} /></form></>;
+  }` };
+  const fields = (await run(files)).facts.filter((fact) => fact.kind === 'field');
+  assert.deepEqual(fields.map((fact) => fact.required), [true, false]);
+  const unbound = { ...files, [page]: files[page].replace("{...r2('phone')}", 'name="phone"') };
+  const loose = (await run(unbound)).facts.filter((fact) => fact.kind === 'field');
+  assert.equal(loose[1].required, 'unknown');
+  assert.match(loose[1].note, /vínculo não provado/u);
+});
+
+test('Controller com control do segundo useForm usa somente o segundo schema', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const yes = yup.object({ phone: yup.string().required('Obrigatório') });
+    const no = yup.object({ phone: yup.string().notRequired() });
+    const first = useForm({ resolver: yupResolver(yes) });
+    const second = useForm({ resolver: yupResolver(no) });
+    return <><Controller name="phone" control={first.control} /><Controller name="phone" control={second.control} /></>;
+  }` };
+  assert.deepEqual((await run(files)).facts.filter((fact) => fact.kind === 'field').map((fact) => fact.required), [true, false]);
+});
+
+test('Formik ancestral e form único vinculam o campo; campo externo fica unknown', async () => {
+  const formik = { ...sources, [page]: `export default function ContactPage() {
+    const schema = yup.object({ phone: yup.string().required('Obrigatório') });
+    return <><Formik validationSchema={schema}><input name="phone" /></Formik><input name="phone" /></>;
+  }` };
+  assert.deepEqual((await run(formik)).facts.filter((fact) => fact.kind === 'field').map((fact) => fact.required), [true, 'unknown']);
+  const single = { ...formik, [page]: formik[page].replace('<Formik validationSchema={schema}>', '<form>').replace('</Formik>', '</form>').replace('<input name="phone" /></>;', '</>;')
+    .replace('return <><form>', 'useForm({ resolver: yupResolver(schema) }); return <><form>') };
+  assert.equal((await run(single)).facts.find((fact) => fact.kind === 'field')?.required, true);
+});
+
+test('zod só publica true para campo do object sem modificador opcional', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const schema = z.object({ phone: z.string(), notes: z.string().nullable() });
+    const { register } = useForm({ resolver: zodResolver(schema) });
+    return <form><input {...register('phone')} /><input {...register('notes')} /></form>;
+  }` };
+  assert.deepEqual((await run(files)).facts.filter((fact) => fact.kind === 'field').map((fact) => fact.required), [true, false]);
+  const reversed = { ...files, [page]: files[page].replace('z.string().nullable()', 'z.string().nullable().nonNullable()') };
+  assert.deepEqual((await run(reversed)).facts.filter((fact) => fact.kind === 'field').map((fact) => fact.required), [true, true]);
+});
+
+test('useController vincula campo ao control do segundo formulário', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const yes = yup.object({ phone: yup.string().required('Obrigatório') });
+    const no = yup.object({ phone: yup.string().notRequired() });
+    const first = useForm({ resolver: yupResolver(yes) });
+    const second = useForm({ resolver: yupResolver(no) });
+    const { field } = useController({ name: 'phone', control: second.control });
+    return <input {...field} />;
+  }` };
+  assert.equal((await run(files)).facts.find((fact) => fact.kind === 'field')?.required, false);
+  const changed = { ...files, [page]: files[page].replace('control: second.control', 'control: first.control') };
+  assert.equal((await run(changed)).facts.find((fact) => fact.kind === 'field')?.required, true);
+});
