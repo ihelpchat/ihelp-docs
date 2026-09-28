@@ -18,6 +18,7 @@ test('passo aceita vocabulário de interface com rótulo exato destacado e fato 
   assert.equal(check('passos', 'Clique em **Excluir tudo**.').sections.passos, undefined);
   assert.equal(check('passos', 'Clique em **Adicionar Contato** e suas vendas dobram em 30 dias.').sections.passos, undefined);
   assert.equal(check('passos', 'Clique em **Adicionar Contato** e suas vendas dobram.').sections.passos, undefined);
+  assert.equal(check('passos', 'Clique em **Adicionar Contato** e aguarde 30 dias.').sections.passos, undefined);
 });
 
 test('seções de negócio mantêm cobertura integral e vocabulário neutro restrito', () => {
@@ -27,6 +28,7 @@ test('seções de negócio mantêm cobertura integral e vocabulário neutro rest
   const result = (text) => validateFaqSections({ quandoUsar: [{ text, citations: [cite] }] }, ctx).sections.quandoUsar;
   assert.equal(result('Organizar contatos na tela ajuda a equipe.' )?.length, 1);
   assert.equal(result('Organizar contatos bloqueia clientes inadimplentes.'), undefined);
+  assert.equal(result('Organizar contatos ajuda a equipe e atende clientes inadimplentes.'), undefined);
   for (const word of ['tela', 'campo', 'botão', 'menu', 'lista', 'linha', 'perfil', 'página', 'opção', 'aba', 'janela', 'registro', 'item', 'ícone', 'caixa', 'lo', 'las'])
     assert.ok(FAQ_NEUTRAL_WORDS.includes(word), word);
 });
