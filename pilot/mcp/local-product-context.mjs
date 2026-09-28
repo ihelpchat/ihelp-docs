@@ -316,7 +316,8 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
         const content = await deadline.wait(fileRead(path, { encoding: 'utf8', signal: deadline.signal }));
         return content;
       } }));
-      screen = { facts: screens.flatMap((item) => item.facts), code: [...new Map(screens.flatMap((item) => item.code).map((item) => [item.path, item])).values()],
+      screen = { facts: screens.flatMap((item) => item.facts.map((fact) => ({ ...fact, route: item.route }))),
+        code: [...new Map(screens.flatMap((item) => item.code).map((item) => [item.path, item])).values()],
         files: [...new Set(screens.flatMap((item) => item.files))], pending: [...screens.flatMap((item) => item.pending),
           ...(screens.every((item) => !item.facts.length) ? [`tela não identificada para ${module || topic}`] : [])] };
     }

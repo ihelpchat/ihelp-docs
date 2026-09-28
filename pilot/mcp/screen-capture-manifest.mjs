@@ -2,14 +2,9 @@ import { containsSensitiveData } from './sensitive-data.mjs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-export async function loadScreenshotManifest(root) {
+export async function loadScreenshotManifest(_root) {
   try {
-    let raw;
-    try { raw = await readFile(join(process.env.MCP_STATE_DIR ?? '/data', 'screens/manifest.json'), 'utf8'); }
-    catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-      raw = await readFile(join(root, 'public/img/mcp/manifest.json'), 'utf8');
-    }
+    const raw = await readFile(join(process.env.MCP_STATE_DIR ?? '/data', 'screens/manifest.json'), 'utf8');
     const data = JSON.parse(raw);
     if (data.version !== 1 || !Array.isArray(data.entries)) throw new Error('Manifesto de screenshots inválido');
     return data;
@@ -22,8 +17,9 @@ export async function loadScreenshotManifest(root) {
 export function screenshotForStep(manifest, page, step, expectedSha) {
   if (!manifest || !Array.isArray(manifest.entries)) return null;
   const matches = manifest.entries.filter((entry) => entry.page === page && entry.step === step
-    && entry.file === `/img/mcp/${page}/${step}.png` && /^[a-f0-9]{40}$/u.test(entry.appSha ?? '')
-    && (!expectedSha || entry.appSha === expectedSha)
+    && entry.file === `/img/mcp/${page}/${step}.png`
+    && (entry.source === 'upload' || /^[a-f0-9]{40}$/u.test(entry.appSha ?? ''))
+    && (entry.source === 'upload' || !expectedSha || entry.appSha === expectedSha)
     && typeof entry.alt === 'string' && !containsSensitiveData(entry.alt));
   return matches.find((entry) => entry.source === 'upload') ?? matches.find((entry) => entry.source === 'automatic') ?? null;
 }

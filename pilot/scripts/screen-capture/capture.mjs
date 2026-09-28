@@ -1,32 +1,38 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { launch } from '../visual/measure.mjs';
 import { assertAllowedTarget } from '../guide-proof.mjs';
 import { containsSensitiveData } from '../../mcp/sensitive-data.mjs';
 import { credentialsFromEnv } from '../guide-proof.mjs';
+import { isUnsafeCaptureAction } from '../../mcp/faq-editorial.mjs';
 
 const slug = /^[a-z0-9][a-z0-9-]{0,79}$/u;
 const sha = /^[a-f0-9]{40}$/u;
 const routePattern = /^\/(?!\/)[a-z0-9/_-]*$/u;
 const outputRoot = resolve(import.meta.dirname, '../../public/img/mcp');
 
-export function capturePlan({ page, module, steps, coverage, screenFacts, appSha }) {
-  if (!slug.test(page) || !sha.test(appSha) || !Array.isArray(steps) || !steps.length) throw new Error('Plano de captura inválido');
+export function capturePlan({ page, module, tasks = [], coverage, screenFacts }) {
+  if (!slug.test(page) || !Array.isArray(screenFacts) || !Array.isArray(tasks)
+    || tasks.some((task) => typeof task !== 'string' || task.length > 120)) throw new Error('Plano de captura inválido');
   const entry = coverage.find((item) => item.module === module);
   if (!entry) throw new Error('Módulo ausente da coverage matrix');
   const routes = entry.productRoutes.filter((route) => routePattern.test(route) && !route.includes(':'));
-  return steps.map((step) => {
-    if (!slug.test(step.id) || !['button', 'link', 'textbox', 'combobox', 'menuitem', 'text'].includes(step.role)
-      || !step.label || containsSensitiveData(step.label) || !['click', 'none'].includes(step.action ?? 'none')
-      || step.alt && (containsSensitiveData(step.alt) || /[\[\]\n\r]/u.test(step.alt))) throw new Error('Passo de captura inválido');
-    const route = step.route ?? routes[0];
-    if (!routes.includes(route)) throw new Error('Rota não confirmada pela coverage matrix');
-    const fact = screenFacts.find((item) => (!item.route || item.route === route) && item.sha === appSha
-      && item.text === step.label && item.owner && ['action', 'field', 'text', 'route'].includes(item.kind));
-    if (!fact) throw new Error('Rótulo sem fato da tela com dono e SHA');
-    return { page, step: step.id, role: step.role, label: step.label, route, appSha,
-      alt: step.alt ?? `Tela de ${module}: ${step.label}`,
-      action: step.action ?? 'none' };
+  const selected = screenFacts.filter((fact) => ['action', 'field'].includes(fact.kind)
+    && fact.owner && sha.test(fact.sha ?? '') && typeof fact.text === 'string'
+    && fact.text.length <= 160 && !/[\[\]\n\r]/u.test(fact.text) && !containsSensitiveData(fact.text)
+    && (!fact.route || routes.includes(fact.route))
+    && (!tasks.length || tasks.some((task) => `${fact.text} ${fact.subject ?? ''}`.toLocaleLowerCase('pt-BR')
+      .includes(task.toLocaleLowerCase('pt-BR')))));
+  if (!routes.length || !selected.length) throw new Error('Nenhum fato da tela confirmado para captura');
+  return selected.slice(0, 20).map((fact, index) => {
+    const step = `${String(index + 1).padStart(2, '0')}-${fact.text.normalize('NFD').replace(/\p{Diacritic}/gu, '')
+      .toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '').slice(0, 55)}`;
+    const label = fact.text;
+    return { page, step, role: fact.kind === 'field' ? 'textbox' : 'button', label,
+      route: fact.route ?? routes[0], alt: `Tela de ${module}: ${label}`,
+      action: fact.kind === 'action' && /^(?:abrir|ver|mostrar|acessar)\b/iu.test(label)
+        && !isUnsafeCaptureAction(label) ? 'click' : 'none' };
   });
 }
 
@@ -40,20 +46,21 @@ export function chooseScreenshot(manifest, page, step) {
   return matches.find((entry) => entry.source === 'upload') ?? matches.find((entry) => entry.source === 'automatic') ?? null;
 }
 
-export async function addUploadedScreenshot({ manifest, page, step, file, alt, label, route, approved, appSha, root = outputRoot }) {
-  if (approved !== true || !sha.test(appSha) || !alt || containsSensitiveData(alt)
+export async function addUploadedScreenshot({ manifest, page, step, file, bytes, alt, label, route, approved, root = outputRoot }) {
+  if (approved !== true || !alt || containsSensitiveData(alt)
     || label && containsSensitiveData(label) || route && !routePattern.test(route))
     throw new Error('Upload requer revisão de privacidade');
   const image = checkedPath(page, step);
-  const bytes = await readFile(file);
-  if (bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') throw new Error('Upload precisa ser PNG');
+  const png = bytes ?? await readFile(file);
+  if (png.length > 2 * 1024 * 1024 || png.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') throw new Error('Upload precisa ser PNG de até 2 MiB');
   const destination = join(root, page, `${step}.png`);
   await mkdir(join(root, page), { recursive: true });
-  await copyFile(file, destination);
+  if (bytes) await writeFile(destination, png);
+  else await copyFile(file, destination);
   const previous = chooseScreenshot(manifest, page, step);
   manifest.entries = manifest.entries.filter((entry) => entry.page !== page || entry.step !== step);
   manifest.entries.push({ page, step, label: previous?.label ?? label ?? null, route: previous?.route ?? route ?? null,
-    file: image, alt, appSha, source: 'upload', masked: ['revisão humana'] });
+    file: image, alt, appSha: null, source: 'upload', masked: ['revisão humana'] });
   await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;
 }
@@ -68,11 +75,12 @@ async function login(page, origin, { email, password }) {
 }
 
 export async function captureScreens({ baseUrl, plan, storageState, fixture = false,
-  appSha, manifest = { version: 1, entries: [] }, root = outputRoot, env = process.env }) {
+  manifest = { version: 1, entries: [] }, root = outputRoot, env = process.env }) {
   const target = assertAllowedTarget(baseUrl, env);
   if (target.local !== fixture) throw new Error('Modo e host incompatíveis');
-  if (!sha.test(appSha) || !Array.isArray(plan) || !plan.length || plan.some((step) => step.appSha !== appSha))
-    throw new Error('SHA do plano inválido');
+  if (!Array.isArray(plan) || !plan.length || plan.some((step) => !slug.test(step.page)
+    || !slug.test(step.step) || !routePattern.test(step.route) || !step.label))
+    throw new Error('Plano interno inválido');
   if (!fixture && !storageState && !credentialsFromEnv(env).authorized.password) throw new Error('Sessão de QA ausente');
   if (storageState && resolve(storageState).startsWith(resolve(import.meta.dirname, '../../..') + '/'))
     throw new Error('storageState precisa ficar fora do repositório');
@@ -90,19 +98,34 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
     const page = await context.newPage();
     if (!fixture && !storageState) await login(page, target.url, credentialsFromEnv(env).authorized);
     let currentRoute = null;
+    let appSha = null;
     for (const step of plan) {
-      if (chooseScreenshot(manifest, step.page, step.step)?.source === 'upload') continue;
+      const uploaded = chooseScreenshot(manifest, step.page, step.step);
+      if (uploaded?.source === 'upload') {
+        uploaded.label = step.label;
+        uploaded.route = step.route;
+        continue;
+      }
       const image = checkedPath(step.page, step.step);
       if (currentRoute !== step.route) {
         await page.goto(`${target.url}${step.route}`, { waitUntil: 'domcontentloaded' });
         currentRoute = step.route;
+        if (!appSha) {
+          const bundle = await page.locator('script[src]').evaluateAll((nodes) => nodes.map((node) => node.src)
+            .find((url) => new URL(url).origin === location.origin && /\.js(?:\?|$)/u.test(url)) ?? null);
+          const content = bundle ? Buffer.from(await (await page.request.get(bundle)).body()) : Buffer.from(await page.content());
+          appSha = createHash('sha1').update(content).digest('hex');
+        }
       }
       const current = new URL(page.url());
       if (current.origin !== target.url || current.pathname !== step.route && !current.pathname.startsWith(`${step.route}/`))
         throw new Error('Navegação fora da rota confirmada');
-      const control = step.role === 'text'
-        ? page.getByText(step.label, { exact: true })
-        : page.getByRole(step.role, { name: step.label, exact: true });
+      const roles = step.role === 'button' ? ['button', 'link', 'menuitem']
+        : step.role === 'textbox' ? ['textbox', 'combobox'] : [step.role];
+      const candidates = roles.map((role) => page.getByRole(role, { name: step.label, exact: true }));
+      const control = step.role === 'text' ? page.getByText(step.label, { exact: true })
+        : candidates[(await Promise.all(candidates.map((candidate) => candidate.count()))).findIndex((count) => count > 0)]
+          ?? candidates[0];
       await control.waitFor({ state: 'visible' });
       if (await control.count() !== 1) throw new Error('Rótulo ausente ou ambíguo');
       if (!['click', 'none'].includes(step.action)) throw new Error('Ação não permitida');
@@ -152,7 +175,8 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         document.querySelector('[data-screen-capture-overlay]')?.remove();
         document.querySelector('[data-screen-capture-style]')?.remove();
       });
-      if (step.action === 'click') await control.click();
+      if (step.action === 'click' && !isUnsafeCaptureAction(step.label)
+        && /^(?:abrir|ver|mostrar|acessar)\b/iu.test(step.label)) await control.click();
       manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step);
       manifest.entries.push({ page: step.page, step: step.step, label: step.label, route: step.route,
         file: image, alt: step.alt, appSha, source: 'automatic', masked: [...new Set(mask.map((item) => item.reason))] });

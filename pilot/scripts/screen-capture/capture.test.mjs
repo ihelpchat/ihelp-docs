@@ -13,18 +13,15 @@ import { capturePage, downloadPage, imagesUsedByArticles } from '../../mcp/scree
 const appSha = 'a'.repeat(40);
 const coverage = [{ module: 'Contatos', productRoutes: ['/contact'] }];
 const screenFacts = [
-  { kind: 'action', text: 'Adicionar contato', owner: 'fixture', sha: appSha },
+  { kind: 'action', text: 'Abrir contato', owner: 'fixture', sha: appSha },
   { kind: 'action', text: 'Salvar contato', owner: 'fixture', sha: appSha },
 ];
-const steps = [
-  { id: 'abrir', role: 'button', label: 'Adicionar contato', route: '/contact', action: 'click' },
-  { id: 'salvar', role: 'button', label: 'Salvar contato', route: '/contact' },
-];
+const getScreenFacts = async () => screenFacts;
 
 test('fixture local: rota, clique, destaque, máscara e manifesto', async () => {
   const server = createServer((req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.end(`<!doctype html><html><body><button id="open">Adicionar contato</button>
+    res.end(`<!doctype html><html><body><button id="open">Abrir contato</button>
       <p>cliente@exemplo.com</p>
       <table><tbody><tr><td>Nome Particular</td></tr></tbody></table>
       <button id="save" hidden>Salvar contato</button><script>
@@ -35,15 +32,17 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
   const root = await mkdtemp(join(tmpdir(), 'screen-capture-'));
   try {
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
-    const plan = capturePlan({ page: 'contatos', module: 'Contatos', steps, coverage, screenFacts, appSha });
-    const manifest = await captureScreens({ baseUrl, plan, appSha, fixture: true, root });
+    const plan = capturePlan({ page: 'contatos', module: 'Contatos', coverage, screenFacts });
+    const manifest = await captureScreens({ baseUrl, plan, fixture: true, root });
     assert.equal(manifest.entries.length, 2);
     assert.equal(manifest.entries[0].route, '/contact');
-    assert.equal(manifest.entries[0].file, '/img/mcp/contatos/abrir.png');
+    assert.equal(manifest.entries[0].file, `/img/mcp/contatos/${plan[0].step}.png`);
+    assert.match(manifest.entries[0].appSha, /^[a-f0-9]{40}$/u);
+    assert.notEqual(manifest.entries[0].appSha, appSha, 'versão deve vir da página, não do chamador');
     assert.ok(manifest.entries[0].masked.includes('varredura sensível'));
     assert.ok(manifest.entries[0].masked.includes('campo ou conteúdo dinâmico'));
     assert.deepEqual(JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')), manifest);
-    const png = await readFile(join(root, 'contatos/abrir.png'));
+    const png = await readFile(join(root, `contatos/${plan[0].step}.png`));
     assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
     assert.ok(png.length > 500);
     const browser = await launch();
@@ -66,17 +65,16 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
       assert.ok(colors.frame > 100, 'elemento recebe moldura no PNG');
     } finally { await browser.close(); }
     assert.doesNotMatch(JSON.stringify(manifest), /cliente@exemplo/u);
-    await assert.rejects(captureScreens({ baseUrl: 'https://ihelpchat.com.br', plan, appSha, root }), /host não permitido/u);
+    await assert.rejects(captureScreens({ baseUrl: 'https://ihelpchat.com.br', plan, root }), /host não permitido/u);
     const uploaded = join(root, 'upload.png');
     await writeFile(uploaded, png);
-    await addUploadedScreenshot({ manifest, page: 'contatos', step: 'abrir', file: uploaded,
-      alt: 'Tela de Contatos com o botão de adicionar', approved: true, appSha, root });
-    assert.equal(chooseScreenshot(manifest, 'contatos', 'abrir').source, 'upload');
-    assert.equal(screenshotForStep(manifest, 'contatos', 'abrir').source, 'upload');
-    assert.equal(screenshotForStep(manifest, 'contatos', 'abrir', 'b'.repeat(40)), null);
-    const article = attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Clique em Adicionar contato.\n2. Clique em Salvar contato.' }, manifest);
-    assert.match(article.body, /!\[Tela de Contatos com o botão de adicionar\]\(\/img\/mcp\/contatos\/abrir\.png\)/u);
-    assert.match(article.body, /!\[Tela de Contatos: Salvar contato\]\(\/img\/mcp\/contatos\/salvar\.png\)/u);
+    await addUploadedScreenshot({ manifest, page: 'contatos', step: plan[0].step, file: uploaded,
+      alt: 'Tela de Contatos com o botão de abrir', approved: true, root });
+    assert.equal(chooseScreenshot(manifest, 'contatos', plan[0].step).source, 'upload');
+    assert.equal(screenshotForStep(manifest, 'contatos', plan[0].step).source, 'upload');
+    const article = attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Clique em Abrir contato.\n2. Clique em Salvar contato.' }, manifest);
+    assert.match(article.body, /!\[Tela de Contatos com o botão de abrir\]/u);
+    assert.match(article.body, /!\[Tela de Contatos: Salvar contato\]/u);
   } finally {
     await new Promise((ok) => server.close(ok));
     await rm(root, { recursive: true, force: true });
@@ -84,9 +82,17 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
 });
 
 test('plano exige rota e fato da tela com dono', () => {
-  assert.throws(() => capturePlan({ page: 'contatos', module: 'Contatos', appSha, coverage, screenFacts: [], steps }), /fato da tela/u);
-  assert.throws(() => capturePlan({ page: 'contatos', module: 'Contatos', appSha, coverage, screenFacts,
-    steps: [{ ...steps[0], route: '/production' }] }), /coverage matrix/u);
+  assert.throws(() => capturePlan({ page: 'contatos', module: 'Contatos', coverage, screenFacts: [] }), /fato da tela/u);
+  assert.throws(() => capturePlan({ page: 'contatos', module: 'Contatos', coverage,
+    screenFacts: [{ ...screenFacts[0], route: '/production' }] }), /fato da tela/u);
+});
+
+test('plano preserva a rota de cada fato em módulos com mais de uma tela', () => {
+  const plan = capturePlan({ page: 'contatos', module: 'Contatos',
+    coverage: [{ module: 'Contatos', productRoutes: ['/contact', '/contact/import'] }],
+    screenFacts: [{ ...screenFacts[0], route: '/contact' },
+      { ...screenFacts[1], route: '/contact/import' }] });
+  assert.deepEqual(plan.map((step) => step.route), ['/contact', '/contact/import']);
 });
 
 test('host exato aprovado aceita homologação Railway e rejeita produção conhecida', () => {
@@ -100,21 +106,19 @@ test('serviço MCP captura fixture, baixa imagens e limita volume sem vazar segr
   const secret = 'senha-super-secreta-da-fixture';
   const server = createServer((_req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.end('<button>Adicionar contato</button><p>cliente@exemplo.com</p>');
+    res.end('<button>Abrir contato</button><p>cliente@exemplo.com</p>');
   });
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
   const root = await mkdtemp(join(tmpdir(), 'screen-service-'));
   try {
-    const result = await capturePage({ page: 'contatos', module: 'Contatos', appSha,
-      steps: [steps[0]], screenFacts }, {
+    const result = await capturePage({ page: 'contatos', module: 'Contatos', tasks: ['Abrir'] }, {
       baseUrl: `http://127.0.0.1:${server.address().port}`, root, fixture: true,
-      coverage, env: { GUIDE_QA_AUTHORIZED_PASSWORD: secret },
+      coverage, getScreenFacts, env: { GUIDE_QA_AUTHORIZED_PASSWORD: secret },
     });
     assert.equal(result.entries.length, 1);
-    const second = await capturePage({ page: 'robos', module: 'Robôs', appSha,
-      steps: [steps[0]], screenFacts }, {
+    const second = await capturePage({ page: 'robos', module: 'Robôs', tasks: ['Abrir'] }, {
       baseUrl: `http://127.0.0.1:${server.address().port}`, root, fixture: true,
-      coverage: [{ module: 'Robôs', productRoutes: ['/contact'] }],
+      coverage: [{ module: 'Robôs', productRoutes: ['/contact'] }], getScreenFacts,
     });
     assert.equal(second.entries.length, 2, 'capturar outra página preserva o manifesto anterior');
     const read = await downloadPage('contatos', { root, limit: 1 });
@@ -122,14 +126,14 @@ test('serviço MCP captura fixture, baixa imagens e limita volume sem vazar segr
     assert.equal(Buffer.from(read.images[0].base64, 'base64').subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
     assert.doesNotMatch(JSON.stringify(read), /senha-super|cliente@exemplo/u);
     const selected = await imagesUsedByArticles([
-      { path: 'docs/contatos', body: '![Tela de Contatos](/img/mcp/contatos/abrir.png)' },
+      { path: 'docs/contatos', body: '![Tela de Contatos](/img/mcp/contatos/01-abrir-contato.png)' },
       { path: 'docs/robos', body: 'Sem print nesta página.' },
     ], { root });
-    assert.deepEqual(selected.map((image) => image.file), ['pilot/public/img/mcp/contatos/abrir.png']);
+    assert.deepEqual(selected.map((image) => image.file), ['pilot/public/img/mcp/contatos/01-abrir-contato.png']);
     assert.equal(selected[0].base64, read.images[0].base64);
     await assert.rejects(downloadPage('contatos', { root, limit: 5 }), /Consulta de telas inválida/u);
     await assert.rejects(downloadPage('../contatos', { root }), /Consulta de telas inválida/u);
-    await writeFile(join(root, 'contatos/abrir.png'), Buffer.concat([
+    await writeFile(join(root, 'contatos/01-abrir-contato.png'), Buffer.concat([
       Buffer.from(read.images[0].base64, 'base64'), Buffer.alloc(2 * 1024 * 1024),
     ]));
     await assert.rejects(downloadPage('contatos', { root }), /excedem o teto/u);

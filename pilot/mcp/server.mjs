@@ -11,7 +11,7 @@ import { authorizeTool, registerToolPolicy, requestIdentity } from './access-con
 import { createGuide } from './create-guide.mjs';
 import { atualizarPorDeploy } from './update-by-deploy.mjs';
 import { refreshCodeProduct } from './code-refresh-offer.mjs';
-import { capturePage, downloadPage } from './screen-capture-service.mjs';
+import { capturePage, downloadPage, uploadPage } from './screen-capture-service.mjs';
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
 const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto']);
@@ -202,31 +202,45 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     inputSchema: z.strictObject({
       page: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
       module: z.string().min(2).max(80),
-      appSha: z.string().regex(/^[a-f0-9]{40}$/),
-      steps: z.array(z.strictObject({
-        id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
-        role: z.enum(['button', 'link', 'textbox', 'combobox', 'menuitem', 'text']),
-        label: z.string().min(1).max(160), route: z.string().max(200).optional(),
-        action: z.enum(['click', 'none']).optional(), alt: z.string().max(240).optional(),
-      })).min(1).max(20),
-      screenFacts: z.array(z.strictObject({
-        kind: z.enum(['action', 'field', 'text', 'route']), text: z.string().min(1).max(160),
-        owner: z.string().min(1).max(300), sha: z.string().regex(/^[a-f0-9]{40}$/),
-        route: z.string().max(200).optional(),
-      })).min(1).max(200),
+      tasks: z.array(z.string().min(2).max(120)).max(20).optional(),
       requestedBy: requestedBySchema,
     }),
-  }, async ({ requestedBy, page, module, appSha, steps, screenFacts }) => {
+  }, async ({ requestedBy, page, module, tasks }) => {
     if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
     const target = auditTarget(module, page);
     await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'attempt' });
     try {
-      const manifest = await capturePage({ page, module, appSha, steps, screenFacts });
+      const manifest = await capturePage({ page, module, tasks });
       await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'success' });
       return textResult({ page, captured: manifest.entries.filter((entry) => entry.page === page).length });
     } catch {
       await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'failure' });
       return textResult({ error: 'Captura recusada ou indisponível' }, true);
+    }
+  });
+
+  registerTool('enviar_tela', {
+    mutates: true,
+    description: 'Grava PNG revisado no manifesto privado de capturas; prevalece sobre o automático.',
+    inputSchema: z.strictObject({
+      page: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+      step: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+      base64: z.string().max(3 * 1024 * 1024),
+      alt: z.string().min(1).max(240),
+      approved: z.literal(true),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ requestedBy, page, step, base64, alt, approved }) => {
+    if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    const target = auditTarget(page, step);
+    await auditOperation(root, { actor: requestedBy, operation: 'enviar_tela', target, result: 'attempt' });
+    try {
+      await uploadPage({ page, step, base64, alt, approved });
+      await auditOperation(root, { actor: requestedBy, operation: 'enviar_tela', target, result: 'success' });
+      return textResult({ page, step, source: 'upload' });
+    } catch {
+      await auditOperation(root, { actor: requestedBy, operation: 'enviar_tela', target, result: 'failure' });
+      return textResult({ error: 'Upload recusado' }, true);
     }
   });
 

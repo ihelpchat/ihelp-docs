@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { searchLocalProductContext } from './local-product-context.mjs';
 
 const slug = /^[a-z0-9][a-z0-9-]{0,79}$/u;
 const MAX_IMAGES = 4;
@@ -7,21 +8,46 @@ const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 6 * 1024 * 1024;
 const defaultRoot = () => resolve(process.env.MCP_STATE_DIR ?? '/data', 'screens');
 
-export async function capturePage({ page, module, steps, screenFacts, appSha }, {
+export async function capturePage(input, {
   baseUrl = process.env.GUIDE_QA_STAGING_URL,
-  root = defaultRoot(), fixture = false, env = process.env, coverage,
+  root = defaultRoot(), fixture = false, env = process.env, coverage, storageState,
+  getScreenFacts = async (module) => {
+    const result = await searchLocalProductContext(module, module, { repositoryIds: ['frontend'] });
+    const front = result.code.find((item) => item.role === 'frontend' && item.available);
+    if (!front?.screenFacts?.length) throw new Error('Fatos da tela indisponíveis');
+    return front.screenFacts;
+  },
 } = {}) {
+  if (!input || Object.keys(input).some((key) => !['page', 'module', 'tasks'].includes(key)))
+    throw new Error('Plano do chamador: entrada não permitida');
+  const { page, module, tasks = [] } = input;
+  if (!slug.test(page ?? '') || typeof module !== 'string' || !module.trim()) throw new Error('Página inválida');
   const { capturePlan, captureScreens } = await import('../scripts/screen-capture/capture.mjs');
   if (!baseUrl) throw new Error('Destino de QA ausente');
   const matrix = coverage ?? JSON.parse(await readFile(new URL('../architecture/coverage-matrix.json', import.meta.url), 'utf8'));
-  const plan = capturePlan({ page, module, steps, screenFacts, appSha, coverage: matrix });
+  const screenFacts = await getScreenFacts(module);
+  const plan = capturePlan({ page, module, tasks, screenFacts, coverage: matrix });
   if (plan.length > 20) throw new Error('Plano excede 20 passos');
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8').catch((error) => {
     if (error.code === 'ENOENT') return '{"version":1,"entries":[]}';
     throw error;
   }));
   if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error('Manifesto de telas inválido');
-  return captureScreens({ baseUrl, plan, appSha, root, fixture, env, manifest });
+  return captureScreens({ baseUrl, plan, root, fixture, env, manifest, storageState });
+}
+
+export async function uploadPage({ page, step, base64, alt, approved }, { root = defaultRoot() } = {}) {
+  const { addUploadedScreenshot } = await import('../scripts/screen-capture/capture.mjs');
+  if (!slug.test(page ?? '') || !slug.test(step ?? '') || typeof base64 !== 'string'
+    || base64.length > 3 * 1024 * 1024 || !/^[A-Za-z0-9+/]+={0,2}$/u.test(base64))
+    throw new Error('Upload de tela inválido');
+  const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8').catch((error) => {
+    if (error.code === 'ENOENT') return '{"version":1,"entries":[]}';
+    throw error;
+  }));
+  if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error('Manifesto de telas inválido');
+  return addUploadedScreenshot({ manifest, page, step, bytes: Buffer.from(base64, 'base64'), alt,
+    approved, root });
 }
 
 export async function downloadPage(page, { root = defaultRoot(), limit = MAX_IMAGES } = {}) {
