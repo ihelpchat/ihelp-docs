@@ -1,1 +1,1 @@
-export const assistantDisplayName = 'Claricia — assistente virtual do iHelp';
+export const assistantDisplayName = 'Claricia · assistente de IA';
