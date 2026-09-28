@@ -142,7 +142,7 @@ test('SHA do front com dez dígitos consecutivos chega íntegro ao prompt e vali
   assert.ok(prompt.includes(sha));
   assert.equal(prompt.includes('[dado removido]'), false);
   const citation = { repository: fact.repository, path: 'src/Fixture.tsx', lineStart: 12, lineEnd: 12, sha };
-  assert.equal(validateFaqSections({ passos: [unit('Clique em Criar novo robô.', [citation])] },
+  assert.equal(validateFaqSections({ passos: [unit('Clique em **Criar novo robô**.', [citation])] },
     { screenFacts: adaptScreenFacts({ facts: [fact], sha }) }).sections.passos?.length, 1);
   }
 });
@@ -153,9 +153,9 @@ test('citação aceita faixa curta contendo o fato da tela', () => {
     source: 'src/Fixture.tsx:12' }] });
   const cite = { repository: 'ihelpchat/front-react', path: 'src/Fixture.tsx', sha,
     lineStart: 10, lineEnd: 14 };
-  assert.equal(validateFaqSections({ passos: [unit('Clique em Criar novo robô.', [cite])] },
+  assert.equal(validateFaqSections({ passos: [unit('Clique em **Criar novo robô**.', [cite])] },
     { screenFacts: facts }).sections.passos?.length, 1);
-  assert.equal(validateFaqSections({ passos: [unit('Clique em Criar novo robô.', [
+  assert.equal(validateFaqSections({ passos: [unit('Clique em **Criar novo robô**.', [
     { ...cite, lineStart: 15, lineEnd: 16 }])] }, { screenFacts: facts }).sections.passos, undefined);
 });
 
@@ -239,20 +239,20 @@ test('required real de M5.58 governa afirmações em passos e dúvidas', () => {
       source: 'src/Contact.tsx:12', owner: 'ContactPage', subject: 'contato' }] });
     const context = { screenFacts: facts, support: { categories: [{ category: 'Contatos', guidance: supportQuote }] } };
     for (const [word, permitted] of [['obrigatório', required === true], ['opcional', required === false]]) {
-      const sentence = `Nome ${word}.`;
+      const sentence = `**Nome** ${word}.`;
       const sections = { passos: [unit(sentence, [citation])],
         duvidas: [unit(sentence, [{ source: 'suporte', quote: supportQuote }])] };
       const result = validateFaqSections(sections, context);
       for (const key of ['passos', 'duvidas']) assert.equal(Boolean(result.sections[key]), permitted,
         `${key}: required=${required}, ${word}`);
     }
-    assert.equal(validateFaqSections({ passos: [unit('Nome.', [citation])] }, context).sections.passos?.length, 1);
+    assert.equal(validateFaqSections({ passos: [unit('**Nome**.', [citation])] }, context).sections.passos?.length, 1);
   }
   const distinct = adaptScreenFacts({ sha, facts: [
     { kind: 'field', name: 'name', text: 'Nome', required: 'unknown', source: 'src/Contact.tsx:12' },
     { kind: 'field', name: 'surname', text: 'Sobrenome', required: true, source: 'src/Contact.tsx:13' },
   ] });
-  assert.equal(validateFaqSections({ passos: [unit('Sobrenome obrigatório.', [{ ...citation,
+  assert.equal(validateFaqSections({ passos: [unit('**Sobrenome** obrigatório.', [{ ...citation,
     lineStart: 13, lineEnd: 13 }])] }, { screenFacts: distinct }).sections.passos?.length, 1);
 });
 
@@ -261,25 +261,25 @@ test('obrigatoriedade vinda do schema usa a linha do schema como fonte', () => {
   const facts = adaptScreenFacts({ sha, facts: [{ kind: 'field', name: 'name', text: 'Nome',
     required: true, source: 'src/Contact.tsx:12', validationSource: 'src/ContactSchema.ts:7' }] });
   const cite = (path, lineStart) => ({ repository: 'ihelpchat/front-react', path, lineStart, lineEnd: lineStart, sha });
-  const check = (citation) => validateFaqSections({ passos: [unit('Nome obrigatório.', [citation])] }, { screenFacts: facts });
+  const check = (citation) => validateFaqSections({ passos: [unit('**Nome** obrigatório.', [citation])] }, { screenFacts: facts });
   assert.equal(check(cite('src/Contact.tsx', 12)).sections.passos, undefined);
   assert.equal(check(cite('src/ContactSchema.ts', 7)).sections.passos?.length, 1);
 });
 
-test('cobertura integral vale para resposta e passos, com uma alteração por negativo', () => {
+test('cobertura integral na resposta e regras de número e promessa nos passos', () => {
   const sha = 'a'.repeat(40);
   const fact = { repository: 'ihelpchat/front-react', path: 'src/Contact.tsx', lineStart: 12,
     lineEnd: 12, sha, kind: 'action', text: 'Adicionar Contato' };
   const citation = (({ repository, path, lineStart, lineEnd, sha: revision }) =>
     ({ repository, path, lineStart, lineEnd, sha: revision }))(fact);
   const context = { screenFacts: [fact] };
-  const sentence = 'Clique em Adicionar Contato.';
+  const sentence = 'Clique em **Adicionar Contato**.';
   const check = (text) => validateFaqSections({ resposta: [unit(text, [citation])],
     passos: [unit(text, [citation])] }, context);
   const accepted = check(sentence);
   assert.equal(accepted.sections.resposta?.length, 1);
   assert.equal(accepted.sections.passos?.length, 1);
-  const rejected = check('Clique em Adicionar Contato e suas vendas dobram em 30 dias.');
+  const rejected = check('Clique em **Adicionar Contato** e suas vendas dobram em 30 dias.');
   assert.equal(rejected.sections.resposta, undefined);
   assert.equal(rejected.sections.passos, undefined);
   assert.deepEqual(rejected.blocking, ['resposta', 'passos']);
@@ -349,9 +349,9 @@ test('pacote FAQ fica ready com dúvida secundária pendente e seção sem fonte
   const context = { groundingRequired: true,
     matches: [{ ...citation(12), line: 12, ref: sha, excerpt: '12: Adicionar Contato' }],
     code: [{ available: true, role: 'frontend', ref: sha, repository: 'ihelpchat/front-react' }],
-    screenFacts: [direct, ...steps].map((text, index) => ({ kind: 'text', text,
+    screenFacts: [{ kind: 'route', text: 'Contatos', source: 'src/Contact.tsx:11', sha }, ...[direct, ...steps].map((text, index) => ({ kind: 'action', text: 'Adicionar Contato',
       property: 'translate', owner: 'ContactPage', subject: 'contato',
-      source: `src/Contact.tsx:${index + 12}`, repository: 'ihelpchat/front-react', sha })),
+      source: `src/Contact.tsx:${index + 12}`, repository: 'ihelpchat/front-react', sha }))],
     support: { categories: [], rules: [] }, coverage: [], pending: [], businessContext: [], faqStyleExamples: [] };
   const result = await generateContentPackage(new URL('../', import.meta.url).pathname,
     { topic: 'Contatos', module: 'Contatos', description: 'Criar FAQ para cadastrar contatos.' },
@@ -362,7 +362,7 @@ test('pacote FAQ fica ready com dúvida secundária pendente e seção sem fonte
         return { model: 'fixture', output_text: JSON.stringify(reply) };
       } } } });
   assert.equal(result.status, 'ready', JSON.stringify(result.questions));
-  assert.match(result.articles[0].body, /^Abra Contatos/u);
+  assert.match(result.articles[0].body, /^Na tela \*\*Contatos\*\*/u);
   assert.doesNotMatch(result.articles[0].body, /Erros comuns/u);
   assert.match(result.articles[0].body, /## Quando falar com o suporte\n\n/u);
   assert.ok(result.pending.some((item) => item.includes('Qual formato do telefone')));
@@ -390,7 +390,7 @@ test('plano da Agenda sai ready quando só pergunta detalhes secundários', asyn
   assert.equal(plan.pending.filter((item) => item.startsWith('pergunta pendente:')).length, 2);
 });
 
-test('FAQ reescreve uma vez a palavra sem fonte e bloqueia núcleo ainda descoberto', async () => {
+test('FAQ ignora resposta direta livre do modelo', async () => {
   const sha = 'a'.repeat(40);
   const direct = 'Abra Contatos no menu e clique em Adicionar Contato para cadastrar uma pessoa da sua lista.';
   const steps = [
@@ -398,10 +398,10 @@ test('FAQ reescreve uma vez a palavra sem fonte e bloqueia núcleo ainda descobe
     'Clique em Adicionar Contato e preencha os campos mostrados na tela para iniciar o cadastro.',
     'Confira as informações de Adicionar Contato antes de avançar e volte à lista para localizar o cadastro.',
   ];
-  const facts = [direct, ...steps].map((text, index) => ({ kind: 'text', text,
+  const facts = [{ kind: 'route', text: 'Contatos', source: 'src/Contact.tsx:11', sha }, ...[direct, ...steps].map((text, index) => ({ kind: 'action', text: 'Adicionar Contato',
     property: 'translate', owner: 'ContactPage', subject: 'contato',
-    source: `src/Contact.tsx:${index + 12}`, repository: 'ihelpchat/front-react', sha }));
-  const citation = (line) => ({ repository: facts[0].repository, path: 'src/Contact.tsx',
+    source: `src/Contact.tsx:${index + 12}`, repository: 'ihelpchat/front-react', sha }))];
+  const citation = (line) => ({ repository: 'ihelpchat/front-react', path: 'src/Contact.tsx',
     lineStart: line, lineEnd: line, sha });
   const packageFor = (bad) => ({ status: 'ready', summary: 'FAQ.', questions: [], articles: [{
     path: 'docs/sobre-o-sistema/contatos-novos', title: 'Contatos novos', description: 'FAQ.',
@@ -410,7 +410,7 @@ test('FAQ reescreve uma vez a palavra sem fonte e bloqueia núcleo ainda descobe
       passos: steps.map((text, index) => unit(text, [citation(index + 13)])) },
   }] });
   const context = { groundingRequired: true, code: [{ available: true, role: 'frontend', ref: sha,
-    repository: facts[0].repository }], matches: [{ ...citation(12), line: 12, ref: sha, excerpt: '12: Adicionar Contato' }],
+    repository: 'ihelpchat/front-react' }], matches: [{ ...citation(12), line: 12, ref: sha, excerpt: '12: Adicionar Contato' }],
     screenFacts: facts, support: { categories: [], rules: [] }, coverage: [], pending: [],
     businessContext: [], faqStyleExamples: [] };
   for (const corrected of [true, false]) {
@@ -424,9 +424,8 @@ test('FAQ reescreve uma vez a palavra sem fonte e bloqueia núcleo ainda descobe
           return { model: 'fixture', output_text: JSON.stringify(packageFor(calls === 1 || !corrected)) };
         } } },
       });
-    assert.equal(calls, 2);
-    assert.ok(retryPromptSeen);
-    assert.equal(result.status, corrected ? 'ready' : 'needs_information');
-    if (!corrected) assert.ok(result.questions.some((item) => item.includes('faltam fontes')));
+    assert.ok(calls >= 1 && calls <= 2);
+    assert.equal(result.status, 'ready', JSON.stringify(result.questions));
+    assert.doesNotMatch(result.articles[0].body, /vendas dobram/u);
   }
 });

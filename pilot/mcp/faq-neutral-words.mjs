@@ -258,7 +258,26 @@ voce
 voces
 vos
 vou
-zero`.trim().split(/\s+/u));
+zero
+tela
+campo
+botão
+menu
+lista
+linha
+perfil
+página
+opção
+aba
+janela
+registro
+item
+ícone
+caixa
+lo
+la
+los
+las`.trim().split(/\s+/u));
 
 // Verbos de interação não afirmam uma capacidade específica; seus objetos exigem fonte.
 export const FAQ_NEUTRAL_VERBS = Object.freeze([

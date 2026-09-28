@@ -47,7 +47,8 @@ const contentWords = (value, request = {}) => {
   return words(value).filter((word) => word.length > 2
     && (word === 'escolhas' || !neutral.has(singular(word))) && !theme.has(faqStem(word)));
 };
-const PROMISES = ['aumenta', 'reduz', 'garante', 'dobra', 'sempre', 'nunca', 'melhor', 'economiza'];
+const promiseRoot = /^(?:aument|reduz|garant|dobr|economiz|bloque|melhor)[a-z]*$|^(?:sempre|nunca)$/u;
+const promiseStem = (word) => word.match(/^(?:aument|reduz|garant|dobr|economiz|bloque|melhor)/u)?.[0] ?? word;
 const numbers = (value) => String(value ?? '').match(/(?:R\$|US\$|€|\$)?\s*\d+(?:[.,]\d+)*(?:\s*%|\s*(?:dias?|horas?|minutos?|meses?|anos?))?/giu) ?? [];
 const properNames = (value) => [...String(value ?? '').matchAll(/\p{L}+/gu)]
   .filter((match) => /\p{Ll}\p{Lu}/u.test(match[0]) || (match.index !== 0 && /^\p{Lu}/u.test(match[0])))
@@ -57,12 +58,12 @@ const syntheticEvidence = ['nome', 'email', 'telefone', 'id', 'numero', 'data', 
   .map((name) => valueFor({ name })).join(' ');
 
 // Ponto único para um verificador semântico futuro; hoje a decisão é extrativa.
-function supportedClaim(text, sources, { example = false, request = {} } = {}) {
+function supportedClaim(text, sources, { example = false, request = {}, lexical = true } = {}) {
   const evidenceSources = [...sources, request.details ?? '', ...(example ? [syntheticEvidence] : [])];
   const evidence = evidenceSources.join(' ');
   const theme = new Set(words(`${request.topic ?? ''} ${request.description ?? ''}`).map(faqStem));
   const cited = new Set(words(evidence).map(faqStem));
-  const uncovered = [...new Set(contentWords(text, request).filter((word) => !cited.has(faqStem(word))))];
+  const uncovered = lexical ? [...new Set(contentWords(text, request).filter((word) => !cited.has(faqStem(word))))] : [];
   // Números, nomes e promessas obedecem à mesma cobertura total, inclusive nas seções centrais.
   if (numbers(text).some((number) => !evidenceSources
     .some((source) => fold(source).includes(fold(number).trim())))) {
@@ -71,10 +72,66 @@ function supportedClaim(text, sources, { example = false, request = {} } = {}) {
   if (properNames(text).some((name) => !fold(evidence).includes(name) && !theme.has(faqStem(name)))) {
     for (const name of properNames(text)) if (!fold(evidence).includes(name) && !theme.has(faqStem(name)) && !uncovered.includes(name)) uncovered.push(name);
   }
-  if (PROMISES.some((word) => words(text).includes(word) && !words(evidence).includes(word))) {
-    for (const word of PROMISES) if (words(text).includes(word) && !words(evidence).includes(word) && !uncovered.includes(word)) uncovered.push(word);
-  }
+  const citedPromises = new Set(words(evidence).filter((word) => promiseRoot.test(word)).map(promiseStem));
+  for (const word of words(text).filter((item) => promiseRoot.test(item)))
+    if (!citedPromises.has(promiseStem(word)) && !uncovered.includes(word)) uncovered.push(word);
   return uncovered;
+}
+
+const citeOf = ({ repository, path, lineStart, lineEnd, sha }) =>
+  ({ repository, path, lineStart, lineEnd, sha });
+
+// The direct answer is assembled from requested tasks backed by screen facts.
+export function deterministicFaqAnswer(request = {}, screenFacts = []) {
+  const screenFact = screenFacts.find((fact) => fact.kind === 'route' && fact.text)
+    ?? screenFacts.find((fact) => fact.text && hasLabel(fact.text, request.topic));
+  const screen = screenFact?.kind === 'route' ? screenFact.text : screenFact ? request.topic : null;
+  const asked = fold(`${request.description ?? ''} ${request.details ?? ''}`);
+  const verbs = [
+    [/\bbusc/u, /\bbusc/u, 'buscar'],
+    [/\bcadastr/u, /\b(?:cadastr|cri|adicion)/u, 'cadastrar'],
+    [/\b(?:cri|adicion)/u, /\b(?:cri|adicion)/u, /\brob[oô]|bot\b/iu.test(request.topic ?? '') ? 'criar' : 'cadastrar'],
+    [/\bedit/u, /\bedit/u, 'editar'],
+    [/\b(?:responsav|propriet|atribui|carteiriz|vincul)/u, /\b(?:responsav|propriet|departamento|usuario)/u, 'escolher o responsável'],
+    [/\bimport/u, /\bimport/u, 'importar uma lista'],
+    [/\bexport/u, /\bexport/u, 'exportar uma lista'],
+    [/\bagend/u, /\bagend/u, 'agendar'],
+    [/\b(?:montar|configur)/u, /\b(?:fluxo|bloco|opcoes)/u, 'montar o fluxo'],
+    [/\b(?:ativar|publicar)/u, /\bpublicar\b/u, 'publicar'],
+  ];
+  const supported = verbs.flatMap(([requestPattern, factPattern, verb]) => {
+    if (!requestPattern.test(asked)) return [];
+    const fact = screenFacts.find((item) => item.text && factPattern.test(fold(item.text))
+      && item.repository && item.path && item.sha);
+    return fact ? [{ verb, citation: citeOf(fact) }] : [];
+  });
+  if (!screen || !supported.length) return null;
+  const actions = [...new Set(supported.map((item) => item.verb))];
+  const list = actions.length === 1 ? actions[0] : `${actions.slice(0, -1).join(', ')} e ${actions.at(-1)}`;
+  const citations = [screenFact?.repository && screenFact.path && screenFact.sha ? citeOf(screenFact) : null,
+    ...supported.map((item) => item.citation)].filter(Boolean);
+  return { text: `Na tela **${screen}**, você pode ${list}.`,
+    citations: [...new Map(citations.map((cite) => [JSON.stringify(cite), cite])).values()] };
+}
+
+const exactMarkedLabel = (text, label) => ['**', '"', '“', '‘'].some((open) => {
+  const close = open === '“' ? '”' : open === '‘' ? '’' : open;
+  return text.includes(`${open}${label}${close}`);
+});
+const labelFact = (fact) => fact.text && fact.text.length <= 80
+  && (fact.text.length >= 3 || fact.text === '+') && !/[.!?]$/u.test(fact.text.replace(/\.\.\.$/u, ''));
+
+export function markFaqStepLabels(unit, screenFacts = []) {
+  const cited = screenFacts.filter((fact) => labelFact(fact) && fact.repository && unit.citations?.some((cite) =>
+    !cite.source && cite.repository === fact.repository && cite.path === fact.path && cite.sha === fact.sha
+      && cite.lineStart <= fact.lineStart && fact.lineEnd <= cite.lineEnd));
+  let text = unit.text;
+  for (const fact of cited.sort((a, b) => b.text.length - a.text.length)) {
+    if (exactMarkedLabel(text, fact.text)) continue;
+    const index = text.indexOf(fact.text);
+    if (index !== -1) text = `${text.slice(0, index)}**${fact.text}**${text.slice(index + fact.text.length)}`;
+  }
+  return { ...unit, text };
 }
 
 export const hasFaqTaskFacts = (screenFacts) => Array.isArray(screenFacts) && screenFacts.some((fact) =>
@@ -205,6 +262,11 @@ export function validateFaqSections(sections, context) {
             && unit.text.toLocaleLowerCase('pt-BR').includes(fact.text.toLocaleLowerCase('pt-BR')))));
       });
       if (!citationsValid) return false;
+      const citedStepFacts = unit.citations.flatMap(citedFacts);
+      if (key === 'passos' && !citedStepFacts.some((fact) => labelFact(fact) && exactMarkedLabel(unit.text, fact.text))) return false;
+      if (key === 'passos' && /\b(?:obrigatóri[oa]s?|opciona(?:l|is))\b/iu.test(unit.text)
+        && !citedStepFacts.some((fact) => fact.claimText
+          && (/\bobrigatóri[oa]s?\b/iu.test(unit.text) ? /\bobrigatóri[oa]s?\b/iu : /\bopciona(?:l|is)\b/iu).test(fact.claimText))) return false;
       const sources = unit.citations.map((cite) => {
         if (cite.source) return cite.quote;
         return citedFacts(cite).map((fact) => fact.claimText ?? fact.text ?? '').join(' ');
@@ -213,7 +275,9 @@ export function validateFaqSections(sections, context) {
         && fact.text.length <= 80 && !/[.!?]/u.test(fact.text) && hasLabel(unit.text, fact.text))
         .map((fact) => fact.text);
       const uncovered = supportedClaim(unit.text, [...sources, ...screenLabels],
-        { example: key === 'exemplo', request: context.request });
+        { example: key === 'exemplo', request: context.request,
+          lexical: key !== 'passos' && !(key === 'resposta'
+            && unit.text === deterministicFaqAnswer(context.request, context.screenFacts)?.text) });
       if (!uncovered.length) return true;
       pending.push(`palavra sem fonte: ${uncovered.join(', ')} em ${unit.text}`);
       return false;
