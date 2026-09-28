@@ -54,6 +54,15 @@ test('refs para endpoint sem o nome são corrigidos quando o destino é único',
   assert.match(result.articles[0].body, /\[Página B\]\(\/api\/teste\/b\)/u);
   assert.deepEqual(result.internalRepairs, [{ name: 'onlyB', from: 'GET /a', endpoint: 'GET /b' }]);
 });
+test('refs cujo nome não aparece na frase nem no campo são omitidos', async () => {
+  const result = await replay((output) => {
+    output.articles[0].notas[0].refs = [{ name: 'onlyB', endpoint: 'GET /b' }];
+    output.articles[0].description.refs = [{ name: 'onlyB', endpoint: 'GET /b' }];
+  });
+  assert.equal(result.status, 'ready', result.summary);
+  assert.doesNotMatch(result.articles[0].description, /Página B/u);
+  assert.ok(result.internalRepairs.some((item) => item.name === 'onlyB' && item.reason === 'nome ausente da unidade'));
+});
 test('summary do pacote mantém escopo global', async () => {
   const result = await replay((output) => { output.articles[0].notas = []; });
   assert.equal(result.status, 'ready', result.summary);
