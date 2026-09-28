@@ -8,16 +8,18 @@ const note = (type, text) => ({ ...unit(text), type });
 const endpoint = { verb: 'GET', route: '/api/v2/contacts', public: true, documented: true,
   authorization: 'authenticated', parameters: [
     { name: 'departmentIds', type: 'int[]', in: 'query', required: false },
+    { name: 'responsibleUserIds', type: 'int[]', in: 'query', required: false },
     { name: 'linkedToMe', type: 'bool', in: 'query', required: false },
     { name: 'showAll', type: 'bool', in: 'query', required: false },
+    { name: 'export', type: 'bool', in: 'query', required: false },
   ], responseFields: [] };
 const article = { path: 'api/contatos/buscar-contatos', endpoint: 'GET /contacts', title: 'Buscar contatos',
   description: unit('Consulta os contatos disponíveis com filtros opcionais na referência pública.'), intro: unit('Use esta consulta para localizar contatos.'),
   notas: [
-    note('Diferenças e cuidados', 'Esta consulta é diferente da página Buscar contatos do CRM.'),
-    note('Quem vê quais contatos', 'linkedToMe é recalculado para o usuário autenticado.'),
-    note('Paginação e cabeçalhos', 'Os cabeçalhos aparecem quando showAll é falso.'),
-    note('Como filtrar', 'Repita os departamentos como departmentIds=1&departmentIds=2.'),
+    note('Diferenças e cuidados', 'Esta consulta é diferente da página Buscar contatos do CRM, que representa outro endpoint e exige pelo menos 2 caracteres na busca.'),
+    note('Quem vê quais contatos', 'linkedToMe não é controlado pelo cliente: o serviço ignora o valor enviado e recalcula o comportamento, que só fica ativo para perfil Atendente quando a empresa tem Carterizado ativo.'),
+    note('Paginação e cabeçalhos', 'Os dois cabeçalhos aparecem quando showAll=false, inclusive com export=true, e nenhum deles aparece quando showAll=true.'),
+    note('Como filtrar', 'As listas departmentIds e responsibleUserIds são enviadas repetindo o parâmetro, como departmentIds=1&departmentIds=2.'),
   ],
   responseHeaders: [
     { name: 'Total-Pages', meaning: unit('Conta os contatos que atendem aos filtros.'), when: unit('Aparece quando showAll é falso.') },
