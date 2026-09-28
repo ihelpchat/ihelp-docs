@@ -349,9 +349,14 @@ export function validateFaqSections(sections, context) {
     const units = sections?.[key] ?? [];
     if (!Array.isArray(units) || !units.length) { pending.push(`seção sem fonte: ${FAQ_SECTIONS[key]}`); continue; }
     if (key === 'passos' || key === 'erros') {
-      const valid = units.map((unit) => ({ unit, rendered: key === 'passos'
-        ? structuredFaqStep(unit, indexedFacts, context, pending)
-        : structuredFaqError(unit, indexedFacts, context, pending) }))
+      const valid = units.map((unit) => {
+        if (key === 'passos' && unit?.acao === 'conferir'
+          && indexedFacts.find((fact) => fact.id === unit.fato)?.kind === 'field')
+          pending.push('ação incompatível: conferir em campo de texto; use preencher');
+        return { unit, rendered: key === 'passos'
+          ? structuredFaqStep(unit, indexedFacts, context, pending)
+          : structuredFaqError(unit, indexedFacts, context, pending) };
+      })
         .filter((item) => item.rendered);
       if (valid.length) {
         if (key === 'passos') {
@@ -442,5 +447,5 @@ export function fixedFaqSupportSection(request, screenFacts = []) {
   const topic = normalized(request.topic);
   const screen = screenFacts.find((fact) => fact.kind === 'route' && fact.text)?.text;
   const location = screen && screen.length <= 80 ? screen : topic;
-  return [{ text: `Se não conseguir concluir em ${location}, fale com o suporte. Informe qual passo tentou e o que apareceu na tela.`, citations: [] }];
+  return [{ text: `Se não conseguir concluir um passo na tela ${location}, fale com o suporte. Informe qual passo tentou e o que apareceu na tela.`, citations: [] }];
 }

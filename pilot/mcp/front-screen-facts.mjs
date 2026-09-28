@@ -467,9 +467,13 @@ function collect(filePath, source, facts, entryName) {
       if (value) emit(node, 'text', { text: value });
     }
     if (ts.isJsxExpression(node) && node.expression && ts.isConditionalExpression(node.expression)) {
+      const opening = ts.isJsxElement(node.parent) ? node.parent.openingElement : null;
+      const button = opening && ACTION.test(jsxName(opening))
+        && (attr(opening, 'onClick') || attrValue(opening, 'type') === 'submit');
       for (const branch of [node.expression.whenTrue, node.expression.whenFalse]) {
         const value = literal(branch);
-        if (value) emit(branch, 'state', { text: value });
+        if (value) emit(branch, button && !/(?:ando|endo|indo)(?:\.{3}|…)$/iu.test(value)
+          ? 'action' : 'state', { text: value });
       }
     }
     if (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) {

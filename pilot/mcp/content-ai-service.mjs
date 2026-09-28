@@ -1053,7 +1053,8 @@ async function generateContentPackageCore(root, request, options = {}) {
     sectionPending.push(...result.pending.filter((item) => !item.includes(FAQ_SECTIONS.suporte))
       .map((item) => `${prose.path}: ${/Para que serve|Quando usar|Exemplo/u.test(item)
         ? `seção sem fonte de negócio: ${item}` : item}`));
-    const uncovered = result.pending.filter((item) => item.startsWith('palavra sem fonte:') || item.startsWith('metanarração'));
+    const uncovered = result.pending.filter((item) => item.startsWith('palavra sem fonte:')
+      || item.startsWith('metanarração') || item.startsWith('ação incompatível:'));
     if ((uncovered.length || missingTasks.length) && !options.faqRetryIssues) return generateContentPackage(root, request, {
       ...options, productContext, plan, faqRetryIssues: [...uncovered, ...missingTasks].map((item) => `${prose.path}: ${item}`),
     });
