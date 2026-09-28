@@ -71,6 +71,8 @@ try {
       if (name === 'mobile') {
         await page.goto(`${baseUrl}/docs/principais-duvidas/`, { waitUntil: 'networkidle' });
         if (process.env.NAVIGATION_PROBE_CSS) await page.addStyleTag({ content: process.env.NAVIGATION_PROBE_CSS });
+        await page.locator('.ih-faq-item', { hasText: 'Como editar ou importar contatos' }).locator('button').click();
+        await page.locator('.ih-product-action small').waitFor({ state: 'visible' });
         await page.screenshot({ path: '/tmp/m5-65-principais-duvidas-mobile.png', fullPage: true });
         const other = await page.evaluate(() => {
           const search = document.querySelector('.ih-header-search')?.getBoundingClientRect();
