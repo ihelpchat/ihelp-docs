@@ -11,6 +11,7 @@ import { githubWriteToken } from './env-compat.mjs';
 import { guideSchema } from '../architecture/conversation-v1.mjs';
 import { assertPublicSubmit } from './public-submit-gate.mjs';
 import { finalizeSecurityResponse } from './security-review.mjs';
+import { imagesUsedByArticles } from './screen-capture-service.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -396,6 +397,7 @@ function safeArticleList(articles, deletes = []) {
 }
 
 async function createPackagePullRequest(items, deletes, actor, beforePull, options = {}) {
+  const screenshots = await imagesUsedByArticles(items.map(({ article }) => article));
   const repository = process.env.GITHUB_REPOSITORY ?? 'ihelpchat/ihelp-docs';
   const base = options.base ?? process.env.GITHUB_BASE_BRANCH ?? 'main';
   const [owner, repo] = repository.split('/');
@@ -452,6 +454,13 @@ async function createPackagePullRequest(items, deletes, actor, beforePull, optio
       body: JSON.stringify({ message: `docs: atualiza ${article.title}`, content: Buffer.from(rendered).toString('base64'), branch, ...(previous ? { sha: previous.sha } : {}) }),
     });
     remember(article.path, 'upsert');
+  }
+  for (const image of screenshots) {
+    const previous = await githubRequest(fileAt(image.file, branch), {}, true);
+    await githubRequest(`/repos/${owner}/${repo}/contents/${image.file}`, {
+      method: 'PUT', body: JSON.stringify({ message: 'docs: adiciona print aprovado do FAQ',
+        content: image.base64, branch, ...(previous ? { sha: previous.sha } : {}) }),
+    });
   }
   for (const path of deletes) {
     const filePath = contentFile(path);

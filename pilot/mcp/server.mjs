@@ -11,6 +11,7 @@ import { authorizeTool, registerToolPolicy, requestIdentity } from './access-con
 import { createGuide } from './create-guide.mjs';
 import { atualizarPorDeploy } from './update-by-deploy.mjs';
 import { refreshCodeProduct } from './code-refresh-offer.mjs';
+import { capturePage, downloadPage } from './screen-capture-service.mjs';
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
 const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto']);
@@ -193,6 +194,54 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
   }, async () => {
     try { return textResult(await refreshCodeProduct()); }
     catch { return textResult({ error: 'Não foi possível atualizar a cópia do código' }, true); }
+  });
+
+  registerTool('capturar_telas', {
+    mutates: true,
+    description: 'Captura na homologação aprovada e grava PNGs mascarados no estado privado do serviço.',
+    inputSchema: z.strictObject({
+      page: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+      module: z.string().min(2).max(80),
+      appSha: z.string().regex(/^[a-f0-9]{40}$/),
+      steps: z.array(z.strictObject({
+        id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+        role: z.enum(['button', 'link', 'textbox', 'combobox', 'menuitem', 'text']),
+        label: z.string().min(1).max(160), route: z.string().max(200).optional(),
+        action: z.enum(['click', 'none']).optional(), alt: z.string().max(240).optional(),
+      })).min(1).max(20),
+      screenFacts: z.array(z.strictObject({
+        kind: z.enum(['action', 'field', 'text', 'route']), text: z.string().min(1).max(160),
+        owner: z.string().min(1).max(300), sha: z.string().regex(/^[a-f0-9]{40}$/),
+        route: z.string().max(200).optional(),
+      })).min(1).max(200),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ requestedBy, page, module, appSha, steps, screenFacts }) => {
+    if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    const target = auditTarget(module, page);
+    await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'attempt' });
+    try {
+      const manifest = await capturePage({ page, module, appSha, steps, screenFacts });
+      await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'success' });
+      return textResult({ page, captured: manifest.entries.filter((entry) => entry.page === page).length });
+    } catch {
+      await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'failure' });
+      return textResult({ error: 'Captura recusada ou indisponível' }, true);
+    }
+  });
+
+  registerTool('baixar_telas', {
+    mutates: false,
+    description: 'Devolve manifesto e até quatro PNGs de uma página como base64 para revisão e PR do FAQ.',
+    inputSchema: z.strictObject({
+      page: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+      limit: z.number().int().min(1).max(4).default(4),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ page, limit }) => {
+    if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    try { return textResult(await downloadPage(page, { limit })); }
+    catch { return textResult({ error: 'Telas indisponíveis ou acima do limite' }, true); }
   });
 
   registerTool('docs_submit_package', {

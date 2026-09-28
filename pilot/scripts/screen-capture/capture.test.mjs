@@ -8,6 +8,7 @@ import { addUploadedScreenshot, capturePlan, captureScreens, chooseScreenshot } 
 import { launch } from '../visual/measure.mjs';
 import { attachScreenshotsToArticle, screenshotForStep } from '../../mcp/screen-capture-manifest.mjs';
 import { assertAllowedTarget } from '../guide-proof.mjs';
+import { capturePage, downloadPage, imagesUsedByArticles } from '../../mcp/screen-capture-service.mjs';
 
 const appSha = 'a'.repeat(40);
 const coverage = [{ module: 'Contatos', productRoutes: ['/contact'] }];
@@ -89,8 +90,45 @@ test('plano exige rota e fato da tela com dono', () => {
 });
 
 test('host exato aprovado aceita homologação Railway e rejeita produção conhecida', () => {
-  const host = 'front-react-production-4a01.up.railway.app';
+  const host = 'example-qa.up.railway.app';
   assert.equal(assertAllowedTarget(`https://${host}/`, { GUIDE_QA_ALLOWED_HOSTS: host }).url, `https://${host}`);
   assert.throws(() => assertAllowedTarget(`https://${host}/`, {}), /host não permitido/u);
   assert.throws(() => assertAllowedTarget('https://app.ihelpchat.com/', { GUIDE_QA_ALLOWED_HOSTS: 'app.ihelpchat.com' }), /host não permitido/u);
+});
+
+test('serviço MCP captura fixture, baixa imagens e limita volume sem vazar segredo', async () => {
+  const secret = 'senha-super-secreta-da-fixture';
+  const server = createServer((_req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.end('<button>Adicionar contato</button><p>cliente@exemplo.com</p>');
+  });
+  await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
+  const root = await mkdtemp(join(tmpdir(), 'screen-service-'));
+  try {
+    const result = await capturePage({ page: 'contatos', module: 'Contatos', appSha,
+      steps: [steps[0]], screenFacts }, {
+      baseUrl: `http://127.0.0.1:${server.address().port}`, root, fixture: true,
+      coverage, env: { GUIDE_QA_AUTHORIZED_PASSWORD: secret },
+    });
+    assert.equal(result.entries.length, 1);
+    const read = await downloadPage('contatos', { root, limit: 1 });
+    assert.equal(read.images.length, 1);
+    assert.equal(Buffer.from(read.images[0].base64, 'base64').subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+    assert.doesNotMatch(JSON.stringify(read), /senha-super|cliente@exemplo/u);
+    const selected = await imagesUsedByArticles([
+      { path: 'docs/contatos', body: '![Tela de Contatos](/img/mcp/contatos/abrir.png)' },
+      { path: 'docs/robos', body: 'Sem print nesta página.' },
+    ], { root });
+    assert.deepEqual(selected.map((image) => image.file), ['pilot/public/img/mcp/contatos/abrir.png']);
+    assert.equal(selected[0].base64, read.images[0].base64);
+    await assert.rejects(downloadPage('contatos', { root, limit: 5 }), /Consulta de telas inválida/u);
+    await assert.rejects(downloadPage('../contatos', { root }), /Consulta de telas inválida/u);
+    await writeFile(join(root, 'contatos/abrir.png'), Buffer.concat([
+      Buffer.from(read.images[0].base64, 'base64'), Buffer.alloc(2 * 1024 * 1024),
+    ]));
+    await assert.rejects(downloadPage('contatos', { root }), /excedem o teto/u);
+  } finally {
+    await new Promise((ok) => server.close(ok));
+    await rm(root, { recursive: true, force: true });
+  }
 });

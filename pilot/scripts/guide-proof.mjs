@@ -76,7 +76,10 @@ export function assertAllowedTarget(value, env = process.env) {
   const local = url.protocol === 'http:' && url.hostname === '127.0.0.1';
   const allowed = new Set((env[envCompatibility.guideProof.allowedHosts] ?? '').split(',').map((host) => host.trim()).filter(Boolean));
   const stagingName = /^(?:staging|homolog|homologacao)(?:-[a-z0-9]+)?\.ihelpchat\.com(?:\.br)?$/u.test(url.hostname);
-  const staging = url.protocol === 'https:' && stagingName && allowed.has(url.hostname) && !url.port;
+  const knownProduction = /^(?:app|api|www|apiv3|api3)\.ihelpchat\.com(?:\.br)?$/u.test(url.hostname)
+    || ['ihelpchat.com', 'ihelpchat.com.br'].includes(url.hostname);
+  const staging = url.protocol === 'https:' && (stagingName || allowed.has(url.hostname))
+    && allowed.has(url.hostname) && !knownProduction && !url.port;
   if (!local && !staging) throw new Error('Destino recusado: host não permitido');
   return { url: url.origin, local };
 }

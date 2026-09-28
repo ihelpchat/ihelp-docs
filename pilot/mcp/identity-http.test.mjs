@@ -51,6 +51,9 @@ try {
   await reader.listTools();
   assert.ok(registered.has('capturar_telas'), 'captura administrativa precisa estar no MCP');
   assert.ok(registered.has('baixar_telas'), 'leitura das telas precisa estar no MCP');
+  const emptyScreens = await reader.callTool({ name: 'baixar_telas', arguments: { page: 'contatos' } });
+  assert.equal(emptyScreens.isError, false);
+  assert.deepEqual(JSON.parse(emptyScreens.content[0].text).images, []);
   assert.ok(registered.size > 0, 'registro de ferramentas deve ser exercitado');
   const article = await readArticle(new URL('../', import.meta.url).pathname, 'api/crm/funis/listar-funis');
   const writeArguments = {
@@ -61,7 +64,9 @@ try {
     criar_guia: { guideId: 'usuario-acesso', topic: 'Adicionar pessoa', module: 'usuarios', description: 'Criar acesso para uma pessoa da equipe.' },
     atualizar_por_deploy: { before: {}, after: {} },
     atualizar_codigo_produto: {},
-    capturar_telas: { page: 'contatos', module: 'Contatos', appSha: 'a'.repeat(40), steps: [] },
+    capturar_telas: { page: 'contatos', module: 'Contatos', appSha: 'a'.repeat(40),
+      steps: [{ id: 'abrir', role: 'button', label: 'Adicionar contato' }],
+      screenFacts: [{ kind: 'action', text: 'Adicionar contato', owner: 'fixture', sha: 'a'.repeat(40) }] },
   };
   for (const [name, config] of registered) {
     assert.equal(typeof config.mutates, 'boolean', `${name} deve declarar mutates explicitamente`);

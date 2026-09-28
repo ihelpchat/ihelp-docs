@@ -4,7 +4,13 @@ import { join } from 'node:path';
 
 export async function loadScreenshotManifest(root) {
   try {
-    const data = JSON.parse(await readFile(join(root, 'public/img/mcp/manifest.json'), 'utf8'));
+    let raw;
+    try { raw = await readFile(join(process.env.MCP_STATE_DIR ?? '/data', 'screens/manifest.json'), 'utf8'); }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      raw = await readFile(join(root, 'public/img/mcp/manifest.json'), 'utf8');
+    }
+    const data = JSON.parse(raw);
     if (data.version !== 1 || !Array.isArray(data.entries)) throw new Error('Manifesto de screenshots inválido');
     return data;
   } catch (error) {
