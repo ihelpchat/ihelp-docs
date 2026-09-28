@@ -50,13 +50,18 @@ test('alvo abaixo da dobra é rolado e moldura/seta aparecem dentro do PNG', asy
         const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
         const context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
         const pixels = context.getImageData(0, 0, image.width, image.height).data;
-        let orange = 0;
-        for (let index = 0; index < pixels.length; index += 4)
-          if (pixels[index] === 236 && pixels[index + 1] === 100 && pixels[index + 2] === 0) orange++;
-        return { width: image.width, height: image.height, orange };
+        let frame = 0, arrow = 0;
+        for (let index = 0; index < pixels.length; index += 4) {
+          if (pixels[index] !== 236 || pixels[index + 1] !== 100 || pixels[index + 2] !== 0) continue;
+          const x = index / 4 % image.width;
+          if (x < 155) arrow++;
+          else if (x < 330) frame++;
+        }
+        return { width: image.width, height: image.height, frame, arrow };
       }, `data:image/png;base64,${png.toString('base64')}`);
       assert.deepEqual([proof.width, proof.height], [1280, 720]);
-      assert.ok(proof.orange > 500, 'moldura e seta devem aparecer dentro do PNG');
+      assert.ok(proof.frame > 500, 'moldura deve aparecer dentro do PNG');
+      assert.ok(proof.arrow > 10, 'seta deve aparecer dentro do PNG');
     } finally { await browser.close(); }
   } finally { await new Promise((done) => server.close(done)); await rm(root, { recursive: true, force: true }); }
 });

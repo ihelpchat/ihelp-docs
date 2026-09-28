@@ -38,8 +38,13 @@ export function faqStepMatches(body, facts = []) {
       .filter(({ label, index }) => index >= 0 && !/[\p{L}\p{N}]/u.test(plain[index - 1] ?? '')
         && !/[\p{L}\p{N}]/u.test(plain[index + normalized(label).length] ?? ''))
       .sort((a, b) => a.index - b.index || b.label.length - a.label.length);
-    for (const item of found) if (!matches.some((match) => match.label === item.label))
+    const selected = [];
+    for (const item of found) {
+      const end = item.index + normalized(item.label).length;
+      if (selected.some((previous) => item.index < previous.end && end > previous.index)) continue;
+      selected.push({ index: item.index, end });
       matches.push({ label: item.label, listIndex: step.listIndex, line: step.line });
+    }
   }
   return matches;
 }
@@ -60,7 +65,7 @@ export function capturePlan({ page, module, faqBody, coverage, screenFacts }) {
   const selected = matches.map((match) => ({ fact: eligible.find((fact) =>
     fact.text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
       === match.label.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')), match }))
-    .filter(({ fact }, index, ordered) => fact && ordered.findIndex((item) => item.fact === fact) === index);
+    .filter(({ fact }) => fact);
   if (!routes.length || !selected.length) throw new Error('Nenhum fato da tela confirmado para captura');
   return selected.slice(0, 20).map(({ fact, match }, index) => {
     const step = `${String(index + 1).padStart(2, '0')}-${fact.text.normalize('NFD').replace(/\p{Diacritic}/gu, '')
@@ -197,11 +202,16 @@ async function captureAttempt(page, cdp, rect, allowedLabels, destination, after
         return { x: area.x, y: area.y, width: area.width, height: area.height }; }));
     if (!masksCoverSensitive(sensitive, renderedMasks)) return null;
     await page.screenshot({ path: destination, animations: 'disabled' });
+    const bytes = await readFile(destination);
+    const width = bytes.readUInt32BE(16);
+    const height = bytes.readUInt32BE(20);
+    if (rect.x < 5 || rect.y < 8 || rect.x + rect.width + 5 > width || rect.y + rect.height + 5 > height)
+      return null;
     if (afterScreenshot) await afterScreenshot(page);
     const after = await scanVisible(page);
     const remaining = after.filter((item) => containsSensitiveData(item.text, { detectOpaque: true })).map((item) => item.rect);
     if (visibleHash(visible) !== visibleHash(after) || !masksCoverSensitive(remaining, renderedMasks)) return null;
-    return { mask, bytes: await readFile(destination) };
+    return { mask, bytes };
   } finally {
     await rm(destination, { force: true }).catch(() => {});
     await page.evaluate(() => {
@@ -211,6 +221,22 @@ async function captureAttempt(page, cdp, rect, allowedLabels, destination, after
     }).catch(() => {});
     if (frozen) await cdp.send('Emulation.setScriptExecutionDisabled', { value: false });
   }
+}
+
+async function scrollControlIntoCapture(page, control) {
+  await control.evaluate(async (element) => {
+    element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+    let previous = null;
+    let stable = 0;
+    for (let frame = 0; frame < 60 && stable < 2; frame++) {
+      await new Promise((done) => requestAnimationFrame(done));
+      const rect = element.getBoundingClientRect();
+      const position = [rect.x, rect.y, rect.width, rect.height];
+      stable = previous && position.every((value, index) => value === previous[index]) ? stable + 1 : 0;
+      previous = position;
+    }
+  });
+  return control.boundingBox();
 }
 
 export async function captureScreens({ baseUrl, plan, storageState, fixture = false,
@@ -272,13 +298,13 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
       await control.waitFor({ state: 'visible' });
       if (await control.count() !== 1) throw new Error('Rótulo ausente ou ambíguo');
       if (!['click', 'none'].includes(step.action)) throw new Error('Ação não permitida');
-      const rect = await control.boundingBox();
-      if (!rect) throw new Error('Elemento fora da tela');
       await mkdir(join(root, step.page), { recursive: true });
       const cdp = await context.newCDPSession(page);
       let captured = null;
       try {
         for (let attempt = 0; attempt < 2 && !captured; attempt++) {
+          const rect = await scrollControlIntoCapture(page, control);
+          if (!rect) throw new Error('Elemento fora da tela');
           captured = await captureAttempt(page, cdp, rect, plan.map((item) => item.label),
             join(root, step.page, `${step.step}.pending.png`), fixtureAfterScreenshot);
         }
@@ -286,7 +312,7 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
       if (!captured) {
         await rm(join(root, step.page, `${step.step}.png`), { force: true });
         manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step);
-        manifest.pending = [...new Set([...(manifest.pending ?? []), `print descartado: dado sensível sem máscara em ${step.route}`])];
+        manifest.pending = [...new Set([...(manifest.pending ?? []), `print descartado: destaque fora da imagem ou dado sensível sem máscara em ${step.route}`])];
         continue;
       }
       await writeFile(join(root, step.page, `${step.step}.png`), captured.bytes);
