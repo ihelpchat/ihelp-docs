@@ -73,3 +73,31 @@ test('rótulo de passo pode vir de página publicada explicitamente citada', () 
   assert.equal(validateFreeFaqSections(sections, context).sections.passos.length, 1);
   assert.equal(validateFreeFaqSections(sections, { ...context, existing: [{ ...context.existing[0], body: 'Outro rótulo' }] }).sections.passos.length, 0);
 });
+
+test('página de outro módulo não prova rótulo nem dispensa fatos da tarefa', () => {
+  const title = 'Como cadastrar Contatos';
+  const sections = { passos: [{ tarefa: 'Montar fluxo', passos: [{ text:
+    `Consulte [${title}](/docs/sobre-o-sistema/contatos) e clique em **Salvar**.` }] }] };
+  const checked = validateFreeFaqSections(sections, { request, screenFacts: [], existing: [{ title,
+    module: 'Contatos', path: '/docs/sobre-o-sistema/contatos', body: '## Cadastrar\nClique em **Salvar**.' }] });
+  assert.equal(checked.sections.passos.length, 0);
+  assert.ok(checked.pending.some((item) => item.includes('tarefa sem fatos de tela: Montar fluxo')));
+});
+
+test('página do mesmo módulo só prova rótulo na seção da tarefa', () => {
+  const title = 'Como usar Robôs';
+  const sections = { passos: [{ tarefa: 'Montar fluxo', passos: [{ text:
+    `Consulte [${title}](/docs/sobre-o-sistema/robos) e clique em **Salvar**.` }] }] };
+  const checked = validateFreeFaqSections(sections, { request, screenFacts: [], existing: [{ title,
+    module: 'Robôs', path: '/docs/sobre-o-sistema/robos', body:
+    '## Criar\nClique em **Salvar**.\n## Montar fluxo\nClique em **Adicionar bloco**.' }] });
+  assert.equal(checked.sections.passos.length, 0);
+  assert.ok(checked.pending.some((item) => item.includes('tarefa sem fatos de tela: Montar fluxo')));
+});
+
+test('completude exige o rótulo relevante, não outro controle da tela', () => {
+  const facts = [{ kind: 'action', text: 'Publicar' }, { kind: 'action', text: 'Salvar' }];
+  const tasks = [{ tarefa: 'Ativar', passos: [{ text: 'Clique em **Salvar**.' }] }];
+  assert.deepEqual(missingFreeFaqTaskSteps({ topic: 'Robô', description: 'Como ativar o robô?' }, facts, tasks),
+    ['tarefa sem passo: ativar']);
+});

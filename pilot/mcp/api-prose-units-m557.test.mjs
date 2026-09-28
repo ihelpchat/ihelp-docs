@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
 import { renderArticle } from './content-service.mjs';
 
@@ -134,6 +136,36 @@ test('quote com uma palavra trocada mantém recusa literal', async () => {
   });
   assert.equal(result.status, 'needs_evidence');
   assert.match(result.summary, /não é trecho literal do pedido/u);
+});
+
+test('API carrega contexto do módulo, api-publica e geral e sustenta nota sem citar arquivos', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'api-business-r3-'));
+  const previous = process.env.BUSINESS_CONTEXT_DIR;
+  try {
+    await writeFile(join(directory, 'contatos.md'), '🟢 PÚBLICO\nUma consulta reúne os contatos para acompanhamento da equipe.\n');
+    await writeFile(join(directory, 'api-publica.md'), '🟢 PÚBLICO\nA API pública permite consultar informações autorizadas.\n');
+    await writeFile(join(directory, 'geral.md'), '🟢 PÚBLICO\nO iHelp organiza o atendimento da equipe.\n');
+    process.env.BUSINESS_CONTEXT_DIR = directory;
+    const prompts = [];
+    const value = structuredClone(base);
+    const note = 'Uma consulta reúne os contatos para acompanhamento da equipe.';
+    value.articles[0].notas = [{ text: note, citations: [{ source: 'negocio', quote: note }], refs: [] }];
+    const result = await generateContentPackage(process.cwd(), request, { productContext: structuredClone(context),
+      plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
+        prompts.push(payload.input[1].content);
+        return { output_text: JSON.stringify(value), model: 'fixture' };
+      } } } });
+    assert.equal(result.status, 'ready', result.summary);
+    assert.match(prompts[0], /Uma consulta reúne os contatos/u);
+    assert.match(prompts[0], /A API pública permite consultar/u);
+    assert.match(prompts[0], /O iHelp organiza o atendimento/u);
+    assert.match(result.articles[0].body, /Uma consulta reúne os contatos/u);
+    assert.doesNotMatch(result.articles[0].body, /business-context|contatos\.md|api-publica\.md|geral\.md/u);
+  } finally {
+    if (previous === undefined) delete process.env.BUSINESS_CONTEXT_DIR;
+    else process.env.BUSINESS_CONTEXT_DIR = previous;
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 async function plan(changedRequest) {
