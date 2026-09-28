@@ -19,9 +19,10 @@ import { validCanonicalQuestion } from './conversational-contract.mjs';
 import { mentionsSource } from './source-mention.mjs';
 import { classifyFaqQuestions, hasFaqTaskFacts, loadBusinessContext, selectFaqStyleExamples, adaptScreenFacts,
   validateFaqSections, renderFaqSections, fixedFaqSupportSection, deterministicFaqAnswer,
-  missingFaqTaskSteps, FAQ_SECTIONS, faqSubtitle, faqModuleName, replaceModuleTerminology } from './faq-editorial.mjs';
+  missingFaqTaskSteps, FAQ_SECTIONS, faqSubtitle, faqModuleName } from './faq-editorial.mjs';
 import { FREE_FAQ_SECTIONS, validateFreeFaqSections, judgeClaims, renderFreeFaqSections,
-  faqTasksWithoutFacts, missingFreeFaqTaskSteps, shortFreeFaqTasks, trimFaqLabels } from './faq-editorial.mjs';
+  faqTasksWithoutFacts, missingFreeFaqTaskSteps, shortFreeFaqTasks, trimFaqLabels,
+  missingFaqSupportSections } from './faq-editorial.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
 contentMaxOutputTokens();
@@ -1144,6 +1145,18 @@ async function generateContentPackageCore(root, request, options = {}) {
       const missingTasks = missingFreeFaqTaskSteps(request, faqContext.screenFacts, checked.sections.passos);
       const shortTasks = shortFreeFaqTasks(checked.sections.passos, faqContext.screenFacts,
         faqModuleName(request, faqContext.screenFacts));
+      const moduleName = faqModuleName(request, faqContext.screenFacts);
+      const escapedModule = moduleName?.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+      const badTerminology = escapedModule && new RegExp(`\\btela\\s+(?:\\*\\*)?${escapedModule}\\b`, 'iu');
+      const terminologyIssues = badTerminology && Object.values(checked.sections).flat()
+        .flatMap((entry) => entry?.passos ?? [entry]).some((unit) => badTerminology.test(unit?.text ?? ''))
+        ? [`${prose.path}: terminologia: reescreva a referência ao item do menu ${moduleName} como módulo, mantendo a concordância da frase inteira.`] : [];
+      const supportIssues = missingFaqSupportSections(checked.sections, faqContext)
+        .map((section) => `${prose.path}: seção ${section} ausente apesar de haver material; escreva pergunta e resposta ou erro e orientação.`);
+      if ((terminologyIssues.length || supportIssues.length) && !options.faqRetryIssues)
+        return generateContentPackage(root, request, { ...options, productContext, plan,
+          faqRetryIssues: [...terminologyIssues, ...supportIssues] });
+      sectionPending.push(...terminologyIssues, ...supportIssues);
       const editorialIssues = checked.pending.filter((item) => item.includes('ação destrutiva fora de rótulo da tela')
         || item.includes('caso de uso com seta'));
       if ((missingTasks.length || editorialIssues.length) && !options.faqRetryIssues)
@@ -1164,14 +1177,13 @@ async function generateContentPackageCore(root, request, options = {}) {
         display.passos = (display.passos ?? []).map((task) => ({ ...task,
           passos: task.passos.filter((step) => !/^#{1,6}\s+\S/u.test(step.text.trim())) }))
           .filter((task) => task.passos.length);
-        const menuModule = faqModuleName(request, faqContext.screenFacts);
         article.description = faqSubtitle(display, request, faqContext.screenFacts).slice(0, 240);
-        article.body = replaceModuleTerminology(renderFreeFaqSections({ ...display,
-          suporte: fixedFaqSupportSection(request, faqContext.screenFacts) }), menuModule);
+        article.body = renderFreeFaqSections({ ...display,
+          suporte: fixedFaqSupportSection(request, faqContext.screenFacts) });
         const firstStep = (display.passos.flatMap((task) => task.passos).find((step) =>
           /\b(?:abra|acesse|clique|escolha|selecione|confira|verifique|corrija|configure|crie|digite|insira|envie|importe|pesquise|revise|localize|inicie|conclua|adicione)\b/iu.test(step.text))?.text ?? '')
           .replace(/<\/?AConfirmar>/gu, '');
-        const plainStep = plainMarkdownText(replaceModuleTerminology(firstStep, menuModule));
+        const plainStep = plainMarkdownText(firstStep);
         article.assistantOverview = trimFaqLabels((plainStep.length >= 45 ? plainStep
           : `${article.description} ${plainStep}`.trim()).slice(0, 200));
         article.assistantInitialSteps = firstStep ? 1 : 0;
@@ -1211,6 +1223,12 @@ async function generateContentPackageCore(root, request, options = {}) {
         faqRetryIssues: [...judged.contradictions.map((item) => `Contradição: ${item.text} — ${item.reason}. Reescreva com os fatos.`),
           ...shortTasks.map((item) => `${prose.path}: ${item}. Escreva o fluxo completo a partir do módulo e termine na confirmação mostrada pelos fatos.`)],
       });
+      const judgedSupportIssues = missingFaqSupportSections(judged.sections, faqContext)
+        .map((section) => `${prose.path}: seção ${section} ficou vazia após julgamento; escreva-a com fatos sustentados.`);
+      if (judgedSupportIssues.length && !options.faqRetryIssues) return generateContentPackage(root, request, {
+        ...options, productContext, plan, faqRetryIssues: judgedSupportIssues,
+      });
+      sectionPending.push(...judgedSupportIssues);
       const article = materialize(judged.sections);
       sectionPending.push(...checked.pending, ...[...missingTasks, ...shortTasks].map((item) => `${prose.path}: ${item}`),
         ...judged.pending.map((item) => `${prose.path}: a confirmar: ${item}`));
@@ -1251,8 +1269,9 @@ async function generateContentPackageCore(root, request, options = {}) {
         && !/[\p{L}\p{N}]/u.test(before[at + fact.routeTitle.length] ?? ''))
         article.assistantQuestion = before.slice(0, at) + fact.text + before.slice(at + fact.routeTitle.length);
     }
-    article.assistantQuestion = replaceModuleTerminology(article.assistantQuestion,
-      faqModuleName(request, faqContext.screenFacts));
+    const assistantModule = faqModuleName(request, faqContext.screenFacts);
+    if (assistantModule && new RegExp(`\\btela\\s+(?:\\*\\*)?${assistantModule.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}\\b`, 'iu')
+      .test(article.assistantQuestion)) article.assistantQuestion = `Como usar o módulo ${assistantModule}?`;
     if (!validCanonicalQuestion(article.assistantQuestion)) {
       const screen = faqModuleName(request, faqContext.screenFacts)
         ?? faqContext.screenFacts.find((fact) => fact.kind === 'route' && fact.text)?.text

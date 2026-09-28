@@ -147,15 +147,9 @@ export function faqModuleName(request = {}, screenFacts = []) {
 }
 
 export function replaceModuleTerminology(text, menuModule) {
-  if (!menuModule) return text;
-  const escaped = menuModule.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-  return String(text).replace(new RegExp(`\\b(?:(na|da|pela|a) )?tela(?=\\s+(?:\\*\\*)?${escaped}(?![\\p{L}\\p{N}]))`, 'giu'),
-    (match, preposition) => {
-      const article = ({ na: 'no', da: 'do', pela: 'pelo', a: 'o' })[preposition?.toLocaleLowerCase('pt-BR')];
-      if (!article) return match === 'Tela' ? 'Módulo' : 'módulo';
-      return `${preposition[0] === preposition[0].toUpperCase()
-        ? article[0].toUpperCase() + article.slice(1) : article} módulo`;
-    });
+  // A troca gramatical exige reescrita; preserve o texto do modelo para revisão.
+  void menuModule;
+  return String(text);
 }
 
 // The direct answer is assembled from requested tasks backed by screen facts.
@@ -196,7 +190,11 @@ export function faqSubtitle(sections, request = {}, screenFacts = []) {
   const first = sections.oQueE?.[0]?.text ?? '';
   const sentence = splitClaims(first)[0];
   if (sentence && !sentence.includes('<AConfirmar>') && !sentence.includes('</AConfirmar>')) {
-    return plainMarkdownText(replaceModuleTerminology(sentence, faqModuleName(request, screenFacts)));
+    const rest = first.slice(first.indexOf(sentence) + sentence.length).trim();
+    if (rest) {
+      sections.oQueE[0].text = rest;
+      return plainMarkdownText(sentence);
+    }
   }
   const direct = deterministicFaqAnswer(request, screenFacts)?.text;
   const actions = direct?.match(/você pode (.+)\.$/u)?.[1];
@@ -699,11 +697,30 @@ export function validateFreeFaqSections(sections, context = {}) {
       const issue = sourceMention ? 'menção à fonte' : text
         ? rigidFaqIssue(text, context, { useCase: key === 'casosDeUso' }) : 'frase vazia';
       if (issue) { pending.push(`${FREE_FAQ_SECTIONS[key]}: ${issue}`); return []; }
+      if (key === 'duvidas' && !faqQuestionAnswered(text)) {
+        pending.push(`Dúvidas comuns: pergunta sem resposta: ${text}`);
+        return [];
+      }
       return [{ ...unit, text }];
     });
   }
   if (!kept.passos.length) blocking.push('passos ausentes');
   return { sections: kept, pending: [...new Set(pending)], blocking: [...new Set(blocking)] };
+}
+
+const faqQuestionAnswered = (text) => {
+  const parts = splitClaims(text);
+  const question = parts.findIndex((part) => part.endsWith('?'));
+  return question < 0 || parts.slice(question + 1).some((part) => part.replace(/<\/?AConfirmar>/gu, '').trim());
+};
+
+export function missingFaqSupportSections(sections, context = {}) {
+  const facts = context.screenFacts ?? [];
+  const business = context.business ?? [];
+  const hasError = facts.some((fact) => /\b(?:nenhum|erro|falha|vazi[oa]|n[aã]o encontrad[oa]|inv[aá]lid[oa])\b/iu.test(fact.text ?? ''));
+  const hasQuestion = business.some((item) => /\?|\bd[uú]vida\b/iu.test(item.body ?? ''));
+  return [hasQuestion && !(sections.duvidas ?? []).length ? 'Dúvidas comuns' : null,
+    hasError && !(sections.erros ?? []).length ? 'Erros comuns e o que fazer' : null].filter(Boolean);
 }
 
 export async function judgeClaims(sections, context, provider) {
@@ -760,6 +777,11 @@ export async function judgeClaims(sections, context, provider) {
     ? (sections.passos ?? []).map((task) => ({ ...task, passos: task.passos.map((unit) => mark(unit, key)).filter(Boolean) }))
       .filter((task) => task.passos.length)
     : (sections[key] ?? []).map((unit) => mark(unit, key)).filter(Boolean);
+  result.duvidas = result.duvidas.filter((unit) => {
+    if (faqQuestionAnswered(unit.text) && !/<AConfirmar>/u.test(unit.text)) return true;
+    pending.push(`Dúvidas comuns: pergunta sem resposta: ${unit.text}`);
+    return false;
+  });
   return { sections: result, pending, contradictions,
     verdicts: claims.map((claim) => ({ text: claim.text, ...statuses.get(claim.id) })) };
 }

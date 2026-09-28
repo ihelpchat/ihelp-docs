@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { classifyFaqQuestions, selectFaqStyleExamples, loadBusinessContext,
   adaptScreenFacts, validateFaqSections, faqSubtitle, replaceModuleTerminology,
   deterministicFaqAnswer, fixedFaqSupportSection, renderFreeFaqSections,
-  validateFreeFaqSections, judgeClaims } from './faq-editorial.mjs';
+  validateFreeFaqSections, judgeClaims, missingFaqSupportSections } from './faq-editorial.mjs';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
 import { FAQ_NEUTRAL_WORDS } from './faq-neutral-words.mjs';
 
@@ -47,6 +47,14 @@ test('dúvida sem resposta sai inteira e gera pendência', async () => {
   }));
   assert.equal(judged.sections.duvidas.length, 0);
   assert.match(judged.pending.join(' '), /pergunta sem resposta/u);
+});
+
+test('material de negócio e estado vazio exigem seções de apoio', () => {
+  const context = { business: [{ body: 'Como publico o robô? Selecione Publicar.' }],
+    screenFacts: [{ kind: 'text', text: 'Nenhum robô encontrado' }] };
+  assert.deepEqual(missingFaqSupportSections({}, context), ['Dúvidas comuns', 'Erros comuns e o que fazer']);
+  assert.deepEqual(missingFaqSupportSections({ duvidas: [{ text: 'Como publico? Use Publicar.' }],
+    erros: [{ text: 'Se não houver robô, crie um.' }] }, context), []);
 });
 test('FAQ só bloqueia dúvida sobre resposta direta ou passo principal', () => {
   const result = classifyFaqQuestions([

@@ -8,16 +8,16 @@ import navigation from '../architecture/front-navigation.json' with { type: 'jso
 
 const sha = 'a'.repeat(40);
 const fixtures = [
-  { route: '/contact', module: 'Contatos', sentence: 'A tela Contatos organiza as pessoas da sua lista.', expected: 'O módulo Contatos organiza as pessoas da sua lista.' },
-  { route: '/bot', module: 'Robôs', sentence: 'A tela Robôs organiza as respostas de atendimento.', expected: 'O módulo Robôs organiza as respostas de atendimento.' },
+  { route: '/contact', module: 'Contatos', sentence: 'O módulo Contatos organiza as pessoas da sua lista.' },
+  { route: '/bot', module: 'Robôs', sentence: 'O módulo Robôs organiza as respostas de atendimento.' },
 ];
 
-test('subtítulo sustentado usa módulo do menu em Contatos e Robôs e preserva a primeira frase', () => {
+test('subtítulo sustentado usa módulo do menu em Contatos e Robôs e remove a primeira frase', () => {
   for (const fixture of fixtures) {
     const sections = { oQueE: [{ text: `${fixture.sentence} Outra frase de contexto.` }] };
     const facts = [{ kind: 'route', route: fixture.route, text: fixture.module, sha }];
-    assert.equal(faqSubtitle(sections, { topic: fixture.module }, facts), fixture.expected);
-    assert.equal(sections.oQueE[0].text, `${fixture.sentence} Outra frase de contexto.`);
+    assert.equal(faqSubtitle(sections, { topic: fixture.module }, facts), fixture.sentence);
+    assert.equal(sections.oQueE[0].text, 'Outra frase de contexto.');
   }
 });
 
@@ -80,7 +80,7 @@ test('pacotes de Canais, Contatos e Robôs usam o nome visível e módulo no sub
       path: 'src/Screen.tsx', lineStart: 1, lineEnd: 1, sha };
     assert.match(deterministicFaqAnswer(request, [...facts, action])?.text ?? '',
       new RegExp(`^No módulo \\*\\*${visible}\\*\\*`), `${visible}: resposta direta`);
-    assert.equal(faqSubtitle({ oQueE: [{ text: `A tela ${visible} mostra ${visible}.` }] }, request, facts),
+    assert.equal(faqSubtitle({ oQueE: [{ text: `O módulo ${visible} mostra ${visible}. Outro detalhe.` }] }, request, facts),
       `O módulo ${visible} mostra ${visible}.`, `${visible}: subtítulo sustentado`);
     assert.match(faqSubtitle({ oQueE: [{ text: '<AConfirmar>Sem prova</AConfirmar>' }] }, request, [...facts, action]),
       new RegExp(visible === 'Robôs' ? 'robôs de atendimento' : visible.toLocaleLowerCase('pt-BR')),

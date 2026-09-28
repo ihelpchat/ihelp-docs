@@ -19,6 +19,7 @@ test('MDX do modelo não executa expressões nem aceita ESM ou JSX estranho', as
 });
 
 test('subtítulo usa texto simples de Markdown sustentado, inclusive link', () => {
-  const sections = { oQueE: [{ text: 'O módulo **Robôs** organiza o [atendimento](https://example.com/ajuda).' }] };
+  const sections = { oQueE: [{ text: 'O módulo **Robôs** organiza o [atendimento](https://example.com/ajuda). Ele segue um fluxo.' }] };
   assert.equal(faqSubtitle(sections, { topic: 'Robôs' }, []), 'O módulo Robôs organiza o atendimento.');
+  assert.equal(sections.oQueE[0].text, 'Ele segue um fluxo.');
 });
