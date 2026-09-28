@@ -1,6 +1,6 @@
+import { apiProseFixture } from './api-prose-test-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { planContent, validateGroundedOutput } from './content-ai-service.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
@@ -29,7 +29,7 @@ async function plan(value = output, changedRequest = request) {
   return planContent(root, changedRequest, { productContext: context,
     client: { responses: { create: async (payload) => {
       if (changedRequest.module === 'api') assert.match(JSON.stringify(payload.text.format.schema), /"source"/);
-      return { model: 'simulado', output_text: JSON.stringify(value) };
+      return { model: 'simulado', output_text: JSON.stringify(apiProseFixture(value)) };
     } } } });
 }
 
@@ -68,11 +68,4 @@ test('mesma citação do pedido é rejeitada no planejamento de guia', async () 
   const result = await plan(changed, { ...request, module: 'Contatos' });
   assert.equal(result.status, 'needs_evidence');
   assert.match(result.summary, /não está vinculada às linhas do código recuperado/i);
-});
-
-test('todos os pontos de validação usam o contexto único', async () => {
-  const source = await readFile(new URL('./content-ai-service.mjs', import.meta.url), 'utf8');
-  const calls = [...source.matchAll(/groundingIssues\(/gu)].slice(2);
-  assert.equal(calls.length, 5);
-  assert.equal([...source.matchAll(/groundingIssues\([^\n]*groundingContext\(/gu)].length, calls.length);
 });

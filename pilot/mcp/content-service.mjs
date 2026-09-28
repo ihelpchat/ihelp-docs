@@ -37,9 +37,11 @@ function escapeYaml(value) {
   return JSON.stringify(value.replaceAll('\r', '').trim());
 }
 
-function rejectSensitive(value) {
-  if (!containsSensitiveData(value)) return;
-  const kinds = sensitiveKinds(value);
+const apiSyntheticEmail = (value) => String(value).replace(/(?<![\w@])pessoa@exemplo\.com(?![\w.])/giu, '[email sintético]');
+function rejectSensitive(value, api = false) {
+  const checked = api ? apiSyntheticEmail(value) : value;
+  if (!containsSensitiveData(checked)) return;
+  const kinds = sensitiveKinds(checked);
   if (kinds.credential) throw new SubmitArticleError('CREDENTIAL', 'Artigo contém possível credencial');
   if (kinds.personal) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém possível dado pessoal');
   if (kinds.internal || kinds.control) throw new SubmitArticleError('PRIVATE_DATA', 'Artigo contém conteúdo interno ou caractere invisível');
@@ -72,7 +74,8 @@ export function validateArticle(article) {
   if (/ihelpchat\.github\.io\/ihelp-docs/i.test(article.body ?? '')) issues.push('links legados não são permitidos');
   if (/^## Tutorial Guiado$/m.test(article.body ?? '')) issues.push('use um Tango público no campo tangoUrl em vez de rodapé genérico');
   if (/^#{2,6}\s+\*\*/m.test(article.body ?? '')) issues.push('headings não devem usar negrito redundante');
-  const sensitive = sensitiveKinds(stringify(article, { lineWidth: 0 }));
+  const serialized = stringify(article, { lineWidth: 0 });
+  const sensitive = sensitiveKinds(article.source === 'api' ? apiSyntheticEmail(serialized) : serialized);
   if (sensitive.credential) issues.push('possível credencial detectada');
   if (sensitive.personal) issues.push('possível dado pessoal detectado');
   if (sensitive.internal || sensitive.control) issues.push('conteúdo interno ou caractere invisível detectado');
@@ -118,7 +121,7 @@ export function renderArticle(article) {
   const metadata = Object.fromEntries(Object.entries(article).filter(([key, value]) => !reserved.has(key) && value !== undefined));
   const body = article.body.trim();
   const rendered = `---\n${stringify(metadata, { lineWidth: 0 })}---\n\n${body}${actionBlock}${tutorial}\n`;
-  rejectSensitive(rendered);
+  rejectSensitive(rendered, article.source === 'api');
   return rendered;
 }
 

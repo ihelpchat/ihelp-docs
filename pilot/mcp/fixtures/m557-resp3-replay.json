@@ -1,0 +1,86 @@
+{
+  "summary": "O pacote contém três páginas novas da referência da API de Contatos, uma por endpoint solicitado.",
+  "path": "api/contatos/buscar-contatos",
+  "endpoint": "GET /contacts/{letter}",
+  "title": "Buscar contatos",
+  "description": "Lista contatos e permite aplicar critérios de busca e segmentação.",
+  "intro": "Use esta página para consultar contatos e obter os identificadores usados nas consultas de detalhes e tags.",
+  "notas": [
+    "Os filtros de consulta são opcionais; searchData busca por trechos do nome ou do número, page começa em 1 e tem padrão 1, e limit tem padrão 20."
+  ],
+  "citations": {
+    "summary": [
+      {
+        "source": "pedido",
+        "quote": "Criar a seção Contatos da referência da API"
+      },
+      {
+        "source": "pedido",
+        "quote": "Uma página por endpoint."
+      }
+    ],
+    "description": [
+      {
+        "repository": "ihelpchat/olah-ihelp",
+        "path": "Comzada.Application/Controllers/V2/ContactsController.cs",
+        "lineStart": 687,
+        "lineEnd": 687,
+        "sha": "71f8201dcc027b1f4b1c5266b3976a8001ae80a0"
+      },
+      {
+        "repository": "ihelpchat/olah-ihelp",
+        "path": "Comzada.Domain/EntitiesV2/Contato/Filters.cs",
+        "lineStart": 16,
+        "lineEnd": 26,
+        "sha": "71f8201dcc027b1f4b1c5266b3976a8001ae80a0"
+      }
+    ],
+    "intro": [
+      {
+        "source": "pedido",
+        "quote": "O idRef do detalhe e o contactId das tags vêm da listagem."
+      }
+    ],
+    "nota": [
+      {
+        "source": "pedido",
+        "quote": "Nenhum filtro é obrigatório."
+      },
+      {
+        "source": "pedido",
+        "quote": "searchData é texto livre que casa com trecho do nome ou do número do contato."
+      },
+      {
+        "repository": "ihelpchat/olah-ihelp",
+        "path": "Comzada.Domain/EntitiesV2/Contato/Filters.cs",
+        "lineStart": 17,
+        "lineEnd": 17,
+        "sha": "71f8201dcc027b1f4b1c5266b3976a8001ae80a0"
+      },
+      {
+        "source": "pedido",
+        "quote": "page começa em 1 e o padrão é 1."
+      },
+      {
+        "repository": "ihelpchat/olah-ihelp",
+        "path": "Comzada.Domain/EntitiesV2/Contato/Filters.cs",
+        "lineStart": 18,
+        "lineEnd": 18,
+        "sha": "71f8201dcc027b1f4b1c5266b3976a8001ae80a0"
+      },
+      {
+        "source": "pedido",
+        "quote": "limit tem padrão 20."
+      }
+    ],
+    "responseDescription": [
+      {
+        "repository": "ihelpchat/olah-ihelp",
+        "path": "Comzada.Domain/EntitiesV2/Contato/Dto/ContactListingsDto.cs",
+        "lineStart": 9,
+        "lineEnd": 9,
+        "sha": "71f8201dcc027b1f4b1c5266b3976a8001ae80a0"
+      }
+    ]
+  }
+}

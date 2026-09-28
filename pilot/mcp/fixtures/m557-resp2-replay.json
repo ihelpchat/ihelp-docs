@@ -1,0 +1,29 @@
+{
+  "list": {
+    "path": "api/contatos/buscar-contatos",
+    "endpoint": "GET /contacts/{letter}",
+    "responseDescription": {
+      "name": "id",
+      "description": {
+        "text": "Identificador numérico do contato, usado como contactId na consulta de tags.",
+        "citations": [
+          {
+            "repository": "ihelpchat/olah-ihelp",
+            "path": "Comzada.Domain/EntitiesV2/Contato/Dto/ContactListingsDto.cs",
+            "lineStart": 7,
+            "lineEnd": 7,
+            "sha": "71f8201dcc027b1f4b1c5266b3976a8001ae80a0"
+          },
+          {
+            "source": "pedido",
+            "quote": "o campo numérico id devolvido pela listagem"
+          }
+        ]
+      }
+    }
+  },
+  "tags": {
+    "path": "api/contatos/buscar-tags-do-contato",
+    "endpoint": "GET /contactTags/getContactsTagByContactId/{contactId}"
+  }
+}

@@ -48,6 +48,7 @@ function linkBlock(destination) {
   return hostReason(/^[a-z][a-z\d+.-]*:/iu.test(value) ? 'forma de esquema não permitido' : 'forma de domínio sem esquema');
 }
 function hostBlocks(text) {
+  text = text.replace(/(?<![\w@])pessoa@exemplo\.com(?![\w.])/giu, '[email sintético]');
   const blocks = [];
   for (const match of text.matchAll(/(?<![\p{L}\p{N}_:])\/\/([^\s<>)"'`]+)/giu)) {
     try {
@@ -149,7 +150,8 @@ export function securityReview(article, { facts = {}, request = {}, examples = [
   const warnings = [];
   const body = String(article.body ?? '');
   const text = stringsOf(article).join('\n');
-  const kinds = sensitiveKinds(text);
+  const kinds = sensitiveKinds(article.path?.startsWith('api/')
+    ? text.replace(/(?<![\w@])pessoa@exemplo\.com(?![\w.])/giu, '[email sintético]') : text);
   if (kinds.personal) blocks.push('Exemplo contém possível dado pessoal (telefone, e-mail ou CPF/CNPJ). Use apenas valores sintéticos.');
   if (kinds.credential || kinds.internal || kinds.control) blocks.push('Conteúdo contém possível segredo ou informação interna.');
   if (normalizedIds(text))

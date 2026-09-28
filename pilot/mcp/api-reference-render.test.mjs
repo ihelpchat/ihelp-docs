@@ -1,3 +1,4 @@
+import { apiProseFixture } from './api-prose-test-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as service from './content-ai-service.mjs';
@@ -29,8 +30,14 @@ async function generate(change = (value) => value, changedContext = context) {
   const output = change(fixture);
   return generateContentPackage(process.cwd(), request, { productContext: changedContext,
     plan: { status: 'ready', guidance: 'Documente o endpoint.', questions: [] },
-    client: { responses: { create: async () => ({ output_text: JSON.stringify(output), model: 'simulado' }) } } });
+    client: { responses: { create: async () => ({ output_text: JSON.stringify(apiProseFixture(output)), model: 'simulado' }) } } });
 }
+const describeParameters = (...names) => (value) => {
+  value.articles[0].parameterDescriptions = names.map((name) => ({
+    name, description: 'Identifica o valor usado nesta consulta.',
+  }));
+  return value;
+};
 
 test('sem fatos estruturados não chama o provider', async () => {
   const result = await generateContentPackage(process.cwd(), request, { productContext: { ...context, endpoints: [] },
@@ -51,7 +58,7 @@ test('renderizador produz rota pública, requisição concreta e pendência de r
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   const [article] = result.articles;
   assert.equal(article.method, 'GET');
-  assert.equal(article.endpoint, '/contacts/details/{IdRef}');
+  assert.equal(article.endpoint, '/contacts/details/{idRef}');
   assert.match(article.body, /curl[^\n]*\/api\/v2\/contacts\/details\/id-exemplo-1/);
   assert.match(article.body, /<Param name="idRef" type="string" required>/);
   assert.match(article.body, /Campos de resposta ainda não documentados/);
@@ -146,7 +153,8 @@ test('parâmetro factual é aceito sem diferenciar maiúsculas', async () => {
 test('campo do body e headers fixos são aceitos na prosa', async () => {
   const facts = { ...endpoint, parameters: [...endpoint.parameters, { name: 'name', type: 'string', in: 'body' }] };
   const result = await generate((value) => {
-    value.articles[0].intro = 'O campo name identifica o contato. O header Authorization autentica a consulta.';
+    value.articles[0].intro = 'O campo name identifica o contato.';
+    value.articles[0].notas = ['O header Authorization autentica a consulta.'];
     return value;
   }, { ...context, endpoints: [facts] });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
@@ -190,12 +198,12 @@ test('rota opcional preserva a página pública sem o segmento opcional', async 
     parameters: [{ name: 'letter', type: 'string', in: 'route', required: false }, { name: 'page', type: 'int', in: 'query' }] };
   const page = { ...examples[0], path: prose.path, paramNames: ['page'],
     frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts' } };
-  const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
+  const result = await generate(describeParameters('page'), { ...context, endpoints: [fact], apiExamples: [page] });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   assert.equal(result.articles[0].endpoint, '/contacts');
   assert.match(result.articles[0].body, /\/api\/v2\/contacts\?page=1/);
-  assert.match(result.articles[0].body, /<Param name="letter" type="string">route \(string\), opcional<\/Param>/);
-  assert.ok(result.pending.includes('parâmetro no código ausente da página: letter'));
+  assert.doesNotMatch(result.articles[0].body, /<Param name="letter"/);
+  assert.ok(!result.pending.includes('parâmetro no código ausente da página: letter'));
 });
 
 test('parâmetros vêm dos fatos e divergências da página viram pendências nos dois sentidos', async () => {
@@ -207,13 +215,11 @@ test('parâmetros vêm dos fatos e divergências da página viram pendências no
     ], responseFields: [] };
   const page = { ...examples[0], path: prose.path, paramNames: ['searchData', 'page', 'limit'],
     frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts' } };
-  const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
+  const result = await generate(describeParameters('page', 'limit'), { ...context, endpoints: [fact], apiExamples: [page] });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
-  assert.deepEqual([...result.articles[0].body.matchAll(/<Param name="([^"]+)"/gu)].map((match) => match[1]), ['letter', 'page', 'limit']);
-  assert.match(result.articles[0].body, /<Param name="letter" type="string">route \(string\), opcional<\/Param>/);
+  assert.deepEqual([...result.articles[0].body.matchAll(/<Param name="([^"]+)"/gu)].map((match) => match[1]), ['page', 'limit']);
   assert.deepEqual(result.pending, [
     'parâmetro na página sem fato no código: searchData',
-    'parâmetro no código ausente da página: letter',
   ]);
 });
 
@@ -221,7 +227,7 @@ test('página alinhada aos fatos não cria pendência de parâmetro', async () =
   const fact = { ...endpoint, responseFields: [] };
   const page = { ...examples[0], path: prose.path, paramNames: ['IdRef'],
     frontmatter: { source: 'api', contentType: 'referencia', method: 'GET', endpoint: '/contacts/details/{IdRef}' } };
-  const result = await generate((value) => value, { ...context, endpoints: [fact], apiExamples: [page] });
+  const result = await generate(describeParameters('idRef'), { ...context, endpoints: [fact], apiExamples: [page] });
   assert.equal(result.status, 'ready', result.questions?.join('; '));
   assert.deepEqual(result.pending, []);
 });
@@ -242,7 +248,7 @@ test('query e body usam nomes e valores tipados dos fatos', () => {
   assert.match(rendered.body, /<Param name="page" type="number">query/);
   assert.match(rendered.body, /<Param name="name" type="string" required>body/);
   assert.match(rendered.body, /\/api\/v2\/contacts\?page=1/);
-  assert.match(rendered.body, /-d '\{"name":"exemplo"\}'/);
+  assert.match(rendered.body, /-d '\{"name":"Maria Exemplo"\}'/);
 });
 
 test('página sem parâmetro de corpo não o remove do artigo', () => {
@@ -251,7 +257,7 @@ test('página sem parâmetro de corpo não o remove do artigo', () => {
   const page = { ...examples[0], paramNames: [] };
   const rendered = renderApiReference(fact, [page], page);
   assert.match(rendered.body, /<Param name="name" type="string" required>body/);
-  assert.match(rendered.body, /-d '\{"name":"exemplo"\}'/);
+  assert.match(rendered.body, /-d '\{"name":"Maria Exemplo"\}'/);
   assert.deepEqual(rendered.pending, ['parâmetro no código ausente da página: name']);
 });
 
@@ -281,4 +287,25 @@ test('seções técnicas seguem a ordem lida da página', () => {
 
 test('renderizador é determinístico byte a byte', () => {
   assert.equal(JSON.stringify(renderApiReference(endpoint, examples)), JSON.stringify(renderApiReference(endpoint, examples)));
+});
+
+test('tabela de erros publica apenas linguagem do contrato', () => {
+  const fact = { ...endpoint, responseFields: [], errors: [
+    { status: 400, message: 'Mensagem de erro', when: 'Exceção capturada pela action; corpo em ResponseHttp.ToReturn.' },
+  ] };
+  const table = renderApiReference(fact, examples).body.split('## Erros comuns\n\n')[1];
+  assert.match(table, /\| 400 \| Mensagem de erro \| Falha ao processar a requisição; a mensagem vem no campo `dados`\. \|/u);
+  assert.doesNotMatch(table, /\b(?:DTO|entity|repository|service|action|ToReturn)\b/iu);
+});
+
+test('Field usa tipos públicos para anulável e classes', () => {
+  const fact = { ...endpoint, responseFields: [
+    { name: 'page', type: 'int?' }, { name: 'contato', type: 'Contato' },
+    { name: 'contatos', type: 'List<Contato>' },
+  ] };
+  const body = renderApiReference(fact, examples).body;
+  assert.match(body, /<Field name="page">número \(opcional\) — /u);
+  assert.match(body, /<Field name="contato">objeto — /u);
+  assert.match(body, /<Field name="contatos">lista de objetos — /u);
+  assert.doesNotMatch(body, /<Field[^>]*>[^<]*(?:int\?|Contato)/u);
 });
