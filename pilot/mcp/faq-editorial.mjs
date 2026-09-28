@@ -5,6 +5,7 @@ import { redactSensitiveData, containsSensitiveData, sensitiveKinds } from './se
 import { valueFor } from './api-synthetic-example.mjs';
 import { FAQ_NEUTRAL_WORDS, FAQ_NEUTRAL_VERBS } from './faq-neutral-words.mjs';
 import { faqStem } from './faq-portuguese-stem.mjs';
+import { mentionsSource } from './source-mention.mjs';
 
 export const FAQ_SECTIONS = {
   resposta: 'Resposta direta', paraQueServe: 'Para que serve', quandoUsar: 'Quando usar',
@@ -411,7 +412,11 @@ export function validateFaqSections(sections, context) {
           ? structuredFaqStep(unit, indexedFacts, context, pending)
           : structuredFaqError(unit, indexedFacts, context, pending) };
       })
-        .filter((item) => item.rendered);
+        .filter((item) => {
+          if (!mentionsSource(item.rendered?.text)) return Boolean(item.rendered);
+          pending.push(`${FAQ_SECTIONS[key]}: menção à fonte`);
+          return false;
+        });
       if (valid.length) {
         if (key === 'passos') {
           const distinct = [];
@@ -436,6 +441,7 @@ export function validateFaqSections(sections, context) {
     }
     const valid = units.filter((unit) => {
       if (!unit || typeof unit.text !== 'string' || !normalized(unit.text)) return false;
+      if (mentionsSource(unit.text)) { pending.push(`${FAQ_SECTIONS[key]}: menção à fonte`); return false; }
       if (key !== 'resposta' && FAQ_PROCEDURAL_IMPERATIVE.test(unit.text)) return false;
       if (/\b(?:pedido|sinal agregado|fonte|nao esta descrito|nao estao descritos)\b/u.test(fold(unit.text))) {
         pending.push(`metanarração em ${unit.text}`);
@@ -585,7 +591,7 @@ export function validateFreeFaqSections(sections, context = {}) {
         if (!task || typeof task.tarefa !== 'string' || !Array.isArray(task.passos)) return [];
         const heading = task.tarefa.replace(/^#+\s*/u, '').trim();
         const headingIssue = !/^[\p{L}\p{N}() ,\/-]{1,80}$/u.test(heading)
-          ? 'título de tarefa inválido' : rigidFaqIssue(heading, context);
+          ? 'título de tarefa inválido' : mentionsSource(heading) ? 'menção à fonte' : rigidFaqIssue(heading, context);
         if (headingIssue) { pending.push(`${heading}: ${headingIssue}`); return []; }
         const citedPublishedPage = task.passos.some((unit) => publishedStepEvidence(unit?.text ?? '', context, heading));
         if (!citedPublishedPage && faqTasksWithoutFacts(context.request, context.screenFacts).some((name) => fold(name) === fold(heading))) {
@@ -593,8 +599,10 @@ export function validateFreeFaqSections(sections, context = {}) {
           return [];
         }
         const steps = task.passos.flatMap((unit) => {
-          const text = typeof unit?.text === 'string' ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
-          const issue = text ? rigidFaqIssue(text, { ...context, taskHeading: heading }) : 'passo vazio';
+          const sourceMention = mentionsSource(unit?.text);
+          const text = typeof unit?.text === 'string' && !sourceMention ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
+          const issue = sourceMention ? 'menção à fonte' : text
+            ? rigidFaqIssue(text, { ...context, taskHeading: heading }) : 'passo vazio';
           if (issue) { pending.push(`${task.tarefa}: ${issue}`); return []; }
           return [{ ...unit, text }];
         });
@@ -604,8 +612,9 @@ export function validateFreeFaqSections(sections, context = {}) {
       continue;
     }
     kept[key] = (sections?.[key] ?? []).flatMap((unit) => {
-      const text = typeof unit?.text === 'string' ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
-      const issue = text ? rigidFaqIssue(text, context) : 'frase vazia';
+      const sourceMention = mentionsSource(unit?.text);
+      const text = typeof unit?.text === 'string' && !sourceMention ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
+      const issue = sourceMention ? 'menção à fonte' : text ? rigidFaqIssue(text, context) : 'frase vazia';
       if (issue) { pending.push(`${FREE_FAQ_SECTIONS[key]}: ${issue}`); return []; }
       return [{ ...unit, text }];
     });

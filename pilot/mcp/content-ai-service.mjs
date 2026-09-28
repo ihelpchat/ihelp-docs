@@ -15,6 +15,7 @@ import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 import { guardModelOutput } from './model-output-guard.mjs';
 import { PRODUCT_TERMS } from './product-terms.mjs';
 import { validCanonicalQuestion } from './conversational-contract.mjs';
+import { mentionsSource } from './source-mention.mjs';
 import { classifyFaqQuestions, hasFaqTaskFacts, loadBusinessContext, selectFaqStyleExamples, adaptScreenFacts,
   validateFaqSections, renderFaqSections, fixedFaqSupportSection, deterministicFaqAnswer,
   missingFaqTaskSteps, FAQ_SECTIONS } from './faq-editorial.mjs';
@@ -88,7 +89,7 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint], refs = []
     .map((name) => name.toLocaleLowerCase('pt-BR')));
   for (const value of [article.title, article.description, article.intro, ...article.notas]) {
     if (typeof value !== 'string') { issues.push('prosa inválida'); continue; }
-    if (/\bbusiness-context\b|\b[a-z0-9-]+\.md\b/iu.test(value)) issues.push('fonte de contexto na prosa');
+    if (mentionsSource(value)) issues.push('menção à fonte');
     const typeIssue = internalTypeIssue(value);
     if (typeIssue) issues.push(typeIssue);
     for (const term of value.matchAll(/\b(?:DTO|entity|repository|service)\b/giu))
@@ -896,6 +897,64 @@ async function generateContentPackageCore(root, request, options = {}) {
     }
   }
   if (!Array.isArray(parsed.articles)) return withPending(apiPending('schema de artigos inválido'));
+  const sourcePending = [];
+  if (faqRequested(request)) {
+    const affected = mentionsSource(parsed.summary) || parsed.articles.some((article) =>
+      [article.title, article.description, article.assistantQuestion, article.assistantOverview,
+        ...(article.assistantSuggestions ?? [])].some(mentionsSource)
+      || Object.values(article.sections ?? {}).some((items) => Array.isArray(items) && items.some((item) =>
+        mentionsSource(item?.text) || mentionsSource(item?.tarefa)
+        || item?.passos?.some((step) => mentionsSource(step.text)))));
+    if (affected && !options.faqRetryIssues) return generateContentPackage(root, request, { ...options,
+      productContext, plan, faqRetryIssues: ['menção à fonte'] });
+    if (affected) {
+      if (mentionsSource(parsed.summary)) { parsed.summary = 'Página pronta para revisão.'; sourcePending.push('summary: menção à fonte'); }
+      for (const article of parsed.articles) {
+        for (const field of ['description', 'assistantOverview', 'assistantSuggestions'])
+          if ((Array.isArray(article[field]) ? article[field] : [article[field]]).some(mentionsSource))
+            sourcePending.push(`${article.path}: menção à fonte em ${field}`);
+        if (mentionsSource(article.title)) { article.title = mentionsSource(request.topic) ? 'Guia do iHelp' : request.topic; sourcePending.push(`${article.path}: menção à fonte no título`); }
+        if (mentionsSource(article.assistantQuestion)) { article.assistantQuestion = `Como uso ${article.title}?`; sourcePending.push(`${article.path}: menção à fonte em assistantQuestion`); }
+      }
+      safePackage.summary = parsed.summary;
+    }
+  }
+  if (request.module === 'api') {
+    const citedSource = (unit) => mentionsSource(typeof unit === 'string' ? unit : unit?.text);
+    const affected = parsed.articles.some((article) => citedSource(article.title)
+      || [article.description, article.intro, ...(article.notas ?? []),
+        ...(article.responseDescriptions ?? []).map((item) => item.description),
+        ...(article.parameterDescriptions ?? []).map((item) => item.description)].some(citedSource))
+      || (parsed.summary ?? []).some(citedSource);
+    if (affected && !options.retryIssues) return generateContentPackage(root, request, { ...options,
+      productContext, plan, retryIssues: ['menção à fonte'] });
+    if (affected) {
+      for (const article of parsed.articles) {
+        if (citedSource(article.title)) {
+          sourcePending.push(`${article.path}: menção à fonte no título`);
+          article.title = `Referência de ${mentionsSource(request.topic) ? 'API do iHelp' : request.topic}`;
+        }
+        for (const field of ['description', 'intro']) if (citedSource(article[field])) {
+          sourcePending.push(`${article.path}: menção à fonte em ${field}`);
+          article[field] = { ...article[field], text: 'Consulte os dados deste endpoint.' };
+        }
+        for (const field of ['notas', 'responseDescriptions', 'parameterDescriptions']) {
+          const units = article[field] ?? [];
+          article[field] = units.filter((item) => {
+            const unsafe = citedSource(field === 'notas' ? item : item.description);
+            if (unsafe) sourcePending.push(`${article.path}: menção à fonte em ${field}`);
+            return !unsafe;
+          });
+        }
+      }
+      parsed.summary = parsed.summary.filter((item) => {
+        const unsafe = citedSource(item);
+        if (unsafe) sourcePending.push('summary: menção à fonte');
+        return !unsafe;
+      });
+      safePackage.summary = parsed.summary.map((unit) => unit.text).join(' ');
+    }
+  }
   if (faqRequested(request) && !faqMultipleTypesRequested(request)) {
     const faq = parsed.articles.find((article) => article.contentType === 'faq' && /^docs\//u.test(article.path ?? ''));
     if (faq) {
@@ -1036,7 +1095,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       && !apiPages?.pending.some((item) => item.startsWith(`${id}:`)));
     if (withoutPage) return withPending(apiPending(`endpoint sem página: ${withoutPage}`));
     return finalizeGeneratedPages(withPending({ ...safePackage, articles, discardedQuestions: plan.discardedQuestions ?? [],
-      pending: [...new Set([...(productContext.pending ?? []), ...pending, ...(apiPages?.pending ?? [])])], existing, model: response.model }), request, factsByPath);
+      pending: [...new Set([...(productContext.pending ?? []), ...pending, ...(apiPages?.pending ?? []), ...sourcePending])], existing, model: response.model }), request, factsByPath);
   }
   if (parsed.articles.some((article) => article.source === 'api' || /^api\//u.test(article.path ?? ''))) {
     return withPending(apiPending('página API exige fatos estruturados e módulo api'));
@@ -1072,7 +1131,7 @@ async function generateContentPackageCore(root, request, options = {}) {
   const faqContext = { request, existing, support: productContext.support,
     business: productContext.businessContext,
     screenFacts: adaptScreenFacts({ facts: productContext.screenFacts, sha: productContext.code?.find((item) => item.role === 'frontend')?.ref }, productContext.coverage) };
-  const sectionPending = [];
+  const sectionPending = [...sourcePending];
   const articles = [];
   for (const prose of parsed.articles) {
     if (!prose.sections?.passos?.some((item) => item?.acao)) {
@@ -1187,6 +1246,19 @@ async function generateContentPackageCore(root, request, options = {}) {
     articles.push(article);
   }
   const invalid = articles.map((article) => {
+    for (const field of ['description', 'assistantQuestion', 'assistantOverview']) if (mentionsSource(article[field])) {
+      sectionPending.push(`${article.path}: menção à fonte em ${field}`);
+      article[field] = field === 'assistantQuestion' ? 'Como uso o iHelp?' : 'Passos para usar o iHelp.';
+    }
+    article.assistantSuggestions = (article.assistantSuggestions ?? []).filter((text) => {
+      if (!mentionsSource(text)) return true;
+      sectionPending.push(`${article.path}: menção à fonte em assistantSuggestions`);
+      return false;
+    });
+    if (mentionsSource(article.body)) {
+      article.body = article.body.split(/\n\n/u).filter((text) => !mentionsSource(text)).join('\n\n');
+      sectionPending.push(`${article.path}: menção à fonte no corpo`);
+    }
     const validation = validateArticle(article);
     const issues = [...validation.issues, ...article.productActions
       .filter((action) => !confirmedAction(action, request, productContext))
