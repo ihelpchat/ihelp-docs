@@ -4616,6 +4616,16 @@ button {
   border-color: var(--ih-coral-300);
 }
 
+.ih-prose a.ih-ai-product-action {
+  padding-inline: 0;
+  color: var(--ih-slate-700);
+  border: 0;
+  background: transparent;
+  font-weight: 500;
+}
+
+.ih-prose a.ih-ai-product-action:hover { text-decoration: underline; }
+
 .ih-ai-product-action svg {
   width: 14px;
   height: 14px;

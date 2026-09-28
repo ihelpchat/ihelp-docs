@@ -189,8 +189,6 @@ export function faqSubtitle(sections, request = {}, screenFacts = []) {
   const first = sections.oQueE?.[0]?.text ?? '';
   const sentence = first.match(/^[^.!?]+[.!?]/u)?.[0]?.trim();
   if (sentence && !sentence.includes('<AConfirmar>') && !sentence.includes('</AConfirmar>')) {
-    sections.oQueE[0] = { ...sections.oQueE[0], text: first.slice(sentence.length).trim() };
-    if (!sections.oQueE[0].text) sections.oQueE.shift();
     return replaceModuleTerminology(sentence, faqModuleName(request, screenFacts));
   }
   const direct = deterministicFaqAnswer(request, screenFacts)?.text;
@@ -545,12 +543,14 @@ const cleanFaqMeta = (text, pending) => String(text).split(/(?<=[.!?])\s+(?=[\p{
 }).join(' ');
 const trimFaqLabels = (text) => text.replace(/\*\*([^*\n]+)\*\*/gu, (_match, label) => `**${label.trim()}**`);
 
-function rigidFaqIssue(text, context) {
+function rigidFaqIssue(text, context, { useCase = false } = {}) {
+  if (String(text).includes('→')) return 'caso de uso com seta';
   const labels = [...String(text).matchAll(/\*\*([^*\n]+)\*\*/gu)].map((match) => match[1]);
   const labelKey = (value) => fold(String(value).replace(/[“”"']/gu, '').trim());
   const known = new Set((context.screenFacts ?? []).map((fact) => labelKey(fact.text)));
   const pages = new Set((context.existing ?? []).map((page) => labelKey(page.title)));
   for (const label of labels) {
+    if (useCase && String(text).startsWith(`**${label}**`) && /[.!?]$/u.test(label)) continue;
     const before = String(text).slice(0, String(text).indexOf(`**${label}**`));
     const pageReference = pages.has(labelKey(label)) && /\b(?:consulte|veja|leia|guia|página)\b/iu.test(before.slice(-100));
     if (!known.has(labelKey(label)) && !pageReference) return `rótulo inexistente: ${label}`;
@@ -599,7 +599,7 @@ export function validateFreeFaqSections(sections, context = {}) {
     }
     kept[key] = (sections?.[key] ?? []).flatMap((unit) => {
       const text = typeof unit?.text === 'string' ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
-      const issue = text ? rigidFaqIssue(text, context) : 'frase vazia';
+      const issue = text ? rigidFaqIssue(text, context, { useCase: key === 'casosDeUso' }) : 'frase vazia';
       if (issue) { pending.push(`${FREE_FAQ_SECTIONS[key]}: ${issue}`); return []; }
       return [{ ...unit, text }];
     });
@@ -651,6 +651,6 @@ export function renderFreeFaqSections(sections) {
     if (key === 'passos') return (sections.passos ?? []).length ? [`## ${title}\n\n${sections.passos.map((task) =>
       `### ${String(task.tarefa).replace(/^#+\s*/u, '').trim()}\n\n${task.passos.map((unit, index) => `${index + 1}. ${trimFaqLabels(unit.text)}`).join('\n')}`).join('\n\n')}`] : [];
     const units = sections[key] ?? [];
-    return units.length ? [`## ${title}\n\n${units.map((unit) => key === 'casosDeUso' ? `- ${unit.text}` : unit.text).join('\n\n')}`] : [];
+    return units.length ? [`## ${title}\n\n${units.map((unit) => unit.text).join('\n\n')}`] : [];
   }).join('\n\n');
 }
