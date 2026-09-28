@@ -7,8 +7,8 @@ const unit = (text) => ({ text, citations: [], refs: [] });
 const note = (type, text) => ({ ...unit(text), type });
 const endpoint = { verb: 'GET', route: '/api/v2/contacts', public: true, documented: true,
   authorization: 'authenticated', parameters: [
-    { name: 'departmentIds', type: 'int[]', in: 'query', required: false },
-    { name: 'responsibleUserIds', type: 'int[]', in: 'query', required: false },
+    { name: 'departmentIds', type: 'List<int>', in: 'query', required: false },
+    { name: 'responsibleUserIds', type: 'List<int>', in: 'query', required: false },
     { name: 'linkedToMe', type: 'bool', in: 'query', required: false },
     { name: 'showAll', type: 'bool', in: 'query', required: false },
     { name: 'export', type: 'bool', in: 'query', required: false },
@@ -110,4 +110,13 @@ test('valores inline seguem o tipo dos parâmetros dos fatos', async () => {
     assert.equal(result.status, 'needs_information', value);
     assert.match(result.summary, /código inline proibido/u);
   }
+});
+
+test('query sem crases também é validada antes de ser marcada', async () => {
+  const invalid = structuredClone(output);
+  invalid.articles[0].notas[3].text = 'Use inventado=1&inventado=2 para filtrar.';
+  const { result, calls } = await generate([invalid]);
+  assert.equal(calls, 2);
+  assert.equal(result.status, 'needs_information');
+  assert.match(result.summary, /query|parâmetro|código inline/iu);
 });
