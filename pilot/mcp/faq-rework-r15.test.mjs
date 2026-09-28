@@ -27,9 +27,9 @@ test('nome visível vem do item de menu com a mesma rota', async () => {
     const request = { topic: expected, description: `Criar ${expected} e publicar.` };
     const direct = deterministicFaqAnswer(request, [...facts, { kind: 'action', text: 'Criar',
       repository: 'ihelpchat/front-react', path: 'src/Fixture.tsx', lineStart: 3, lineEnd: 3, sha }]);
-    assert.match(direct.text, new RegExp(`Na tela \\*\\*${expected}\\*\\*`));
+    assert.match(direct.text, new RegExp(`No módulo \\*\\*${expected}\\*\\*`));
     assert.match(fixedFaqSupportSection(request, facts)[0].text,
-      new RegExp(`concluir um passo na tela ${expected}`));
+      new RegExp(`concluir um passo no módulo ${expected}`));
   }
 });
 
@@ -137,5 +137,5 @@ test('conferir placeholder pede nova tentativa para preencher o campo', async ()
   assert.equal(result.status, 'ready', JSON.stringify(result.questions));
   assert.match(result.articles[0].body, /Preencha \*\*Digite o título do robô\*\*/u);
   assert.doesNotMatch(result.articles[0].body, /Confira \*\*Digite o título do robô\*\*/u);
-  assert.equal(result.articles[0].assistantQuestion, 'Como usar a tela Robôs?');
+  assert.equal(result.articles[0].assistantQuestion, 'Como usar o módulo Robôs?');
 });

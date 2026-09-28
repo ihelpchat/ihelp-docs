@@ -1012,7 +1012,7 @@ button {
   border-bottom: 1px solid var(--ih-slate-200);
 }
 
-.ih-meta > span {
+.ih-meta > span, .ih-meta > a {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1024,6 +1024,12 @@ button {
   color: var(--ih-slate-400);
 }
 
+.ih-meta > .ih-meta-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 .ih-meta-pill {
   padding: 3px 9px;
   color: #15803d;
@@ -1031,6 +1037,11 @@ button {
   font-weight: 600;
   border-radius: 999px;
   background: #dcfce7;
+}
+
+.ih-meta a.ih-meta-pill:hover, .ih-meta a.ih-meta-pill:focus-visible {
+  color: #166534;
+  text-decoration: underline;
 }
 
 .ih-meta-pill > span {

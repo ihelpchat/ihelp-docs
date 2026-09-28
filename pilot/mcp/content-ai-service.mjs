@@ -17,7 +17,7 @@ import { PRODUCT_TERMS } from './product-terms.mjs';
 import { validCanonicalQuestion } from './conversational-contract.mjs';
 import { classifyFaqQuestions, hasFaqTaskFacts, loadBusinessContext, selectFaqStyleExamples, adaptScreenFacts,
   validateFaqSections, renderFaqSections, fixedFaqSupportSection, deterministicFaqAnswer,
-  missingFaqTaskSteps, FAQ_SECTIONS } from './faq-editorial.mjs';
+  missingFaqTaskSteps, FAQ_SECTIONS, faqSubtitle, faqModuleName, replaceModuleTerminology } from './faq-editorial.mjs';
 import { FREE_FAQ_SECTIONS, validateFreeFaqSections, judgeClaims, renderFreeFaqSections,
   faqTasksWithoutFacts, missingFreeFaqTaskSteps } from './faq-editorial.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
@@ -595,7 +595,7 @@ function requestText(request, existing, productContext, codeHygiene = {}) {
   };
   return [
     `Tema: ${request.topic}`,
-    `Módulo: ${request.module}`,
+    `Módulo do menu: ${faqModuleName(request, productContext.screenFacts ?? []) ?? request.module}`,
     `<<PEDIDO>>\n${request.description}${request.details ? `\n${request.details}` : ''}\n<<FIM DO PEDIDO>>`,
     `Público: ${request.audience ?? 'Cliente em trial sem treinamento'}`,
     request.productRoute ? `Rota confirmada no produto: ${request.productRoute}` : '',
@@ -828,8 +828,8 @@ async function generateContentPackageCore(root, request, options = {}) {
         request.module === 'api' || !faqRequested(request) ? 'Crie um pacote completo de documentação do iHelp usando apenas os fatos fornecidos.'
           : 'Escreva o FAQ com os fatos da tela e a experiência do cliente. Afirmações sem fonte serão marcadas pelo juiz para revisão.',
         request.module === 'api' ? 'O público da referência conhece HTTP. Descreva somente o contrato sustentado pelos fatos.' : 'O público acabou de acessar o iHelp há 30 segundos, está em trial e não recebeu treinamento. Nunca suponha que conhece menus, termos ou pré-requisitos.',
-        request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : faqRequested(request) ? 'Gere UMA página FAQ em docs/. Escreva livremente como atendente experiente para cliente 60+, com frases naturais e curtas. Em sections inclua O que é em 2–3 frases, Para que serve com ganho, Casos de uso em tópicos (situação → ação → resultado), Passo a passo por tarefa (Buscar, Cadastrar, Editar, Responsável, Importar, Agendar conforme o pedido e fatos), Dúvidas comuns, Erros comuns e o que fazer. Cada passo é texto livre, com rótulos exatos da tela em negrito. Deixe suporte vazio; o sistema adiciona a seção fixa. Use modelos só para estilo, nunca como fatos. Se faltar contexto de negócio, ainda escreva as seções de negócio: o juiz marcará a confirmar.' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
-        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations,refs}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations,refs}, também com uma frase por text (ponto e vírgula permitido). Use refs: [] quando não houver referência cruzada. Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros, como cabeçalhos e diferenças entre endpoints.' : faqRequested(request) ? 'Em passos use objetos {tarefa,passos:[{text}]}, com um ### por tarefa. Escreva instruções completas, na ordem da tela, sem repetir abertura do mesmo menu. Tarefa pedida sem fatos da tela não vira seção; registre-a como pendência para a PR. Em Casos de uso use 2 ou 3 itens {text}, cada um com situação, ação e resultado. Não gere print se não houver manifesto. Nenhuma estrutura acao/fato da versão antiga.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
+        request.module === 'api' ? 'Escreva path, endpoint, title, description, intro e notas para endpoints públicos. Escolha endpoint exatamente da lista fechada do schema, um endpoint distinto por artigo. A ordem dos artigos deve seguir a ordem dos fatos. Use os modelos somente como estilo: explique o que o endpoint faz, quando usar, o que retorna, erros comuns e notas úteis, incluindo de onde vem cada id quando houver fonte. Não copie fatos dos modelos para outro endpoint. Não escreva método, rota, parâmetros, resposta, componentes, frontmatter ou código. Se o endpoint não for público, responda needs_information com "endpoint não público: confirmar".' : faqRequested(request) ? 'Gere UMA página FAQ em docs/. Escreva livremente como atendente experiente para cliente 60+, com frases naturais e curtas. Em sections inclua O que é em 2–3 frases, Para que serve com ganho, Casos de uso em tópicos (situação → ação → resultado), Passo a passo por tarefa (Buscar, Cadastrar, Editar, Responsável, Importar, Agendar conforme o pedido e fatos), Dúvidas comuns, Erros comuns e o que fazer. Cada passo é texto livre, com rótulos exatos da tela em negrito. Chame o item do menu de módulo pelo nome da matriz de cobertura; use tela apenas para telas e janelas específicas dentro dele. Deixe suporte vazio; o sistema adiciona a seção fixa. Use modelos só para estilo, nunca como fatos. Se faltar contexto de negócio, ainda escreva as seções de negócio: o juiz marcará a confirmar.' : 'Gere exatamente dois artigos quando o tema for operacional: uma FAQ em docs/ e um tutorial em tutoriais/. Ambos devem começar dizendo onde a pessoa está e onde deve clicar.',
+        request.module === 'api' ? 'A parte técnica será renderizada dos fatos depois da sua resposta. summary é uma lista de objetos {text,citations,refs}, com uma frase por item; description, intro, cada nota e cada descrição de responseDescriptions e parameterDescriptions são objetos {text,citations,refs}, também com uma frase por text (ponto e vírgula permitido). Use refs: [] quando não houver referência cruzada. Não crie grounding separado no pacote. Em responseDescriptions, use em name o caminho completo de um campo de resposta do enum, incluindo envelope e [] quando houver. Em parameterDescriptions, use em name o nome exato de um parâmetro do enum e explique-o individualmente, com nome técnico entre crases no texto se for citado. Cite cada descrição. Sem fonte, omita o item da lista. Reserve notas para comportamentos que atravessam parâmetros, como cabeçalhos e diferenças entre endpoints.' : faqRequested(request) ? 'Em passos use objetos {tarefa,passos:[{text}]}. Escreva a tarefa sem ###; o sistema cria o heading. Cada text é uma ação concreta, nunca um título. Escreva instruções completas, na ordem da tela, sem repetir abertura do mesmo menu. Tarefa pedida sem fatos da tela não vira seção; registre-a como pendência para a PR. Em Casos de uso use 2 ou 3 itens {text}, cada um com situação, ação e resultado. Não gere print se não houver manifesto. Nenhuma estrutura acao/fato da versão antiga.' : 'Cada passo deve conter uma ação, o resultado visível e, quando necessário, como confirmar que funcionou. Não repita a mesma instrução em introdução, listas e passos.',
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
         request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : faqRequested(request) ? 'Preencha assistantQuestion com uma pergunta canônica. Os demais campos do assistente vêm da resposta direta e dos passos validados.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
@@ -1072,13 +1072,19 @@ async function generateContentPackageCore(root, request, options = {}) {
       }
       const materialize = (sections) => {
         const { sections: _sections, ...article } = prose;
-        const direct = deterministicFaqAnswer(request, faqContext.screenFacts);
-        article.body = [direct?.text, renderFreeFaqSections({ ...sections,
-          suporte: fixedFaqSupportSection(request, faqContext.screenFacts) })].filter(Boolean).join('\n\n');
-        article.description = `${(direct?.text ?? `Passos para usar ${request.topic} no iHelp.`).replace(/\*\*/gu, '')} Veja as tarefas e os passos nesta página.`.slice(0, 240);
-        const firstStep = (sections.passos[0]?.passos[0]?.text ?? '').replace(/<\/?AConfirmar>/gu, '');
-        article.assistantOverview = (firstStep.length >= 45 ? firstStep
-          : `${direct?.text ?? ''} ${firstStep}`.trim()).slice(0, 200);
+        const display = structuredClone(sections);
+        display.passos = (display.passos ?? []).map((task) => ({ ...task,
+          passos: task.passos.filter((step) => !/^#{1,6}\s+\S/u.test(step.text.trim())) }))
+          .filter((task) => task.passos.length);
+        const menuModule = faqModuleName(request, faqContext.screenFacts);
+        article.description = faqSubtitle(display, request, faqContext.screenFacts).slice(0, 240);
+        article.body = replaceModuleTerminology(renderFreeFaqSections({ ...display,
+          suporte: fixedFaqSupportSection(request, faqContext.screenFacts) }), menuModule);
+        const firstStep = (display.passos.flatMap((task) => task.passos).find((step) =>
+          /\b(?:abra|acesse|clique|escolha|selecione|confira|verifique|corrija|configure|crie|digite|insira|envie|importe|pesquise|revise|localize|inicie|conclua|adicione)\b/iu.test(step.text))?.text ?? '')
+          .replace(/<\/?AConfirmar>/gu, '');
+        article.assistantOverview = replaceModuleTerminology((firstStep.length >= 45 ? firstStep
+          : `${article.description} ${firstStep}`.trim()).slice(0, 200), menuModule);
         article.assistantInitialSteps = firstStep ? 1 : 0;
         article.assistantSuggestions = ['Falar com uma pessoa?'];
         article.productActions = article.productActions.map(normalizeCatalogLabel);
@@ -1155,10 +1161,13 @@ async function generateContentPackageCore(root, request, options = {}) {
         && !/[\p{L}\p{N}]/u.test(before[at + fact.routeTitle.length] ?? ''))
         article.assistantQuestion = before.slice(0, at) + fact.text + before.slice(at + fact.routeTitle.length);
     }
+    article.assistantQuestion = replaceModuleTerminology(article.assistantQuestion,
+      faqModuleName(request, faqContext.screenFacts));
     if (!validCanonicalQuestion(article.assistantQuestion)) {
-      const screen = faqContext.screenFacts.find((fact) => fact.kind === 'route' && fact.text)?.text
+      const screen = faqModuleName(request, faqContext.screenFacts)
+        ?? faqContext.screenFacts.find((fact) => fact.kind === 'route' && fact.text)?.text
         ?? request.module ?? prose.title ?? request.topic;
-      const candidate = `Como uso a tela ${screen}?`;
+      const candidate = `Como uso o módulo ${screen}?`;
       article.assistantQuestion = validCanonicalQuestion(candidate)
         ? candidate : `Como uso ${String(request.topic ?? prose.title).slice(0, 90)}?`;
     }

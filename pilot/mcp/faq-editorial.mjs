@@ -5,6 +5,7 @@ import { redactSensitiveData, containsSensitiveData } from './sensitive-data.mjs
 import { valueFor } from './api-synthetic-example.mjs';
 import { FAQ_NEUTRAL_WORDS, FAQ_NEUTRAL_VERBS } from './faq-neutral-words.mjs';
 import { faqStem } from './faq-portuguese-stem.mjs';
+import coverageMatrix from '../architecture/coverage-matrix.json' with { type: 'json' };
 
 export const FAQ_SECTIONS = {
   resposta: 'Resposta direta', paraQueServe: 'Para que serve', quandoUsar: 'Quando usar',
@@ -129,6 +130,25 @@ const requestedFaqTaskText = (request = {}) => fold([
   request.topic, request.description, request.details,
 ].filter(Boolean).join(' '));
 
+export function faqModuleName(request = {}, screenFacts = []) {
+  const route = screenFacts.find((fact) => fact.kind === 'route' && fact.route)?.route ?? request.productRoute;
+  return coverageMatrix.find((item) => item.productRoutes.includes(route))?.module
+    ?? coverageMatrix.find((item) => fold(item.module) === fold(request.module))?.module
+    ?? null;
+}
+
+export function replaceModuleTerminology(text, menuModule) {
+  if (!menuModule) return text;
+  const escaped = menuModule.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  return String(text).replace(new RegExp(`\\b(?:(na|da|pela|a) )?tela(?=\\s+(?:\\*\\*)?${escaped}(?![\\p{L}\\p{N}]))`, 'giu'),
+    (match, preposition) => {
+      const article = ({ na: 'no', da: 'do', pela: 'pelo', a: 'o' })[preposition?.toLocaleLowerCase('pt-BR')];
+      if (!article) return match === 'Tela' ? 'Módulo' : 'módulo';
+      return `${preposition[0] === preposition[0].toUpperCase()
+        ? article[0].toUpperCase() + article.slice(1) : article} módulo`;
+    });
+}
+
 // The direct answer is assembled from requested tasks backed by screen facts.
 export function deterministicFaqAnswer(request = {}, screenFacts = []) {
   const screenFact = screenFacts.find((fact) => fact.kind === 'route' && fact.text)
@@ -158,8 +178,25 @@ export function deterministicFaqAnswer(request = {}, screenFacts = []) {
   const list = actions.length === 1 ? actions[0] : `${actions.slice(0, -1).join(', ')} e ${actions.at(-1)}`;
   const citations = [screenFact?.repository && screenFact.path && screenFact.sha ? citeOf(screenFact) : null,
     ...supported.map((item) => item.citation)].filter(Boolean);
-  return { text: `Na tela **${screen}**, você pode ${list}.`,
+  const menuModule = faqModuleName(request, screenFacts);
+  return { text: `${menuModule ? 'No módulo' : 'Na tela'} **${menuModule ?? screen}**, você pode ${list}.`,
     citations: [...new Map(citations.map((cite) => [JSON.stringify(cite), cite])).values()] };
+}
+
+export function faqSubtitle(sections, request = {}, screenFacts = []) {
+  const first = sections.oQueE?.[0]?.text ?? '';
+  const sentence = first.match(/^[^.!?]+[.!?]/u)?.[0]?.trim();
+  if (sentence && !sentence.includes('<AConfirmar>') && !sentence.includes('</AConfirmar>')) {
+    sections.oQueE[0] = { ...sections.oQueE[0], text: first.slice(sentence.length).trim() };
+    if (!sections.oQueE[0].text) sections.oQueE.shift();
+    return sentence;
+  }
+  const direct = deterministicFaqAnswer(request, screenFacts)?.text;
+  const actions = direct?.match(/você pode (.+)\.$/u)?.[1];
+  const menuModule = faqModuleName(request, screenFacts) ?? request.topic;
+  const object = fold(menuModule) === 'robos' ? 'robôs de atendimento' : menuModule.toLocaleLowerCase('pt-BR');
+  const fallback = actions ? `Como ${actions} ${object} no iHelp.` : `Como usar ${object} no iHelp.`;
+  return fallback.length >= 40 ? fallback : `${fallback.slice(0, -1)}: veja as tarefas e os passos.`;
 }
 
 export const hasFaqTaskFacts = (screenFacts) => Array.isArray(screenFacts) && screenFacts.some((fact) =>
@@ -482,7 +519,9 @@ export function fixedFaqSupportSection(request, screenFacts = []) {
   const topic = normalized(request.topic);
   const screen = screenFacts.find((fact) => fact.kind === 'route' && fact.text)?.text;
   const location = screen && screen.length <= 80 ? screen : topic;
-  return [{ text: `Se não conseguir concluir um passo na tela ${location}, fale com o suporte. Informe qual passo tentou e o que apareceu na tela.`, citations: [] }];
+  const menuModule = faqModuleName(request, screenFacts);
+  const place = menuModule ? `no módulo ${menuModule}` : `na tela ${location}`;
+  return [{ text: `Se não conseguir concluir um passo ${place}, fale com o suporte. Informe qual passo tentou e o que apareceu na tela.`, citations: [] }];
 }
 
 export const FREE_FAQ_SECTIONS = {

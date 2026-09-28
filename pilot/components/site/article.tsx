@@ -26,6 +26,11 @@ export async function repeatsDescription(page: Page) {
   return first === page.data.description.trim();
 }
 
+export async function guideActionId(page: Page) {
+  if (page.data.contentType !== 'faq') return null;
+  return (await page.data.getText('raw')).match(/<ProductAction\b[^>]*\bid="([a-z0-9-]+)"/u)?.[1] ?? null;
+}
+
 export async function readingMinutes(page: Page) {
   const text = await page.data.getText('processed');
   return Math.max(1, Math.round(text.split(/\s+/).filter(Boolean).length / 200));
@@ -89,6 +94,7 @@ export async function ArticleLayout({
 }) {
   const minutes = meta ? await readingMinutes(page) : 0;
   const hideFirst = await repeatsDescription(page);
+  const guideAction = await guideActionId(page);
   const api = page.url.startsWith('/api');
   const canonical = canonicalPages().find((item) => item.path === page.url);
 
@@ -118,7 +124,10 @@ export async function ArticleLayout({
               <div className="ih-meta">
                 <span><Clock aria-hidden="true" />{minutes} min de leitura</span>
                 {page.data.lastModified ? <span>Atualizado em {updatedFormat.format(page.data.lastModified)}</span> : null}
-                <span className="ih-meta-pill"><span aria-hidden="true" />{contentLabel[page.data.contentType]}</span>
+                <span className="ih-meta-badges">
+                  <span className="ih-meta-pill"><span aria-hidden="true" />{contentLabel[page.data.contentType]}</span>
+                  {guideAction ? <a className="ih-meta-pill" href={`#guia-${guideAction}`}><span aria-hidden="true" />Guia passo a passo</a> : null}
+                </span>
               </div>
             ) : null}
           </>

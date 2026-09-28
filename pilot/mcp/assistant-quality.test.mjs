@@ -491,6 +491,7 @@ const actionComponent = await readFile(join(projectRoot, 'components/product-act
 assert.doesNotMatch(actionComponent, /exatamente na tela deste passo/i, 'CTA ainda promete abertura exata antes da integração no app');
 assert.doesNotMatch(actionComponent, /Abre a tela Contatos no iHelp/i, 'descrição do CTA não pode ficar presa à ação de Contatos');
 assert.doesNotMatch(actionComponent, /destaca onde começar/i, 'CTA público não pode prometer tour antes do handler chegar ao app');
-assert.match(actionComponent, /Abre.*no iHelp/i, 'CTA deve explicar apenas a navegação já disponível em produção');
+assert.match(actionComponent, /className="ih-ai-product-action"/u, 'CTA da página usa o botão de ação da Claricia');
+assert.doesNotMatch(actionComponent, /<small>/u, 'CTA não repete a ação numa descrição');
 
 console.log("Claricia para iniciantes passou.");

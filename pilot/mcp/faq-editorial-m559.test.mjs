@@ -4,7 +4,8 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { classifyFaqQuestions, selectFaqStyleExamples, loadBusinessContext,
-  adaptScreenFacts, validateFaqSections } from './faq-editorial.mjs';
+  adaptScreenFacts, validateFaqSections, faqSubtitle, replaceModuleTerminology,
+  deterministicFaqAnswer, fixedFaqSupportSection, renderFreeFaqSections } from './faq-editorial.mjs';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
 import { FAQ_NEUTRAL_WORDS } from './faq-neutral-words.mjs';
 
@@ -12,6 +13,29 @@ const unit = (text, citations) => ({ text, citations });
 const distinctActions = ['Adicionar Contato', 'Abrir Cadastro de Contato', 'Selecionar Departamento do Contato',
   'Escolher Atendente Responsável', 'Conferir Dados do Contato', 'Salvar Novo Contato',
   'Voltar à Lista de Contatos', 'Localizar Contato Cadastrado'];
+
+test('subtítulo sustentado sai de O que é uma só vez; pendência usa fallback fixo', () => {
+  const request = { topic: 'Robô', module: 'Robôs', description: 'Criar, editar e publicar robôs.' };
+  const facts = [{ kind: 'route', text: 'Robôs', route: '/bot' },
+    ...['Criar robô', 'Editar robô', 'Publicar'].map((text, line) => ({ kind: 'action', text,
+      repository: 'fixture', path: 'fixture', sha: 'a', lineStart: line, lineEnd: line }))];
+  const supported = { oQueE: [{ text: 'Os robôs orientam o atendimento. Eles têm um fluxo configurável.' }] };
+  assert.equal(faqSubtitle(supported, request, facts), 'Os robôs orientam o atendimento.');
+  assert.equal(supported.oQueE[0].text, 'Eles têm um fluxo configurável.');
+  assert.doesNotMatch(renderFreeFaqSections(supported), /Os robôs orientam o atendimento/u);
+  const pending = { oQueE: [{ text: '<AConfirmar>Os robôs orientam o atendimento.</AConfirmar>' }] };
+  assert.equal(faqSubtitle(pending, request, facts), 'Como criar, editar e publicar robôs de atendimento no iHelp.');
+  assert.match(pending.oQueE[0].text, /AConfirmar/u);
+  assert.match(deterministicFaqAnswer(request, facts)?.text ?? '', /^No módulo \*\*Robôs\*\*/u);
+  assert.match(fixedFaqSupportSection(request, facts)[0].text, /no módulo Robôs/u);
+});
+
+test('nome do módulo muda só a referência ao item do menu', () => {
+  assert.equal(replaceModuleTerminology('Abra a tela **Contatos**. Depois abra a tela **Importar Contatos**.', 'Contatos'),
+    'Abra o módulo **Contatos**. Depois abra a tela **Importar Contatos**.');
+  assert.equal(replaceModuleTerminology('Na tela **Contatos**, busque uma pessoa.', 'Contatos'),
+    'No módulo **Contatos**, busque uma pessoa.');
+});
 test('FAQ só bloqueia dúvida sobre resposta direta ou passo principal', () => {
   const result = classifyFaqQuestions([
     'Como entrar na tela de Contatos para cadastrar?',
@@ -340,6 +364,7 @@ test('pacote FAQ livre fica ready com dúvida secundária pendente', async () =>
   const steps = distinctActions;
   sections.oQueE = [{ text: 'A tela Contatos organiza as pessoas da sua lista.' }];
   sections.passos = [{ tarefa: 'Cadastrar', passos: [
+    { text: '### Cadastrar' },
     { text: 'Clique em **Adicionar Contato**.' },
     ...steps.map((text) => ({ text: `Clique em **${text}**.` })),
   ] }];
@@ -372,7 +397,9 @@ test('pacote FAQ livre fica ready com dúvida secundária pendente', async () =>
         return { model: 'fixture', output_text: JSON.stringify(reply) };
       } } } });
   assert.equal(result.status, 'ready', JSON.stringify(result.questions));
-  assert.match(result.articles[0].body, /^Na tela \*\*Contatos\*\*/u);
+  assert.match(result.articles[0].description, /^Como cadastrar contatos no iHelp/u);
+  assert.doesNotMatch(result.articles[0].body, /^Na tela/u);
+  assert.doesNotMatch(result.articles[0].body, /1\. ### Cadastrar/u);
   assert.doesNotMatch(result.articles[0].body, /Erros comuns/u);
   assert.match(result.articles[0].body, /## Quando falar com o suporte\n\n/u);
   assert.ok(result.pending.some((item) => item.includes('Qual formato do telefone')));

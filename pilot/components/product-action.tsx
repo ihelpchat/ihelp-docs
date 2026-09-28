@@ -1,6 +1,7 @@
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { productActionUrl } from '@/lib/links';
 import allowedActions from '@/architecture/product-actions.json';
+import coverage from '@/architecture/coverage-matrix.json';
 
 type ProductActionProps = {
   id: string;
@@ -12,15 +13,12 @@ type ProductActionProps = {
 export function ProductAction({ id, route, target }: ProductActionProps) {
   const href = productActionUrl(route, id, target);
   if (!href) return null;
-  const label = (allowedActions as Record<string, { label: string }>)[id].label;
-  const destination = label.replace(/^Abrir\s+/i, '').replace(/[.!?]+$/, '');
+  const menuModule = coverage.find((item) => item.productRoutes.includes(route))?.module;
+  const label = menuModule && !menuModule.includes(' — ') ? `Abrir o módulo ${menuModule}`
+    : (allowedActions as Record<string, { label: string }>)[id].label;
   return (
-    <a className="ih-product-action" href={href} target="_blank" rel="noreferrer noopener">
-      <span>
-        <strong>{label}</strong>
-        <small>Abre {destination} no iHelp.</small>
-      </span>
-      <ArrowUpRight aria-hidden="true" />
+    <a id={`guia-${id}`} className="ih-ai-product-action" href={href} target="_blank" rel="noreferrer noopener">
+      {label}<ArrowRight aria-hidden="true" />
     </a>
   );
 }
