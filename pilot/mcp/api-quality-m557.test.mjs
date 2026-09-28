@@ -135,7 +135,7 @@ test('duas descrições do mesmo caminho são recusadas', async () => {
     client: { responses: { create: async (payload) => { schemaPaths = payload.text.format.schema.properties.articles.items.properties.responseDescriptions.items.properties.name.enum;
       return { output_text: JSON.stringify({ status: 'ready', summary: [{ text: 'Contatos.', citations: [] }], questions: [],
       articles: [{ path: 'api/contatos/listar', endpoint: 'GET /contacts/{letter}', title: 'Listar contatos',
-        description: { text: 'Lista os contatos disponíveis para consulta na referência pública.', citations: [] }, intro: { text: 'Consulte contatos.', citations: [] }, notas: [],
+        description: { text: 'Lista os contatos disponíveis para consulta na referência pública.', citations: [] }, intro: { text: 'Consulte contatos.', citations: [] }, notas: [], responseHeaders: [],
         responseDescriptions }] }), model: 'synthetic' }; } } },
   });
   const positive = await generate([item]);

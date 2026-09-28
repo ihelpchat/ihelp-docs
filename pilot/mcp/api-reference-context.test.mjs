@@ -149,7 +149,7 @@ test('coleta DTO de saída no checkout e impede controller privado no prompt fin
   try {
     await mkdir(join(backend, 'Comzada.Application/Controllers/V2'), { recursive: true });
     await mkdir(join(backend, 'Comzada.Domain/EntitiesV2/Contato'), { recursive: true });
-    await writeFile(join(backend, 'Comzada.Application/Controllers/V2/ContactsController.cs'), `[Authorize]\n[ApiVersion("2")]\n[Route("api/v{version:apiVersion}/contacts")]\npublic class ContactsController {\n  [AllowAnonymous][HttpGet("{id}")]\n  public Task<ActionResult<ContactResponse>> Get([FromRoute] int id) { return null; }\n}`);
+    await writeFile(join(backend, 'Comzada.Application/Controllers/V2/ContactsController.cs'), `[Authorize]\n[ApiVersion("2")]\n[Route("api/v{version:apiVersion}/contacts")]\npublic class ContactsController {\n  [AllowAnonymous][HttpGet("{id}")]\n  public Task<ActionResult<ContactResponse>> Get([FromRoute] int id) {\n    Response.Headers.Append("Total-Pages", "1");\n    Response.Headers.Add(\n      "Total-Pages-Exported", "1");\n    // Response.Headers.Add("X-Admin-Override", "1");\n    /* Response.Headers.Add("X-Comment-Only", "1"); */\n    return null;\n  }\n}`);
     await writeFile(join(backend, 'Comzada.Application/Controllers/V2/InternalController.cs'), `[Route("api/v{version:apiVersion}/internal")]\n[ApiVersion("2")]\npublic class InternalController {\n  // contacts are visible only in the private service\n  [HttpGet("private/{id}")]\n  public Task<IActionResult> Get([FromRoute] int id) { return null; }\n}`);
     await writeFile(join(backend, 'Comzada.Domain/EntitiesV2/Contato/ContactResponse.cs'), 'public class ContactResponse {\n  public string Name { get; set; }\n}');
     execFileSync('git', ['init', '-q', backend]);
@@ -163,6 +163,9 @@ test('coleta DTO de saída no checkout e impede controller privado no prompt fin
     process.env.BACKEND_LOCAL_CHECKOUT = backend;
     const context = await getIhelpContext(root, 'API contacts', 'api', { requireLocal: true, repositoryIds: ['backend'], cache: false });
     assert.deepEqual(context.endpoints.find((item) => item.controller === 'ContactsController')?.responseFields.map(({ name, type }) => [name, type]), [['name', 'string']]);
+    assert.deepEqual(context.endpoints.find((item) => item.controller === 'ContactsController')?.responseHeaders,
+      [{ name: 'Total-Pages', source: 'Comzada.Application/Controllers/V2/ContactsController.cs:7' },
+        { name: 'Total-Pages-Exported', source: 'Comzada.Application/Controllers/V2/ContactsController.cs:8' }]);
     const captured = [];
     await planContent(root, { topic: 'API contacts', module: 'api', description: 'Documentar contatos' }, {
       productContext: context, client: { responses: { create: async (payload) => {

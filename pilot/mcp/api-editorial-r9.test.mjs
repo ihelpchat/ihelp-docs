@@ -67,7 +67,7 @@ const unit = (text) => ({ text, citations: [] });
 const prose = (parameterDescriptions) => ({ status: 'ready', summary: [unit('Referência de contatos.')], questions: [],
   articles: [{ path: 'api/contatos/listar', endpoint: 'GET /contacts', title: 'Listar contatos',
     description: unit('Lista contatos disponíveis para consulta.'), intro: unit('Consulte os contatos disponíveis.'),
-    notas: [], responseDescriptions: [], parameterDescriptions }] });
+    notas: [], responseHeaders: [], responseDescriptions: [], parameterDescriptions }] });
 const generate = (parameterDescriptions) => generateContentPackage(process.cwd(), { module: 'api', topic: 'Contatos', confirmations: ['GET /contacts'] }, {
   productContext: { groundingRequired: false, matches: [], code: [], endpoints: [list], apiExamples: [style] },
   plan: { status: 'ready' }, client: { responses: { create: async () =>
