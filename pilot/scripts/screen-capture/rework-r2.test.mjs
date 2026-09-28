@@ -62,15 +62,14 @@ test('upload revisado e captura compartilham manifesto do gerador; upload preval
       faqRoot, coverage, getScreenFacts: async () => facts,
     });
     let manifest = await loadScreenshotManifest();
-    assert.equal(manifest.entries.length, 1);
-    assert.equal(manifest.entries[0].source, 'upload');
-    assert.equal(manifest.entries[0].label, 'Excluir contato');
-    assert.equal(manifest.entries[0].status, 'pending');
+    assert.equal(manifest.entries.length, 2);
+    assert.equal(manifest.entries.find((entry) => entry.source === 'automatic')?.label, 'Excluir contato');
+    assert.equal(manifest.entries.find((entry) => entry.source === 'upload')?.status, 'pending');
     assert.doesNotMatch(attachScreenshotsToArticle({ path: 'docs/contatos', body: 'Clique em Excluir contato.' }, manifest).body, /!\[/u);
     manifest = await approvePage({ page: 'contatos', step: step.step, token: 'admin-token-de-teste-com-mais-de-24', approvedBy: 'revisor' },
       { root, env: { SCREEN_CAPTURE_ADMIN_TOKEN: 'admin-token-de-teste-com-mais-de-24' } });
     assert.deepEqual(await readFile(join(root, 'contatos', `${step.step}.png`)), png);
-    const article = attachScreenshotsToArticle({ path: 'docs/contatos', body: 'Clique em Excluir contato.' }, manifest);
+    const article = attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Clique em Excluir contato.' }, manifest);
     assert.match(article.body, /!\[Botão Excluir contato revisado\]/u);
   } finally {
     if (previous === undefined) delete process.env.MCP_STATE_DIR;

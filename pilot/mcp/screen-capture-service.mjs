@@ -2,12 +2,23 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { searchLocalProductContext } from './local-product-context.mjs';
+import { screenshotForStep } from './screen-capture-manifest.mjs';
 
 const slug = /^[a-z0-9][a-z0-9-]{0,79}$/u;
 const MAX_IMAGES = 4;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 6 * 1024 * 1024;
 const defaultRoot = () => resolve(process.env.MCP_STATE_DIR ?? '/data', 'screens');
+
+export function captureFailureCategory(error) {
+  const message = String(error?.message ?? '');
+  if (/20 passos|limite de passos/iu.test(message)) return 'limite de passos';
+  if (/nenhum fato|rótulo|plano interno|rota confirmada/iu.test(message)) return 'nenhum passo com rótulo da tela';
+  if (/fatos da tela|checkout|código do produto/iu.test(message)) return 'fatos da tela indisponíveis';
+  if (/destino recusado|host|URL|modo e host/iu.test(message)) return 'host de QA não permitido';
+  if (/login|credenciais de QA|sessão de QA|senha|password/iu.test(message)) return 'login na homologação falhou';
+  return 'captura indisponível';
+}
 
 export async function capturePage(input, {
   baseUrl = process.env.GUIDE_QA_STAGING_URL,
@@ -98,9 +109,10 @@ export async function downloadPage(page, { root = defaultRoot(), limit = MAX_IMA
     throw error;
   }
   if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error('Manifesto de telas inválido');
-  const entries = manifest.entries.filter((entry) => entry.page === page && slug.test(entry.step)
+  const eligible = manifest.entries.filter((entry) => entry.page === page && slug.test(entry.step)
     && (entry.source !== 'upload' || entry.status === 'approved')
-    && (entry.file === `/img/mcp/${page}/${entry.step}.png` || entry.file === `/img/mcp/${page}/${entry.step}.jpg`)).slice(0, limit);
+    && (entry.file === `/img/mcp/${page}/${entry.step}.png` || entry.file === `/img/mcp/${page}/${entry.step}.jpg`));
+  const entries = eligible.filter((entry) => screenshotForStep(manifest, page, entry.step) === entry).slice(0, limit);
   let total = 0;
   const images = [];
   for (const entry of entries) {
@@ -128,8 +140,7 @@ export async function imagesUsedByArticles(articles, { root = defaultRoot() } = 
     for (const match of article.body.matchAll(/!\[[^\]\n]+\]\((\/img\/mcp\/([a-z0-9-]+)\/([a-z0-9-]+)\.(png|jpg))\)/gu)) {
       const [, file, imagePage, step, extension] = match;
       if (imagePage !== page || !slug.test(step)) throw new Error('Imagem fora da página do artigo');
-      if (!manifest.entries.some((entry) => entry.page === page && entry.step === step && entry.file === file
-        && (entry.source !== 'upload' || entry.status === 'approved')))
+      if (screenshotForStep(manifest, page, step)?.file !== file)
         throw new Error('Imagem citada sem captura aprovada');
       const bytes = await readFile(join(root, page, `${step}.${extension}`));
       if (bytes.length > MAX_IMAGE_BYTES || (extension === 'png' ? bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'

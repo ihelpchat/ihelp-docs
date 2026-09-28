@@ -1,8 +1,6 @@
 # O MCP e o site staging usam Dockerfiles distintos; ambos precisam dos artefatos públicos.
 app
 components
-lib
-scripts
 out
 release-dist
 .next

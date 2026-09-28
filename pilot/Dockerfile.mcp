@@ -20,6 +20,5 @@ COPY mcp ./mcp
 COPY scripts ./scripts
 
 EXPOSE 3100
-VOLUME /data
 
 CMD ["npm", "run", "mcp:http"]

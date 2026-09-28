@@ -86,7 +86,8 @@ function checkedPath(page, step) {
 
 export function chooseScreenshot(manifest, page, step) {
   const matches = manifest.entries.filter((entry) => entry.page === page && entry.step === step);
-  return matches.find((entry) => entry.source === 'upload') ?? matches.find((entry) => entry.source === 'automatic') ?? null;
+  return matches.find((entry) => entry.source === 'upload' && entry.status === 'approved')
+    ?? matches.find((entry) => entry.source === 'automatic') ?? null;
 }
 
 export function masksCoverSensitive(sensitive, masks) {
@@ -108,7 +109,7 @@ export async function addUploadedScreenshot({ manifest, page, step, file, bytes,
   await mkdir(join(root, 'pending', page), { recursive: true });
   await writeFile(destination, image);
   const previous = chooseScreenshot(manifest, page, step);
-  manifest.entries = manifest.entries.filter((entry) => entry.page !== page || entry.step !== step);
+  manifest.entries = manifest.entries.filter((entry) => entry.page !== page || entry.step !== step || entry.source !== 'upload');
   manifest.entries.push({ page, step, label: previous?.label ?? label ?? null, route: previous?.route ?? route ?? null,
     owner: previous?.owner ?? null, checkoutSha: previous?.checkoutSha ?? null,
     listIndex: previous?.listIndex ?? null, line: previous?.line ?? null,
@@ -263,12 +264,25 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
       return route.fulfill({ response });
     });
     const page = await context.newPage();
-    if (!fixture && !storageState) await login(page, target.url, credentialsFromEnv(env).authorized);
+    if (!fixture && !storageState) {
+      try { await login(page, target.url, credentialsFromEnv(env).authorized); }
+      catch { throw new Error('Login na homologação falhou'); }
+    }
     let currentRoute = null;
     let bundleSha = null;
     for (const step of plan) {
+      const pendingUpload = manifest.entries.find((entry) => entry.page === step.page && entry.step === step.step
+        && entry.source === 'upload' && entry.status === 'pending');
+      if (pendingUpload) {
+        if (pendingUpload.label && pendingUpload.label !== step.label
+          || pendingUpload.route && pendingUpload.route !== step.route
+          || pendingUpload.owner && pendingUpload.owner !== step.owner)
+          throw new Error('Upload não corresponde ao fato da tela');
+        Object.assign(pendingUpload, { label: step.label, route: step.route, owner: step.owner,
+          checkoutSha: step.checkoutSha, listIndex: step.listIndex, line: step.line });
+      }
       const uploaded = chooseScreenshot(manifest, step.page, step.step);
-      if (uploaded?.source === 'upload') {
+      if (uploaded?.source === 'upload' && uploaded.status === 'approved') {
         if (uploaded.label && uploaded.label !== step.label || uploaded.route && uploaded.route !== step.route
           || uploaded.owner && uploaded.owner !== step.owner) throw new Error('Upload não corresponde ao fato da tela');
         uploaded.label = step.label;
@@ -311,7 +325,7 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
       } finally { await cdp.detach(); }
       if (!captured) {
         await rm(join(root, step.page, `${step.step}.png`), { force: true });
-        manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step);
+        manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step || entry.source !== 'automatic');
         manifest.pending = [...new Set([...(manifest.pending ?? []), `print descartado: destaque fora da imagem ou dado sensível sem máscara em ${step.route}`])];
         continue;
       }
@@ -319,7 +333,7 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
       const mask = captured.mask;
       if (step.action === 'click' && !isUnsafeCaptureAction(step.label)
         && /^(?:abrir|ver|mostrar|acessar)\b/iu.test(step.label)) await control.click();
-      manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step);
+      manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step || entry.source !== 'automatic');
       manifest.entries.push({ page: step.page, step: step.step, label: step.label, route: step.route,
         listIndex: step.listIndex, line: step.line,
         owner: step.owner, file: image, alt: step.alt, bundleSha, checkoutSha: step.checkoutSha,

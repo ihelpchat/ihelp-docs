@@ -71,8 +71,8 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
     await writeFile(uploaded, png);
     await addUploadedScreenshot({ manifest, page: 'contatos', step: plan[0].step, file: uploaded,
       alt: 'Tela de Contatos com o botão de abrir', root });
-    assert.equal(chooseScreenshot(manifest, 'contatos', plan[0].step).source, 'upload');
-    assert.equal(screenshotForStep(manifest, 'contatos', plan[0].step), null);
+    assert.equal(chooseScreenshot(manifest, 'contatos', plan[0].step).source, 'automatic');
+    assert.equal(screenshotForStep(manifest, 'contatos', plan[0].step).source, 'automatic');
     manifest = await approvePage({ page: 'contatos', step: plan[0].step, token: 'admin-token-de-teste-com-mais-de-24', approvedBy: 'revisor' },
       { root, env: { SCREEN_CAPTURE_ADMIN_TOKEN: 'admin-token-de-teste-com-mais-de-24' } });
     assert.equal(screenshotForStep(manifest, 'contatos', plan[0].step).source, 'upload');

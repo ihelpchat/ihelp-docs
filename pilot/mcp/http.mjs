@@ -48,9 +48,9 @@ if (!process.env.BUSINESS_CONTEXT_DIR) {
       if (syncingBusiness) return;
       syncingBusiness = true;
       try {
-        const result = await syncBusinessContext({ stateDir, token: checkoutToken });
+        const result = await syncBusinessContext({ stateDir, token: checkoutToken, log: (line) => console.error(line) });
         if (result.status === 'available') process.env.BUSINESS_CONTEXT_DIR = result.directory;
-      } catch { /* sem contexto, o juiz mantém a confirmar */ }
+      } catch { console.error('contexto de negócio: falhou'); }
       finally { syncingBusiness = false; }
     };
     await refreshBusiness();
@@ -64,8 +64,10 @@ async function refreshProductContext() {
   if (syncingProduct) return;
   syncingProduct = true;
   try {
-    productContext = await initializeProductCheckouts({ stateDir, token: checkoutToken });
-  } catch {
+    productContext = await initializeProductCheckouts({ stateDir, token: checkoutToken, log: (line) => console.error(line) });
+    console.info(`checkout do produto: ok ${productContext.front.sha.slice(0, 7)}`);
+  } catch (error) {
+    console.error(`checkout do produto: falhou: ${error.stage ?? 'restauração'}`);
     productContext = { status: 'unavailable', reason: 'sync do código do produto falhou' };
   } finally { syncingProduct = false; }
 }

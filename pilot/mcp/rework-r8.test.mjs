@@ -10,6 +10,7 @@ import { approvePage, captureFailureCategory } from './screen-capture-service.mj
 import { syncProductCheckouts } from './product-checkouts.mjs';
 import { syncBusinessContext } from './business-context-sync.mjs';
 import { validateRailwayDockerContext } from './railway-docker-context.mjs';
+import { safeSyncError } from './sync-diagnostics.mjs';
 
 const sha = 'a'.repeat(40);
 const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000b49444154789c636000020000050001a5f645400000000049454e44ae426082', 'hex');
@@ -76,4 +77,12 @@ test('capturar_telas informa apenas a categoria segura do motivo', () => {
   assert.equal(captureFailureCategory(new Error('Nenhum fato da tela confirmado nos passos')), 'nenhum passo com rótulo da tela');
   assert.equal(captureFailureCategory(new Error('Plano excede 20 passos')), 'limite de passos');
   assert.equal(captureFailureCategory(new Error('token secreto')), 'captura indisponível');
+});
+
+test('diagnóstico elimina cabeçalho de autorização e URL com credencial', () => {
+  const token = 'synthetic-secret-token-123';
+  const error = { stderr: `fatal: AUTHORIZATION: basic eC1hY2Nlc3MtdG9rZW46${token} em https://user:${token}@example.test/repo.git\nsegunda linha` };
+  const safe = safeSyncError(error, token);
+  assert.match(safe, /^fatal:/u);
+  assert.doesNotMatch(safe, /synthetic-secret|AUTHORIZATION|https:\/\/|user:|segunda linha/iu);
 });

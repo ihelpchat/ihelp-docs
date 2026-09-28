@@ -11,7 +11,7 @@ import { authorizeTool, registerToolPolicy, requestIdentity } from './access-con
 import { createGuide } from './create-guide.mjs';
 import { atualizarPorDeploy } from './update-by-deploy.mjs';
 import { refreshCodeProduct } from './code-refresh-offer.mjs';
-import { approvePage, capturePage, downloadPage, uploadPage } from './screen-capture-service.mjs';
+import { approvePage, capturePage, captureFailureCategory, downloadPage, uploadPage } from './screen-capture-service.mjs';
 import { syncBusinessContext } from './business-context-sync.mjs';
 import { envCompatibility } from './env-compat.mjs';
 
@@ -215,9 +215,9 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       const manifest = await capturePage({ path, module });
       await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'success' });
       return textResult({ page, captured: manifest.entries.filter((entry) => entry.page === page).length });
-    } catch {
+    } catch (error) {
       await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'failure' });
-      return textResult({ error: 'Captura recusada ou indisponível' }, true);
+      return textResult({ error: captureFailureCategory(error) }, true);
     }
   });
 
