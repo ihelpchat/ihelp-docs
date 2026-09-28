@@ -40,7 +40,7 @@ function generatedPagesGuarded(source) {
   const packageCore = bodyOf('generateContentPackageCore');
   const guide = bodyOf('generateCanonicalGuide');
   return finalizer.includes('securityReview(')
-    && [...packageCore.matchAll(/return finalizeGeneratedPages\(/gu)].length === 2
+    && [...packageCore.matchAll(/return finalizeGeneratedPages\(/gu)].length === 3
     && /return finalizeGeneratedPages\(/u.test(guide);
 }
 

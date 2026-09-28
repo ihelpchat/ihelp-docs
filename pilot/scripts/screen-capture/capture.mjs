@@ -62,7 +62,7 @@ async function login(page, origin, { email, password }) {
   if (!email || !password) throw new Error('Credenciais de QA ausentes');
   await page.goto(`${origin}/login`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('textbox', { name: /e-mail|email/iu }).fill(email);
-  await page.getByRole('textbox', { name: /senha|password/iu }).fill(password);
+  await page.getByLabel(/senha|password/iu).fill(password);
   await page.getByRole('button', { name: /^entrar$/iu }).click();
   await page.waitForURL((url) => url.pathname !== '/login');
 }

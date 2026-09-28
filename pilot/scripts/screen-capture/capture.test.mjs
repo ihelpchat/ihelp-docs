@@ -71,6 +71,7 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
       alt: 'Tela de Contatos com o botão de adicionar', approved: true, appSha, root });
     assert.equal(chooseScreenshot(manifest, 'contatos', 'abrir').source, 'upload');
     assert.equal(screenshotForStep(manifest, 'contatos', 'abrir').source, 'upload');
+    assert.equal(screenshotForStep(manifest, 'contatos', 'abrir', 'b'.repeat(40)), null);
     const article = attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Clique em Adicionar contato.\n2. Clique em Salvar contato.' }, manifest);
     assert.match(article.body, /!\[Tela de Contatos com o botão de adicionar\]\(\/img\/mcp\/contatos\/abrir\.png\)/u);
     assert.match(article.body, /!\[Tela de Contatos: Salvar contato\]\(\/img\/mcp\/contatos\/salvar\.png\)/u);
