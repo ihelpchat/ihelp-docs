@@ -53,7 +53,69 @@ test('few-shot usa três páginas e reage à edição', async () => {
     const after = await selectFaqStyleExamples(root);
     assert.equal(after[0].path, 'docs/sobre-o-sistema/0');
     assert.notDeepEqual(after, before);
+    const selected = before[0];
+    const selectedFile = join(root, selected.path.replace(/^docs\//u, '') + '.mdx');
+    const original = await (await import('node:fs/promises')).readFile(selectedFile, 'utf8');
+    await writeFile(selectedFile, original.replace('Faça um passo.', 'Abra a agenda e confirme o contato.'));
+    const changed = await selectFaqStyleExamples(root);
+    assert.notEqual(changed.find((item) => item.path === selected.path).style, selected.style);
+    assert.match(changed.find((item) => item.path === selected.path).style, /Abra a agenda/u);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('contexto público sob a raiz pilot chega ao prompt e pode ser citado', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'faq-pilot-'));
+  try {
+    await mkdir(join(root, 'architecture', 'business-context'), { recursive: true });
+    await writeFile(join(root, 'architecture', 'business-context', 'publico.md'),
+      '🟢 PÚBLICO\nOrganizar contatos evita retrabalho da equipe.');
+    const context = { groundingRequired: true, matches: [{ repository: 'ihelpchat/front-react', path: 'src/Contact.tsx',
+      line: 12, ref: 'a'.repeat(40), sha: 'a'.repeat(40), excerpt: '12: Adicionar Contato' }],
+      code: [{ available: true, repository: 'ihelpchat/front-react', ref: 'a'.repeat(40), role: 'frontend' }],
+      screenFacts: [], support: { categories: [], rules: [] }, coverage: [], pending: [] };
+    let prompt = '';
+    await planContent(root, { topic: 'Contatos', module: 'Contatos', description: 'Cadastrar contatos.' }, {
+      productContext: context, client: { responses: { create: async (payload) => {
+        prompt = payload.input[1].content;
+        return { model: 'fixture', output_text: JSON.stringify({ status: 'ready', guidance: '', questions: [],
+          risks: [], suggestedActions: [], grounding: [] }) };
+      } } },
+    });
+    assert.match(prompt, /Organizar contatos evita retrabalho da equipe/u);
+    assert.equal(validateFaqSections({ paraQueServe: [unit('Organizar contatos evita retrabalho.', [
+      { source: 'negocio', path: 'business-context/publico.md', quote: 'Organizar contatos evita retrabalho da equipe.' },
+    ])] }, { business: context.businessContext }).sections.paraQueServe?.length, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('quote exige ao menos 12 caracteres', () => {
+  const context = { request: { description: 'Contatos bons ajudam a equipe.' } };
+  const check = (quote) => validateFaqSections({ resposta: [unit('Abra Contatos.', [
+    { source: 'pedido', quote },
+  ])] }, context).sections.resposta?.length ?? 0;
+  assert.equal(check('Contatos bo'), 0);
+  assert.equal(check('Contatos bon'), 1);
+});
+
+test('afirmações de negócio exigem números, promessa e maioria das palavras sustentados', () => {
+  const text = 'Cadastre contatos pela tela Contatos.';
+  const context = { request: { description: text }, business: [] };
+  const check = (sentence, quote = text, source = 'pedido', extra = {}) => validateFaqSections({
+    paraQueServe: [unit(sentence, [{ source, quote, ...extra }])],
+  }, context);
+  const unsupported = check('Isso aumenta as vendas em 50%.');
+  assert.equal(unsupported.sections.paraQueServe, undefined);
+  assert.ok(unsupported.pending.includes('afirmação sem sustentação: Isso aumenta as vendas em 50%.'));
+  const businessQuote = 'Cadastrar contatos aumenta as vendas em 50%.';
+  const supported = check('Cadastrar contatos aumenta as vendas em 50%.', businessQuote, 'negocio',
+    { path: 'business-context/publico.md' });
+  assert.equal(supported.sections.paraQueServe, undefined);
+  context.business = [{ path: 'business-context/publico.md', body: `🟢 PÚBLICO\n${businessQuote}` }];
+  assert.equal(check('Cadastrar contatos aumenta as vendas em 50%.', businessQuote, 'negocio',
+    { path: 'business-context/publico.md' }).sections.paraQueServe?.length, 1);
+  assert.equal(check('Isso garante contatos organizados.').sections.paraQueServe, undefined);
+  assert.equal(check('Cadastre os contatos pela tela Contatos.').sections.paraQueServe?.length, 1);
+  assert.equal(check('Campanhas reduzem custos e ampliam receitas pela tela Contatos.').sections.paraQueServe, undefined);
 });
 
 test('negócio começa vazio e fatos da tela mantêm proveniência', async () => {
