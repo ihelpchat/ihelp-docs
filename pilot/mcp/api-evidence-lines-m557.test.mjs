@@ -31,7 +31,7 @@ test('prompt numera callEvidence e matches com linhas do arquivo original', asyn
       generationInput = payload.input;
       return { output_text: '{}' };
     } } } });
-  assert.match(generationInput.find((item) => item.role === 'developer').content, /faixa mais curta.*30 linhas/iu);
+  assert.match(generationInput.find((item) => item.role === 'developer').content, /Use somente identificadores do ÍNDICE DE CITAÇÕES/iu);
 });
 
 test('literal verbatim omitido de cinco linhas mantém a linha seguinte', async () => {

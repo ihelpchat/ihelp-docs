@@ -16,6 +16,8 @@ import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 import { guardModelOutput } from './model-output-guard.mjs';
 import { PRODUCT_TERMS } from './product-terms.mjs';
 import { validCanonicalQuestion } from './conversational-contract.mjs';
+import { apiCitationRegistry, apiCitationPrompt, resolveApiCitationIds } from './api-citation-ids.mjs';
+export { apiCitationRegistry, apiCitationPrompt, resolveApiCitationIds } from './api-citation-ids.mjs';
 import { classifyFaqQuestions, hasFaqTaskFacts, loadBusinessContext, selectFaqStyleExamples, adaptScreenFacts,
   validateFaqSections, renderFaqSections, fixedFaqSupportSection, deterministicFaqAnswer,
   missingFaqTaskSteps, FAQ_SECTIONS } from './faq-editorial.mjs';
@@ -48,7 +50,7 @@ const API_GROUNDING_SCHEMA = { type: 'array', items: {
   ] } } },
 } };
 const API_PROSE_UNIT_SCHEMA = { type: 'object', additionalProperties: false, required: ['text', 'citations', 'refs'],
-  properties: { text: { type: 'string' }, citations: API_GROUNDING_SCHEMA.items.properties.citations,
+  properties: { text: { type: 'string' }, citations: { type: 'array', items: { type: 'string', pattern: '^[CRPF][1-9][0-9]*$' } },
     refs: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: ['name', 'endpoint'], properties: { name: { type: 'string' }, endpoint: { type: 'string' } } } } } };
 const NOTE_TYPES = ['Como filtrar', 'Paginação e cabeçalhos', 'Quem vê quais contatos', 'Diferenças e cuidados'];
@@ -165,13 +167,21 @@ function referenceIssues(unit, endpoints, articles, ownerName = '') {
       ...(target.route ?? '').split('/').map((segment) => segment.replace(/^\{([^}]+)\}$/u, '$1')),
     ];
     if (!target || !included || !names.some((name) => name.toLowerCase() === ref.name.toLowerCase())
-      || !(new RegExp(`(?<![\\p{L}\\p{N}_])${ref.name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\p{N}_])`, 'iu').test(unit.text)
-        || ownerName.split('.').at(-1)?.toLowerCase() === ref.name.toLowerCase()))
+      || !refMentioned(unit, ref.name, ownerName))
       issues.push(`referência inválida: ${ref.name}`);
   }
   return issues;
 }
-function repairApiRefs(unit, endpoints, articles, repairs) {
+function refMentioned(unit, name, ownerName = '') {
+  return new RegExp(`(?<![\\p{L}\\p{N}_])${name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\p{N}_])`, 'iu').test(unit.text)
+    || ownerName.split('.').at(-1)?.toLowerCase() === name.toLowerCase();
+}
+function repairApiRefs(unit, endpoints, articles, repairs, ownerName = '') {
+  unit.refs = (unit.refs ?? []).filter((ref) => {
+    if (refMentioned(unit, ref.name, ownerName)) return true;
+    repairs.push({ name: ref.name, endpoint: ref.endpoint, reason: 'nome ausente da unidade' });
+    return false;
+  });
   for (const ref of unit.refs ?? []) {
     const candidates = endpoints.filter((endpoint) => articles.some((article) => article.endpoint === publicEndpointId(endpoint))
       && (endpoint.parameters ?? []).some((field) => field.name.toLowerCase() === ref.name.toLowerCase()));
@@ -297,6 +307,13 @@ function groundingIssues(output, context, fields) {
     if (typeof claim.text !== 'string' || !lines.includes(claim.text)) issues.push('citação sem frase correspondente');
     if (!Array.isArray(claim.citations) || !claim.citations.length) { issues.push(`frase sem citação: ${claim.text ?? ''}`); continue; }
     for (const citation of claim.citations) {
+      if (citation?.citationId) {
+        const entry = context.citationRegistry?.get(citation.citationId);
+        if (!entry || JSON.stringify({ ...citation, citationId: undefined })
+          !== JSON.stringify({ ...entry.citation, citationId: undefined }))
+          issues.push(`identificador de citação inválido: ${citation.citationId}`);
+        continue;
+      }
       if (citation?.source === 'pedido') {
         if (context.module !== 'api' || !literalSegments(citation.quote ?? '', [context.request?.details, context.request?.description]))
           issues.push(`não é trecho literal do pedido: ${citation.quote ?? ''}`);
@@ -668,6 +685,7 @@ function requestText(request, existing, productContext, codeHygiene = {}) {
     productContext.screenFacts?.length ? `FATOS DA TELA (texto visível, sem código; cite arquivo:linha e SHA):\n${JSON.stringify(productContext.screenFacts)}` : '',
     request.module === 'api' && productContext.callEvidence?.length ? `TRECHOS INTERNOS ALCANÇADOS (cite arquivo:linha; não publique código):\n${productContext.callEvidence.map((item) => `${item.path}:${item.start}-${item.end}\n${numberedCode(safeCode(item.excerpt), item.start)}`).join('\n\n')}` : '',
     request.module === 'api' ? `FATOS ESTRUTURADOS DE ENDPOINTS (somente public=true é gerável):\n${JSON.stringify(selectedEndpoints)}\nFORMATO REAL DAS PÁGINAS API:\n${JSON.stringify(productContext.apiExamples ?? [])}\nMODELOS DE ESTILO (não são fatos do endpoint pedido):\n${JSON.stringify(productContext.apiStyleExamples ?? [])}` : '',
+    request.module === 'api' ? `ÍNDICE DE CITAÇÕES (cite somente os IDs; as fontes completas ficam no servidor):\n${apiCitationPrompt(apiCitationRegistry({ ...productContext, request, existing }))}` : '',
     faqRequested(request) ? `FATOS DA TELA (use os rótulos exatos em negrito nos passos):\n${JSON.stringify(adaptScreenFacts({ facts: productContext.screenFacts ?? [], sha: productContext.code?.find((item) => item.role === 'frontend')?.ref }, productContext.coverage))}\nCONTEXTO DE NEGÓCIO 🟢 CURADO DO MÓDULO:\n${JSON.stringify(productContext.businessContext ?? [])}\nMODELOS DE ESTILO FAQ (não são fatos do tema):\n${JSON.stringify(productContext.faqStyleExamples ?? [])}` : '',
     `Sinais agregados do suporte:\n${productContext.support?.categories?.length ? productContext.support.categories.map((item) => `- ${item.category}: ${item.guidance}`).join('\n') : '- Nenhum sinal específico'}`,
     `Regras do suporte:\n${productContext.support?.rules?.map((item) => `- ${item}`).join('\n') ?? '- Nenhuma'}`,
@@ -901,7 +919,7 @@ async function generateContentPackageCore(root, request, options = {}) {
         request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : faqRequested(request) ? 'Preencha assistantQuestion com uma pergunta canônica. Os demais campos do assistente vêm da resposta direta e dos passos validados.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
         request.module === 'api' ? 'Se faltar método, rota, parâmetros ou autorização, use needs_information e deixe articles vazio. responseFields=null é permitido: a resposta terá nota fixa e pendência.' : faqRequested(request) ? 'Use needs_information só quando não houver fatos para o passo principal. Afirmações de negócio sem fonte podem ser escritas: o juiz as marcará a confirmar. Verbo destrutivo só pode aparecer dentro de rótulo exato da tela em negrito, nunca em texto livre.' : 'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
         request.module === 'api' ? 'A prosa não pode conter método HTTP, caminho, bloco de código, componente JSX nem código inline, exceto nome exato de parâmetro ou campo dos fatos. Nome técnico de outro endpoint do pacote exige refs: [{name,endpoint}] na própria unidade, com endpoint exato do enum; o nome deve ser parâmetro, campo ou segmento da rota desse endpoint. O link para a página referenciada é renderizado automaticamente. O summary mantém escopo global. Descreva cada campo pelo significado e pelo tipo PÚBLICO (texto, número, data e hora, verdadeiro ou falso, lista, objeto), nunca pelo tipo do código, DTO, entity, repository ou service.' : faqRequested(request) ? 'Cada seção é lista de objetos {text}; passos é lista de tarefas. O juiz semântico avaliará cada frase com pedido, fatos da tela, contexto de negócio, sinais de suporte, páginas publicadas e manifesto de prints. Escreva como pessoa do suporte, sem jargão inexplicado, sem dados reais, sem código interno. Na página nunca fale das fontes, do pedido nem do material; dúvidas sobre confirmação, suposições e lacunas vão somente para pendencias da PR. Explique a ação diretamente. Tire espaços de dentro das bordas de **rótulos em negrito**. Não apague uma seção útil só por falta de fonte.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
-        request.module === 'api' ? 'Cite cada unidade de summary, description, intro, notas e descrições de campo nas citations da própria unidade. source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. Use os números reais mostrados ao lado do código e cite a faixa mais curta que contém o comportamento, com no máximo 30 linhas. O JSON interno de formato não é fonte. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : faqRequested(request) ? 'Rótulos em negrito precisam corresponder exatamente a fatos da tela. Não ponha em negrito o nome de um botão citado por uma página publicada se ele não estiver nos FATOS DA TELA; deixe a frase em texto comum para avaliação do juiz. Título de guia publicado pode ser link, sem negrito. Ação destrutiva precisa de fato de ação com o mesmo verbo. O juiz classifica sustentada, a confirmar ou contradiz a fonte. O time resolve pendências na prévia.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
+        request.module === 'api' ? 'Cite cada unidade de summary, description, intro, notas e descrições de campo nas citations da própria unidade. Use somente identificadores do ÍNDICE DE CITAÇÕES, por exemplo ["C3","F2","R1"]. C significa trecho de código, R frase do pedido, P trecho de página existente e F fato derivado de código. Nunca escreva repository, path, SHA, linhas, source ou quote nas citations: o servidor resolve os IDs. Escolha IDs que sustentem exatamente a frase; o pedido não confirma nomes de parâmetros nem campos. O JSON interno de formato não é fonte.' : faqRequested(request) ? 'Rótulos em negrito precisam corresponder exatamente a fatos da tela. Não ponha em negrito o nome de um botão citado por uma página publicada se ele não estiver nos FATOS DA TELA; deixe a frase em texto comum para avaliação do juiz. Título de guia publicado pode ser link, sem negrito. Ação destrutiva precisa de fato de ação com o mesmo verbo. O juiz classifica sustentada, a confirmar ou contradiz a fonte. O time resolve pendências na prévia.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].filter(Boolean).join(' '),
     },
     { role: 'user', content: redactPromptEvidence(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`, productContext) },
@@ -965,8 +983,27 @@ async function generateContentPackageCore(root, request, options = {}) {
   if (request.module === 'api') {
     if (!productContext.apiExamples?.length) return withPending(apiPending('formato da referência API indisponível'));
     const context = groundingContext(productContext, request, existing);
+    const citationRegistry = apiCitationRegistry(context);
+    context.citationRegistry = citationRegistry;
+    const internalCitations = [];
+    const citationIdProblems = [];
+    const citedUnits = [...parsed.summary, ...parsed.articles.flatMap((article) => [
+      article.description, article.intro, ...(article.notas ?? []),
+      ...(article.responseHeaders ?? []).flatMap((header) => [header.meaning, header.when]),
+      ...(article.responseDescriptions ?? []).map((item) => item.description),
+      ...(article.parameterDescriptions ?? []).map((item) => item.description),
+    ])];
+    for (const unit of citedUnits) {
+      if (!unit || !Array.isArray(unit.citations)) continue;
+      const original = unit.citations;
+      const resolved = resolveApiCitationIds(original, citationRegistry, unit.text);
+      citationIdProblems.push(...resolved.issues);
+      unit.citations = resolved.citations;
+      if (original.some((id) => typeof id === 'string'))
+        internalCitations.push({ text: unit.text, ids: original, citations: resolved.citations });
+    }
     const proseProblems = [];
-    const groundingProblems = [];
+    const groundingProblems = [...citationIdProblems];
     const missingParameterDescriptions = [];
     const internalRepairs = [];
     const notePending = [];
@@ -980,9 +1017,10 @@ async function generateContentPackageCore(root, request, options = {}) {
       normalizeHeaderNotes(prose, notePending);
       const units = [prose.description, prose.intro, ...prose.notas];
       for (const header of prose.responseHeaders) units.push(header.meaning, header.when);
-      for (const unit of [...units, ...(prose.responseDescriptions ?? []).map((item) => item.description),
-        ...(prose.parameterDescriptions ?? []).map((item) => item.description)])
+      for (const unit of units)
         repairApiRefs(unit, selectable, parsed.articles, internalRepairs);
+      for (const item of [...(prose.responseDescriptions ?? []), ...(prose.parameterDescriptions ?? [])])
+        repairApiRefs(item.description, selectable, parsed.articles, internalRepairs, item.name);
       if (prose.notas.some((note) => /\b(?:requer|exige|obrigat[oó]ria?)\s+autentica[çc][aã]o|token\s+(?:Bearer|ausente|inv[aá]lido|expirado)/iu.test(note.text)))
         proseProblems.push('autenticação deve ficar na seção fixa');
       if (prose.notas.some((note) => /\bTotal-Pages(?:-Exported)?\b/iu.test(note.text)))
@@ -1016,6 +1054,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       { parameters: [], responseFields: selectable.flatMap((item) => item.responseFields ?? []) }, selectable, [], true));
     for (const [index, unit] of parsed.summary.entries()) {
       const before = proseProblems.length + groundingProblems.length;
+      repairApiRefs(unit, selectable, parsed.articles, internalRepairs);
       proseProblems.push(...referenceIssues(unit, selectable, parsed.articles));
       groundingProblems.push(...apiUnitIssues([unit], context));
       if (proseProblems.length + groundingProblems.length > before)
@@ -1109,7 +1148,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     const withoutPage = selectable.map(publicEndpointId).find((id) => !usedEndpoints.has(id)
       && !apiPages?.pending.some((item) => item.startsWith(`${id}:`)));
     if (withoutPage) return withPending(apiPending(`endpoint sem página: ${withoutPage}`));
-    return finalizeGeneratedPages(withPending({ ...safePackage, articles, internalRepairs,
+    return finalizeGeneratedPages(withPending({ ...safePackage, articles, internalRepairs, internalCitations,
       discardedQuestions: plan.discardedQuestions ?? [],
       pending: [...new Set([...(productContext.pending ?? []), ...pending, ...(apiPages?.pending ?? [])])], existing, model: response.model }), request, factsByPath);
   }

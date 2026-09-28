@@ -31,7 +31,7 @@ async function generate(change = (value) => value, changedRequest = request, mod
     client: { responses: { create: async (payload) => {
       if (module === 'api') {
         assert.match(payload.input[0].content, /pedido/i);
-        assert.match(JSON.stringify(payload.text.format.schema), /"source"/);
+        assert.match(JSON.stringify(payload.text.format.schema), /"pattern":"\^\[CRPF\]/);
       }
       return { output_text: JSON.stringify(apiProseFixture(value)), model: 'simulado' };
     } } } });
