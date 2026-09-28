@@ -17,6 +17,9 @@ test('verificação exige cobertura integral antes de salvar', () => {
     [{ x: 10, y: 10, width: 19, height: 10 }]), false);
   assert.equal(masksCoverSensitive([{ x: 10, y: 10, width: 20, height: 10 }],
     [{ x: 9, y: 9, width: 22, height: 12 }]), true);
+  assert.deepEqual(screenshotVersionWarnings([{ path: 'docs/contatos', body: 'Passo sem imagem.' }],
+    { version: 1, entries: [], pending: ['print descartado: dado sensível sem máscara em /contact'] }, sha),
+  ['print descartado: dado sensível sem máscara em /contact']);
 });
 
 test('Contatos e Robôs usam todos os rótulos dos passos reais, sem bullets de exemplo', async () => {

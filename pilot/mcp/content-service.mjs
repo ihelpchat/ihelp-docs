@@ -403,7 +403,7 @@ async function createPackagePullRequest(items, deletes, actor, beforePull, optio
   const manifest = await loadScreenshotManifest();
   const screenshotWarnings = [];
   for (const { article } of items) {
-    if (!manifest?.entries?.some((entry) => entry.page === article.path.split('/').at(-1))) continue;
+    if (!manifest?.entries?.some((entry) => entry.page === article.path.split('/').at(-1)) && !manifest?.pending?.length) continue;
     const context = await searchLocalProductContext(article.title, article.title, { repositoryIds: ['frontend'] });
     const currentSha = context.code.find((item) => item.role === 'frontend' && item.available)?.ref;
     screenshotWarnings.push(...screenshotVersionWarnings([article], manifest, currentSha));
@@ -418,7 +418,7 @@ async function createPackagePullRequest(items, deletes, actor, beforePull, optio
   const baseBody = options.body ?? `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`;
   const marked = items.filter(({ article }) => article.body.includes('<AConfirmar>'));
   const warnedBody = marked.length ? `${baseBody}\n\n## Pendências a confirmar\n\n${marked.map(({ article }) => `- ${article.path}: contém afirmações marcadas como a confirmar; revisão humana obrigatória antes da publicação.`).join('\n')}` : baseBody;
-  const versionBody = screenshotReviewBody(warnedBody, screenshotWarnings);
+  const versionBody = screenshotReviewBody(warnedBody, [...new Set(screenshotWarnings)]);
   const body = options.securityWarnings?.length ? `${versionBody}\n\n## Atenção de segurança\n\n${options.securityWarnings.map((warning) => `- ${warning}`).join('\n')}` : versionBody;
   rejectSensitive(`${title}\n${body}`);
   const branch = options.branch ?? `docs/ia-pacote-${Date.now()}`;
