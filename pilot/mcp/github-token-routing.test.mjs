@@ -78,7 +78,9 @@ async function exercise(label, readToken) {
         : name === 'baixar_telas'
           ? { ...request, page: 'contatos' }
         : name === 'enviar_tela'
-          ? { ...request, page: 'contatos', step: 'abrir', alt: 'Tela revisada', approved: true, base64: 'aGVsbG8=' }
+          ? { ...request, page: 'contatos', step: 'abrir', alt: 'Tela revisada', base64: 'aGVsbG8=' }
+        : name === 'aprovar_tela'
+          ? { ...request, page: 'contatos', step: 'abrir', adminToken: 'admin-token-de-teste-com-mais-de-24' }
         : request;
     const input = Object.fromEntries(Object.keys(config.inputSchema.shape).filter((key) => key in source).map((key) => [key, source[key]]));
     await callback(config.inputSchema.parse(input));

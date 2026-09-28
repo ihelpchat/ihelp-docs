@@ -52,6 +52,7 @@ try {
   await client.connect(transport);
   const tools = await client.listTools();
   assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
+    'aprovar_tela',
     'atualizar_codigo_produto',
     'atualizar_por_deploy',
     'baixar_telas',
