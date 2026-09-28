@@ -16,6 +16,8 @@ const states = {
 };
 const manifest = JSON.parse(await readFile(new URL('../../public/guides/manifest.json', import.meta.url), 'utf8'));
 const catalog = JSON.parse(await readFile(new URL(`../../public/guides/${manifest.current}/catalog.json`, import.meta.url), 'utf8'));
+// Mesma medição de produção usada por site-navigation.mjs (decisão do regente, 28/09).
+const navigationReference = JSON.parse(await readFile(new URL('./navigation-reference.json', import.meta.url), 'utf8'));
 for (const file of ['app/(home)/page.tsx', 'components/site/header.tsx', 'components/assistant/assistant-screen.tsx']) {
   const source = await readFile(new URL(`../../${file}`, import.meta.url), 'utf8');
   assert.doesNotMatch(source, /Claricia.{0,24}assistente de IA do iHelp|assistente de IA do iHelp.{0,24}Claricia/i, `${file}: nome fora de assistantDisplayName`);
@@ -36,9 +38,23 @@ const assertCurrentName = async (page) => {
   assert.equal(await page.locator('[aria-label="Claricia, assistente de IA do iHelp"]').count(), 0, 'nome antigo acessível');
 };
 
-const audit = (root) => {
+const audit = (root, reference) => {
   const failures = [];
   const measured = { text: 0, clickable: 0 };
+  const touch = matchMedia('(pointer: coarse)').matches;
+  const navigationFonts = [
+    ['.ih-side-kicker', reference.fontPx.section],
+    ['.ih-side-label, .ih-side-link', reference.fontPx.side],
+    ['.ih-breadcrumb', reference.fontPx.breadcrumb],
+    ['.ih-meta', reference.fontPx.meta],
+    ['.ih-toc-kicker', reference.fontPx.tocTitle],
+    ['.ih-toc-link', reference.fontPx.toc],
+    ['.ih-nav-link', reference.fontPx.nav],
+    ['.ih-header-cta', reference.desktop1440.fontPx.support],
+    ['.ih-toc-ask', reference.desktop1440.fontPx.ask],
+    ['.ih-ai-launcher', reference.desktop1440.fontPx.launcher],
+    ['.ih-feedback .ih-button', reference.desktop1440.fontPx.feedback],
+  ];
   const visible = (el) => {
     if (!el.getClientRects().length) return false;
     if (el.matches('.ih-visually-hidden')) return false;
@@ -84,14 +100,23 @@ const audit = (root) => {
     if (!visible(el)) continue;
     const style = getComputedStyle(el);
     const selector = label(el);
+    if (!touch) {
+      for (const [navigationSelector, production] of navigationFonts) {
+        if (!el.matches(navigationSelector)) continue;
+        const size = parseFloat(style.fontSize);
+        if (size < Math.max(12, production - 1) || size > production + 1) {
+          failures.push(`${selector}: fonte ${size}px fora da escala de produção ${production}px`);
+        }
+      }
+    }
     const directText = [...el.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
     const isField = el.matches('textarea,input');
     if (directText || isField) {
       measured.text++;
       const size = parseFloat(style.fontSize);
-      // O piso de leitura vale no conteúdo e nas ações principais; navegação e metadados seguem a escala do site.
+      // Leitura tem 16px nos dois ponteiros; navegação segue a escala de produção no ponteiro fino.
       const reading = root.matches('.ih-ai-screen, .ih-ai-drawer')
-        || el.closest('.ih-prose, .ih-guide-page, .ih-guide-catalog, .ih-lead, .ih-ai-screen, .ih-ai-drawer, .ih-ai-launcher, .ih-feedback .ih-button, .ih-header-cta');
+        || el.closest('.ih-prose, .ih-guide-page, .ih-guide-catalog, .ih-lead, .ih-ai-screen, .ih-ai-drawer');
       if (reading && size < 16) failures.push(`${selector}: fonte ${size}px < 16px`);
       const fg = rgba(isField && !el.value && el.getAttribute('placeholder')
         ? getComputedStyle(el, '::placeholder').color
@@ -103,7 +128,7 @@ const audit = (root) => {
     if (el.matches('a,button,summary,[role="button"],textarea,input') && !el.matches(':disabled')) {
       measured.clickable++;
       const height = el.getBoundingClientRect().height;
-      if (height < 44) failures.push(`${selector}: altura ${height.toFixed(1)}px < 44px`);
+      if (touch && height < 44) failures.push(`${selector}: altura ${height.toFixed(1)}px < 44px`);
     }
   }
   return { failures, measured };
@@ -111,6 +136,7 @@ const audit = (root) => {
 
 const site = await startQaSite(out, basePath);
 const browser = await launch();
+const auditAt = (locator) => locator.evaluate(audit, navigationReference);
 const failures = [];
 let textCount = 0;
 let clickCount = 0;
@@ -118,7 +144,7 @@ try {
   const url = `${site.url}${basePath}/assistente/`;
   for (const [viewport, dimensions] of Object.entries(viewports)) {
     for (const [state, messages] of Object.entries(states)) {
-      const page = await browser.newPage({ viewport: dimensions });
+      const page = await browser.newPage({ viewport: dimensions, hasTouch: viewport === 'mobile' });
       await page.addInitScript((value) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages: value, scope: 'Tudo', sessionId: 'qa-session' })), messages);
       await page.goto(url, { waitUntil: 'networkidle' });
       await injectProbe(page);
@@ -130,7 +156,7 @@ try {
       assert.equal(await root.getByText(/Procedimento não documentado|Parte da resposta exige atendimento/i).count(), 0, `${state}/${viewport}: etiqueta proibida`);
       const targets = await page.locator('.ih-ai-screen a, .ih-ai-screen button, .ih-ai-screen textarea, .ih-ai-screen summary').evaluateAll((els) => els.flatMap((el, i) => el.getClientRects().length && !el.matches(':disabled') ? [i] : []));
       const collect = async (mode) => {
-        const result = await root.evaluate(audit);
+        const result = await auditAt(root);
         textCount += result.measured.text;
         clickCount += result.measured.clickable;
         failures.push(...result.failures.map((item) => `${state}/${viewport}/${mode}: ${item}`));
@@ -167,7 +193,7 @@ try {
       await page.close();
     }
     for (const zoom of [1, 2]) {
-      const page = await browser.newPage({ viewport: dimensions, deviceScaleFactor: zoom });
+      const page = await browser.newPage({ viewport: dimensions, deviceScaleFactor: zoom, hasTouch: viewport === 'mobile' });
       await page.addInitScript((messages) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages, scope: 'Tudo', sessionId: 'qa-session' })), states.guia);
       await page.goto(`${site.url}${basePath}/docs/guias/?origem=suporte`, { waitUntil: 'networkidle' });
       if (zoom === 2) await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
@@ -176,21 +202,21 @@ try {
       const catalog = page.locator('.ih-guide-catalog');
       assert.ok(await catalog.isVisible(), `catálogo/${viewport}/${zoom}: catálogo ausente`);
       assert.equal(await catalog.locator('a.ih-guide-card').count(), guidePaths.length, 'catálogo vem do pacote publicado');
-      const catalogAudit = await page.locator('body').evaluate(audit);
+      const catalogAudit = await auditAt(page.locator('body'));
       assert.ok(catalogAudit.measured.text > 10, 'catálogo: página completa não medida');
       failures.push(...catalogAudit.failures.map((item) => `catálogo/${viewport}/${zoom}: ${item}`));
       await page.locator('.ih-ai-launcher').click();
       const catalogDrawer = page.locator('.ih-ai-drawer');
       await catalogDrawer.locator('.ih-ai-thread[data-compact] .ih-ai-steps li').first().waitFor();
       await catalogDrawer.evaluate(async (el) => { await Promise.all(el.getAnimations().map((animation) => animation.finished)); });
-      failures.push(...(await catalogDrawer.evaluate(audit)).failures.map((item) => `catálogo/compacto/${viewport}/${zoom}: ${item}`));
+      failures.push(...(await auditAt(catalogDrawer)).failures.map((item) => `catálogo/compacto/${viewport}/${zoom}: ${item}`));
       await catalogDrawer.getByRole('button', { name: 'Abrir em tela cheia' }).click();
       await page.waitForURL((url) => /\/assistente\/?$/.test(url.pathname));
       await injectProbe(page);
       await page.locator('.ih-ai-screen .ih-ai-steps li').first().waitFor();
       await assertCurrentName(page);
       assert.ok(await page.locator('.ih-ai-screen-human').isVisible(), 'catálogo/tela-cheia: humano disponível');
-      failures.push(...(await page.locator('body').evaluate(audit)).failures.map((item) => `catálogo/tela-cheia/${viewport}/${zoom}: ${item}`));
+      failures.push(...(await auditAt(page.locator('body'))).failures.map((item) => `catálogo/tela-cheia/${viewport}/${zoom}: ${item}`));
       await page.goBack({ waitUntil: 'networkidle' });
       const catalogLink = catalog.locator('a.ih-guide-card').first();
       await page.keyboard.press('Tab');
@@ -207,7 +233,7 @@ try {
       await page.waitForURL((url) => guidePaths.some(({ path }) => url.pathname.replace(/\/$/, '').endsWith(path)));
       assert.equal(new URL(page.url()).searchParams.get('origem'), 'suporte', 'origem preservada');
       for (const { path, id, stepId } of guidePaths) {
-        const guidePage = await browser.newPage({ viewport: dimensions, deviceScaleFactor: zoom });
+        const guidePage = await browser.newPage({ viewport: dimensions, deviceScaleFactor: zoom, hasTouch: viewport === 'mobile' });
         await guidePage.addInitScript((messages) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages, scope: 'Tudo', sessionId: 'qa-session' })), states.guia);
         await guidePage.goto(`${site.url}${basePath}${path}/?origem=suporte`, { waitUntil: 'networkidle' });
         if (zoom === 2) await guidePage.evaluate(() => { document.documentElement.style.zoom = '2'; });
@@ -227,7 +253,7 @@ try {
           assert.ok(await guide.getByText(/No iPhone, abra WhatsApp/).isVisible(), 'escolha corrigível');
         }
         const selectedStepId = id === 'reconectar-canal-qr' ? 'iphone' : stepId;
-        const guideAudit = await guidePage.locator('body').evaluate(audit);
+        const guideAudit = await auditAt(guidePage.locator('body'));
         assert.ok(guideAudit.measured.text > 10, `${path}: página completa não medida`);
         failures.push(...guideAudit.failures.map((item) => `${path}/${viewport}/${zoom}: ${item}`));
         await guide.getByRole('button', { name: /Perguntar à Claricia/ }).click();
@@ -240,10 +266,10 @@ try {
         assert.ok(await drawerHuman.isVisible(), `${path}: humano no painel`);
         await assertSupportContext(drawer.locator('.ih-ai-drawer-human'), id, selectedStepId);
         assert.ok(await drawer.locator('.ih-ai-follow button').count() <= 2, `${path}: até duas sugestões`);
-        const drawerAudit = await drawer.evaluate(audit);
+        const drawerAudit = await auditAt(drawer);
         assert.ok(drawerAudit.measured.text > 5, `${path}: painel compacto não medido`);
         failures.push(...drawerAudit.failures.map((item) => `${path}/compacto/${viewport}/${zoom}: ${item}`));
-        failures.push(...(await guidePage.locator('body').evaluate(audit)).failures.map((item) => `${path}/compacto/${viewport}/${zoom}: ${item}`));
+        failures.push(...(await auditAt(guidePage.locator('body'))).failures.map((item) => `${path}/compacto/${viewport}/${zoom}: ${item}`));
         await drawer.getByRole('button', { name: 'Abrir em tela cheia' }).click();
         await guidePage.waitForURL((url) => /\/assistente\/?$/.test(url.pathname));
         await injectProbe(guidePage);
@@ -253,7 +279,7 @@ try {
         const fullHuman = screen.getByRole('link', { name: 'Falar com uma pessoa' });
         assert.ok(await fullHuman.isVisible(), `${path}: humano na tela cheia`);
         await assertSupportContext(fullHuman, id, selectedStepId);
-        failures.push(...(await guidePage.locator('body').evaluate(audit)).failures.map((item) => `${path}/tela-cheia/${viewport}/${zoom}: ${item}`));
+        failures.push(...(await auditAt(guidePage.locator('body'))).failures.map((item) => `${path}/tela-cheia/${viewport}/${zoom}: ${item}`));
         await guidePage.close();
       }
       await page.close();
@@ -264,6 +290,9 @@ try {
   await site.close();
 }
 assert.ok(textCount > 100 && clickCount > 50, `cobertura insuficiente: ${textCount} textos, ${clickCount} clicáveis`);
-for (const item of [...new Set(failures.map((failure) => failure.replace(/^.*?: /, '')))]) console.error(`FALHA ${item}`);
+for (const item of [...new Set(failures.map((failure) => {
+  const match = failure.match(/(?:^|\/)(desktop|mobile)\/[^:]+: (.*)$/);
+  return match ? `${match[1]}: ${match[2]}` : failure;
+}))]) console.error(`FALHA ${item}`);
 assert.equal(failures.length, 0, `${failures.length} falhas de legibilidade`);
 console.log(`qa:assistant: ${Object.keys(states).length} estados × ${Object.keys(viewports).length} viewports; catálogo + ${guidePaths.length} guias publicados; ${textCount} textos, ${clickCount} clicáveis; 0 falhas.`);
