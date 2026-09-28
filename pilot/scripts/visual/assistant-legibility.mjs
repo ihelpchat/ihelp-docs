@@ -198,6 +198,8 @@ try {
     await emptyPage.close();
     const drawerPage = await browser.newPage({ viewport: dimensions, hasTouch: viewport === 'mobile' });
     await drawerPage.goto(`${site.url}${basePath}/docs/guias/`, { waitUntil: 'networkidle' });
+    await assertAssistantReference(drawerPage, drawerPage.locator('body'), `fechado/${viewport}`);
+    assert.equal(await drawerPage.locator('.ih-ai-launcher').evaluate((el) => getComputedStyle(el).height), '44px', `fechado/${viewport}: launcher fora da produção`);
     await drawerPage.locator('.ih-ai-launcher').click();
     await drawerPage.locator('.ih-ai-drawer-empty button').first().waitFor();
     await injectProbe(drawerPage);
