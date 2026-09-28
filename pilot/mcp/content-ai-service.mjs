@@ -824,14 +824,24 @@ async function generateContentPackageCore(root, request, options = {}) {
   if (!modelJson.ok) return withPending(apiPending(modelJson.reason));
   const parsed = modelJson.value;
   const { grounding: _grounding, ...safePackage } = parsed;
+  const faqCoreTasks = faqRequested(request) && hasFaqTaskFacts(productContext.screenFacts)
+    ? missingFaqTaskSteps(request, adaptScreenFacts({ facts: productContext.screenFacts,
+      sha: productContext.code?.find((item) => item.role === 'frontend')?.ref }), [])
+      .map((item) => item.replace(/^tarefa sem passo: /u, '')) : [];
+  const faqCoreInstruction = `Escreva os passos das tarefas que têm FATOS DA TELA: ${faqCoreTasks.join(', ')}. As outras tarefas ficam em pendência. Não recuse a página inteira.`;
+  const refusedFaq = () => withPending({ status: 'needs_information',
+    summary: 'modelo recusou com fatos disponíveis',
+    questions: [...new Set([...(parsed.questions ?? []), 'modelo recusou com fatos disponíveis'])],
+    pending: ['modelo recusou com fatos disponíveis'], articles: [], existing, model: response.model });
   if (request.module === 'api' && Array.isArray(parsed.summary))
     safePackage.summary = parsed.summary.map((unit) => typeof unit?.text === 'string' ? unit.text.trim() : '').join(' ');
   if (parsed.status !== 'ready') {
-    if (faqRequested(request) && hasFaqTaskFacts(productContext.screenFacts) && !options.faqRetryIssues) {
+    if (faqCoreTasks.length && !options.faqRetryIssues) {
       return generateContentPackage(root, request, { ...options, productContext, plan,
-        faqRetryIssues: (parsed.questions ?? []).length ? parsed.questions : ['Gere a página com as tarefas que têm fatos da tela.'],
+        faqRetryIssues: [faqCoreInstruction, ...(parsed.questions ?? [])],
         faqCarryPending: [...(options.faqCarryPending ?? []), ...(parsed.questions ?? []).map((question) => `pergunta pendente: ${question}`)] });
     }
+    if (faqRequested(request) && faqCoreTasks.length) return refusedFaq();
     return withPending({ ...safePackage, articles: [], existing, model: response.model });
   }
   if (request.module === 'api') {
@@ -852,6 +862,11 @@ async function generateContentPackageCore(root, request, options = {}) {
       parsed.articles = [faq];
       safePackage.articles = parsed.articles;
     }
+  }
+  if (faqCoreTasks.length && !parsed.articles.some((article) => article.sections?.passos?.length)) {
+    if (options.faqRetryIssues) return refusedFaq();
+    return generateContentPackage(root, request, { ...options, productContext, plan,
+      faqRetryIssues: [faqCoreInstruction] });
   }
   if (request.module === 'api' && !parsed.articles.length) return withPending(apiPending('nenhuma página de API gerada'));
   if (request.module === 'api') {

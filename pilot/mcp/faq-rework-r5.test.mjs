@@ -55,7 +55,8 @@ test('Robô replay: tema e verbos de interação não exigem citação própria'
       body: replay.robotInitial.whenUse.citations[0].quote }],
   });
   assert.equal(initial.sections.quandoUsar, undefined);
-  assert.ok(initial.pending.some((item) => item.includes('palavra sem fonte: apresentar')));
+  assert.ok(initial.pending.some((item) => item.includes('palavra sem fonte: cliente, ligar, fluxo')));
+  assert.ok(!initial.pending.some((item) => item.includes('palavra sem fonte: apresentar')));
   assert.equal(replay.robotInitial.status, 'ready');
   assert.equal(replay.robotRetry.status, 'ready');
 });

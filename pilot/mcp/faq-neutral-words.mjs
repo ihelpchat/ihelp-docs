@@ -1,7 +1,9 @@
-// Base: NLTK Data, Portuguese stopwords corpus (207 entradas), licença em
+// Base: NLTK Data, Portuguese stopwords corpus (200 entradas), licença em
 // https://github.com/nltk/nltk_data/blob/gh-pages/DATASET-LICENSES.md
 // https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/stopwords.zip
-// Complementos: numerais por extenso até dez e flexões frequentes de ir, poder e dever.
+// Conferido contra as 200 entradas de pt do corpus NLTK. Complementos:
+// demonstrativos, possessivos e indefinidos usuais que faltam ao corpus,
+// numerais até dez e flexões frequentes de ir, poder e dever.
 // Mantenha apenas palavras funcionais; termos de negócio exigem fonte.
 export const FAQ_NEUTRAL_WORDS = Object.freeze(`a
 ali
@@ -277,12 +279,71 @@ caixa
 lo
 la
 los
-las`.trim().split(/\s+/u));
+las
+esse
+esses
+essa
+essas
+este
+estes
+esta
+estas
+isto
+isso
+aquele
+aqueles
+aquela
+aquelas
+aquilo
+deste
+desta
+destes
+destas
+desse
+dessa
+desses
+dessas
+nisso
+nisto
+meu
+meus
+minha
+minhas
+seu
+seus
+sua
+suas
+teu
+teus
+tua
+tuas
+vosso
+vossos
+vossa
+vossas
+algum
+alguns
+alguma
+algumas
+nenhum
+nenhuma
+nenhuns
+nenhumas
+qualquer
+quaisquer
+outro
+outra
+outros
+outras
+todo
+toda
+todos
+todas`.trim().split(/\s+/u));
 
 // Verbos de interação não afirmam uma capacidade específica; seus objetos exigem fonte.
 export const FAQ_NEUTRAL_VERBS = Object.freeze([
   'querer', 'oferecer', 'escolher', 'ver', 'selecionar', 'clicar', 'tocar',
   'digitar', 'preencher', 'salvar', 'enviar', 'receber', 'aparecer', 'mostrar',
   'usar', 'criar', 'editar', 'apagar', 'ativar', 'desativar', 'abrir', 'fechar',
-  'voltar', 'continuar', 'responder',
+  'voltar', 'continuar', 'responder', 'apresentar',
 ]);

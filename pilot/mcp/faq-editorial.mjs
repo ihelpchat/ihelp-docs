@@ -18,6 +18,15 @@ const literal = (quote, source) => normalized(quote).length >= 12
   && normalized(source).toLocaleLowerCase('pt-BR').includes(normalized(quote).toLocaleLowerCase('pt-BR'));
 const fold = (value) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLocaleLowerCase('pt-BR');
 const words = (value) => fold(value).match(/[a-z]+|\d+/gu) ?? [];
+// Derivação restrita aos verbos neutros; substantivos genéricos não afirmam capacidades.
+const derivedStems = new Map(FAQ_NEUTRAL_VERBS.flatMap((verb) => {
+  const root = fold(verb).slice(0, -2);
+  const nouns = [verb.endsWith('ar') ? `${root}acao` : `${root}imento`];
+  if (verb === 'escolher') nouns.push('escolha');
+  if (verb === 'editar') nouns.push('edicao');
+  return nouns.map((noun) => [noun, faqStem(verb)]);
+}));
+const lexicalStem = (word) => derivedStems.get(singular(word)) ?? faqStem(word);
 const hasLabel = (text, label) => {
   const inText = words(text), fromLabel = words(label);
   return fromLabel.length > 0 && inText.some((word, index) => word === fromLabel[0]
@@ -35,23 +44,24 @@ const verbForms = (verb) => {
   return [base, ...endings.map((ending) => stem + ending)];
 };
 const neutral = new Set([...FAQ_NEUTRAL_WORDS, ...FAQ_NEUTRAL_VERBS.flatMap(verbForms),
+  ...derivedStems.keys(),
   'quero', 'quer', 'querem', 'queria', 'queriam', 'quis', 'quiser', 'quisesse',
   'vejo', 've', 'veem', 'vi', 'viu', 'visto', 'vendo', 'vir',
   'ofereco', 'ofereca', 'oferecam', 'escolho', 'escolha', 'escolham',
   'preencha', 'preencham', 'confira', 'confiram', 'clique', 'cliquem',
   'toque', 'toquem', 'use', 'uses', 'abra', 'abram', 'abre', 'abrem', 'abriu', 'abrindo',
 ].map((word) => singular(fold(word))));
-// "escolhas" também é substantivo; sem fonte não pode ser liberado pela flexão verbal.
 const contentWords = (value, request = {}) => {
   const theme = new Set(words(`${request.topic ?? ''} ${request.description ?? ''}`).map(faqStem));
   return words(value).filter((word) => word.length > 2
-    && (word === 'escolhas' || !neutral.has(singular(word))) && !theme.has(faqStem(word)));
+    && !neutral.has(singular(word)) && !theme.has(faqStem(word)));
 };
 const promiseRoot = /^(?:aument|reduz|garant|dobr|economiz|bloque|melhor)[a-z]*$|^(?:sempre|nunca)$/u;
 const promiseStem = (word) => word.match(/^(?:aument|reduz|garant|dobr|economiz|bloque|melhor)/u)?.[0] ?? word;
 const numbers = (value) => String(value ?? '').match(/(?:R\$|US\$|€|\$)?\s*\d+(?:[.,]\d+)*(?:\s*%|\s*(?:dias?|horas?|minutos?|meses?|anos?))?/giu) ?? [];
 const properNames = (value) => [...String(value ?? '').matchAll(/\p{L}+/gu)]
-  .filter((match) => /\p{Ll}\p{Lu}/u.test(match[0]) || (match.index !== 0 && /^\p{Lu}/u.test(match[0])))
+  .filter((match) => (/\p{Ll}\p{Lu}/u.test(match[0]) || (match.index !== 0 && /^\p{Lu}/u.test(match[0])))
+    && !neutral.has(singular(fold(match[0]))))
   .map((match) => fold(match[0]));
 
 const syntheticEvidence = ['nome', 'email', 'telefone', 'id', 'numero', 'data', 'searchData']
@@ -62,8 +72,8 @@ function supportedClaim(text, sources, { example = false, request = {}, lexical 
   const evidenceSources = [...sources, request.details ?? '', ...(example ? [syntheticEvidence] : [])];
   const evidence = evidenceSources.join(' ');
   const theme = new Set(words(`${request.topic ?? ''} ${request.description ?? ''}`).map(faqStem));
-  const cited = new Set(words(evidence).map(faqStem));
-  const uncovered = lexical ? [...new Set(contentWords(text, request).filter((word) => !cited.has(faqStem(word))))] : [];
+  const cited = new Set(words(evidence).map(lexicalStem));
+  const uncovered = lexical ? [...new Set(contentWords(text, request).filter((word) => !cited.has(lexicalStem(word))))] : [];
   // Números, nomes e promessas obedecem à mesma cobertura total, inclusive nas seções centrais.
   if (numbers(text).some((number) => !evidenceSources
     .some((source) => fold(source).includes(fold(number).trim())))) {
