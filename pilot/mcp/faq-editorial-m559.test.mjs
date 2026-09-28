@@ -172,6 +172,9 @@ test('passos e erros omitem ações sem fato de tela citado', () => {
   const check = (key, sentence, line) => validateFaqSections({ [key]: [unit(sentence, [cite(line)])] },
     { screenFacts: facts });
   assert.equal(check('passos', 'Clique em **Criar novo robô**.', 12).sections.passos?.length, 1);
+  const destructiveOnly = check('passos', 'Clique em **Criar novo robô** e apague os robôs.', 12);
+  assert.equal(destructiveOnly.sections.passos, undefined);
+  assert.ok(destructiveOnly.pending.some((item) => item.includes('ação destrutiva sem fato de tela')));
   const inventedStep = check('passos', 'Clique em **Criar novo robô** e apague todos os robôs.', 12);
   assert.equal(inventedStep.sections.passos, undefined);
   assert.ok(inventedStep.pending.some((item) => item.includes('ação destrutiva sem fato de tela')));
