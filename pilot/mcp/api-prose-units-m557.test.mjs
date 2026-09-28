@@ -104,7 +104,9 @@ test('intro sem citação mantém motivo frase sem citação', async () => {
 
 test('nota API com atribuição à fonte vai para nova tentativa e vira pendência', async () => {
   let calls = 0;
-  const result = await generateContentPackage(process.cwd(), request, { productContext: context, plan: { status: 'ready' },
+  const fixtureContext = structuredClone(context);
+  fixtureContext.endpoints[0].parameters = [];
+  const result = await generateContentPackage(process.cwd(), request, { productContext: fixtureContext, plan: { status: 'ready' },
     client: { responses: { create: async (payload) => {
       calls++;
       if (calls === 2) assert.match(JSON.stringify(payload.input), /menção à fonte/u);
