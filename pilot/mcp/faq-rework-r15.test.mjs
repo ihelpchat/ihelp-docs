@@ -55,13 +55,28 @@ test('passos removem aberturas repetidas da mesma tela e ações iguais consecut
   assert.equal(renderFaqSections(result.sections).match(/Abra \*\*Robôs\*\*/gu)?.length, 1);
 });
 
+test('rotas internas diferentes com o mesmo nome visível não reabrem a mesma tela', () => {
+  const facts = adaptScreenFacts({ sha, facts: [
+    { kind: 'route', text: 'Contatos', route: '/contact', source: 'src/Router.tsx:1' },
+    { kind: 'route', text: 'Contatos', route: '/contact/detail/:idRef', source: 'src/Router.tsx:2' },
+    { kind: 'action', text: 'Agendamento', source: 'src/Contact.tsx:3' },
+  ] });
+  const result = validateFaqSections({ passos: [
+    { acao: 'abrir', fato: 'f1' }, { acao: 'clicar', fato: 'f3' },
+    { acao: 'abrir', fato: 'f2' },
+  ] }, { screenFacts: facts });
+  assert.equal(result.sections.passos.filter((item) => item.text === 'Abra **Contatos**.').length, 1);
+});
+
 test('placeholder de input só aceita preencher; conferir estado continua válido', () => {
   const facts = adaptScreenFacts({ sha, facts: [
     { kind: 'text', property: 'placeholder', text: 'Digite o título do robô', source: 'src/Robots.tsx:3' },
     { kind: 'state', text: 'Ativo', source: 'src/Robots.tsx:4' },
+    { kind: 'text', text: 'Salvar', source: 'src/Robots.tsx:5' },
   ] });
   const check = (acao, fato) => validateFaqSections({ passos: [{ acao, fato }] }, { screenFacts: facts });
   assert.equal(check('conferir', 'f1').sections.passos, undefined);
   assert.match(renderFaqSections(check('preencher', 'f1').sections), /Preencha \*\*Digite o título do robô\*\*/u);
   assert.match(renderFaqSections(check('conferir', 'f2').sections), /Confira \*\*Ativo\*\*/u);
+  assert.equal(check('conferir', 'f3').sections.passos, undefined);
 });
