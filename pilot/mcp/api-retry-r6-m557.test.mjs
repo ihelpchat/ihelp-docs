@@ -10,7 +10,7 @@ const endpoint = (route, field) => ({ verb: 'GET', route, public: true, document
   authorization: 'authenticated', parameters: [], responseFields: [{ name: field, type: 'string' }] });
 const endpoints = [endpoint('/api/v2/contacts', 'id'), endpoint('/api/v2/contacts/details', 'lastActivity')];
 const article = (path, id, name, text) => ({ path, endpoint: id, title: 'Contatos',
-  description: unit('Consulta os dados dos contatos disponíveis na referência pública da API.'), intro: unit('Use para consultar contatos.'), notas: [],
+  description: unit('Consulta os dados dos contatos disponíveis na referência pública da API.'), intro: unit('Use para consultar contatos.'), notas: [], responseHeaders: [],
   responseDescriptions: [{ name, description: unit(text) }] });
 const original = { status: 'ready', summary: [unit('Contatos.')], questions: [], articles: [
   article('api/contatos/buscar-contatos', 'GET /contacts', 'id', 'Identificador do contato.'),
