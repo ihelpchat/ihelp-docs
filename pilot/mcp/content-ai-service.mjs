@@ -14,6 +14,7 @@ import { contentMaxOutputTokens } from './env-compat.mjs';
 import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 import { guardModelOutput } from './model-output-guard.mjs';
 import { PRODUCT_TERMS } from './product-terms.mjs';
+import { validCanonicalQuestion } from './conversational-contract.mjs';
 import { classifyFaqQuestions, hasFaqTaskFacts, loadBusinessContext, selectFaqStyleExamples, adaptScreenFacts,
   validateFaqSections, renderFaqSections, fixedFaqSupportSection, deterministicFaqAnswer,
   markFaqStepLabels, missingFaqTaskSteps, FAQ_SECTIONS } from './faq-editorial.mjs';
@@ -769,7 +770,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     productContext.faqStyleExamples ??= await selectFaqStyleExamples(`${root}/content/docs/docs`);
   }
   let plan = options.plan;
-  const withPending = (result) => ({ securityWarnings: [], ...result, pending: [...new Set([...(productContext.pending ?? []), ...(plan?.pending ?? []), ...(result.pending ?? [])])] });
+  const withPending = (result) => ({ securityWarnings: [], ...result, pending: [...new Set([...(productContext.pending ?? []), ...(plan?.pending ?? []), ...(options.faqCarryPending ?? []), ...(result.pending ?? [])])] });
   if (productContext.pending?.some((item) => item.startsWith('endpoint citado não encontrado'))) return groundingPending(productContext);
   if (request.module === 'api' && !productContext.endpoints?.length) return withPending(apiPending(productContext.nonPublicEndpoints ? 'endpoint não público: confirmar' : 'endpoints estruturados ausentes'));
   if (request.module === 'api' && !productContext.endpoints.some((item) => item.public)) return withPending(apiPending('endpoint não público: confirmar'));
@@ -825,7 +826,14 @@ async function generateContentPackageCore(root, request, options = {}) {
   const { grounding: _grounding, ...safePackage } = parsed;
   if (request.module === 'api' && Array.isArray(parsed.summary))
     safePackage.summary = parsed.summary.map((unit) => typeof unit?.text === 'string' ? unit.text.trim() : '').join(' ');
-  if (parsed.status !== 'ready') return withPending({ ...safePackage, articles: [], existing, model: response.model });
+  if (parsed.status !== 'ready') {
+    if (faqRequested(request) && hasFaqTaskFacts(productContext.screenFacts) && !options.faqRetryIssues) {
+      return generateContentPackage(root, request, { ...options, productContext, plan,
+        faqRetryIssues: (parsed.questions ?? []).length ? parsed.questions : ['Gere a página com as tarefas que têm fatos da tela.'],
+        faqCarryPending: [...(options.faqCarryPending ?? []), ...(parsed.questions ?? []).map((question) => `pergunta pendente: ${question}`)] });
+    }
+    return withPending({ ...safePackage, articles: [], existing, model: response.model });
+  }
   if (request.module === 'api') {
     if (!Array.isArray(parsed.summary) || !parsed.summary.length
       || !parsed.summary.every((unit) => unit && typeof unit === 'object' && !Array.isArray(unit)
@@ -1026,11 +1034,19 @@ async function generateContentPackageCore(root, request, options = {}) {
     article.body = renderFaqSections({ ...result.sections,
       suporte: fixedFaqSupportSection(request, faqContext.screenFacts) });
     article.description = article.body.split('\n')[0].slice(0, 240);
-    article.assistantOverview = result.sections.passos.map((unit) => unit.text).find((text) =>
-      text.length >= 45 && text.length <= 200 && /\b(?:abra|clique|escolha|selecione|confira|digite|crie|importe|pesquise|localize)\b/iu.test(text))
-      ?? result.sections.resposta.map((unit) => unit.text).join(' ');
-    article.assistantInitialSteps = Math.min(2, result.sections.passos.length);
+    const firstStep = result.sections.passos[0]?.text ?? '';
+    const directText = result.sections.resposta.map((unit) => unit.text).join(' ');
+    article.assistantOverview = firstStep.length >= 45 && firstStep.length <= 200
+      ? firstStep : `${directText} ${firstStep}`.trim().slice(0, 200);
+    article.assistantInitialSteps = result.sections.passos.length ? 1 : 0;
     article.assistantSuggestions = ['Falar com uma pessoa?'];
+    if (!validCanonicalQuestion(article.assistantQuestion)) {
+      const screen = faqContext.screenFacts.find((fact) => fact.kind === 'route' && fact.text)?.text
+        ?? request.module ?? prose.title ?? request.topic;
+      const candidate = `Como uso a tela ${screen}?`;
+      article.assistantQuestion = validCanonicalQuestion(candidate)
+        ? candidate : `Como uso ${String(request.topic ?? prose.title).slice(0, 90)}?`;
+    }
     article.productActions = article.productActions.map(normalizeCatalogLabel);
     if (request.tangoUrl && article.contentType === 'tutorial') article.tangoUrl = request.tangoUrl;
     articles.push(article);
@@ -1043,6 +1059,8 @@ async function generateContentPackageCore(root, request, options = {}) {
     return { path: article.path, valid: issues.length === 0, issues };
   }).filter(({ valid }) => !valid);
   if (invalid.length) {
+    if (!options.faqRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan,
+      faqRetryIssues: invalid.flatMap(({ path, issues }) => issues.map((issue) => `${path}: ${issue}`)) });
     return withPending({
       status: 'needs_information',
       summary: 'A IA gerou conteúdo que não passou pela validação editorial.',

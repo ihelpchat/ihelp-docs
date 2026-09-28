@@ -96,14 +96,29 @@ test('Agenda cobra busca, importação e agendamento quando há fatos dessas tar
     unit('Clique em **Agendamento**.', 16)]), []);
 });
 
-test('validação editorial do FAQ participa do retry único e pergunta canônica tem fallback', async () => {
-  const invalid = packageOf([article('docs/robo', 'faq', [createStep, createStep2, createStep3])]);
+test('pergunta canônica inválida recebe padrão determinístico', async () => {
+  const steps = [createStep, unit('Clique em **Editar robô** e confira a tela antes de continuar.', 6),
+    unit('Abra **Fluxo** e confira a opção antes de continuar.', 7),
+    unit('Clique em **Publicar** e confira a tela antes de continuar.', 5)];
+  const invalid = packageOf([article('docs/robo', 'faq', steps)]);
   invalid.articles[0].assistantQuestion = '';
-  const { result, calls, prompts } = await run([invalid, invalid]);
-  assert.equal(calls, 2, JSON.stringify(result));
-  assert.match(prompts[1], /assistantQuestion|validação editorial/u);
+  const { result, calls } = await run([invalid]);
+  assert.equal(calls, 1, JSON.stringify(result));
   assert.equal(result.status, 'ready', JSON.stringify(result));
   assert.match(result.articles[0].assistantQuestion, /^Como uso a tela .+\?$/u);
+});
+
+test('validateArticle entra na tentativa única para erro editorial não corrigível localmente', async () => {
+  const steps = [createStep, unit('Clique em **Editar robô** e confira a tela antes de continuar.', 6),
+    unit('Abra **Fluxo** e confira a opção antes de continuar.', 7),
+    unit('Clique em **Publicar** e confira a tela antes de continuar.', 5)];
+  const bad = packageOf([article('docs/robo', 'faq', steps)]);
+  bad.articles[0].title = 'X';
+  const good = packageOf([article('docs/robo', 'faq', steps)]);
+  const { result, calls, prompts } = await run([bad, good]);
+  assert.equal(calls, 2, JSON.stringify(result));
+  assert.match(prompts[1], /title precisa ter ao menos 4 caracteres/u);
+  assert.equal(result.status, 'ready', JSON.stringify(result));
 });
 
 test('plano e geração usam o mesmo núcleo: Robô com fatos segue e mantém perguntas pendentes', async () => {

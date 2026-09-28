@@ -1,6 +1,8 @@
 const FIELDS = ['assistantQuestion', 'assistantOverview', 'assistantInitialSteps', 'assistantSuggestions'];
 const ACTION = /\b(?:abra|acesse|clique|escolha|selecione|confira|verifique|corrija|configure|crie|digite|insira|envie|importe|pesquise|revise|localize|inicie|conclua|adicione)\b/i;
 const normalized = (value) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g, ' ').trim();
+export const validCanonicalQuestion = (value) => typeof value === 'string'
+  && value.trim().length >= 10 && value.trim().length <= 120 && value.trim().endsWith('?');
 
 export function parseAssistantSuggestions(value) {
   if (typeof value !== 'string') return [];
@@ -18,7 +20,7 @@ export function conversationalIssues(article) {
   if (!FIELDS.some((field) => Object.hasOwn(article, field))) return issues;
   for (const field of FIELDS) if (!Object.hasOwn(article, field) || article[field] === undefined || article[field] === null) issues.push(`${field} obrigatório no contrato conversacional`);
   const question = article.assistantQuestion;
-  if (typeof question !== 'string' || question.trim().length < 10 || question.trim().length > 120 || !question.trim().endsWith('?')) issues.push('assistantQuestion precisa ser uma pergunta canônica não vazia');
+  if (!validCanonicalQuestion(question)) issues.push('assistantQuestion precisa ser uma pergunta canônica não vazia');
   const overview = article.assistantOverview;
   if (typeof overview !== 'string' || overview.trim().length < 45 || overview.trim().length > 200 || !ACTION.test(overview)) issues.push('assistantOverview precisa ser curta e orientar iniciante com ação concreta');
   const count = article.assistantInitialSteps;
