@@ -235,3 +235,29 @@ test('onSubmit com wrapper de formulário segue callback local', async () => {
   assert.deepEqual(facts.map((fact) => [fact.text, fact.owner]),
     [['Sucesso!', 'Salvar'], ['Contato criado', 'Salvar']]);
 });
+
+test('handler só atribui feedback e destino de funções executadas', async () => {
+  const body = `const save = () => { const later = () => { toast.success('Falso'); navigate('/private'); }; toast.success('Ok'); };`;
+  const files = { ...sources, [page]: `export default function ContactPage() { ${body} return <button onClick={save}>Salvar</button>; }` };
+  const facts = (await run(files)).facts;
+  assert.equal(facts.some((fact) => fact.kind === 'message' && fact.text === 'Ok' && fact.owner === 'Salvar'), true);
+  assert.equal(facts.some((fact) => fact.text === 'Falso' || fact.route === '/private'), false);
+  const called = { ...files, [page]: files[page].replace("toast.success('Ok'); };", "later(); toast.success('Ok'); };") };
+  const reached = (await run(called)).facts;
+  assert.equal(reached.some((fact) => fact.text === 'Falso' && fact.owner === 'Salvar'), true);
+  assert.equal(reached.some((fact) => fact.route === '/private' && fact.owner === 'Salvar'), true);
+});
+
+test('promise callback executado atribui feedback à ação', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() { const save = () => Promise.resolve().then(() => toast.success('Ok')); return <button onClick={save}>Salvar</button>; }` };
+  assert.equal((await run(files)).facts.some((fact) => fact.kind === 'message' && fact.text === 'Ok' && fact.owner === 'Salvar'), true);
+});
+
+test('tooltip mais próximo nomeia botão de ícone e liga handler', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() { const handleSave = () => toast.success('Salvo'); return <CustomTooltip title="Salvar"><button onClick={handleSave}><Check /></button></CustomTooltip>; }` };
+  const facts = (await run(files)).facts;
+  assert.equal(facts.some((fact) => fact.kind === 'action' && fact.text === 'Salvar' && fact.handler === 'handleSave'), true);
+  assert.equal(facts.some((fact) => fact.kind === 'message' && fact.text === 'Salvo' && fact.owner === 'Salvar'), true);
+  const bare = { ...files, [page]: files[page].replace('<CustomTooltip title="Salvar">', '<>').replace('</CustomTooltip>', '</>') };
+  assert.equal((await run(bare)).facts.some((fact) => fact.kind === 'action' && fact.handler === 'handleSave'), false);
+});
