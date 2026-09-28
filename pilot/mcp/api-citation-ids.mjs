@@ -11,7 +11,7 @@ const sourceAt = (source, endpoint) => {
 
 export function apiCitationRegistry(context) {
   const registry = new Map();
-  const counters = { C: 0, R: 0, P: 0, F: 0 };
+  const counters = { C: 0, R: 0, P: 0, F: 0, N: 0 };
   const add = (prefix, entry) => registry.set(`${prefix}${++counters[prefix]}`, entry);
   const code = (item, start, end, excerpt) => {
     if (!item.repository || !item.path || !/^[a-f0-9]{40}$/u.test(item.sha ?? '')
@@ -39,6 +39,11 @@ export function apiCitationRegistry(context) {
     for (const quote of sentenceParts([page.title, page.description, page.body, page.content].filter(Boolean).join('\n')))
       if (quote.length >= 12) add('P', { kind: 'page', text: quote,
         citation: { source: 'pagina', path: page.path, quote } });
+  }
+  for (const item of context.businessContext ?? []) {
+    for (const quote of sentenceParts(item.body))
+      if (quote.length >= 12 && !quote.startsWith('#')) add('N', { kind: 'business', text: quote,
+        citation: { source: 'negocio', quote } });
   }
   const covers = (citation) => [...registry.values()].some((item) => item.kind === 'code'
     && item.citation.repository === citation.repository && item.citation.path === citation.path

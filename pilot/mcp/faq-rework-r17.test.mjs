@@ -47,9 +47,11 @@ test('replay Agenda: Exportar sem fato de tela vira somente pendência', () => {
 
 test('fixture de business-context permite sustentar O que é', async () => {
   const root = await mkdtemp(join(tmpdir(), 'faq-r17-'));
+  const oldBusinessDir = process.env.BUSINESS_CONTEXT_DIR;
   try {
     const dir = join(root, 'architecture', 'business-context');
     await mkdir(dir, { recursive: true });
+    process.env.BUSINESS_CONTEXT_DIR = dir;
     await writeFile(join(dir, 'robos.md'), '🟢 PÚBLICO\nO robô recebe o cliente.\n');
     const business = await loadBusinessContext(root, 'Robôs');
     assert.equal(business.length, 1);
@@ -60,7 +62,11 @@ test('fixture de business-context permite sustentar O que é', async () => {
     assert.doesNotMatch(renderFreeFaqSections(positive.sections), /<AConfirmar>/u);
     const negative = await judgeClaims({ ...base, oQueE: [{ text: 'O robô recebe o cliente.' }] }, context, answer);
     assert.match(renderFreeFaqSections(negative.sections), /<AConfirmar>O robô recebe o cliente/u);
-  } finally { await rm(root, { recursive: true, force: true }); }
+  } finally {
+    if (oldBusinessDir === undefined) delete process.env.BUSINESS_CONTEXT_DIR;
+    else process.env.BUSINESS_CONTEXT_DIR = oldBusinessDir;
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('replay Robô: segunda geração recebe novo julgamento com os mesmos fatos', async () => {

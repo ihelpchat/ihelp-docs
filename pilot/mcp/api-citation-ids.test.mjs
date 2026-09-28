@@ -52,6 +52,23 @@ test('índice enviado ao modelo passa pela higiene de código', () => {
   assert.match(prompt, /literal omitido/u);
 });
 
+test('N resolve apenas o contexto de negócio carregado e pacote antigo mantém validação literal', () => {
+  const quote = 'Uma consulta reúne os contatos para acompanhamento da equipe.';
+  const businessContext = [{ body: `🟢 PÚBLICO\n${quote}` }];
+  const registry = service.apiCitationRegistry({ ...context, businessContext });
+  const businessId = [...registry.keys()].find((id) => id.startsWith('N'));
+  assert.ok(businessId);
+  assert.match(service.apiCitationPrompt(registry), new RegExp(`${businessId} \\[business\\] Uma consulta reúne os contatos`, 'u'));
+  const [resolved] = service.resolveApiCitationIds([businessId], registry).citations;
+  const groundingContext = { ...context, businessContext, citationRegistry: registry, groundingRequired: true };
+  const claim = (citation) => ({ text: quote, grounding: [{ text: quote, citations: [citation] }] });
+  assert.equal(service.validateGroundedOutput(claim(resolved), groundingContext, ['text']), true);
+  assert.equal(service.validateGroundedOutput(claim({ source: 'negocio', quote }), groundingContext, ['text']), true);
+  assert.equal(service.validateGroundedOutput(claim({ source: 'negocio', quote: quote.replace('contatos', 'clientes') }),
+    groundingContext, ['text']), false);
+  assert.equal(service.validateGroundedOutput(claim({ ...resolved, quote: 'texto inventado' }), groundingContext, ['text']), false);
+});
+
 test('pacote API usa IDs na geração e guarda citação completa só na revisão interna', async () => {
   const request = { module: 'api', topic: 'Contatos', description: 'Criar GET /contacts. Consulte contatos disponíveis.' };
   const productContext = { ...context, groundingRequired: true, code: [{ available: true }],
