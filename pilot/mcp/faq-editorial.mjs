@@ -48,10 +48,13 @@ const FAQ_NAVIGATION_VERBS = [
   'abrir', 'clicar', 'tocar', 'selecionar', 'escolher', 'digitar', 'preencher',
   'conferir', 'ver', 'voltar', 'localizar', 'acompanhar', 'aguardar',
 ];
+const FAQ_DESTRUCTIVE_VERBS = [
+  'apagar', 'excluir', 'remover', 'deletar', 'limpar', 'desativar',
+  'desconectar', 'cancelar', 'bloquear', 'resetar', 'zerar', 'destruir',
+];
 const FAQ_ACTION_VERBS = [...new Set([
   ...FAQ_NAVIGATION_VERBS,
-  'apagar', 'excluir', 'remover', 'deletar', 'destruir', 'limpar', 'desativar',
-  'desconectar', 'cancelar', 'bloquear', 'resetar', 'zerar',
+  ...FAQ_DESTRUCTIVE_VERBS,
   'criar', 'adicionar', 'salvar', 'enviar', 'ativar', 'editar', 'importar',
   'exportar', 'publicar', 'agendar', 'configurar', 'cadastrar', 'vincular',
   'transferir', 'finalizar',
@@ -61,6 +64,11 @@ const FAQ_VERB_FORMS = new Map(FAQ_ACTION_VERBS.map((verb) => [verb, new Set([
   ...verbForms(verb).filter((form) => form !== `${fold(verb).slice(0, -2)}o`), ...({
     apagar: ['apague', 'apaguem'], bloquear: ['bloqueie', 'bloqueiem'],
     clicar: ['clique', 'cliquem'], excluir: ['exclua', 'excluam', 'exclui'],
+    remover: ['remova', 'removam'], deletar: ['delete', 'deletem'],
+    limpar: ['limpe', 'limpem'], desativar: ['desative', 'desativem'],
+    desconectar: ['desconecte', 'desconectem'], cancelar: ['cancele', 'cancelem'],
+    resetar: ['resete', 'resetem'], zerar: ['zere', 'zerem'],
+    destruir: ['destrua', 'destruam'],
     publicar: ['publique', 'publiquem'], localizar: ['localize', 'localizem'],
     ver: ['veja', 'vejam', 'vejo', 've', 'veem'],
   }[verb] ?? []),
@@ -184,6 +192,19 @@ export function missingFaqTaskSteps(request = {}, screenFacts = [], steps = []) 
     const covered = steps.some((step) => step.citations?.some((cite) => relevant.some((fact) =>
       !cite.source && cite.repository === fact.repository && cite.path === fact.path && cite.sha === fact.sha
         && cite.lineStart <= fact.lineStart && fact.lineEnd <= cite.lineEnd)));
+    return covered ? [] : [`tarefa sem passo: ${task}`];
+  });
+}
+
+export function missingFreeFaqTaskSteps(request = {}, screenFacts = [], tasks = []) {
+  const asked = fold((request.details ?? request.description ?? '').split(/\bcobrir\b/iu).at(-1));
+  return FAQ_TASKS.flatMap(([task, requested, visible]) => {
+    if (!requested.test(asked)) return [];
+    const relevant = screenFacts.filter((fact) => fact.text && visible.test(fold(`${fact.text} ${fact.subject ?? ''}`))
+      && ['action', 'field', 'upload', 'destination', 'text'].includes(fact.kind));
+    if (!relevant.length) return [];
+    const covered = tasks.some((entry) => requested.test(fold(entry.tarefa ?? ''))
+      && entry.passos?.some((step) => relevant.some((fact) => hasLabel(step.text ?? '', fact.text))));
     return covered ? [] : [`tarefa sem passo: ${task}`];
   });
 }
@@ -464,14 +485,7 @@ export const FREE_FAQ_SECTIONS = {
   passos: 'Passo a passo', duvidas: 'Dúvidas comuns', erros: 'Erros comuns e o que fazer',
   suporte: 'Quando falar com o suporte',
 };
-const destructive = new Map([
-  ['apagar', /\bapag\w*|\bapagu\w*/u], ['excluir', /\bexclu\w*|\bexclui\w*/u],
-  ['remover', /\bremov\w*|\bremov\w*|\bremoa\w*/u], ['deletar', /\bdelet\w*/u],
-  ['destruir', /\bdestru\w*|\bdestrui\w*/u], ['limpar', /\blimp\w*/u],
-  ['desativar', /\bdesativ\w*/u], ['desconectar', /\bdesconect\w*/u],
-  ['cancelar', /\bcancel\w*/u], ['bloquear', /\bbloque\w*/u],
-  ['resetar', /\breset\w*/u], ['zerar', /\bzer\w*/u],
-]);
+const destructiveVerbs = (text) => actionVerbs(text).filter((verb) => FAQ_DESTRUCTIVE_VERBS.includes(verb));
 const faqAllowedHosts = new Set(['app.tango.us', 'apiv3.ihelpchat.com', 'ihelpchat.com.br', 'www.ihelpchat.com.br']);
 const freeUnits = (sections) => Object.entries(FREE_FAQ_SECTIONS).flatMap(([key]) => key === 'passos'
   ? (sections?.passos ?? []).flatMap((task) => task?.passos ?? [])
@@ -495,10 +509,11 @@ function rigidFaqIssue(text, context) {
     const pageReference = pages.has(labelKey(label)) && /\b(?:consulte|veja|leia|guia|página)\b/iu.test(before.slice(-100));
     if (!known.has(labelKey(label)) && !pageReference) return `rótulo inexistente: ${label}`;
   }
-  const visible = fold(text);
-  for (const [verb, pattern] of destructive) if (pattern.test(visible)
-    && !(context.screenFacts ?? []).some((fact) => fact.kind === 'action' && pattern.test(fold(fact.text))))
-    return `ação destrutiva sem fato: ${verb}`;
+  const outsideLabels = String(text).replace(/\*\*[^*\n]+\*\*/gu, ' ');
+  if (destructiveVerbs(outsideLabels).length) return 'ação destrutiva fora de rótulo da tela';
+  for (const label of labels) if (destructiveVerbs(label).length
+    && !(context.screenFacts ?? []).some((fact) => fact.kind === 'action' && labelKey(fact.text) === labelKey(label)))
+    return `ação destrutiva sem fato: ${destructiveVerbs(label)[0]}`;
   if (containsSensitiveData(text, { detectOpaque: true })) return 'dado pessoal ou segredo';
   for (const match of String(text).matchAll(/https?:\/\/[^\s)\]>]+/giu)) {
     let url;

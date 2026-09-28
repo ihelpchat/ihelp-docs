@@ -19,7 +19,7 @@ import { classifyFaqQuestions, hasFaqTaskFacts, loadBusinessContext, selectFaqSt
   validateFaqSections, renderFaqSections, fixedFaqSupportSection, deterministicFaqAnswer,
   missingFaqTaskSteps, FAQ_SECTIONS } from './faq-editorial.mjs';
 import { FREE_FAQ_SECTIONS, validateFreeFaqSections, judgeClaims, renderFreeFaqSections,
-  faqTasksWithoutFacts } from './faq-editorial.mjs';
+  faqTasksWithoutFacts, missingFreeFaqTaskSteps } from './faq-editorial.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
 contentMaxOutputTokens();
@@ -833,7 +833,7 @@ async function generateContentPackageCore(root, request, options = {}) {
         request.module === 'api' ? '' : 'productActions liga o artigo ao produto. Use somente rotas confirmadas no pedido ou na cobertura do módulo; o plano da IA não confirma ações sozinho. Nunca gere vídeo, VideoEmbed, iframe, credencial, dado pessoal ou link legado.',
         request.module === 'api' ? '' : 'Use somente ProductAction do catálogo confiável no contexto, com id, label, route e target exatos. Não invente ação, rota nem target.',
         request.module === 'api' ? 'Não inclua campos assistant nem campos técnicos nas páginas de referência.' : faqRequested(request) ? 'Preencha assistantQuestion com uma pergunta canônica. Os demais campos do assistente vêm da resposta direta e dos passos validados.' : 'Em cada artigo preencha assistantQuestion com uma pergunta canônica, assistantOverview com orientação curta e útil a iniciante, assistantInitialSteps com 1 a 3 passos concretos presentes no body e assistantSuggestions com 1 a 3 próximas perguntas ou ações distintas. Não duplique passos.',
-        request.module === 'api' ? 'Se faltar método, rota, parâmetros ou autorização, use needs_information e deixe articles vazio. responseFields=null é permitido: a resposta terá nota fixa e pendência.' : faqRequested(request) ? 'Use needs_information só quando não houver fatos para o passo principal. Afirmações de negócio sem fonte podem ser escritas: o juiz as marcará a confirmar. Nunca proponha ação destrutiva sem fato da tela com o mesmo verbo.' : 'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
+        request.module === 'api' ? 'Se faltar método, rota, parâmetros ou autorização, use needs_information e deixe articles vazio. responseFields=null é permitido: a resposta terá nota fixa e pendência.' : faqRequested(request) ? 'Use needs_information só quando não houver fatos para o passo principal. Afirmações de negócio sem fonte podem ser escritas: o juiz as marcará a confirmar. Verbo destrutivo só pode aparecer dentro de rótulo exato da tela em negrito, nunca em texto livre.' : 'Se houver conflito entre fontes ou faltar nome de botão, formato aceito, permissão ou resultado esperado, use status=needs_information, liste as perguntas e deixe articles vazio.',
         request.module === 'api' ? 'A prosa não pode conter método HTTP, caminho, bloco de código, componente JSX nem código inline, exceto nome exato de parâmetro ou campo dos fatos. Nome técnico de outro endpoint do pacote exige refs: [{name,endpoint}] na própria unidade, com endpoint exato do enum; o nome deve ser parâmetro, campo ou segmento da rota desse endpoint. O link para a página referenciada é renderizado automaticamente. O summary mantém escopo global. Descreva cada campo pelo significado e pelo tipo PÚBLICO (texto, número, data e hora, verdadeiro ou falso, lista, objeto), nunca pelo tipo do código, DTO, entity, repository ou service.' : faqRequested(request) ? 'Cada seção é lista de objetos {text}; passos é lista de tarefas. O juiz semântico avaliará cada frase com pedido, fatos da tela, contexto de negócio, sinais de suporte, páginas publicadas e manifesto de prints. Escreva como pessoa do suporte, sem jargão inexplicado, sem dados reais, sem código interno. Na página nunca fale das fontes, do pedido nem do material; dúvidas sobre confirmação, suposições e lacunas vão somente para pendencias da PR. Explique a ação diretamente. Tire espaços de dentro das bordas de **rótulos em negrito**. Não apague uma seção útil só por falta de fonte.' : 'Cada body precisa ter pelo menos 60 palavras, Markdown simples e linguagem concreta. FAQ responde rapidamente; tutorial ensina do início ao resultado final.',
         request.module === 'api' ? 'Cite cada unidade de summary, description, intro, notas e descrições de campo nas citations da própria unidade. source: "pedido" só pode citar trecho literal dentro de <<PEDIDO>>...<<FIM DO PEDIDO>>; source: "pagina" só pode citar trecho literal de página publicada listada no contexto, com path e quote. Cada quote deve ter pelo menos 12 caracteres. Para fatos técnicos, cite o código com repository, path, lineStart, lineEnd e sha. Use os números reais mostrados ao lado do código e cite a faixa mais curta que contém o comportamento, com no máximo 30 linhas. O JSON interno de formato não é fonte. O pedido não confirma nomes de parâmetros nem campos; estes precisam existir nos fatos do código.' : faqRequested(request) ? 'Rótulos em negrito precisam corresponder exatamente a fatos da tela. Não ponha em negrito o nome de um botão citado por uma página publicada se ele não estiver nos FATOS DA TELA; deixe a frase em texto comum para avaliação do juiz. Título de guia publicado pode ser link, sem negrito. Ação destrutiva precisa de fato de ação com o mesmo verbo. O juiz classifica sustentada, a confirmar ou contradiz a fonte. O time resolve pendências na prévia.' : 'No modo com código, cada frase ou passo de summary e de description, body, assistantOverview e assistantSuggestions em cada artigo precisa de item grounding com texto idêntico e citações estruturadas: repository, path, lineStart, lineEnd, sha. Sem evidência, use needs_information.',
       ].filter(Boolean).join(' '),
@@ -1059,11 +1059,16 @@ async function generateContentPackageCore(root, request, options = {}) {
   for (const prose of parsed.articles) {
     if (!prose.sections?.passos?.some((item) => item?.acao)) {
       const checked = validateFreeFaqSections(prose.sections, faqContext);
+      const missingTasks = missingFreeFaqTaskSteps(request, faqContext.screenFacts, checked.sections.passos);
+      const destructiveIssues = checked.pending.filter((item) => item.includes('ação destrutiva fora de rótulo da tela'));
+      if ((missingTasks.length || destructiveIssues.length) && !options.faqRetryIssues)
+        return generateContentPackage(root, request, { ...options, productContext, plan,
+          faqRetryIssues: [...missingTasks, ...destructiveIssues].map((item) => `${prose.path}: ${item}`) });
       if (checked.blocking.length) {
         if (!options.faqRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan,
           faqRetryIssues: checked.blocking });
         return withPending({ ...apiPending(`${prose.path}: travas rígidas: ${checked.blocking.join('; ')}`),
-          pending: checked.pending });
+          pending: [...checked.pending, ...missingTasks] });
       }
       const materialize = (sections) => {
         const { sections: _sections, ...article } = prose;
@@ -1111,7 +1116,8 @@ async function generateContentPackageCore(root, request, options = {}) {
         faqRetryIssues: judged.contradictions.map((item) => `Contradição: ${item.text} — ${item.reason}. Reescreva com os fatos.`),
       });
       const article = materialize(judged.sections);
-      sectionPending.push(...checked.pending, ...judged.pending.map((item) => `${prose.path}: a confirmar: ${item}`));
+      sectionPending.push(...checked.pending, ...missingTasks.map((item) => `${prose.path}: ${item}`),
+        ...judged.pending.map((item) => `${prose.path}: a confirmar: ${item}`));
       sectionPending.push(...faqTasksWithoutFacts(request, faqContext.screenFacts)
         .map((task) => `${prose.path}: tarefa sem fatos de tela: ${task}`));
       articles.push(article);
