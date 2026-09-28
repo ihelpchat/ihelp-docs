@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
-import { faqSubtitle } from './faq-editorial.mjs';
+import { deterministicFaqAnswer, faqModuleName, faqSubtitle } from './faq-editorial.mjs';
 import { extractScreenFacts, FRONT_ROUTER } from './front-screen-facts.mjs';
 import navigation from '../architecture/front-navigation.json' with { type: 'json' };
 
@@ -59,4 +59,31 @@ test('Canais vem do item de navegação da configuração, acima do título inte
   assert.equal(route.text, 'Canais');
   assert.match(route.source, /tab\.slice\.ts:/u);
   assert.equal(navigation['/configuracoes/channel'], route.text);
+});
+
+test('pacotes de Canais, Contatos e Robôs usam o nome visível e módulo no subtítulo', async () => {
+  const cases = [
+    { route: '/configuracoes/channel', internal: 'Configurações', visible: 'Canais', nav: 'src/store/slices/tab/tab.slice.ts' },
+    { route: '/contact', internal: 'Pessoas', visible: 'Contatos', nav: 'src/components/ui/components/NavBar/index.tsx' },
+    { route: '/bot', internal: 'Automações', visible: 'Robôs', nav: 'src/components/ui/components/NavBar/index.tsx' },
+  ];
+  for (const { route, internal, visible, nav } of cases) {
+    const sources = {
+      [FRONT_ROUTER]: `const pages = [{ path: '${route}', title: '${internal}', element: <Screen /> }];`,
+      [nav]: `const items = [{ name: '${visible}', ${nav.includes('tab.slice') ? 'href' : 'route'}: '${route}' }];`,
+    };
+    const request = { productRoute: route, module: internal, topic: visible, description: `Como editar ${visible}?` };
+    const { facts } = await extractScreenFacts({ route, module: internal, topic: visible,
+      paths: Object.keys(sources), readSource: async (path) => sources[path], sha });
+    assert.equal(faqModuleName(request, facts), visible, `${visible}: nome do menu`);
+    const action = { kind: 'action', text: `Editar ${visible}`, repository: 'ihelpchat/front-react',
+      path: 'src/Screen.tsx', lineStart: 1, lineEnd: 1, sha };
+    assert.match(deterministicFaqAnswer(request, [...facts, action])?.text ?? '',
+      new RegExp(`^No módulo \\*\\*${visible}\\*\\*`), `${visible}: resposta direta`);
+    assert.equal(faqSubtitle({ oQueE: [{ text: `A tela ${visible} mostra ${visible}.` }] }, request, facts),
+      `O módulo ${visible} mostra ${visible}.`, `${visible}: subtítulo sustentado`);
+    assert.match(faqSubtitle({ oQueE: [{ text: '<AConfirmar>Sem prova</AConfirmar>' }] }, request, [...facts, action]),
+      new RegExp(visible === 'Robôs' ? 'robôs de atendimento' : visible.toLocaleLowerCase('pt-BR')),
+      `${visible}: subtítulo fallback usa menu`);
+  }
 });
