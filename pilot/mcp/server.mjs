@@ -11,6 +11,8 @@ import { authorizeTool, registerToolPolicy, requestIdentity } from './access-con
 import { createGuide } from './create-guide.mjs';
 import { atualizarPorDeploy } from './update-by-deploy.mjs';
 import { refreshCodeProduct } from './code-refresh-offer.mjs';
+import { syncBusinessContext } from './business-context-sync.mjs';
+import { envCompatibility } from './env-compat.mjs';
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
 const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto']);
@@ -262,5 +264,12 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  if (!process.env.BUSINESS_CONTEXT_DIR) {
+    const stateDir = process.env.MCP_STATE_DIR ?? '/data';
+    try {
+      const result = await syncBusinessContext({ stateDir, token: process.env[envCompatibility.githubReadToken.current] });
+      if (result.status === 'available') process.env.BUSINESS_CONTEXT_DIR = result.directory;
+    } catch { /* sem contexto, o juiz mantém a confirmar */ }
+  }
   serveStdio(() => buildServer());
 }

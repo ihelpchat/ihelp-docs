@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
 import { renderArticle } from './content-service.mjs';
 
@@ -100,6 +102,23 @@ test('intro sem citação mantém motivo frase sem citação', async () => {
   assert.match(result.summary, /frase sem citação: Use esta página/u);
 });
 
+test('nota API com atribuição à fonte vai para nova tentativa e vira pendência', async () => {
+  let calls = 0;
+  const fixtureContext = structuredClone(context);
+  fixtureContext.endpoints[0].parameters = [];
+  const result = await generateContentPackage(process.cwd(), request, { productContext: fixtureContext, plan: { status: 'ready' },
+    client: { responses: { create: async (payload) => {
+      calls++;
+      if (calls === 2) assert.match(JSON.stringify(payload.input), /menção à fonte/u);
+      const value = structuredClone(base);
+      value.articles[0].notas = [unit('Segundo o contexto, os contatos aparecem na lista.', replay.citations.nota)];
+      return { output_text: JSON.stringify(value), model: 'offline' };
+    } } } });
+  assert.equal(calls, 2);
+  assert.doesNotMatch(result.articles[0].body, /segundo o contexto/iu);
+  assert.match(result.pending.join(' '), /menção à fonte/u);
+});
+
 test('duas frases numa unidade são rejeitadas', async () => {
   const result = await generate((value) => { value.articles[0].intro.text += ' Consulte os dados.'; });
   assert.equal(result.status, 'needs_evidence');
@@ -134,6 +153,41 @@ test('quote com uma palavra trocada mantém recusa literal', async () => {
   });
   assert.equal(result.status, 'needs_evidence');
   assert.match(result.summary, /não é trecho literal do pedido/u);
+});
+
+test('API carrega contexto do módulo, api-publica e geral e sustenta nota sem citar arquivos', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'api-business-r3-'));
+  const previous = process.env.BUSINESS_CONTEXT_DIR;
+  try {
+    await writeFile(join(directory, 'contatos.md'), '🟢 PÚBLICO\nUma consulta reúne os contatos para acompanhamento da equipe.\n');
+    await writeFile(join(directory, 'api-publica.md'), '🟢 PÚBLICO\nA API pública permite consultar informações autorizadas.\n');
+    await writeFile(join(directory, 'geral.md'), '🟢 PÚBLICO\nO iHelp organiza o atendimento da equipe.\n');
+    process.env.BUSINESS_CONTEXT_DIR = directory;
+    const prompts = [];
+    const value = structuredClone(base);
+    const note = 'Uma consulta reúne os contatos para acompanhamento da equipe.';
+    value.articles[0].notas = [{ text: note, citations: [{ source: 'negocio', quote: note }], refs: [] }];
+    const fixtureContext = structuredClone(context);
+    delete fixtureContext.businessContext;
+    const result = await generateContentPackage(process.cwd(), request, { productContext: fixtureContext,
+      plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
+        prompts.push(payload.input[1].content);
+        return { output_text: JSON.stringify(value), model: 'fixture' };
+      } } } });
+    assert.deepEqual(fixtureContext.businessContext?.map(({ path }) => path).sort(),
+      ['business-context/api-publica.md', 'business-context/contatos.md', 'business-context/geral.md']);
+    assert.match(fixtureContext.businessContext[0].body, /Uma consulta reúne os contatos/u);
+    assert.equal(result.status, 'ready', result.summary);
+    assert.match(prompts[0], /Uma consulta reúne os contatos/u);
+    assert.match(prompts[0], /A API pública permite consultar/u);
+    assert.match(prompts[0], /O iHelp organiza o atendimento/u);
+    assert.match(result.articles[0].body, /Uma consulta reúne os contatos/u);
+    assert.doesNotMatch(result.articles[0].body, /business-context|contatos\.md|api-publica\.md|geral\.md/u);
+  } finally {
+    if (previous === undefined) delete process.env.BUSINESS_CONTEXT_DIR;
+    else process.env.BUSINESS_CONTEXT_DIR = previous;
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 async function plan(changedRequest) {

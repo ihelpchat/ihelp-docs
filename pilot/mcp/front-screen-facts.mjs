@@ -273,6 +273,10 @@ function collect(filePath, source, facts, entryName) {
   if (root) reachable.push([root, ts.isFunctionDeclaration(root) ? root.name?.text ?? entryName :
     ts.isVariableDeclaration(root) ? root.name.getText(file) : entryName]);
   const renderProps = new Set(['component', 'element', 'render', 'Component', 'as']);
+  const isRenderProp = (name) => renderProps.has(name) || /^render[A-Z]/u.test(name);
+  const memoizedView = (node) => node && ts.isCallExpression(node)
+    && /^(?:useMemo|useCallback)$/u.test(node.expression.getText(file))
+    && (ts.isArrowFunction(node.arguments[0]) || ts.isFunctionExpression(node.arguments[0]));
   function render(name) {
     const seen = new Set();
     while (aliases.has(name) && !seen.has(name)) {
@@ -292,7 +296,8 @@ function collect(filePath, source, facts, entryName) {
     return false;
   }
   function returnedTrees(node) {
-    const value = ts.isVariableDeclaration(node) ? node.initializer : node;
+    let value = ts.isVariableDeclaration(node) ? node.initializer : node;
+    if (memoizedView(value)) value = value.arguments[0];
     const body = (ts.isFunctionDeclaration(value) || ts.isFunctionExpression(value) || ts.isArrowFunction(value))
       ? value.body : value;
     if (!body) return [];
@@ -314,7 +319,7 @@ function collect(filePath, source, facts, entryName) {
     if (!node) return;
     if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return;
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) render(node.expression.text);
-    if (ts.isPropertyAssignment(node) && renderProps.has(node.name.getText(file))
+    if (ts.isPropertyAssignment(node) && isRenderProp(node.name.getText(file))
       && ts.isIdentifier(node.initializer)) render(node.initializer.text);
     ts.forEachChild(node, renderExpression);
   }
@@ -455,12 +460,16 @@ function collect(filePath, source, facts, entryName) {
     if (ts.isJsxExpression(node)) {
       renderExpression(node.expression);
       if (!ts.isJsxAttribute(node.parent)) renderedMapChildren(node.expression);
+      if (node.expression && ts.isJsxElement(node.parent)
+        && (ts.isArrowFunction(node.expression) || ts.isFunctionExpression(node.expression)))
+        for (const tree of returnedTrees(node.expression)) visit(tree);
     }
     if (ts.isJsxExpression(node) && node.expression && ts.isIdentifier(node.expression)) {
       const local = found.get(node.expression.text);
-      if (local && ts.isVariableDeclaration(local) && jsxValue(local.initializer)) render(node.expression.text);
+      if (local && ts.isVariableDeclaration(local)
+        && (jsxValue(local.initializer) || memoizedView(local.initializer))) render(node.expression.text);
     }
-    if (ts.isJsxAttribute(node) && renderProps.has(node.name.text) && ts.isJsxExpression(node.initializer)
+    if (ts.isJsxAttribute(node) && isRenderProp(node.name.text) && ts.isJsxExpression(node.initializer)
       && node.initializer.expression && ts.isIdentifier(node.initializer.expression)) render(node.initializer.expression.text);
     if (ts.isJsxText(node)) {
       const value = safeText(node.getText(file));
@@ -709,7 +718,10 @@ function collect(filePath, source, facts, entryName) {
     const trees = returnedTrees(node);
     forms = rulesFor(node);
     title = trees.map((tree) => ownerTitle(tree, file)).find(Boolean) ?? null;
-    for (const tree of trees) visit(tree);
+    for (const tree of trees) {
+      if (ts.isIdentifier(tree)) render(tree.text);
+      visit(tree);
+    }
   }
   return { file, imports, usedImports, clean, translationKeys, linkedImports, columnImports };
 }
@@ -820,7 +832,8 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
       continue;
     }
     facts.push(...localFacts);
-    if (depth >= 3) continue;
+    // Editors and scheduling dialogs are rendered several component imports below the route.
+    if (depth >= 8) continue;
     for (const [specifier, names] of parsed.imports) {
       const target = resolveImport(path, specifier, allowed);
       if (target) for (const binding of names) if (parsed.usedImports.has(`${specifier}\0${binding.local}`))
