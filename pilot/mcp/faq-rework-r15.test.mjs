@@ -1,0 +1,67 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { extractScreenFacts, FRONT_ROUTER } from './front-screen-facts.mjs';
+import { adaptScreenFacts, deterministicFaqAnswer, fixedFaqSupportSection,
+  renderFaqSections, validateFaqSections } from './faq-editorial.mjs';
+
+const sha = 'a'.repeat(40);
+const nav = 'src/components/ui/components/NavBar/index.tsx';
+const router = `const pages = [
+  { path: '/bot', title: 'Bot', element: <Robots /> },
+  { path: '/contact', title: 'Contact', element: <Contacts /> },
+];`;
+const menu = `const items = [
+  { name: 'Robôs', route: '/bot' },
+  { name: 'Contatos', route: '/contact' },
+];`;
+
+test('nome visível vem do item de menu com a mesma rota', async () => {
+  for (const [route, expected] of [['/bot', 'Robôs'], ['/contact', 'Contatos']]) {
+    const sources = { [FRONT_ROUTER]: router, [nav]: menu };
+    const screen = await extractScreenFacts({ route, module: expected, topic: expected,
+      paths: Object.keys(sources), readSource: async (path) => sources[path], sha });
+    const facts = adaptScreenFacts(screen);
+    assert.equal(facts.find((fact) => fact.kind === 'route')?.text, expected);
+    assert.equal(facts.find((fact) => fact.kind === 'route')?.path, nav);
+    const request = { topic: expected, description: `Criar ${expected} e publicar.` };
+    const direct = deterministicFaqAnswer(request, [...facts, { kind: 'action', text: 'Criar',
+      repository: 'ihelpchat/front-react', path: 'src/Fixture.tsx', lineStart: 3, lineEnd: 3, sha }]);
+    assert.match(direct.text, new RegExp(`Na tela \\*\\*${expected}\\*\\*`));
+    assert.match(fixedFaqSupportSection(request, facts)[0].text, new RegExp(`em ${expected}`));
+  }
+});
+
+test('sem item de menu, nome do módulo da coverage-matrix substitui título interno', () => {
+  const facts = adaptScreenFacts({ sha, facts: [
+    { kind: 'route', text: 'Bot', route: '/bot', source: 'src/Router.tsx:3' },
+  ] }, [{ module: 'Robôs', productRoutes: ['/bot'] }]);
+  assert.equal(facts[0].text, 'Robôs');
+});
+
+test('passos removem aberturas repetidas da mesma tela e ações iguais consecutivas', () => {
+  const facts = adaptScreenFacts({ sha, facts: [
+    { kind: 'route', text: 'Robôs', route: '/bot', source: 'src/Router.tsx:1' },
+    { kind: 'action', text: 'Criar novo robô', source: 'src/Robots.tsx:2' },
+    { kind: 'field', text: 'Título do robô', source: 'src/Robots.tsx:3' },
+  ] });
+  const result = validateFaqSections({ passos: [
+    { acao: 'abrir', fato: 'f1' }, { acao: 'clicar', fato: 'f2' },
+    { acao: 'abrir', fato: 'f1' }, { acao: 'abrir', fato: 'f1' },
+    { acao: 'preencher', fato: 'f3' }, { acao: 'preencher', fato: 'f3' },
+  ] }, { screenFacts: facts });
+  assert.deepEqual(result.sections.passos.map((item) => item.text), [
+    'Abra **Robôs**.', 'Clique em **Criar novo robô**.', 'Preencha **Título do robô**.',
+  ]);
+  assert.equal(renderFaqSections(result.sections).match(/Abra \*\*Robôs\*\*/gu)?.length, 1);
+});
+
+test('placeholder de input só aceita preencher; conferir estado continua válido', () => {
+  const facts = adaptScreenFacts({ sha, facts: [
+    { kind: 'text', property: 'placeholder', text: 'Digite o título do robô', source: 'src/Robots.tsx:3' },
+    { kind: 'state', text: 'Ativo', source: 'src/Robots.tsx:4' },
+  ] });
+  const check = (acao, fato) => validateFaqSections({ passos: [{ acao, fato }] }, { screenFacts: facts });
+  assert.equal(check('conferir', 'f1').sections.passos, undefined);
+  assert.match(renderFaqSections(check('preencher', 'f1').sections), /Preencha \*\*Digite o título do robô\*\*/u);
+  assert.match(renderFaqSections(check('conferir', 'f2').sections), /Confira \*\*Ativo\*\*/u);
+});
