@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { parse } from 'yaml';
 import { redactSensitiveData, containsSensitiveData } from './sensitive-data.mjs';
 import { valueFor } from './api-synthetic-example.mjs';
-import { FAQ_NEUTRAL_WORDS } from './faq-neutral-words.mjs';
+import { FAQ_NEUTRAL_WORDS, FAQ_NEUTRAL_VERBS } from './faq-neutral-words.mjs';
 
 export const FAQ_SECTIONS = {
   resposta: 'Resposta direta', paraQueServe: 'Para que serve', quandoUsar: 'Quando usar',
@@ -26,8 +26,26 @@ const singular = (word) => word.endsWith('oes') || word.endsWith('aes') ? `${wor
   : word.endsWith('ais') ? `${word.slice(0, -3)}al`
     : word.endsWith('eis') ? `${word.slice(0, -3)}el`
       : word.length > 3 && word.endsWith('s') ? word.slice(0, -1) : word;
-const neutral = new Set(FAQ_NEUTRAL_WORDS.map((word) => singular(fold(word))));
-const contentWords = (value) => words(value).filter((word) => word.length > 2 && !neutral.has(singular(word)));
+const verbForms = (verb) => {
+  const base = fold(verb), stem = base.slice(0, -2);
+  const endings = base.endsWith('ar')
+    ? ['o', 'a', 'am', 'amos', 'ei', 'ou', 'ava', 'avam', 'ando', 'ado', 'e', 'em', 'asse', 'assem', 'aria', 'ariam']
+    : ['o', 'e', 'em', 'emos', 'i', 'eu', 'ia', 'iam', 'endo', 'ido', 'a', 'am', 'esse', 'essem', 'eria', 'eriam'];
+  return [base, ...endings.map((ending) => stem + ending)];
+};
+const neutral = new Set([...FAQ_NEUTRAL_WORDS, ...FAQ_NEUTRAL_VERBS.flatMap(verbForms),
+  'quero', 'quer', 'querem', 'queria', 'queriam', 'quis', 'quiser', 'quisesse',
+  'vejo', 've', 'veem', 'vi', 'viu', 'visto', 'vendo', 'vir',
+  'ofereco', 'ofereca', 'oferecam', 'escolho', 'escolha', 'escolham',
+  'preencha', 'preencham', 'confira', 'confiram', 'clique', 'cliquem',
+  'toque', 'toquem', 'use', 'uses', 'abra', 'abram', 'abre', 'abrem', 'abriu', 'abrindo',
+].map((word) => singular(fold(word))));
+// "escolhas" também é substantivo; sem fonte não pode ser liberado pela flexão verbal.
+const contentWords = (value, request = {}) => {
+  const theme = new Set(words(`${request.topic ?? ''} ${request.description ?? ''}`).map(singular));
+  return words(value).filter((word) => word.length > 2
+    && (word === 'escolhas' || !neutral.has(singular(word))) && !theme.has(singular(word)));
+};
 const PROMISES = ['aumenta', 'reduz', 'garante', 'dobra', 'sempre', 'nunca', 'melhor', 'economiza'];
 const numbers = (value) => String(value ?? '').match(/(?:R\$|US\$|€|\$)?\s*\d+(?:[.,]\d+)*(?:\s*%|\s*(?:dias?|horas?|minutos?|meses?|anos?))?/giu) ?? [];
 const properNames = (value) => [...String(value ?? '').matchAll(/\p{L}+/gu)]
@@ -38,17 +56,18 @@ const syntheticEvidence = ['nome', 'email', 'telefone', 'id', 'numero', 'data', 
   .map((name) => valueFor({ name })).join(' ');
 
 // Ponto único para um verificador semântico futuro; hoje a decisão é extrativa.
-function supportedClaim(text, sources, { example = false } = {}) {
+function supportedClaim(text, sources, { example = false, request = {} } = {}) {
   const evidence = [...sources, ...(example ? [syntheticEvidence] : [])].join(' ');
+  const theme = new Set(words(`${request.topic ?? ''} ${request.description ?? ''}`).map(singular));
   const cited = new Set(words(evidence).map(singular));
-  const uncovered = [...new Set(contentWords(text).filter((word) => !cited.has(singular(word))))];
+  const uncovered = [...new Set(contentWords(text, request).filter((word) => !cited.has(singular(word))))];
   // Números, nomes e promessas obedecem à mesma cobertura total, inclusive nas seções centrais.
   if (numbers(text).some((number) => ![...sources, ...(example ? [syntheticEvidence] : [])]
     .some((source) => fold(source).includes(fold(number).trim())))) {
     for (const number of numbers(text)) if (!uncovered.includes(fold(number).trim())) uncovered.push(fold(number).trim());
   }
-  if (properNames(text).some((name) => !fold(evidence).includes(name))) {
-    for (const name of properNames(text)) if (!fold(evidence).includes(name) && !uncovered.includes(name)) uncovered.push(name);
+  if (properNames(text).some((name) => !fold(evidence).includes(name) && !theme.has(singular(name)))) {
+    for (const name of properNames(text)) if (!fold(evidence).includes(name) && !theme.has(singular(name)) && !uncovered.includes(name)) uncovered.push(name);
   }
   if (PROMISES.some((word) => words(text).includes(word) && !words(evidence).includes(word))) {
     for (const word of PROMISES) if (words(text).includes(word) && !words(evidence).includes(word) && !uncovered.includes(word)) uncovered.push(word);
@@ -56,12 +75,19 @@ function supportedClaim(text, sources, { example = false } = {}) {
   return uncovered;
 }
 
-export function classifyFaqQuestions(questions = []) {
+export const hasFaqTaskFacts = (screenFacts) => Array.isArray(screenFacts) && screenFacts.some((fact) =>
+  ['action', 'field', 'upload', 'validation', 'destination'].includes(fact.kind) && fact.text);
+
+export function classifyFaqQuestions(questions = [], _request = {}, screenFacts = null) {
   const blocking = [], pending = [];
+  const hasTaskFacts = hasFaqTaskFacts(screenFacts);
   for (const question of questions) {
     const q = String(question);
-    (/\b(?:como (?:entrar|abrir|acessar|começar|iniciar|salvar|confirmar|cadastrar|criar)|onde (?:fica|está|clicar)|qual (?:tela|botão|menu)|resposta direta|passo (?:principal|inicial))\b/iu.test(q)
+    (!hasTaskFacts && /\b(?:como (?:entrar|abrir|acessar|começar|iniciar|salvar|confirmar|cadastrar|criar)|onde (?:fica|está|clicar)|qual (?:tela|botão|menu)|resposta direta|passo (?:principal|inicial))\b/iu.test(q)
       ? blocking : pending).push(q);
+  }
+  if (screenFacts !== null && !hasTaskFacts && !blocking.length && questions.length) {
+    blocking.push(...pending.splice(0));
   }
   return { blocking, pending };
 }
@@ -177,7 +203,7 @@ export function validateFaqSections(sections, context) {
           && cite.lineEnd === fact.lineEnd);
         return fact?.claimText ?? fact?.text ?? '';
       });
-      const uncovered = supportedClaim(unit.text, sources, { example: key === 'exemplo' });
+      const uncovered = supportedClaim(unit.text, sources, { example: key === 'exemplo', request: context.request });
       if (!uncovered.length) return true;
       pending.push(`palavra sem fonte: ${uncovered.join(', ')} em ${unit.text}`);
       return false;

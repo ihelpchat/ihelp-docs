@@ -335,7 +335,8 @@ test('plano da Agenda sai ready quando só pergunta detalhes secundários', asyn
     code: [{ available: true, repository: 'ihelpchat/front-react', ref: 'a'.repeat(40), role: 'frontend' }],
     matches: [{ repository: 'ihelpchat/front-react', path: 'src/Contact.tsx', line: 12,
       ref: 'a'.repeat(40), sha: 'a'.repeat(40), excerpt: '12: Adicionar Contato' }],
-    screenFacts: [], support: { categories: [], rules: [] }, coverage: [], pending: [],
+    screenFacts: [{ kind: 'action', text: 'Adicionar Contato', source: 'src/Contact.tsx:12' }],
+    support: { categories: [], rules: [] }, coverage: [], pending: [],
     businessContext: [], faqStyleExamples: [] };
   const client = { responses: { create: async () => ({ model: 'fixture', output_text: JSON.stringify({
     status: 'needs_information', guidance: 'A tela mostra ações para contatos.',

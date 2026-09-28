@@ -14,7 +14,7 @@ import { contentMaxOutputTokens } from './env-compat.mjs';
 import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 import { guardModelOutput } from './model-output-guard.mjs';
 import { PRODUCT_TERMS } from './product-terms.mjs';
-import { classifyFaqQuestions, loadBusinessContext, selectFaqStyleExamples, adaptScreenFacts,
+import { classifyFaqQuestions, hasFaqTaskFacts, loadBusinessContext, selectFaqStyleExamples, adaptScreenFacts,
   validateFaqSections, renderFaqSections, FAQ_SECTIONS } from './faq-editorial.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
@@ -692,7 +692,7 @@ async function planContentCore(root, request, options = {}) {
         'O público final acabou de acessar o produto há 30 segundos, está em trial e não recebeu treinamento.',
         'Identifique conflitos, informação ausente, duplicidade e nomes de telas ou botões que precisam ser confirmados.',
         'Não pergunte o que os FATOS DA TELA já respondem; cite o fato.',
-        request.module === 'api' ? 'Use needs_information somente quando faltar método, rota, parâmetro ou campo de primeiro nível da resposta. Outras dúvidas são pendências não bloqueantes. Não invente comportamento.' : faqRequested(request) ? 'Use needs_information somente quando faltarem fatos para a resposta direta ou o passo a passo principal. Toda outra pergunta é pendência não bloqueante; omita a seção sem fonte. Não invente comportamento.' : 'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
+        request.module === 'api' ? 'Use needs_information somente quando faltar método, rota, parâmetro ou campo de primeiro nível da resposta. Outras dúvidas são pendências não bloqueantes. Não invente comportamento.' : faqRequested(request) ? 'O núcleo do FAQ é a resposta direta e o passo a passo de pelo menos UMA tarefa pedida com fatos de tela. Se outra tarefa pedida não tiver fatos, omita sua seção e registre pendência; não bloqueie as demais. Use needs_information só quando NENHUMA tarefa pedida tiver fatos de tela. Não invente comportamento.' : 'Use status=needs_information quando faltar qualquer fato necessário; faça perguntas curtas e específicas. Não invente comportamento do produto.',
         'Sugira ações no produto somente com rota fornecida ou sustentada pelos detalhes. target é um identificador data-help-id estável, nunca um seletor CSS.',
         request.module === 'api' ? 'Planeje páginas de referência da API. Para tema amplo, foque nos endpoints documented=true. Se o pedido nomeia o caminho de uma página nova para um endpoint público, documented=false não exige pergunta. Não peça dados já presentes nos fatos estruturados. Endpoint sem public=true exige confirmação. responseFields=null não bloqueia: a resposta exibirá nota fixa e pendência.' : 'O pacote final deve incluir uma FAQ curta, um tutorial completo, passos guiados no produto e navegação. Vídeo não faz parte do escopo.',
         request.module === 'api' ? 'Guidance e risks são orientação interna e não precisam de grounding por frase. Nunca são publicados. Podem mencionar métodos e nomes técnicos para orientar a geração; o schema é a única validação desta resposta. A prosa publicada será validada com grounding completo na geração.' : faqRequested(request) ? 'Guidance e risks são orientação interna e não precisam de grounding por frase. A prosa publicada terá citações em cada unidade.' : 'No modo com código, cada frase ou passo de guidance e risks precisa de um item grounding com texto idêntico e citações estruturadas do contexto: repository, path, lineStart, lineEnd, sha. Sem evidência para o núcleo, use needs_information.',
@@ -708,11 +708,15 @@ async function planContentCore(root, request, options = {}) {
     : { questions: parsed.questions ?? [], discardedQuestions: [] };
   parsed.questions = filtered.questions;
   const classified = request.module === 'api' ? classifyApiQuestions(parsed.questions, productContext.endpoints ?? [])
-    : faqRequested(request) ? classifyFaqQuestions(parsed.questions)
+    : faqRequested(request) ? classifyFaqQuestions(parsed.questions, request, productContext.screenFacts ?? [])
       : { blocking: parsed.questions, pending: [] };
   if (request.module === 'api' || faqRequested(request)) parsed.questions = classified.blocking;
   if ((request.module === 'api' || faqRequested(request)) && parsed.status === 'needs_information' && !parsed.questions.length) parsed.status = 'ready';
   else if ((request.module === 'api' || faqRequested(request)) && classified.blocking.length) parsed.status = 'needs_information';
+  if (faqRequested(request) && !hasFaqTaskFacts(productContext.screenFacts)) {
+    parsed.status = 'needs_information';
+    if (!parsed.questions.length) parsed.questions = ['Faltam fatos da tela para as tarefas pedidas.'];
+  }
   if (parsed.status === 'ready') {
     const issues = request.module === 'api' || faqRequested(request) ? []
       : groundingIssues(parsed, groundingContext(productContext, request, existing), ['guidance', 'risks']);

@@ -58,6 +58,19 @@ test('Robô negativo: substantivos sem fonte continuam omitidos', () => {
   const result = validateFaqSections({ quandoUsar: [negative] }, robotContext);
   assert.equal(result.sections.quandoUsar, undefined);
   assert.ok(result.pending.some((item) => item.includes('clientes') && item.includes('inadimplentes')));
+  const oneNoun = validateFaqSections({ quandoUsar: [{ ...positive,
+    text: `${positive.text} clientes.` }] }, robotContext);
+  assert.equal(oneNoun.sections.quandoUsar, undefined);
+  assert.ok(oneNoun.pending.some((item) => item.includes('clientes')));
+});
+
+test('rótulo literal entre aspas é coberto pelo fato da tela', () => {
+  const fact = { kind: 'action', text: 'Menu de opções', repository: 'ihelpchat/front-react',
+    path: 'src/Robot.tsx', lineStart: 9, lineEnd: 9, sha: 'a'.repeat(40) };
+  const { kind: _kind, text: _text, ...citation } = fact;
+  const result = validateFaqSections({ resposta: [{ text: 'Abra “Menu de opções”.',
+    citations: [citation] }] }, { request: robotRequest, screenFacts: [fact] });
+  assert.equal(result.sections.resposta?.length, 1);
 });
 
 test('pergunta principal só bloqueia sem outra tarefa com fato de tela', () => {
