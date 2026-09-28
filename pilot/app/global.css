@@ -5618,6 +5618,8 @@ button {
 @media (max-width: 899px) {
   .ih-menu-button {
     display: flex;
+    width: 44px;
+    margin-right: -10px;
   }
 
   .ih-header-inner {
@@ -5689,6 +5691,9 @@ button {
   }
 
   .ih-drawer-sections a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
     padding: 8px 10px;
     color: var(--ih-slate-600);
     font-size: 14px;
@@ -5700,6 +5705,23 @@ button {
     color: var(--ih-ink);
     font-weight: 600;
     background: var(--ih-coral-50);
+  }
+
+  .ih-prose :is(h2, h3, h4, h5, h6) button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .ih-faq-filter {
+    height: 46px;
+  }
+
+  .ih-faq-filter input {
+    height: 44px;
+  }
+
+  .ih-faq .ih-chip {
+    min-height: 44px;
   }
 
   .ih-scrim {
