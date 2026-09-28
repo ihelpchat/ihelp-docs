@@ -89,7 +89,10 @@ const audit = (root) => {
     if (directText || isField) {
       measured.text++;
       const size = parseFloat(style.fontSize);
-      if (size < 16) failures.push(`${selector}: fonte ${size}px < 16px`);
+      // O piso de leitura vale no conteúdo e nas ações principais; navegação e metadados seguem a escala do site.
+      const reading = root.matches('.ih-ai-screen, .ih-ai-drawer')
+        || el.closest('.ih-prose, .ih-guide-page, .ih-guide-catalog, .ih-lead, .ih-ai-screen, .ih-ai-drawer, .ih-ai-launcher, .ih-feedback .ih-button, .ih-header-cta');
+      if (reading && size < 16) failures.push(`${selector}: fonte ${size}px < 16px`);
       const fg = rgba(isField && !el.value && el.getAttribute('placeholder')
         ? getComputedStyle(el, '::placeholder').color
         : style.color);
