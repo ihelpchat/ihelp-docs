@@ -326,8 +326,8 @@ test('callback map em filho JSX inclui elemento, sem colher feedback da função
 test('yup usado pelo formulário define required e mensagem; ausência fica unknown', async () => {
   const files = { ...sources, [page]: `export default function ContactPage() {
     const schema = yup.object({ phone: yup.string().required('Telefone obrigatório') });
-    useForm({ resolver: yupResolver(schema) });
-    return <form><input name="phone" label="Telefone" /><input name="notes" label="Notas" /></form>;
+    const { handleSubmit } = useForm({ resolver: yupResolver(schema) });
+    return <form onSubmit={handleSubmit(save)}><input name="phone" label="Telefone" /><input name="notes" label="Notas" /></form>;
   }` };
   const fields = (await run(files)).facts.filter((fact) => fact.kind === 'field');
   assert.equal(fields.find((fact) => fact.name === 'phone')?.required, true);
@@ -340,8 +340,8 @@ test('yup usado pelo formulário define required e mensagem; ausência fica unkn
 test('optional explícito é false; zodResolver vincula schema ao campo', async () => {
   const files = { ...sources, [page]: `export default function ContactPage() {
     const schema = z.object({ phone: z.string().optional() });
-    useForm({ resolver: zodResolver(schema) });
-    return <form><input name="phone" label="Telefone" /></form>;
+    const { handleSubmit } = useForm({ resolver: zodResolver(schema) });
+    return <form onSubmit={handleSubmit(save)}><input name="phone" label="Telefone" /></form>;
   }` };
   assert.equal((await run(files)).facts.find((fact) => fact.kind === 'field')?.required, false);
   const required = { ...files, [page]: files[page].replace('z.string().optional()', "z.string().min(1, 'Telefone obrigatório')") };
@@ -379,8 +379,8 @@ test('schema importado e usado via useFormik define campo; import sem uso não d
   const schemaPath = 'src/components/pages/Contacts/schema.ts';
   const files = { ...sources,
     [page]: `import { contactSchema } from './schema'; export default function ContactPage() {
-      useFormik({ validationSchema: contactSchema });
-      return <form><input name="phone" label="Telefone" /></form>;
+      const formik = useFormik({ validationSchema: contactSchema });
+      return <form onSubmit={formik.handleSubmit}><input name="phone" label="Telefone" /></form>;
     }`,
     [schemaPath]: `export const contactSchema = yup.object({ phone: yup.string().required('Telefone obrigatório') });`,
   };
@@ -435,8 +435,8 @@ test('limite sem feedback executado nem return não vira fato', async () => {
 test('último modificador de presença vence nos dois sentidos', async () => {
   const files = { ...sources, [page]: `export default function ContactPage() {
     const schema = yup.object({ phone: yup.string().optional().required('Obrigatório') });
-    useForm({ resolver: yupResolver(schema) });
-    return <form><input name="phone" /></form>;
+    const { handleSubmit } = useForm({ resolver: yupResolver(schema) });
+    return <form onSubmit={handleSubmit(save)}><input name="phone" /></form>;
   }` };
   const field = async (input) => (await run(input)).facts.find((fact) => fact.kind === 'field');
   assert.equal((await field(files)).required, true);
@@ -477,8 +477,8 @@ test('Formik ancestral e form único vinculam o campo; campo externo fica unknow
     return <><Formik validationSchema={schema}><input name="phone" /></Formik><input name="phone" /></>;
   }` };
   assert.deepEqual((await run(formik)).facts.filter((fact) => fact.kind === 'field').map((fact) => fact.required), [true, 'unknown']);
-  const single = { ...formik, [page]: formik[page].replace('<Formik validationSchema={schema}>', '<form>').replace('</Formik>', '</form>').replace('<input name="phone" /></>;', '</>;')
-    .replace('return <><form>', 'useForm({ resolver: yupResolver(schema) }); return <><form>') };
+  const single = { ...formik, [page]: formik[page].replace('<Formik validationSchema={schema}>', '<form onSubmit={handleSubmit(save)}>').replace('</Formik>', '</form>').replace('<input name="phone" /></>;', '</>;')
+    .replace('return <><form', 'const { handleSubmit } = useForm({ resolver: yupResolver(schema) }); return <><form') };
   assert.equal((await run(single)).facts.find((fact) => fact.kind === 'field')?.required, true);
 });
 
@@ -488,9 +488,42 @@ test('zod só publica true para campo do object sem modificador opcional', async
     const { register } = useForm({ resolver: zodResolver(schema) });
     return <form><input {...register('phone')} /><input {...register('notes')} /></form>;
   }` };
-  assert.deepEqual((await run(files)).facts.filter((fact) => fact.kind === 'field').map((fact) => fact.required), [true, false]);
-  const reversed = { ...files, [page]: files[page].replace('z.string().nullable()', 'z.string().nullable().nonNullable()') };
-  assert.deepEqual((await run(reversed)).facts.filter((fact) => fact.kind === 'field').map((fact) => fact.required), [true, true]);
+  assert.deepEqual((await run(files)).facts.filter((fact) => fact.kind === 'field').map((fact) => fact.required), [true, true]);
+  const nullish = { ...files, [page]: files[page].replace('z.string().nullable()', 'z.string().nullish()') };
+  assert.deepEqual((await run(nullish)).facts.filter((fact) => fact.kind === 'field').map((fact) => fact.required), [true, false]);
+});
+
+test('presença segue a biblioteca e o último modificador de presença', async () => {
+  const source = (library, rule) => ({ ...sources, [page]: `export default function ContactPage() {
+    const schema = ${library}.object({ phone: ${library}.string()${rule} });
+    const { register } = useForm({ resolver: ${library === 'z' ? 'zodResolver' : 'yupResolver'}(schema) });
+    return <form><input {...register('phone')} /></form>;
+  }` });
+  const required = async (library, rule) => (await run(source(library, rule))).facts.find((fact) => fact.kind === 'field')?.required;
+  for (const [library, rule, expected] of [
+    ['z', '', true], ['z', '.nullable()', true], ['z', '.optional()', false],
+    ['z', '.nullish()', false], ['z', '.default(\'x\')', false], ['z', '.catch(\'x\')', false],
+    ['yup', '', false], ['yup', '.nullable()', false], ['yup', '.required()', true],
+    ['yup', '.defined()', true], ['yup', '.optional()', false], ['yup', '.notRequired()', false],
+    ['yup', '.nullable().required()', true], ['yup', '.required().nullable()', true],
+    ['yup', '.required().optional()', false], ['yup', '.optional().required()', true],
+  ]) assert.equal(await required(library, rule), expected, `${library}.string()${rule}`);
+});
+
+test('form único vincula somente o elemento com handleSubmit do useForm', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const schema = yup.object({ phone: yup.string().required('Obrigatório') });
+    const { handleSubmit } = useForm({ resolver: yupResolver(schema) });
+    return <>
+      <form onSubmit={handleSubmit(save)}><input name="phone" /></form>
+      <form><input name="phone" /></form>
+      <input name="phone" />
+    </>;
+  }` };
+  const fields = (input) => run(input).then((result) => result.facts.filter((fact) => fact.kind === 'field').map((fact) => fact.required));
+  assert.deepEqual(await fields(files), [true, 'unknown', 'unknown']);
+  const detached = { ...files, [page]: files[page].replace('onSubmit={handleSubmit(save)}', 'onSubmit={save}') };
+  assert.deepEqual(await fields(detached), ['unknown', 'unknown', 'unknown']);
 });
 
 test('useController vincula campo ao control do segundo formulário', async () => {
