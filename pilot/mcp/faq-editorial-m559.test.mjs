@@ -44,6 +44,18 @@ test('seção sem citação é omitida com pendência; quote não literal é rec
   assert.equal(falseSupport.sections.duvidas, undefined);
 });
 
+test('quote de suporte exige trecho literal, com a frase e a fonte mantidas', () => {
+  const text = 'Clientes recebem números válidos.';
+  const context = { support: { categories: [{ category: 'Contatos', guidance: text }] } };
+  const check = (quote) => validateFaqSections({ duvidas: [unit(text, [
+    { source: 'suporte', quote },
+  ])] }, context);
+  assert.equal(check(text).sections.duvidas?.length, 1);
+  const changedQuote = check('Cliente recebem números válidos.');
+  assert.equal(changedQuote.sections.duvidas, undefined);
+  assert.ok(changedQuote.pending.includes('seção sem fonte válida: Dúvidas comuns'));
+});
+
 test('resposta sem citação é recusada mesmo sem palavras que exijam cobertura lexical', () => {
   const sentence = 'Clique na tela.';
   const context = { request: { description: sentence } };
