@@ -56,3 +56,11 @@ test('rótulo exato sem destaque é destacado antes da validação', () => {
   assert.equal(marked.text, 'Clique em **Adicionar Contato**.');
   assert.equal(validateFaqSections({ passos: [marked] }, context).sections.passos?.length, 1);
 });
+
+test('unidade de passo do Robô com duas frases usa regra ancorada', () => {
+  const robot = { ...fact, text: 'Criar novo robô' };
+  const result = validateFaqSections({ passos: [unit('Para criar, clique em **Criar novo robô**. Esse comando inicia a criação de um robô.', [citation])] },
+    { screenFacts: [robot], request: { topic: 'Robô de atendimento', description: 'Criar um robô.' } });
+  assert.equal(result.sections.passos?.length, 1, result.pending.join('; '));
+  assert.ok(!result.pending.some((item) => item.startsWith('palavra sem fonte:')));
+});

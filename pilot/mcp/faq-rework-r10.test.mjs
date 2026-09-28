@@ -144,3 +144,24 @@ test('plano e geração usam o mesmo núcleo: Robô com fatos segue e mantém pe
   assert.equal(generated.result.status, 'ready', JSON.stringify(generated.result));
   assert.ok(questions.every((question) => generated.result.pending.some((item) => item.includes(question))));
 });
+
+test('recusa com fatos tenta de novo pedindo as tarefas ancoradas, e registra segunda recusa', async () => {
+  const refused = { status: 'needs_information', summary: 'Não gerei a FAQ para evitar inventar caminhos.',
+    questions: ['Não gerei a FAQ para evitar inventar caminhos.'], articles: [] };
+  const { result, calls, prompts } = await run([refused, refused]);
+  assert.equal(calls, 2);
+  assert.match(prompts[1], /Escreva os passos das tarefas que têm FATOS DA TELA:/u);
+  assert.match(prompts[1], /criar/u);
+  assert.match(prompts[1], /As outras tarefas ficam em pendência\. Não recuse a página inteira\./u);
+  assert.equal(result.status, 'needs_information');
+  assert.ok(result.pending.some((item) => item.includes('modelo recusou com fatos disponíveis')));
+});
+
+test('ready sem passos também recebe a tentativa explícita de núcleo', async () => {
+  const empty = packageOf([article('docs/robo', 'faq', [])]);
+  const { result, calls, prompts } = await run([empty, empty]);
+  assert.equal(calls, 2);
+  assert.match(prompts[1], /Escreva os passos das tarefas que têm FATOS DA TELA:/u);
+  assert.equal(result.status, 'needs_information');
+  assert.ok(result.pending.some((item) => item.includes('modelo recusou com fatos disponíveis')));
+});

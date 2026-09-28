@@ -50,3 +50,18 @@ test('metanarração é omitida com motivo próprio, mesmo quando todas as palav
     assert.ok(result.pending.some((item) => item.includes('metanarração')), phrase);
   }
 });
+
+test('demonstrativos, possessivos e indefinidos são palavras funcionais', () => {
+  for (const word of ['esse', 'essa', 'este', 'esta', 'isso', 'isto', 'aquele', 'aquela',
+    'meu', 'minha', 'seu', 'sua', 'algum', 'alguma', 'qualquer', 'outro', 'outra'])
+    assert.ok(FAQ_NEUTRAL_WORDS.includes(word), word);
+});
+
+test('derivações mínimas dos verbos neutros preservam cobertura de negócio', () => {
+  for (const [noun, verb] of [['escolhas', 'escolher'], ['criação', 'criar'], ['edição', 'editar']]) {
+    const quote = `Você pode ${verb} na tela do Robô.`;
+    const result = validateFaqSections({ quandoUsar: [{ text: `Use ${noun} na tela do Robô.`,
+      citations: [{ source: 'pedido', quote }] }] }, { request: { description: quote } });
+    assert.equal(result.sections.quandoUsar?.length, 1, `${noun}: ${result.pending.join('; ')}`);
+  }
+});
