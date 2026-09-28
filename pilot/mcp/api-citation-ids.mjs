@@ -27,8 +27,10 @@ export function apiCitationRegistry(context) {
   }
   for (const item of context.callEvidence ?? []) {
     const lines = String(item.excerpt ?? '').split('\n');
-    for (let offset = 0; offset < lines.length; offset += 30)
-      code(item, item.start + offset, Math.min(item.end, item.start + offset + 29), lines.slice(offset, offset + 30).join('\n'));
+    for (let offset = 0; offset < lines.length; offset += 30) {
+      const chunk = lines.slice(offset, offset + 30);
+      code(item, item.start + offset, Math.min(item.end, item.start + offset + chunk.length - 1), chunk.join('\n'));
+    }
   }
   const sentenceParts = (value) => String(value ?? '').split(/(?<=[.!?;])\s+|\n/u).map((part) => part.trim()).filter(Boolean);
   for (const quote of sentenceParts(context.request?.description).concat(sentenceParts(context.request?.details)))
