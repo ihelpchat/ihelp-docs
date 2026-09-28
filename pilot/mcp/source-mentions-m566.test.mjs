@@ -37,6 +37,43 @@ test('atribuição gramatical é recusada nas saídas públicas sem bloquear lin
   }
 });
 
+test('atribuições por radical cobrem flexões e determinantes', () => {
+  const materials = [
+    ['informação', 'informações'], ['documento', 'documentos'], ['material', 'materiais'],
+    ['conteúdo', 'conteúdos'], ['texto', 'textos'], ['fonte', 'fontes'],
+    ['contexto', 'contextos'], ['dado', 'dados'], ['arquivo', 'arquivos'],
+    ['trecho', 'trechos'], ['anotação', 'anotações'], ['referência', 'referências'],
+    ['descrição', 'descrições'], ['leitura', 'leituras'],
+  ];
+  const participles = [
+    ['fornecido', 'fornecida', 'fornecidos', 'fornecidas'],
+    ['disponibilizado', 'disponibilizada', 'disponibilizados', 'disponibilizadas'],
+    ['recebido', 'recebida', 'recebidos', 'recebidas'],
+    ['informado', 'informada', 'informados', 'informadas'],
+    ['apresentado', 'apresentada', 'apresentados', 'apresentadas'],
+    ['enviado', 'enviada', 'enviados', 'enviadas'],
+    ['consultado', 'consultada', 'consultados', 'consultadas'],
+    ['compartilhado', 'compartilhada', 'compartilhados', 'compartilhadas'],
+  ];
+  for (const forms of materials) for (const form of forms) {
+    const phrase = `Segundo ${form}, o robô recebe o cliente.`;
+    assert.equal(mentionsSource(phrase), true, phrase);
+  }
+  for (const forms of participles) for (const form of forms) {
+    const phrase = `Conforme ${form}, o robô recebe o cliente.`;
+    assert.equal(mentionsSource(phrase), true, phrase);
+  }
+  for (const phrase of [
+    'Segundo a informação recebida, o robô recebe o cliente.',
+    'Conforme os documentos enviados, o robô recebe o cliente.',
+    'Conforme este documento, o robô recebe o cliente.',
+    'Segundo as informações recebidas, o robô recebe o cliente.',
+  ]) {
+    assert.equal(mentionsSource(phrase), true, phrase);
+    assert.deepEqual(validateFreeFaqSections(sections(phrase), context).sections.oQueE, [], phrase);
+  }
+});
+
 test('juiz semântico reescreve uma vez e omite atribuição persistente, sem nova chamada', async () => {
   const input = { ...sections('A leitura de apoio mostra que o robô recebe o cliente.'),
     duvidas: [{ text: 'O que li para gerar esta resposta diz que o robô responde.' }] };
@@ -53,6 +90,29 @@ test('juiz semântico reescreve uma vez e omite atribuição persistente, sem no
   assert.deepEqual(judged.sections.duvidas, []);
   assert.match(judged.pending.join(' '), /menção à fonte/u);
   assert.doesNotMatch(renderFreeFaqSections(judged.sections), /leitura de apoio|o que li|material enviado/iu);
+});
+
+test('juiz ignora rewrite inventado e remove somente atribuição destacável', async () => {
+  const originals = [
+    'A leitura de apoio mostra que o robô recebe o cliente.',
+    'Segundo a informação recebida, o robô recebe o cliente.',
+    'Conforme os documentos enviados, o robô recebe o cliente.',
+    'O que li para gerar esta resposta diz que o robô responde.',
+  ];
+  const input = { ...sections(originals[0]), oQueE: originals.map((text) => ({ text })) };
+  const judged = await judgeClaims(input, { ...context, business: [{ module: 'Robôs' }] }, async (claims) => ({
+    claims: claims.map((claim) => ({ id: claim.id, status: claim.text.includes('informação') ? 'a confirmar' : 'sustentada',
+      reason: 'fonte insuficiente', sourceMention: claim.section === 'oQueE',
+      rewrite: 'O robô cobra cem reais por conversa.' })),
+  }));
+  const page = renderFreeFaqSections(judged.sections);
+  assert.doesNotMatch(page, /cem reais|leitura de apoio|documentos enviados|o que li/iu);
+  assert.deepEqual(judged.sections.oQueE, [
+    { text: 'O robô recebe o cliente.' },
+    { text: '<AConfirmar>O robô recebe o cliente.</AConfirmar>' },
+    { text: 'O robô recebe o cliente.' },
+  ]);
+  assert.match(judged.pending.join(' '), /frase omitida: mencionava a fonte/u);
 });
 
 test('replay do revisor: omite atribuição ao contexto em O que é', () => {
