@@ -4,6 +4,7 @@ import { containsSensitiveData } from './sensitive-data.mjs';
 import { sanitizeCodeForModel } from './code-hygiene.mjs';
 
 export const FRONT_ROUTER = 'src/components/core/components/Router/utils/pagesData.tsx';
+const FRONT_MENU = 'src/components/ui/components/NavBar/index.tsx';
 const MAX_FILES = 72;
 const MAX_CHARS = 1_000_000;
 const VISIBLE = new Set(['label', 'labelText', 'title', 'placeholder', 'aria-label', 'tooltip']);
@@ -466,9 +467,13 @@ function collect(filePath, source, facts, entryName) {
       if (value) emit(node, 'text', { text: value });
     }
     if (ts.isJsxExpression(node) && node.expression && ts.isConditionalExpression(node.expression)) {
+      const opening = ts.isJsxElement(node.parent) ? node.parent.openingElement : null;
+      const button = opening && ACTION.test(jsxName(opening))
+        && (attr(opening, 'onClick') || attrValue(opening, 'type') === 'submit');
       for (const branch of [node.expression.whenTrue, node.expression.whenFalse]) {
         const value = literal(branch);
-        if (value) emit(branch, 'state', { text: value });
+        if (value) emit(branch, button && !/(?:ando|endo|indo)(?:\.{3}|…)$/iu.test(value)
+          ? 'action' : 'state', { text: value });
       }
     }
     if (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) {
@@ -792,12 +797,13 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
         const walk = (node) => { if (ts.isObjectLiteralExpression(node)) found.push(node); ts.forEachChild(node, walk); };
         walk(statement); return found;
       });
-      const wanted = normalized(module || topic);
+      const wanted = [module, topic].map(normalized).filter((value) => value.length >= 4);
       const entry = objects.find((node) => {
         const path = node.properties.find((prop) => ts.isPropertyAssignment(prop) && prop.name.getText(parsed.file) === 'path');
         const title = node.properties.find((prop) => ts.isPropertyAssignment(prop) && prop.name.getText(parsed.file) === 'title');
-        return route ? literal(path?.initializer) === route : wanted.length >= 4
-          && normalized(literal(title?.initializer)).includes(wanted);
+        const name = normalized(literal(title?.initializer));
+        return route ? literal(path?.initializer) === route : name.length >= 4
+          && wanted.some((value) => name.includes(value) || value.includes(name));
       });
       if (!entry) break;
       route = literal(entry.properties.find((prop) => ts.isPropertyAssignment(prop)
@@ -839,6 +845,33 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
     code.push({ path, excerpt: source });
   }
   if (queue.length) pending.push(`limite de arquivos dos fatos da tela: ${MAX_FILES}`);
+  // The router title is internal; the navigation item is the name the reader sees.
+  if (route && allowed.has(FRONT_MENU)) {
+    const source = await readSource(FRONT_MENU);
+    const file = ts.createSourceFile(FRONT_MENU, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let visible = null;
+    const visit = (node) => {
+      if (!visible && ts.isObjectLiteralExpression(node)) {
+        const field = (name) => node.properties.find((item) => ts.isPropertyAssignment(item)
+          && item.name.getText(file) === name);
+        const name = field('name');
+        if (literal(field('route')?.initializer) === route && name) {
+          const label = safeText(literal(name.initializer));
+          if (label) visible = { text: label, source: `${FRONT_MENU}:${lineOf(file, name)}` };
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+    if (visible) {
+      for (const fact of facts) if (fact.kind === 'route' && fact.route === route) {
+        fact.routeTitle = fact.text;
+        fact.text = visible.text;
+        fact.source = visible.source;
+      }
+      if (!files.includes(FRONT_MENU)) { files.push(FRONT_MENU); code.push({ path: FRONT_MENU, excerpt: source }); }
+    }
+  }
   for (const fact of facts) delete fact.presenceEvidence;
   return { route, sha, files, facts: finalizeScreenFacts(facts, pending), code, pending };
 }

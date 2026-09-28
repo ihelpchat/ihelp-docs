@@ -14,9 +14,6 @@
   "api/atendimentos/pegar-ids-departamento-canal": [
     "readArticle: artigo de origem contém possível dado pessoal"
   ],
-  "api/atendimentos/resumir-conversa": [
-    "readArticle: artigo de origem contém possível dado pessoal"
-  ],
   "api/atendimentos/transcrever-audio": [
     "readArticle: artigo de origem contém possível dado pessoal"
   ],

@@ -25,7 +25,27 @@ function evidenceWindows(context) {
   return windows;
 }
 
-function spansIn(text, windows, publicRoutes) {
+function publicEvidence(context) {
+  const request = context?.request ?? {};
+  return [request.topic, request.module, request.description, request.details,
+    ...(context?.screenFacts ?? []).flatMap((fact) => [fact.text, fact.message, fact.label]),
+    ...(context?.existing ?? []).flatMap((page) => [page.title, page.description, page.snippet, page.body]),
+    ...(context?.support?.categories ?? []).flatMap((item) => [item.category, item.guidance]),
+    ...(context?.support?.rules ?? []).flatMap((item) => typeof item === 'string' ? [item] : Object.values(item)),
+    ...(context?.businessContext ?? context?.business ?? []).map((item) => item.body),
+  ].filter((item) => typeof item === 'string');
+}
+
+function publicWindows(context) {
+  const windows = new Set();
+  for (const source of publicEvidence(context)) {
+    const parts = tokens(source);
+    for (let i = 0; i <= parts.length - 8; i++) windows.add(key(parts.slice(i, i + 8)));
+  }
+  return windows;
+}
+
+function spansIn(text, windows, publicWindows, publicRoutes) {
   const spans = [...text.matchAll(SQL)].map((match) => [match.index, match.index + match[0].length]);
   const routes = publicRoutes.flatMap((route) => {
     const found = [];
@@ -35,9 +55,10 @@ function spansIn(text, windows, publicRoutes) {
   });
   const parts = tokens(text);
   for (let i = 0; i <= parts.length - 8; i++) {
-    if (!windows.has(key(parts.slice(i, i + 8)))) continue;
+    if (!windows.has(key(parts.slice(i, i + 8))) || publicWindows.has(key(parts.slice(i, i + 8)))) continue;
     let end = i + 8;
-    while (end < parts.length && windows.has(key(parts.slice(end - 7, end + 1)))) end++;
+    while (end < parts.length && windows.has(key(parts.slice(end - 7, end + 1)))
+      && !publicWindows.has(key(parts.slice(end - 7, end + 1)))) end++;
     const span = [parts[i].start, parts[end - 1].end];
     if (!routes.some(([start, stop]) => span[0] >= start && span[1] <= stop)) spans.push(span);
     i = end - 1;
@@ -52,13 +73,14 @@ function spansIn(text, windows, publicRoutes) {
 
 export function guardModelOutput(value, context, mode = 'internal') {
   const windows = evidenceWindows(context);
+  const publicSourceWindows = publicWindows(context);
   const publicRoutes = (context?.endpoints ?? []).filter((endpoint) => endpoint.public)
     .map((endpoint) => endpoint.route).filter((route) => typeof route === 'string' && route.startsWith('/'));
   let internalCodeEcho = 0;
   let pageEcho = false;
   const visit = (node, inPage = false) => {
     if (typeof node === 'string') {
-      const spans = spansIn(node, windows, publicRoutes);
+      const spans = spansIn(node, windows, publicSourceWindows, publicRoutes);
       internalCodeEcho += spans.length;
       if (inPage && spans.length) pageEcho = true;
       let redacted = node;

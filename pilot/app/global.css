@@ -1185,6 +1185,8 @@ button {
 }
 
 /* Passo a passo numerado, como no desenho (círculo coral com o número). */
+.a-confirmar { background: #fff0c2; color: #463400; border-radius: 3px; padding: 0 2px; }
+.a-confirmar-label { font-size: .85em; font-weight: 700; white-space: nowrap; }
 .ih-prose > ol {
   padding-left: 0;
   list-style: none;

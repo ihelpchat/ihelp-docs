@@ -404,7 +404,9 @@ async function createPackagePullRequest(items, deletes, actor, beforePull, optio
   const targets = [...items.map(({ article }) => article.path), ...deletes.map((path) => `-${path}`)].join(', ');
   const title = options.title ?? (items.length ? `docs: pacote ${items[0].article.title}` : `docs: remove ${deletes.length === 1 ? deletes[0] : `${deletes.length} artigos`}`);
   const baseBody = options.body ?? `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`;
-  const body = options.securityWarnings?.length ? `${baseBody}\n\n## Atenção de segurança\n\n${options.securityWarnings.map((warning) => `- ${warning}`).join('\n')}` : baseBody;
+  const marked = items.filter(({ article }) => article.body.includes('<AConfirmar>'));
+  const warnedBody = marked.length ? `${baseBody}\n\n## Pendências a confirmar\n\n${marked.map(({ article }) => `- ${article.path}: contém afirmações marcadas como a confirmar; revisão humana obrigatória antes da publicação.`).join('\n')}` : baseBody;
+  const body = options.securityWarnings?.length ? `${warnedBody}\n\n## Atenção de segurança\n\n${options.securityWarnings.map((warning) => `- ${warning}`).join('\n')}` : warnedBody;
   rejectSensitive(`${title}\n${body}`);
   const branch = options.branch ?? `docs/ia-pacote-${Date.now()}`;
   if (options.branch && !/^docs\/deploy-[a-z0-9-]+-[a-f0-9]{16}$/.test(branch)) throw new SubmitArticleError('INVALID_BRANCH', 'Branch determinística inválida');

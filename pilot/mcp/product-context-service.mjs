@@ -162,7 +162,7 @@ export async function getIhelpContext(root, topic, module, provided = {}) {
   let apiExamples = [];
   let contextCode = code;
   let nonPublicEndpoints = false;
-  let pending = [];
+  let pending = code.flatMap((source) => source.screenPending ?? []);
   let allowedBackendFiles = new Set();
   let allowedEndpointKeys = new Set();
   if (normalize(module) === 'api' || /\bendpoint\b|\/api\/v\d/iu.test(topic)) {

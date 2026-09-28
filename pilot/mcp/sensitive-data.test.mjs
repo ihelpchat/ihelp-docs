@@ -7,7 +7,7 @@ const cases = [
   ['CPF somente dígitos', '12345678909'],
   ['telefone formatado', '(11) 98765-4321'],
   ['telefone dez dígitos', '1130422307'],
-  ['telefone onze dígitos no path', 'contato11987654321X'],
+  ['telefone onze dígitos isolado', 'contato 11987654321 X'],
   ['Bearer', 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456'],
   ['apiKey', 'apiKey="abcdefghijklmnop123456"'],
   ['password', 'password="abcdefghijklmnop123456"'],
@@ -79,6 +79,15 @@ for (const [positive, negative, reason] of [
   assert.equal(containsSensitiveData(positive), true);
   assert.equal(containsSensitiveData(negative), false, reason);
   assert.equal(redactSensitiveData(negative), negative, reason);
+}
+const frontSha = 'a'.repeat(15) + '9136328159' + 'b'.repeat(15);
+for (const value of [frontSha, 'abc9136328159']) {
+  assert.equal(containsSensitiveData(value), false, `${value} não é telefone`);
+  assert.equal(redactSensitiveData(value), value);
+}
+for (const value of ['tel 17992610896', '(17) 99261-0896']) {
+  assert.equal(containsSensitiveData(value), true);
+  assert.match(redactSensitiveData(value), /\[dado removido\]/u);
 }
 for (const value of ['docs/contatos/antigo', 'Abra a opção A', 'ID de teste 12', 'token de acesso', 'senha do usuário', 'apiKey inválida', 'token=$IHELP_TOKEN', 'token=${TOKEN}', 'tokenizer="abcdefghijklmno"', 'password_hint="abcdefghijklmno"', 'admin_password_hint="Sup3rS3cret!"', 'secret_name="Sup3rS3cret!"', 'access_token_count=25', 'version2="Sup3rS3cret!"', 'step2="Sup3rS3cret!"', 'token_count2="Sup3rS3cret!"', 'password_hint2="Sup3rS3cret!"', 'private_key_description2="Sup3rS3cret!"', 'dono do token: administradores veem todos os funis', 'credentials: administradores', 'private_key_description="texto explicativo"', 'monkey="alphaBetaGammaDeltaEpsilon"']) {
   assert.equal(containsSensitiveData(value), false, `${value} não deve ser redigido`);

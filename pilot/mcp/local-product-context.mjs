@@ -7,6 +7,7 @@ import { containsSensitiveData, redactSensitiveData } from './sensitive-data.mjs
 import { envCompatibility } from './env-compat.mjs';
 import ts from 'typescript';
 import uiSynonyms from './ui-synonyms.json' with { type: 'json' };
+import coverageMatrix from '../architecture/coverage-matrix.json' with { type: 'json' };
 import { readCsharpEndpoints, collectCsharpErrors } from '../lib/csharp-endpoints.mjs';
 import { traceCsharpCalls } from '../lib/csharp-call-chain.mjs';
 import { routeMatches } from './api-route-match.mjs';
@@ -46,6 +47,16 @@ const ALIASES = { robo: ['robot'], robos: ['robot'], canal: ['channel'], canais:
 
 function normalize(value) {
   return String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+}
+
+function screenRoutes(topic, module) {
+  const name = normalize(module).trim();
+  const matches = coverageMatrix.filter((item) => normalize(item.module).trim() === name);
+  if (matches.length) return matches.flatMap((item) => item.productRoutes);
+  const terms = new Set(words(topic, module).map((term) => term.replace(/s$/u, '')));
+  const inferred = coverageMatrix.filter((item) => normalize(item.module).split(/[^\p{L}\p{N}]+/u)
+    .map((term) => term.replace(/s$/u, '')).some((term) => term.length > 3 && terms.has(term)));
+  return inferred.length === 1 ? inferred[0].productRoutes : [null];
 }
 
 function words(topic, module) {
@@ -295,7 +306,7 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
     }
     let screen = null;
     if (source.role === 'frontend' && paths.includes(FRONT_ROUTER)) {
-      const routes = /contat/u.test(normalize(`${topic} ${module}`)) ? ['/contact', '/contact/detail/:idRef'] : [null];
+      const routes = screenRoutes(topic, module);
       const screens = [];
       for (const route of routes) screens.push(await extractScreenFacts({ route, topic, module, paths, sha, readSource: async (path) => {
         if (!canReadFrontFile(path) || !paths.includes(path)) throw new Error('Arquivo do front não permitido');
@@ -306,7 +317,8 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
         return content;
       } }));
       screen = { facts: screens.flatMap((item) => item.facts), code: [...new Map(screens.flatMap((item) => item.code).map((item) => [item.path, item])).values()],
-        files: [...new Set(screens.flatMap((item) => item.files))], pending: screens.flatMap((item) => item.pending) };
+        files: [...new Set(screens.flatMap((item) => item.files))], pending: [...screens.flatMap((item) => item.pending),
+          ...(screens.every((item) => !item.facts.length) ? [`tela não identificada para ${module || topic}`] : [])] };
     }
     if ((await git(root, deadline, 'rev-parse', 'HEAD')).toString().trim() !== sha || (await git(root, deadline, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Fonte alterada durante a leitura');
     let endpoints = [];
