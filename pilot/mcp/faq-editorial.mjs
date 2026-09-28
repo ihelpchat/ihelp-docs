@@ -284,6 +284,8 @@ function structuredFaqStep(step, facts, context, pending, { correction = false }
     || !FAQ_FACT_ACTIONS[step.acao]?.has(facts.find((fact) => fact.id === step.fato)?.kind)) return null;
   const fact = facts.find((item) => item.id === step.fato);
   if (!fact?.text || !fact.repository || !fact.path || !fact.sha || !Number.isInteger(fact.lineStart)) return null;
+  if (step.acao === 'conferir' && fact.kind === 'state' && facts.some((item) =>
+    item.kind === 'action' && fold(item.text) === fold(fact.text))) return null;
   const result = step.resultado == null ? null : facts.find((item) => item.id === step.resultado);
   if (step.resultado != null && (!result || !['message', 'validation'].includes(result.kind)
     || !result.text || !result.repository || !result.path || !result.sha)) return null;
