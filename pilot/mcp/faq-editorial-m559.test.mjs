@@ -56,6 +56,17 @@ test('material de negócio e estado vazio exigem seções de apoio', () => {
   assert.deepEqual(missingFaqSupportSections({ duvidas: [{ text: 'Como publico? Use Publicar.' }],
     erros: [{ text: 'Se não houver robô, crie um.' }] }, context), []);
 });
+
+test('pergunta e sintoma em negrito são prosa, mas dúvida sem resposta sai', () => {
+  const sections = { duvidas: [{ text: '**Como importo os contatos?** Use **Importar Contatos**.' },
+    { text: '**A planilha é para uma campanha?**' }],
+  erros: [{ text: '**Nenhum contato encontrado.** Revise os filtros.' }] };
+  const context = { screenFacts: [{ text: 'Importar Contatos' }, { text: 'Nenhum contato encontrado' }] };
+  const checked = validateFreeFaqSections(sections, context);
+  assert.equal(checked.sections.duvidas.length, 1);
+  assert.equal(checked.sections.erros.length, 1);
+  assert.match(checked.pending.join(' '), /pergunta sem resposta/u);
+});
 test('FAQ só bloqueia dúvida sobre resposta direta ou passo principal', () => {
   const result = classifyFaqQuestions([
     'Como entrar na tela de Contatos para cadastrar?',
