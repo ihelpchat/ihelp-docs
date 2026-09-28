@@ -10,7 +10,7 @@ import { assistantDisplayName } from '@/lib/assistant-name';
 
 // `extra`: itens que somem primeiro quando a tela estreita (mesma regra do desenho).
 const nav = [
-  { label: assistantDisplayName, href: '/assistente', icon: true },
+  { label: 'Claricia', href: '/assistente', icon: true },
   { label: 'Central de ajuda', href: '/docs' },
   { label: 'Tutoriais', href: '/tutoriais', extra: true },
   { label: 'Referência da API', href: '/api' },

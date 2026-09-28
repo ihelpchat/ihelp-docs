@@ -55,7 +55,7 @@ export function AssistantLauncher() {
   return (
     <button type="button" className="ih-ai-launcher" onClick={openDrawer} aria-haspopup="dialog">
       <Sparkles aria-hidden="true" />
-      {assistantDisplayName}
+      Claricia · assistente virtual
       {messages.length ? <span className="ih-ai-launcher-dot" aria-label="conversa em andamento" /> : null}
     </button>
   );
