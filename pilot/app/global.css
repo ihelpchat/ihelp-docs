@@ -563,7 +563,7 @@ button {
   margin: 0;
   padding: 0;
   color: var(--ih-slate-500);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -2026,7 +2026,7 @@ button {
 .ih-toc-kicker {
   margin: 0 0 10px;
   color: var(--ih-slate-500);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
