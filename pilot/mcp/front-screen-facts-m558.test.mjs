@@ -181,7 +181,7 @@ test('plano recebe fatos e conserva todas as perguntas do modelo', async () => {
       } } },
     });
   assert.deepEqual(result.questions, questions);
-  assert.equal(result.discardedQuestions, undefined);
+  assert.deepEqual(result.discardedQuestions, []);
   assert.match(JSON.stringify(prompt), /FATOS DA TELA/u);
   assert.match(JSON.stringify(prompt), /Adicionar Contato/u);
   assert.match(JSON.stringify(prompt), /não pergunte o que os FATOS DA TELA já respondem; cite o fato/iu);
@@ -321,4 +321,56 @@ test('callback map em filho JSX inclui elemento, sem colher feedback da função
   assert.equal(facts.some((fact) => fact.kind === 'text' && fact.text === '…'), false);
   assert.equal(facts.some((fact) => fact.kind === 'message'), false);
   assert.equal(facts.some((fact) => fact.kind === 'text' && fact.text === 'Nome do contato' && fact.property === 'title'), true);
+});
+
+test('yup usado pelo formulário define required e mensagem; ausência fica unknown', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const schema = yup.object({ phone: yup.string().required('Telefone obrigatório') });
+    useForm({ resolver: yupResolver(schema) });
+    return <form><input name="phone" label="Telefone" /><input name="notes" label="Notas" /></form>;
+  }` };
+  const fields = (await run(files)).facts.filter((fact) => fact.kind === 'field');
+  assert.equal(fields.find((fact) => fact.name === 'phone')?.required, true);
+  assert.equal(fields.find((fact) => fact.name === 'phone')?.message, 'Telefone obrigatório');
+  assert.equal(fields.find((fact) => fact.name === 'notes')?.required, 'unknown');
+  const detached = { ...files, [page]: files[page].replace('yupResolver(schema)', 'yupResolver(other)') };
+  assert.equal((await run(detached)).facts.find((fact) => fact.kind === 'field' && fact.name === 'phone')?.required, 'unknown');
+});
+
+test('optional explícito é false; zodResolver vincula schema ao campo', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const schema = z.object({ phone: z.string().optional() });
+    useForm({ resolver: zodResolver(schema) });
+    return <form><input name="phone" label="Telefone" /></form>;
+  }` };
+  assert.equal((await run(files)).facts.find((fact) => fact.kind === 'field')?.required, false);
+  const required = { ...files, [page]: files[page].replace('z.string().optional()', "z.string().min(1, 'Telefone obrigatório')") };
+  assert.equal((await run(required)).facts.find((fact) => fact.kind === 'field')?.required, true);
+});
+
+test('Formik validationSchema liga campo; schema solto não liga', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const schema = yup.object({ phone: yup.string().required('Obrigatório') });
+    return <Formik validationSchema={schema}><input name="phone" /></Formik>;
+  }` };
+  assert.equal((await run(files)).facts.find((fact) => fact.kind === 'field')?.required, true);
+  const detached = { ...files, [page]: files[page].replace('validationSchema={schema}', 'validationSchema={other}') };
+  assert.equal((await run(detached)).facts.find((fact) => fact.kind === 'field')?.required, 'unknown');
+});
+
+test('limite de upload vem do handler executado e não do handler solto', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() {
+    const upload = file => { if (file.size > 1048576) alert('Arquivo grande'); };
+    return <input type="file" accept=".csv" onChange={upload} />;
+  }` };
+  assert.equal((await run(files)).facts.find((fact) => fact.kind === 'uploadLimit')?.maxBytes, 1048576);
+  const detached = { ...files, [page]: files[page].replace('onChange={upload}', 'onChange={other}') };
+  assert.equal((await run(detached)).facts.some((fact) => fact.kind === 'uploadLimit'), false);
+});
+
+test('maxSize em prop de upload é limite com dono', async () => {
+  const files = { ...sources, [page]: `export default function ContactPage() { return <Dropzone accept=".csv" maxSize={1048576} />; }` };
+  const fact = (await run(files)).facts.find((item) => item.kind === 'uploadLimit');
+  assert.equal(fact?.maxBytes, 1048576);
+  assert.equal(fact?.owner, 'Dropzone');
 });
