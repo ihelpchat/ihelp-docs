@@ -523,6 +523,29 @@ const cleanFaqMeta = (text, pending) => String(text).split(/(?<=[.!?])\s+(?=[\p{
 }).join(' ');
 const trimFaqLabels = (text) => text.replace(/\*\*([^*\n]+)\*\*/gu, (_match, label) => `**${label.trim()}**`);
 
+function publishedStepEvidence(text, context, task, expectedLabel) {
+  const requestedModule = singular(fold(context.request?.module ?? ''));
+  const taskVerb = words(task).find((word) => !['como', 'de', 'do', 'da', 'o', 'a'].includes(word));
+  if (!requestedModule || !taskVerb) return false;
+  const labelKeys = [...String(text).matchAll(/\*\*([^*\n]+)\*\*/gu)]
+    .map((match) => fold(match[1].replace(/[“”"']/gu, '').trim()));
+  if (!labelKeys.length) return false;
+  if (expectedLabel && !labelKeys.includes(fold(expectedLabel.replace(/[“”"']/gu, '').trim()))) return false;
+  return (context.existing ?? []).some((page) => {
+    if (!page.title || !(String(text).includes(page.title) || page.path && String(text).includes(page.path))) return false;
+    const pageModule = page.module ? singular(fold(page.module)) : null;
+    if (pageModule ? pageModule !== requestedModule
+      : !words(`${page.title} ${page.path ?? ''}`).some((word) => singular(word) === requestedModule)) return false;
+    const sections = String(page.body ?? '').split(/(?=^#{1,6}\s+)/mu);
+    const relevant = sections.filter((section) => {
+      const heading = section.match(/^#{1,6}\s+(.+)$/mu)?.[1] ?? (sections.length === 1 ? page.title : '');
+      return words(heading).some((word) => faqStem(word) === faqStem(taskVerb));
+    });
+    return relevant.some((section) => labelKeys.every((label) => [...section.matchAll(/\*\*([^*\n]+)\*\*/gu)]
+      .some((match) => fold(match[1].replace(/[“”"']/gu, '').trim()) === label)));
+  });
+}
+
 function rigidFaqIssue(text, context) {
   const labels = [...String(text).matchAll(/\*\*([^*\n]+)\*\*/gu)].map((match) => match[1]);
   const labelKey = (value) => fold(String(value).replace(/[“”"']/gu, '').trim());
@@ -533,8 +556,8 @@ function rigidFaqIssue(text, context) {
   for (const label of labels) {
     const before = String(text).slice(0, String(text).indexOf(`**${label}**`));
     const pageReference = pages.has(labelKey(label)) && /\b(?:consulte|veja|leia|guia|página)\b/iu.test(before.slice(-100));
-    const publishedLabel = citedPages.some((page) => [...String(page.body ?? '').matchAll(/\*\*([^*\n]+)\*\*/gu)]
-      .some((match) => labelKey(match[1]) === labelKey(label)));
+    const publishedLabel = context.taskHeading && citedPages.length
+      && publishedStepEvidence(text, context, context.taskHeading, label);
     if (!known.has(labelKey(label)) && !pageReference && !publishedLabel) return `rótulo inexistente: ${label}`;
   }
   const outsideLabels = String(text).replace(/\*\*[^*\n]+\*\*/gu, ' ');
@@ -564,16 +587,14 @@ export function validateFreeFaqSections(sections, context = {}) {
         const headingIssue = !/^[\p{L}\p{N}() ,\/-]{1,80}$/u.test(heading)
           ? 'título de tarefa inválido' : rigidFaqIssue(heading, context);
         if (headingIssue) { pending.push(`${heading}: ${headingIssue}`); return []; }
-        const citedPublishedPage = task.passos.some((unit) => (context.existing ?? []).some((page) =>
-          page.title && (String(unit?.text ?? '').includes(page.title)
-            || page.path && String(unit?.text ?? '').includes(page.path))));
+        const citedPublishedPage = task.passos.some((unit) => publishedStepEvidence(unit?.text ?? '', context, heading));
         if (!citedPublishedPage && faqTasksWithoutFacts(context.request, context.screenFacts).some((name) => fold(name) === fold(heading))) {
           pending.push(`tarefa sem fatos de tela: ${heading}`);
           return [];
         }
         const steps = task.passos.flatMap((unit) => {
           const text = typeof unit?.text === 'string' ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
-          const issue = text ? rigidFaqIssue(text, context) : 'passo vazio';
+          const issue = text ? rigidFaqIssue(text, { ...context, taskHeading: heading }) : 'passo vazio';
           if (issue) { pending.push(`${task.tarefa}: ${issue}`); return []; }
           return [{ ...unit, text }];
         });

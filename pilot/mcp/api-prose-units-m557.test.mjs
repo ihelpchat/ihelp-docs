@@ -150,11 +150,16 @@ test('API carrega contexto do módulo, api-publica e geral e sustenta nota sem c
     const value = structuredClone(base);
     const note = 'Uma consulta reúne os contatos para acompanhamento da equipe.';
     value.articles[0].notas = [{ text: note, citations: [{ source: 'negocio', quote: note }], refs: [] }];
-    const result = await generateContentPackage(process.cwd(), request, { productContext: structuredClone(context),
+    const fixtureContext = structuredClone(context);
+    delete fixtureContext.businessContext;
+    const result = await generateContentPackage(process.cwd(), request, { productContext: fixtureContext,
       plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
         prompts.push(payload.input[1].content);
         return { output_text: JSON.stringify(value), model: 'fixture' };
       } } } });
+    assert.deepEqual(fixtureContext.businessContext?.map(({ path }) => path).sort(),
+      ['business-context/api-publica.md', 'business-context/contatos.md', 'business-context/geral.md']);
+    assert.match(fixtureContext.businessContext[0].body, /Uma consulta reúne os contatos/u);
     assert.equal(result.status, 'ready', result.summary);
     assert.match(prompts[0], /Uma consulta reúne os contatos/u);
     assert.match(prompts[0], /A API pública permite consultar/u);
