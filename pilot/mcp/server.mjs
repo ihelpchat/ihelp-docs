@@ -200,17 +200,17 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     mutates: true,
     description: 'Captura na homologação aprovada e grava PNGs mascarados no estado privado do serviço.',
     inputSchema: z.strictObject({
-      page: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+      path: z.string().regex(/^docs\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/),
       module: z.string().min(2).max(80),
-      tasks: z.array(z.string().min(2).max(120)).max(20).optional(),
       requestedBy: requestedBySchema,
     }),
-  }, async ({ requestedBy, page, module, tasks }) => {
+  }, async ({ requestedBy, path, module }) => {
     if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
-    const target = auditTarget(module, page);
+    const page = path.split('/').at(-1);
+    const target = auditTarget(module, path);
     await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'attempt' });
     try {
-      const manifest = await capturePage({ page, module, tasks });
+      const manifest = await capturePage({ path, module });
       await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'success' });
       return textResult({ page, captured: manifest.entries.filter((entry) => entry.page === page).length });
     } catch {

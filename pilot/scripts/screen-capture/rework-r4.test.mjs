@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { capturePage } from '../../mcp/screen-capture-service.mjs';
-import { attachScreenshotsToArticle, screenshotVersionWarnings } from '../../mcp/screen-capture-manifest.mjs';
+import { attachScreenshotsToArticle, screenshotReviewBody, screenshotVersionWarnings } from '../../mcp/screen-capture-manifest.mjs';
 
 const oldSha = 'a'.repeat(40);
 const currentSha = 'b'.repeat(40);
@@ -30,8 +30,9 @@ test('print capturado só entra no artigo com SHA dos fatos atuais; PR pede reca
     const currentFacts = [fact('Abrir', '/contact', 'contatos.tsx')];
     const withoutImage = attachScreenshotsToArticle(article, old, currentSha, currentFacts);
     assert.doesNotMatch(withoutImage.body, /!\[/u);
-    assert.match(screenshotVersionWarnings([withoutImage], old, currentSha).join(' '),
-      /print de versão anterior: recapturar contatos\/01-abrir/u);
+    const pending = screenshotVersionWarnings([withoutImage], old, currentSha);
+    assert.match(screenshotReviewBody('Pacote criado pelo MCP.', pending),
+      /## Prints a revisar\n\n- print de versão anterior: recapturar contatos\/01-abrir/u);
     const renewed = await capturePage({ path: 'docs/contatos', module: 'Contatos' }, {
       ...options, getScreenFacts: async () => currentFacts,
     });
@@ -39,6 +40,7 @@ test('print capturado só entra no artigo com SHA dos fatos atuais; PR pede reca
     const withImage = attachScreenshotsToArticle(article, renewed, currentSha, currentFacts);
     assert.match(withImage.body, /!\[Tela de Contatos: Abrir\]\(\/img\/mcp\/contatos\/01-abrir\.png\)/u);
     assert.deepEqual(screenshotVersionWarnings([withImage], renewed, currentSha), []);
+    assert.equal(screenshotReviewBody('Pacote criado pelo MCP.', []), 'Pacote criado pelo MCP.');
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(root, { recursive: true, force: true });

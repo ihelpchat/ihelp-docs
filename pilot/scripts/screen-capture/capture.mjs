@@ -12,9 +12,16 @@ const sha = /^[a-f0-9]{40}$/u;
 const routePattern = /^\/(?!\/)[a-z0-9/_-]*$/u;
 const outputRoot = resolve(import.meta.dirname, '../../public/img/mcp');
 
-export function capturePlan({ page, module, tasks = [], coverage, screenFacts }) {
-  if (!slug.test(page) || !Array.isArray(screenFacts) || !Array.isArray(tasks)
-    || tasks.some((task) => typeof task !== 'string' || task.length > 120)) throw new Error('Plano de captura inválido');
+export function faqStepLabels(body) {
+  if (typeof body !== 'string') throw new Error('FAQ aprovado inválido');
+  return [...body.matchAll(/^\s*(?:\d+[.)]|[-*])\s+[^\n]*?\*\*([^*\n]+)\*\*/gmu)]
+    .map((match) => match[1].trim()).filter(Boolean);
+}
+
+export function capturePlan({ page, module, faqBody, coverage, screenFacts }) {
+  if (!slug.test(page) || !Array.isArray(screenFacts)) throw new Error('Plano de captura inválido');
+  const labels = faqStepLabels(faqBody);
+  if (!labels.length) throw new Error('FAQ aprovado sem passos com rótulos');
   const entry = coverage.find((item) => item.module === module);
   if (!entry) throw new Error('Módulo ausente da coverage matrix');
   const routes = entry.productRoutes.filter((route) => routePattern.test(route) && !route.includes(':'));
@@ -22,10 +29,10 @@ export function capturePlan({ page, module, tasks = [], coverage, screenFacts })
     && fact.owner && sha.test(fact.sha ?? '') && typeof fact.text === 'string'
     && fact.text.length <= 160 && !/[\[\]\n\r]/u.test(fact.text) && !containsSensitiveData(fact.text)
     && (!fact.route || routes.includes(fact.route)));
-  const selected = tasks.length ? tasks.map((task) => eligible.find((fact) =>
-    fact.text.toLocaleLowerCase('pt-BR') === task.toLocaleLowerCase('pt-BR')) ?? eligible.find((fact) =>
-    `${fact.text} ${fact.subject ?? ''}`.toLocaleLowerCase('pt-BR').includes(task.toLocaleLowerCase('pt-BR'))))
-    .filter((fact, index, ordered) => fact && ordered.indexOf(fact) === index) : eligible;
+  const selected = labels.map((label) => eligible.find((fact) =>
+    fact.text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
+      === label.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')))
+    .filter((fact, index, ordered) => fact && ordered.indexOf(fact) === index);
   if (!routes.length || !selected.length) throw new Error('Nenhum fato da tela confirmado para captura');
   return selected.slice(0, 20).map((fact, index) => {
     const step = `${String(index + 1).padStart(2, '0')}-${fact.text.normalize('NFD').replace(/\p{Diacritic}/gu, '')

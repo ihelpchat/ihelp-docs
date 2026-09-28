@@ -52,8 +52,8 @@ try {
   assert.ok(registered.has('capturar_telas'), 'captura administrativa precisa estar no MCP');
   assert.ok(registered.has('enviar_tela'), 'upload precisa estar no MCP autenticado');
   const captureSchema = registered.get('capturar_telas').inputSchema;
-  for (const injected of [{ appSha: 'a'.repeat(40) }, { steps: [] }, { screenFacts: [] }, { owner: 'fixture' }])
-    assert.equal(captureSchema.safeParse({ page: 'contatos', module: 'Contatos', ...injected }).success, false);
+  for (const injected of [{ appSha: 'a'.repeat(40) }, { steps: [] }, { screenFacts: [] }, { owner: 'fixture' }, { tasks: ['Salvar'] }])
+    assert.equal(captureSchema.safeParse({ path: 'docs/contatos', module: 'Contatos', ...injected }).success, false);
   assert.ok(registered.has('baixar_telas'), 'leitura das telas precisa estar no MCP');
   const emptyScreens = await reader.callTool({ name: 'baixar_telas', arguments: { page: 'contatos' } });
   assert.equal(emptyScreens.isError, false);
@@ -68,7 +68,7 @@ try {
     criar_guia: { guideId: 'usuario-acesso', topic: 'Adicionar pessoa', module: 'usuarios', description: 'Criar acesso para uma pessoa da equipe.' },
     atualizar_por_deploy: { before: {}, after: {} },
     atualizar_codigo_produto: {},
-    capturar_telas: { page: 'contatos', module: 'Contatos' },
+    capturar_telas: { path: 'docs/contatos', module: 'Contatos' },
     enviar_tela: { page: 'contatos', step: 'abrir', alt: 'Botão Abrir contato', approved: true, base64: 'aGVsbG8=' },
   };
   for (const [name, config] of registered) {

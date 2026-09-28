@@ -25,7 +25,7 @@ export function screenshotForStep(manifest, page, step) {
   return matches.find((entry) => entry.source === 'upload') ?? matches.find((entry) => entry.source === 'automatic') ?? null;
 }
 
-export function attachScreenshotsToArticle(article, manifest, _expectedSha, screenFacts = []) {
+export function attachScreenshotsToArticle(article, manifest, expectedSha, screenFacts = []) {
   if (!manifest?.entries?.length || !article?.body || !article?.path) return article;
   const page = article.path.split('/').at(-1);
   const lines = article.body.split('\n');
@@ -33,12 +33,14 @@ export function attachScreenshotsToArticle(article, manifest, _expectedSha, scre
   for (const step of steps) {
     const image = screenshotForStep(manifest, page, step);
     if (!image || !image.label || /[\[\]\n\r]/u.test(image.alt)) continue;
+    if (image.source === 'automatic' && (!/^[a-f0-9]{40}$/u.test(expectedSha ?? '')
+      || image.checkoutSha !== expectedSha)) continue;
     const identity = manifest.entries.filter((entry) => entry.page === page
       && normalized(entry.label ?? '') === normalized(image.label)
       && (entry.route !== image.route || entry.owner !== image.owner));
     if (identity.length) continue;
     if (screenFacts.length && !screenFacts.some((fact) => normalized(fact.text ?? '') === normalized(image.label)
-      && fact.route === image.route && fact.owner === image.owner)) continue;
+      && fact.route === image.route && fact.owner === image.owner && (image.source === 'upload' || fact.sha === expectedSha))) continue;
     if (lines.some((value) => value.includes(`](${image.file})`))) continue;
     const line = lines.findIndex((value) => normalized(value).includes(normalized(image.label)) && !value.startsWith('!['));
     if (line < 0) continue;
@@ -47,13 +49,17 @@ export function attachScreenshotsToArticle(article, manifest, _expectedSha, scre
   return { ...article, body: lines.join('\n') };
 }
 
-export function screenshotVersionWarnings(articles, manifest) {
+export function screenshotVersionWarnings(articles, manifest, expectedSha) {
   if (!manifest?.entries) return [];
   return manifest.entries.filter((entry) => entry.source === 'automatic'
-    && /^[a-f0-9]{40}$/u.test(entry.bundleSha ?? '')
     && /^[a-f0-9]{40}$/u.test(entry.checkoutSha ?? '')
-    && entry.bundleSha !== entry.checkoutSha
+    && /^[a-f0-9]{40}$/u.test(expectedSha ?? '')
+    && entry.checkoutSha !== expectedSha
     && articles.some((article) => article.path?.split('/').at(-1) === entry.page
-      && article.body?.includes(`](${entry.file})`)))
-    .map((entry) => `${entry.page}/${entry.step}: bundle e checkout divergentes; revisar print na homologação`);
+      && article.body?.split('\n').some((line) => normalized(line).includes(normalized(entry.label ?? '')))))
+    .map((entry) => `print de versão anterior: recapturar ${entry.page}/${entry.step}`);
+}
+
+export function screenshotReviewBody(baseBody, warnings) {
+  return warnings.length ? `${baseBody}\n\n## Prints a revisar\n\n${warnings.map((warning) => `- ${warning}`).join('\n')}` : baseBody;
 }

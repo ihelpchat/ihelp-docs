@@ -11,6 +11,7 @@ const defaultRoot = () => resolve(process.env.MCP_STATE_DIR ?? '/data', 'screens
 export async function capturePage(input, {
   baseUrl = process.env.GUIDE_QA_STAGING_URL,
   root = defaultRoot(), fixture = false, env = process.env, coverage, storageState,
+  faqRoot = resolve(import.meta.dirname, '../content/docs'),
   getScreenFacts = async (module) => {
     const result = await searchLocalProductContext(module, module, { repositoryIds: ['frontend'] });
     const front = result.code.find((item) => item.role === 'frontend' && item.available);
@@ -18,15 +19,23 @@ export async function capturePage(input, {
     return front.screenFacts;
   },
 } = {}) {
-  if (!input || Object.keys(input).some((key) => !['page', 'module', 'tasks'].includes(key)))
+  if (!input || Object.keys(input).some((key) => !['path', 'module'].includes(key)))
     throw new Error('Plano do chamador: entrada não permitida');
-  const { page, module, tasks = [] } = input;
-  if (!slug.test(page ?? '') || typeof module !== 'string' || !module.trim()) throw new Error('Página inválida');
+  const { path, module } = input;
+  if (typeof path !== 'string' || !/^docs\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/u.test(path)
+    || typeof module !== 'string' || !module.trim()) throw new Error('Página inválida');
+  const page = path.split('/').at(-1);
   const { capturePlan, captureScreens } = await import('../scripts/screen-capture/capture.mjs');
   if (!baseUrl) throw new Error('Destino de QA ausente');
   const matrix = coverage ?? JSON.parse(await readFile(new URL('../architecture/coverage-matrix.json', import.meta.url), 'utf8'));
   const screenFacts = await getScreenFacts(module);
-  const plan = capturePlan({ page, module, tasks, screenFacts, coverage: matrix });
+  let faqBody;
+  try { faqBody = await readFile(join(env.MCP_STATE_DIR ?? '/data', '.drafts', `${path}.mdx`), 'utf8'); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    faqBody = await readFile(join(faqRoot, `${path}.mdx`), 'utf8');
+  }
+  const plan = capturePlan({ page, module, faqBody, screenFacts, coverage: matrix });
   if (plan.length > 20) throw new Error('Plano excede 20 passos');
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8').catch((error) => {
     if (error.code === 'ENOENT') return '{"version":1,"entries":[]}';

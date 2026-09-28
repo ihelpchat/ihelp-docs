@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { addUploadedScreenshot, capturePlan, captureScreens, chooseScreenshot } from './capture.mjs';
@@ -32,7 +32,7 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
   const root = await mkdtemp(join(tmpdir(), 'screen-capture-'));
   try {
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
-    const plan = capturePlan({ page: 'contatos', module: 'Contatos', coverage, screenFacts });
+    const plan = capturePlan({ page: 'contatos', module: 'Contatos', faqBody: '1. **Abrir contato**\n2. **Salvar contato**', coverage, screenFacts });
     const manifest = await captureScreens({ baseUrl, plan, fixture: true, root });
     assert.equal(manifest.entries.length, 2);
     assert.equal(manifest.entries[0].route, '/contact');
@@ -73,7 +73,7 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
       alt: 'Tela de Contatos com o botão de abrir', approved: true, root });
     assert.equal(chooseScreenshot(manifest, 'contatos', plan[0].step).source, 'upload');
     assert.equal(screenshotForStep(manifest, 'contatos', plan[0].step).source, 'upload');
-    const article = attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Clique em Abrir contato.\n2. Clique em Salvar contato.' }, manifest);
+    const article = attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Clique em Abrir contato.\n2. Clique em Salvar contato.' }, manifest, appSha);
     assert.match(article.body, /!\[Tela de Contatos com o botão de abrir\]/u);
     assert.match(article.body, /!\[Tela de Contatos: Salvar contato\]/u);
   } finally {
@@ -83,13 +83,13 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
 });
 
 test('plano exige rota e fato da tela com dono', () => {
-  assert.throws(() => capturePlan({ page: 'contatos', module: 'Contatos', coverage, screenFacts: [] }), /fato da tela/u);
-  assert.throws(() => capturePlan({ page: 'contatos', module: 'Contatos', coverage,
+  assert.throws(() => capturePlan({ page: 'contatos', module: 'Contatos', faqBody: '1. **Abrir contato**', coverage, screenFacts: [] }), /fato da tela/u);
+  assert.throws(() => capturePlan({ page: 'contatos', module: 'Contatos', faqBody: '1. **Abrir contato**', coverage,
     screenFacts: [{ ...screenFacts[0], route: '/production' }] }), /fato da tela/u);
 });
 
 test('plano preserva a rota de cada fato em módulos com mais de uma tela', () => {
-  const plan = capturePlan({ page: 'contatos', module: 'Contatos',
+  const plan = capturePlan({ page: 'contatos', module: 'Contatos', faqBody: '1. **Abrir contato**\n2. **Salvar contato**',
     coverage: [{ module: 'Contatos', productRoutes: ['/contact', '/contact/import'] }],
     screenFacts: [{ ...screenFacts[0], route: '/contact' },
       { ...screenFacts[1], route: '/contact/import' }] });
@@ -112,14 +112,18 @@ test('serviço MCP captura fixture, baixa imagens e limita volume sem vazar segr
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
   const root = await mkdtemp(join(tmpdir(), 'screen-service-'));
   try {
-    const result = await capturePage({ page: 'contatos', module: 'Contatos', tasks: ['Abrir'] }, {
+    const faqRoot = join(root, 'faq');
+    await mkdir(join(faqRoot, 'docs'), { recursive: true });
+    await writeFile(join(faqRoot, 'docs/contatos.mdx'), '1. Clique em **Abrir contato**.');
+    await writeFile(join(faqRoot, 'docs/robos.mdx'), '1. Clique em **Abrir contato**.');
+    const result = await capturePage({ path: 'docs/contatos', module: 'Contatos' }, {
       baseUrl: `http://127.0.0.1:${server.address().port}`, root, fixture: true,
-      coverage, getScreenFacts, env: { GUIDE_QA_AUTHORIZED_PASSWORD: secret },
+      faqRoot, coverage, getScreenFacts, env: { GUIDE_QA_AUTHORIZED_PASSWORD: secret },
     });
     assert.equal(result.entries.length, 1);
-    const second = await capturePage({ page: 'robos', module: 'Robôs', tasks: ['Abrir'] }, {
+    const second = await capturePage({ path: 'docs/robos', module: 'Robôs' }, {
       baseUrl: `http://127.0.0.1:${server.address().port}`, root, fixture: true,
-      coverage: [{ module: 'Robôs', productRoutes: ['/contact'] }], getScreenFacts,
+      faqRoot, coverage: [{ module: 'Robôs', productRoutes: ['/contact'] }], getScreenFacts,
     });
     assert.equal(second.entries.length, 2, 'capturar outra página preserva o manifesto anterior');
     const read = await downloadPage('contatos', { root, limit: 1 });
