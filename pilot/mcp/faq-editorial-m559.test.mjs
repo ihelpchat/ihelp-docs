@@ -106,6 +106,10 @@ test('afirmações de negócio exigem números, promessa e maioria das palavras 
   const unsupported = check('Isso aumenta as vendas em 50%.');
   assert.equal(unsupported.sections.paraQueServe, undefined);
   assert.ok(unsupported.pending.includes('afirmação sem sustentação: Isso aumenta as vendas em 50%.'));
+  context.request.description = 'Cadastrar contatos aumenta as vendas.';
+  assert.equal(check('Cadastrar contatos aumenta as vendas em 50%.', context.request.description).sections.paraQueServe, undefined);
+  context.request.description = 'Cadastre contatos organizados para a equipe.';
+  assert.equal(check('Cadastre contatos organizados e garante a equipe.', context.request.description).sections.paraQueServe, undefined);
   const businessQuote = 'Cadastrar contatos aumenta as vendas em 50%.';
   const supported = check('Cadastrar contatos aumenta as vendas em 50%.', businessQuote, 'negocio',
     { path: 'business-context/publico.md' });
@@ -114,18 +118,21 @@ test('afirmações de negócio exigem números, promessa e maioria das palavras 
   assert.equal(check('Cadastrar contatos aumenta as vendas em 50%.', businessQuote, 'negocio',
     { path: 'business-context/publico.md' }).sections.paraQueServe?.length, 1);
   assert.equal(check('Isso garante contatos organizados.').sections.paraQueServe, undefined);
+  context.request.description = text;
   assert.equal(check('Cadastre os contatos pela tela Contatos.').sections.paraQueServe?.length, 1);
+  assert.equal(check('Cadastre os contatos pela tela AgendaNova.').sections.paraQueServe, undefined);
+  assert.equal(check('Cadastre contatos para organizar equipes modernas e campanhas futuras.').sections.paraQueServe, undefined);
   assert.equal(check('Campanhas reduzem custos e ampliam receitas pela tela Contatos.').sections.paraQueServe, undefined);
 });
 
 test('negócio começa vazio e fatos da tela mantêm proveniência', async () => {
   const root = await mkdtemp(join(tmpdir(), 'faq-business-'));
   try {
-    await mkdir(join(root, 'business-context'));
-    await writeFile(join(root, 'business-context', 'README.md'), 'Formato público');
+    await mkdir(join(root, 'architecture', 'business-context'), { recursive: true });
+    await writeFile(join(root, 'architecture', 'business-context', 'README.md'), 'Formato público');
     assert.deepEqual(await loadBusinessContext(root), []);
-    await writeFile(join(root, 'business-context', 'publico.md'), '🟢 PÚBLICO\nA equipe ganha tempo.');
-    await writeFile(join(root, 'business-context', 'interno.md'), '🟡 INTERNO\nNão publicar.');
+    await writeFile(join(root, 'architecture', 'business-context', 'publico.md'), '🟢 PÚBLICO\nA equipe ganha tempo.');
+    await writeFile(join(root, 'architecture', 'business-context', 'interno.md'), '🟡 INTERNO\nNão publicar.');
     assert.equal((await loadBusinessContext(root)).length, 1);
     const facts = adaptScreenFacts({ facts: [{ kind: 'action', text: 'Adicionar Contato', source: 'src/Contact.tsx:12', subject: 'cadastro contato' }], sha: 'a'.repeat(40) });
     assert.equal(facts[0].lineStart, 12);

@@ -14,6 +14,28 @@ const BUSINESS_PATH = /^business-context\/[a-z0-9][a-z0-9-]*\.md$/u;
 const normalized = (value) => String(value ?? '').replace(/\s+/gu, ' ').trim();
 const literal = (quote, source) => normalized(quote).length >= 12
   && normalized(source).toLocaleLowerCase('pt-BR').includes(normalized(quote).toLocaleLowerCase('pt-BR'));
+const fold = (value) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLocaleLowerCase('pt-BR');
+const words = (value) => fold(value).match(/[a-z]+/gu) ?? [];
+const STOP = new Set('a as o os um uma uns umas de da do das dos e em no na nos nas por para pela pelo pelas pelos com que se isso este esta esse essa ao aos ou seu sua suas seus mais como quando onde entre'.split(' '));
+const contentWords = (value) => words(value).filter((word) => word.length > 2 && !STOP.has(word));
+const root = (word) => word.length > 5 ? word.slice(0, 5) : word.replace(/s$/u, '');
+const PROMISES = ['aumenta', 'reduz', 'garante', 'dobra', 'sempre', 'nunca', 'melhor', 'economiza'];
+const numbers = (value) => String(value ?? '').match(/(?:R\$|US\$|€|\$)?\s*\d+(?:[.,]\d+)*(?:\s*%|\s*(?:dias?|horas?|minutos?|meses?|anos?))?/giu) ?? [];
+const properNames = (value) => [...String(value ?? '').matchAll(/\p{L}+/gu)]
+  .filter((match) => /\p{Ll}\p{Lu}/u.test(match[0]) || (match.index !== 0 && /^\p{Lu}/u.test(match[0])))
+  .map((match) => fold(match[0]));
+
+function supportedClaim(text, sources) {
+  const evidence = fold(sources.join(' '));
+  if (numbers(text).some((number) => !sources.some((source) => fold(source).includes(fold(number).trim())))) return false;
+  if (properNames(text).some((name) => !evidence.includes(name))) return false;
+  if (PROMISES.some((word) => words(text).some((token) => root(token) === root(word))
+    && !words(evidence).some((token) => root(token) === root(word)))) return false;
+  if (/mais vendas/iu.test(text) && !/mais vendas/iu.test(evidence)) return false;
+  const terms = contentWords(text);
+  const cited = new Set(contentWords(evidence).map(root));
+  return !terms.length || terms.filter((term) => cited.has(root(term))).length / terms.length >= 0.5;
+}
 
 export function classifyFaqQuestions(questions = []) {
   const blocking = [], pending = [];
@@ -25,8 +47,8 @@ export function classifyFaqQuestions(questions = []) {
   return { blocking, pending };
 }
 
-export async function loadBusinessContext(architectureRoot) {
-  const directory = join(architectureRoot, 'business-context');
+export async function loadBusinessContext(pilotRoot) {
+  const directory = join(pilotRoot, 'architecture', 'business-context');
   if (!(await lstat(directory).catch(() => null))?.isDirectory()) return [];
   const names = await readdir(directory).catch(() => []);
   const result = [];
@@ -58,9 +80,13 @@ export async function selectFaqStyleExamples(docsRoot) {
     const sections = [...body.matchAll(/^##\s+(.+)$/gmu)].map((item) => item[1]);
     const steps = [...body.matchAll(/^\s*\d+[.)]\s+/gmu)].length;
     const examplesCount = [...body.matchAll(/\bexemplos?\b/giu)].length;
+    const prose = body.split('\n').map((line) => line.trim()).filter(Boolean);
+    const direct = prose.find((line) => !/^#|^\d+[.)]\s/u.test(line)) ?? '';
+    const stepText = prose.filter((line) => /^\d+[.)]\s/u.test(line)).slice(0, 3);
+    const example = prose.find((line) => /\bexemplo\b/iu.test(line)) ?? '';
     examples.push({ path: `docs/${name.replace(/\.mdx$/u, '')}`, sections: sections.length,
       steps, examples: examplesCount,
-      style: redactSensitiveData(`Introdução: ${String(fields.description ?? '').slice(0, 240)}\nSeções: ${sections.join(' | ').slice(0, 600)}`) });
+      style: redactSensitiveData(`Resposta: ${direct}\nPassos: ${stepText.join(' | ')}\nExemplo: ${example}`.slice(0, 900)) });
   }
   return examples.sort((a, b) => b.sections - a.sections || b.examples - a.examples
     || b.steps - a.steps || a.path.localeCompare(b.path)).slice(0, 3);
@@ -91,7 +117,7 @@ export function validateFaqSections(sections, context) {
       if (key === 'exemplo' && !unit.text.includes(valueFor({ name: 'nome' }))) return false;
       if ((key === 'paraQueServe' || key === 'quandoUsar')
         && !unit.citations.some((cite) => ['negocio', 'pagina', 'pedido'].includes(cite.source))) return false;
-      return unit.citations.every((cite) => {
+      const citationsValid = unit.citations.every((cite) => {
         if (key === 'duvidas' && cite.source !== 'suporte') return false;
         if ((key === 'passos' || key === 'erros') && cite.source) return false;
         if (cite.source === 'pedido') return literal(cite.quote, `${context.request?.description ?? ''}\n${context.request?.details ?? ''}`);
@@ -111,6 +137,17 @@ export function validateFaqSections(sections, context) {
           && (!['passos', 'erros'].includes(key) || (fact.text
             && unit.text.toLocaleLowerCase('pt-BR').includes(fact.text.toLocaleLowerCase('pt-BR')))));
       });
+      if (!citationsValid) return false;
+      if (!['paraQueServe', 'quandoUsar', 'exemplo', 'duvidas'].includes(key)) return true;
+      const sources = unit.citations.map((cite) => {
+        if (cite.source) return cite.quote;
+        return (context.screenFacts ?? []).find((fact) => cite.repository === fact.repository
+          && cite.path === fact.path && cite.sha === fact.sha && cite.lineStart === fact.lineStart
+          && cite.lineEnd === fact.lineEnd)?.text ?? '';
+      });
+      if (supportedClaim(unit.text, sources)) return true;
+      pending.push(`afirmação sem sustentação: ${unit.text}`);
+      return false;
     });
     if (valid.length) kept[key] = valid;
     if (valid.length !== units.length || !valid.length) pending.push(`seção sem fonte válida: ${FAQ_SECTIONS[key]}`);
