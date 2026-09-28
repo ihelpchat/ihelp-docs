@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { launch } from '../visual/measure.mjs';
@@ -12,16 +12,39 @@ const sha = /^[a-f0-9]{40}$/u;
 const routePattern = /^\/(?!\/)[a-z0-9/_-]*$/u;
 const outputRoot = resolve(import.meta.dirname, '../../public/img/mcp');
 
-export function faqStepLabels(body) {
+const normalized = (value) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
+
+export function faqStepLabels(body, facts = []) {
   if (typeof body !== 'string') throw new Error('FAQ aprovado inválido');
-  return [...body.matchAll(/^\s*(?:\d+[.)]|[-*])\s+[^\n]*?\*\*([^*\n]+)\*\*/gmu)]
-    .map((match) => match[1].trim()).filter(Boolean);
+  const lines = body.split('\n');
+  const headings = lines.some((line) => /^#{2,4}\s/u.test(line));
+  let guideSection = false;
+  const steps = [];
+  for (const line of lines) {
+    const heading = line.match(/^#{2,4}\s+(.+)/u);
+    if (heading) {
+      guideSection = /passo a passo|^como (?:criar|cadastrar|fazer|funciona a importação|configurar)/iu.test(heading[1]);
+      continue;
+    }
+    const numbered = /^\s*\d+[.)]\s+(.+)/u.exec(line);
+    const implicit = guideSection && /^\s*(?:Clique|Abra|Acesse|Escolha|Preencha)\b/iu.test(line) ? line.trim() : null;
+    if ((!numbered && !implicit) || headings && !guideSection) continue;
+    steps.push(numbered?.[1] ?? implicit);
+  }
+  const labels = [];
+  for (const step of steps) {
+    const plain = normalized(step.replace(/\*\*|[“”"'`]/gu, ''));
+    const found = facts.map((fact) => ({ label: fact.text, index: plain.indexOf(normalized(fact.text)) }))
+      .filter(({ label, index }) => index >= 0 && !/[\p{L}\p{N}]/u.test(plain[index - 1] ?? '')
+        && !/[\p{L}\p{N}]/u.test(plain[index + normalized(label).length] ?? ''))
+      .sort((a, b) => a.index - b.index || b.label.length - a.label.length);
+    for (const item of found) if (!labels.includes(item.label)) labels.push(item.label);
+  }
+  return labels;
 }
 
 export function capturePlan({ page, module, faqBody, coverage, screenFacts }) {
   if (!slug.test(page) || !Array.isArray(screenFacts)) throw new Error('Plano de captura inválido');
-  const labels = faqStepLabels(faqBody);
-  if (!labels.length) throw new Error('FAQ aprovado sem passos com rótulos');
   const entry = coverage.find((item) => item.module === module);
   if (!entry) throw new Error('Módulo ausente da coverage matrix');
   const routes = entry.productRoutes.filter((route) => routePattern.test(route) && !route.includes(':'));
@@ -29,6 +52,8 @@ export function capturePlan({ page, module, faqBody, coverage, screenFacts }) {
     && fact.owner && sha.test(fact.sha ?? '') && typeof fact.text === 'string'
     && fact.text.length <= 160 && !/[\[\]\n\r]/u.test(fact.text) && !containsSensitiveData(fact.text)
     && (!fact.route || routes.includes(fact.route)));
+  const labels = faqStepLabels(faqBody, eligible);
+  if (!labels.length) throw new Error('Nenhum fato da tela confirmado nos passos do FAQ');
   const selected = labels.map((label) => eligible.find((fact) =>
     fact.text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
       === label.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')))
@@ -55,22 +80,29 @@ export function chooseScreenshot(manifest, page, step) {
   return matches.find((entry) => entry.source === 'upload') ?? matches.find((entry) => entry.source === 'automatic') ?? null;
 }
 
-export async function addUploadedScreenshot({ manifest, page, step, file, bytes, alt, label, route, approved, root = outputRoot }) {
-  if (approved !== true || !alt || containsSensitiveData(alt)
+export function masksCoverSensitive(sensitive, masks) {
+  return sensitive.every((rect) => masks.some((mask) => mask.x <= rect.x && mask.y <= rect.y
+    && mask.x + mask.width >= rect.x + rect.width
+    && mask.y + mask.height >= rect.y + rect.height));
+}
+
+export async function addUploadedScreenshot({ manifest, page, step, file, bytes, alt, label, route, root = outputRoot }) {
+  checkedPath(page, step);
+  if (!alt || containsSensitiveData(alt)
     || label && containsSensitiveData(label) || route && !routePattern.test(route))
     throw new Error('Upload requer revisão de privacidade');
-  const image = checkedPath(page, step);
-  const png = bytes ?? await readFile(file);
-  if (png.length > 2 * 1024 * 1024 || png.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') throw new Error('Upload precisa ser PNG de até 2 MiB');
-  const destination = join(root, page, `${step}.png`);
-  await mkdir(join(root, page), { recursive: true });
-  if (bytes) await writeFile(destination, png);
-  else await copyFile(file, destination);
+  const image = bytes ?? await readFile(file);
+  const signature = image.subarray(0, 8).toString('hex');
+  const extension = signature === '89504e470d0a1a0a' ? 'png' : image.subarray(0, 3).toString('hex') === 'ffd8ff' ? 'jpg' : null;
+  if (!extension || image.length > 2 * 1024 * 1024) throw new Error('Upload precisa ser PNG/JPEG de até 2 MiB');
+  const destination = join(root, 'pending', page, `${step}.${extension}`);
+  await mkdir(join(root, 'pending', page), { recursive: true });
+  await writeFile(destination, image);
   const previous = chooseScreenshot(manifest, page, step);
   manifest.entries = manifest.entries.filter((entry) => entry.page !== page || entry.step !== step);
   manifest.entries.push({ page, step, label: previous?.label ?? label ?? null, route: previous?.route ?? route ?? null,
     owner: previous?.owner ?? null, checkoutSha: previous?.checkoutSha ?? null,
-    file: image, alt, bundleSha: null, source: 'upload', masked: ['revisão humana'] });
+    file: `/img/mcp/${page}/${step}.${extension}`, alt, bundleSha: null, source: 'upload', status: 'pending', masked: [] });
   await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;
 }
@@ -143,24 +175,42 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
       if (!['click', 'none'].includes(step.action)) throw new Error('Ação não permitida');
       const rect = await control.boundingBox();
       if (!rect) throw new Error('Elemento fora da tela');
-      const mask = await page.evaluate((allowedLabels) => {
-        const areas = [];
-        const add = (element, reason) => {
-          const r = element.getBoundingClientRect();
-          if (r.width && r.height) areas.push({ x: r.x, y: r.y, width: r.width, height: r.height, reason });
+      const visible = await page.evaluate(() => {
+        const items = [];
+        const add = (text, rects, reason) => {
+          if (!text?.trim()) return;
+          for (const rect of rects) if (rect.width > 0 && rect.height > 0
+            && rect.right > 0 && rect.bottom > 0 && rect.x < innerWidth && rect.y < innerHeight)
+            items.push({ text, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, reason });
         };
-        for (const element of document.querySelectorAll('input,textarea,[contenteditable="true"],img,svg,canvas,video,iframe,tbody td')) add(element, 'campo ou conteúdo dinâmico');
-        for (const element of document.querySelectorAll('body *')) {
-          if (element.children.length || !element.textContent?.trim()) continue;
-          if (!allowedLabels.includes(element.textContent.trim())) add(element, 'texto não confirmado');
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        for (let node; (node = walker.nextNode());) {
+          const element = node.parentElement;
+          if (!element || !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden') continue;
+          const range = document.createRange(); range.selectNodeContents(node);
+          add(node.textContent, range.getClientRects(), 'texto não confirmado');
         }
-        return areas;
-      }, plan.map((item) => item.label));
-      // The shared sensitive-data scanner is the final textual gate. It catches secrets as well as PII.
-      const sensitive = await page.evaluate(() => [...document.querySelectorAll('body *')]
-        .filter((element) => !element.children.length && element.textContent?.trim())
-        .map((element) => ({ text: element.textContent, rect: element.getBoundingClientRect().toJSON() })));
-      for (const item of sensitive) if (containsSensitiveData(item.text)) mask.push({ ...item.rect, reason: 'varredura sensível' });
+        for (const element of document.querySelectorAll('input,textarea')) {
+          add(element.value, element.getClientRects(), 'campo ou conteúdo dinâmico');
+          add(element.placeholder, element.getClientRects(), 'campo ou conteúdo dinâmico');
+        }
+        for (const element of document.querySelectorAll('img,svg,canvas,video,iframe,tbody td'))
+          add('conteúdo dinâmico', element.getClientRects(), 'campo ou conteúdo dinâmico');
+        return items;
+      });
+      const allowedLabels = plan.map((item) => item.label);
+      const mask = [];
+      const sensitive = [];
+      for (const item of visible) {
+        const isSensitive = containsSensitiveData(item.text, { detectOpaque: true });
+        if (isSensitive) sensitive.push(item.rect);
+        if (isSensitive || item.reason === 'campo ou conteúdo dinâmico' || !allowedLabels.includes(item.text.trim()))
+          mask.push({ ...item.rect, reason: isSensitive ? 'varredura sensível' : item.reason });
+      }
+      if (!masksCoverSensitive(sensitive, mask)) {
+        manifest.pending = [...new Set([...(manifest.pending ?? []), `print descartado: dado sensível sem máscara em ${step.route}`])];
+        continue;
+      }
       await page.evaluate(({ masks, rect }) => {
         const privacyStyle = document.createElement('style');
         privacyStyle.setAttribute('data-screen-capture-style', '');
@@ -171,6 +221,7 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         layer.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
         for (const area of masks) {
           const box = document.createElement('div');
+          box.setAttribute('data-screen-capture-mask', '');
           box.style.cssText = `position:absolute;left:${area.x}px;top:${area.y}px;width:${area.width}px;height:${area.height}px;background:#111;`;
           layer.append(box);
         }
@@ -181,6 +232,15 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         arrow.style.cssText = `position:absolute;left:${Math.max(0, rect.x - 38)}px;top:${Math.max(0, rect.y - 8)}px;color:#ec6400;font:bold 32px sans-serif;text-shadow:0 1px white`;
         layer.append(frame, arrow); document.body.append(layer);
       }, { masks: mask, rect });
+      const renderedMasks = await page.evaluate(() => [...document.querySelectorAll('[data-screen-capture-mask]')]
+        .map((box) => { const area = box.getBoundingClientRect();
+          return { x: area.x, y: area.y, width: area.width, height: area.height }; }));
+      if (!masksCoverSensitive(sensitive, renderedMasks)) {
+        await page.evaluate(() => { document.querySelector('[data-screen-capture-overlay]')?.remove();
+          document.querySelector('[data-screen-capture-style]')?.remove(); });
+        manifest.pending = [...new Set([...(manifest.pending ?? []), `print descartado: dado sensível sem máscara em ${step.route}`])];
+        continue;
+      }
       await mkdir(join(root, step.page), { recursive: true });
       await page.screenshot({ path: join(root, step.page, `${step.step}.png`), animations: 'disabled' });
       await page.evaluate(() => {

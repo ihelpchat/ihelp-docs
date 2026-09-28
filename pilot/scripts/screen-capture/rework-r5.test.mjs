@@ -4,13 +4,20 @@ import { createServer } from 'node:http';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { capturePlan, captureScreens } from './capture.mjs';
+import { capturePlan, captureScreens, masksCoverSensitive } from './capture.mjs';
 import { uploadPage, downloadPage } from '../../mcp/screen-capture-service.mjs';
 import * as screenService from '../../mcp/screen-capture-service.mjs';
 import { attachScreenshotsToArticle, screenshotForStep, screenshotVersionWarnings } from '../../mcp/screen-capture-manifest.mjs';
 import { launch } from '../visual/measure.mjs';
 
 const sha = 'a'.repeat(40);
+
+test('verificação exige cobertura integral antes de salvar', () => {
+  assert.equal(masksCoverSensitive([{ x: 10, y: 10, width: 20, height: 10 }],
+    [{ x: 10, y: 10, width: 19, height: 10 }]), false);
+  assert.equal(masksCoverSensitive([{ x: 10, y: 10, width: 20, height: 10 }],
+    [{ x: 9, y: 9, width: 22, height: 12 }]), true);
+});
 
 test('Contatos e Robôs usam todos os rótulos dos passos reais, sem bullets de exemplo', async () => {
   const contatos = await readFile(new URL('../../content/docs/docs/sobre-o-sistema/agenda-de-contatos.mdx', import.meta.url), 'utf8');
@@ -30,7 +37,7 @@ test('Contatos e Robôs usam todos os rótulos dos passos reais, sem bullets de 
 test('texto direto com filho e value de input ficam opacos no PNG', async () => {
   const server = createServer((_req, res) => {
     res.setHeader('Content-Type', 'text/html');
-    res.end('<style>body{font:20px monospace}div,input{position:absolute;left:20px;width:400px;height:40px}div{top:70px}input{top:140px}button{position:absolute;top:220px}</style><div>cliente@exemplo.com<span>Abrir</span></div><input value="outra@exemplo.com"><button>Abrir</button>');
+    res.end('<style>body{font:20px monospace}div,input{position:absolute;left:20px;width:400px;height:40px}div{top:70px}input{top:140px}input + input{top:190px}button{position:absolute;top:260px}</style><div>cliente@exemplo.com<span>Abrir</span></div><input value="outra@exemplo.com"><input placeholder="terceira@exemplo.com"><button>Abrir</button>');
   });
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   const root = await mkdtemp(join(tmpdir(), 'screen-r5-'));
@@ -46,9 +53,9 @@ test('texto direto com filho e value de input ficam opacos no PNG', async () => 
         const image = new Image(); image.src = data; await image.decode();
         const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
         const context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
-        return [[55, 85], [55, 155]].map(([x, y]) => [...context.getImageData(x, y, 1, 1).data].slice(0, 3));
+        return [[55, 85], [55, 155], [55, 205]].map(([x, y]) => [...context.getImageData(x, y, 1, 1).data].slice(0, 3));
       }, `data:image/png;base64,${png.toString('base64')}`);
-      assert.deepEqual(pixels, [[17, 17, 17], [17, 17, 17]]);
+      assert.deepEqual(pixels, [[17, 17, 17], [17, 17, 17], [17, 17, 17]]);
     } finally { await browser.close(); }
   } finally { await new Promise((done) => server.close(done)); await rm(root, { recursive: true, force: true }); }
 });

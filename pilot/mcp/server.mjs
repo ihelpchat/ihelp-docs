@@ -11,7 +11,7 @@ import { authorizeTool, registerToolPolicy, requestIdentity } from './access-con
 import { createGuide } from './create-guide.mjs';
 import { atualizarPorDeploy } from './update-by-deploy.mjs';
 import { refreshCodeProduct } from './code-refresh-offer.mjs';
-import { capturePage, downloadPage, uploadPage } from './screen-capture-service.mjs';
+import { approvePage, capturePage, downloadPage, uploadPage } from './screen-capture-service.mjs';
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
 const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto']);
@@ -221,26 +221,48 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
 
   registerTool('enviar_tela', {
     mutates: true,
-    description: 'Grava PNG revisado no manifesto privado de capturas; prevalece sobre o automático.',
+    description: 'Recebe PNG/JPEG no volume privado como pendente de revisão.',
     inputSchema: z.strictObject({
       page: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
       step: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
       base64: z.string().max(3 * 1024 * 1024),
       alt: z.string().min(1).max(240),
-      approved: z.literal(true),
       requestedBy: requestedBySchema,
     }),
-  }, async ({ requestedBy, page, step, base64, alt, approved }) => {
+  }, async ({ requestedBy, page, step, base64, alt }) => {
     if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
     const target = auditTarget(page, step);
     await auditOperation(root, { actor: requestedBy, operation: 'enviar_tela', target, result: 'attempt' });
     try {
-      await uploadPage({ page, step, base64, alt, approved });
+      await uploadPage({ page, step, base64, alt });
       await auditOperation(root, { actor: requestedBy, operation: 'enviar_tela', target, result: 'success' });
-      return textResult({ page, step, source: 'upload' });
+      return textResult({ page, step, status: 'pending' });
     } catch {
       await auditOperation(root, { actor: requestedBy, operation: 'enviar_tela', target, result: 'failure' });
       return textResult({ error: 'Upload recusado' }, true);
+    }
+  });
+
+  registerTool('aprovar_tela', {
+    mutates: true,
+    description: 'Aprova um upload pendente com token de administração separado.',
+    inputSchema: z.strictObject({
+      page: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+      step: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+      adminToken: z.string().min(24),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ requestedBy, page, step, adminToken }) => {
+    if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    const target = auditTarget(page, step);
+    await auditOperation(root, { actor: requestedBy, operation: 'aprovar_tela', target, result: 'attempt' });
+    try {
+      await approvePage({ page, step, token: adminToken, approvedBy: requestedBy });
+      await auditOperation(root, { actor: requestedBy, operation: 'aprovar_tela', target, result: 'success' });
+      return textResult({ page, step, status: 'approved' });
+    } catch {
+      await auditOperation(root, { actor: requestedBy, operation: 'aprovar_tela', target, result: 'failure' });
+      return textResult({ error: 'Aprovação recusada' }, true);
     }
   });
 

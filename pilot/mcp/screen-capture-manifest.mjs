@@ -19,7 +19,8 @@ const normalized = (value) => value.normalize('NFD').replace(/\p{Diacritic}/gu, 
 export function screenshotForStep(manifest, page, step) {
   if (!manifest || !Array.isArray(manifest.entries)) return null;
   const matches = manifest.entries.filter((entry) => entry.page === page && entry.step === step
-    && entry.file === `/img/mcp/${page}/${step}.png`
+    && (entry.file === `/img/mcp/${page}/${step}.png` || entry.file === `/img/mcp/${page}/${step}.jpg`)
+    && (entry.source !== 'upload' || entry.status === 'approved')
     && (entry.source === 'upload' || /^[a-f0-9]{40}$/u.test(entry.bundleSha ?? entry.appSha ?? ''))
     && typeof entry.alt === 'string' && !containsSensitiveData(entry.alt));
   return matches.find((entry) => entry.source === 'upload') ?? matches.find((entry) => entry.source === 'automatic') ?? null;
@@ -51,13 +52,17 @@ export function attachScreenshotsToArticle(article, manifest, expectedSha, scree
 
 export function screenshotVersionWarnings(articles, manifest, expectedSha) {
   if (!manifest?.entries) return [];
-  return manifest.entries.filter((entry) => entry.source === 'automatic'
+  const awaiting = manifest.entries.filter((entry) => entry.source === 'upload' && entry.status === 'pending'
+    && articles.some((article) => article.path?.split('/').at(-1) === entry.page))
+    .map((entry) => `print enviado aguardando revisão: ${entry.page}/${entry.step}`);
+  const discarded = manifest.pending ?? [];
+  return [...awaiting, ...discarded, ...manifest.entries.filter((entry) => entry.source === 'automatic'
     && /^[a-f0-9]{40}$/u.test(entry.checkoutSha ?? '')
     && /^[a-f0-9]{40}$/u.test(expectedSha ?? '')
     && entry.checkoutSha !== expectedSha
     && articles.some((article) => article.path?.split('/').at(-1) === entry.page
       && article.body?.split('\n').some((line) => normalized(line).includes(normalized(entry.label ?? '')))))
-    .map((entry) => `print de versão anterior: recapturar ${entry.page}/${entry.step}`);
+    .map((entry) => `print de versão anterior: recapturar ${entry.page}/${entry.step}`)];
 }
 
 export function screenshotReviewBody(baseBody, warnings) {

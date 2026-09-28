@@ -8,7 +8,7 @@ import { addUploadedScreenshot, capturePlan, captureScreens, chooseScreenshot } 
 import { launch } from '../visual/measure.mjs';
 import { attachScreenshotsToArticle, screenshotForStep } from '../../mcp/screen-capture-manifest.mjs';
 import { assertAllowedTarget } from '../guide-proof.mjs';
-import { capturePage, downloadPage, imagesUsedByArticles } from '../../mcp/screen-capture-service.mjs';
+import { approvePage, capturePage, downloadPage, imagesUsedByArticles } from '../../mcp/screen-capture-service.mjs';
 
 const appSha = 'a'.repeat(40);
 const coverage = [{ module: 'Contatos', productRoutes: ['/contact'] }];
@@ -33,7 +33,7 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
   try {
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
     const plan = capturePlan({ page: 'contatos', module: 'Contatos', faqBody: '1. **Abrir contato**\n2. **Salvar contato**', coverage, screenFacts });
-    const manifest = await captureScreens({ baseUrl, plan, fixture: true, root });
+    let manifest = await captureScreens({ baseUrl, plan, fixture: true, root });
     assert.equal(manifest.entries.length, 2);
     assert.equal(manifest.entries[0].route, '/contact');
     assert.equal(manifest.entries[0].file, `/img/mcp/contatos/${plan[0].step}.png`);
@@ -70,8 +70,11 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
     const uploaded = join(root, 'upload.png');
     await writeFile(uploaded, png);
     await addUploadedScreenshot({ manifest, page: 'contatos', step: plan[0].step, file: uploaded,
-      alt: 'Tela de Contatos com o botão de abrir', approved: true, root });
+      alt: 'Tela de Contatos com o botão de abrir', root });
     assert.equal(chooseScreenshot(manifest, 'contatos', plan[0].step).source, 'upload');
+    assert.equal(screenshotForStep(manifest, 'contatos', plan[0].step), null);
+    manifest = await approvePage({ page: 'contatos', step: plan[0].step, token: 'admin-token-de-teste-com-mais-de-24', approvedBy: 'revisor' },
+      { root, env: { SCREEN_CAPTURE_ADMIN_TOKEN: 'admin-token-de-teste-com-mais-de-24' } });
     assert.equal(screenshotForStep(manifest, 'contatos', plan[0].step).source, 'upload');
     const article = attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Clique em Abrir contato.\n2. Clique em Salvar contato.' }, manifest, appSha);
     assert.match(article.body, /!\[Tela de Contatos com o botão de abrir\]/u);

@@ -1,5 +1,6 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { searchLocalProductContext } from './local-product-context.mjs';
 
 const slug = /^[a-z0-9][a-z0-9-]{0,79}$/u;
@@ -45,7 +46,7 @@ export async function capturePage(input, {
   return captureScreens({ baseUrl, plan, root, fixture, env, manifest, storageState });
 }
 
-export async function uploadPage({ page, step, base64, alt, approved }, { root = defaultRoot() } = {}) {
+export async function uploadPage({ page, step, base64, alt }, { root = defaultRoot() } = {}) {
   const { addUploadedScreenshot } = await import('../scripts/screen-capture/capture.mjs');
   if (!slug.test(page ?? '') || !slug.test(step ?? '') || typeof base64 !== 'string'
     || base64.length > 3 * 1024 * 1024 || !/^[A-Za-z0-9+/]+={0,2}$/u.test(base64))
@@ -56,7 +57,35 @@ export async function uploadPage({ page, step, base64, alt, approved }, { root =
   }));
   if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error('Manifesto de telas inválido');
   return addUploadedScreenshot({ manifest, page, step, bytes: Buffer.from(base64, 'base64'), alt,
-    approved, root });
+    root });
+}
+
+export async function approvePage({ page, step, token, approvedBy }, { root = defaultRoot(), env = process.env } = {}) {
+  if (!slug.test(page ?? '') || !slug.test(step ?? '') || !/^(?:(?:user|service):)?[a-z0-9][a-z0-9_-]{2,63}$/iu.test(approvedBy ?? ''))
+    throw new Error('Aprovação inválida');
+  const expected = env.SCREEN_CAPTURE_ADMIN_TOKEN;
+  let mcpKeys = [];
+  try { mcpKeys = JSON.parse(env.DOCS_MCP_CREDENTIALS ?? '[]').map((entry) => entry.key); }
+  catch { throw new Error('Credenciais MCP inválidas'); }
+  if (typeof expected !== 'string' || expected.length < 24 || expected === env.DOCS_MCP_API_KEY || mcpKeys.includes(expected)
+    || typeof token !== 'string') throw new Error('Token admin inválido');
+  const digest = (value) => createHash('sha256').update(value).digest();
+  if (!timingSafeEqual(digest(token), digest(expected))) throw new Error('Token admin inválido');
+  const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8'));
+  if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error('Manifesto de telas inválido');
+  const entry = manifest.entries.find((item) => item.page === page && item.step === step && item.source === 'upload' && item.status === 'pending');
+  if (!entry || !entry.file?.startsWith(`/img/mcp/${page}/${step}.`)) throw new Error('Upload pendente ausente');
+  const extension = entry.file.endsWith('.png') ? 'png' : entry.file.endsWith('.jpg') ? 'jpg' : null;
+  if (!extension) throw new Error('Upload pendente inválido');
+  const bytes = await readFile(join(root, 'pending', page, `${step}.${extension}`));
+  if (bytes.length > MAX_IMAGE_BYTES || extension === 'png' && bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'
+    || extension === 'jpg' && bytes.subarray(0, 3).toString('hex') !== 'ffd8ff') throw new Error('Upload pendente inválido');
+  await mkdir(join(root, page), { recursive: true });
+  await rename(join(root, 'pending', page, `${step}.${extension}`), join(root, page, `${step}.${extension}`));
+  entry.status = 'approved'; entry.approvedBy = approvedBy; entry.approvedAt = new Date().toISOString();
+  entry.masked = ['revisão humana'];
+  await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  return manifest;
 }
 
 export async function downloadPage(page, { root = defaultRoot(), limit = MAX_IMAGES } = {}) {
@@ -70,15 +99,18 @@ export async function downloadPage(page, { root = defaultRoot(), limit = MAX_IMA
   }
   if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error('Manifesto de telas inválido');
   const entries = manifest.entries.filter((entry) => entry.page === page && slug.test(entry.step)
-    && entry.file === `/img/mcp/${page}/${entry.step}.png`).slice(0, limit);
+    && (entry.source !== 'upload' || entry.status === 'approved')
+    && (entry.file === `/img/mcp/${page}/${entry.step}.png` || entry.file === `/img/mcp/${page}/${entry.step}.jpg`)).slice(0, limit);
   let total = 0;
   const images = [];
   for (const entry of entries) {
-    const bytes = await readFile(join(root, page, `${entry.step}.png`));
+    const extension = entry.file.endsWith('.jpg') ? 'jpg' : 'png';
+    const bytes = await readFile(join(root, page, `${entry.step}.${extension}`));
     total += bytes.length;
     if (bytes.length > MAX_IMAGE_BYTES || total > MAX_TOTAL_BYTES) throw new Error('Imagens excedem o teto da chamada');
-    if (bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') throw new Error('Imagem inválida');
-    images.push({ step: entry.step, file: entry.file, mimeType: 'image/png', base64: bytes.toString('base64') });
+    if (extension === 'png' ? bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'
+      : bytes.subarray(0, 3).toString('hex') !== 'ffd8ff') throw new Error('Imagem inválida');
+    images.push({ step: entry.step, file: entry.file, mimeType: `image/${extension === 'jpg' ? 'jpeg' : 'png'}`, base64: bytes.toString('base64') });
   }
   return { version: 1, entries, images };
 }
@@ -93,13 +125,15 @@ export async function imagesUsedByArticles(articles, { root = defaultRoot() } = 
   for (const article of articles) {
     const page = article.path?.split('/').at(-1);
     if (!slug.test(page ?? '')) continue;
-    for (const match of article.body.matchAll(/!\[[^\]\n]+\]\((\/img\/mcp\/([a-z0-9-]+)\/([a-z0-9-]+)\.png)\)/gu)) {
-      const [, file, imagePage, step] = match;
+    for (const match of article.body.matchAll(/!\[[^\]\n]+\]\((\/img\/mcp\/([a-z0-9-]+)\/([a-z0-9-]+)\.(png|jpg))\)/gu)) {
+      const [, file, imagePage, step, extension] = match;
       if (imagePage !== page || !slug.test(step)) throw new Error('Imagem fora da página do artigo');
-      if (!manifest.entries.some((entry) => entry.page === page && entry.step === step && entry.file === file))
+      if (!manifest.entries.some((entry) => entry.page === page && entry.step === step && entry.file === file
+        && (entry.source !== 'upload' || entry.status === 'approved')))
         throw new Error('Imagem citada sem captura aprovada');
-      const bytes = await readFile(join(root, page, `${step}.png`));
-      if (bytes.length > MAX_IMAGE_BYTES || bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a')
+      const bytes = await readFile(join(root, page, `${step}.${extension}`));
+      if (bytes.length > MAX_IMAGE_BYTES || (extension === 'png' ? bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'
+        : bytes.subarray(0, 3).toString('hex') !== 'ffd8ff'))
         throw new Error('Imagem citada inválida ou grande demais');
       used.set(file, bytes.toString('base64'));
     }
