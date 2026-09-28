@@ -170,6 +170,31 @@ function referenceIssues(unit, endpoints, articles) {
   }
   return issues;
 }
+function repairApiRefs(unit, endpoints, articles, repairs) {
+  for (const ref of unit.refs ?? []) {
+    const candidates = endpoints.filter((endpoint) => articles.some((article) => article.endpoint === publicEndpointId(endpoint))
+      && (endpoint.parameters ?? []).some((field) => field.name.toLowerCase() === ref.name.toLowerCase()));
+    if (candidates.length !== 1 || ref.endpoint === publicEndpointId(candidates[0])) continue;
+    const endpoint = publicEndpointId(candidates[0]);
+    repairs.push({ name: ref.name, from: ref.endpoint, endpoint });
+    ref.endpoint = endpoint;
+  }
+}
+function normalizeHeaderNotes(prose, pending) {
+  const headers = new Set(prose.responseHeaders.map((header) => header.name.toLowerCase()));
+  for (const note of prose.notas) {
+    if (!/\bTotal-Pages(?:-Exported)?\b/iu.test(note.text)) continue;
+    const mentioned = [...note.text.matchAll(/\bTotal-Pages(?:-Exported)?\b/giu)].map(([name]) => name.toLowerCase());
+    if (!mentioned.every((name) => headers.has(name))) continue;
+    const kept = note.text.split(/(?<=[.!?;])\s+/u)
+      .filter((sentence) => !/\bTotal-Pages(?:-Exported)?\b/iu.test(sentence)
+        && !/\b(?:nenhum dos dois|os dois|ambos|deles)\b/iu.test(sentence))
+      .join(' ').trim().replace(/;$/u, '.');
+    note.text = kept;
+    pending.push('nota de cabeçalho repetida na tabela omitida');
+  }
+  prose.notas = prose.notas.filter((note) => note.text);
+}
 function renderUnit(unit, articles, endpoints) {
   const text = markFactNames(unit.text, endpoints);
   const links = [...new Set((unit.refs ?? []).map((ref) => ref.endpoint))].map((id) => {
@@ -942,6 +967,8 @@ async function generateContentPackageCore(root, request, options = {}) {
     const proseProblems = [];
     const groundingProblems = [];
     const missingParameterDescriptions = [];
+    const internalRepairs = [];
+    const notePending = [];
     const apiRetryEndpoints = new Set();
     for (const prose of parsed.articles) {
       const endpoint = selectable.find((item) => publicEndpointId(item) === prose.endpoint);
@@ -949,8 +976,12 @@ async function generateContentPackageCore(root, request, options = {}) {
       const before = proseProblems.length + groundingProblems.length + missingParameterDescriptions.length;
       const schemaIssue = apiSchemaIssue(prose, endpoint);
       if (schemaIssue) { proseProblems.push(schemaIssue); apiRetryEndpoints.add(prose.endpoint); continue; }
+      normalizeHeaderNotes(prose, notePending);
       const units = [prose.description, prose.intro, ...prose.notas];
       for (const header of prose.responseHeaders) units.push(header.meaning, header.when);
+      for (const unit of [...units, ...(prose.responseDescriptions ?? []).map((item) => item.description),
+        ...(prose.parameterDescriptions ?? []).map((item) => item.description)])
+        repairApiRefs(unit, selectable, parsed.articles, internalRepairs);
       if (prose.notas.some((note) => /\b(?:requer|exige|obrigat[oó]ria?)\s+autentica[çc][aã]o|token\s+(?:Bearer|ausente|inv[aá]lido|expirado)/iu.test(note.text)))
         proseProblems.push('autenticação deve ficar na seção fixa');
       if (prose.notas.some((note) => /\bTotal-Pages(?:-Exported)?\b/iu.test(note.text)))
@@ -1000,6 +1031,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     const usedEndpoints = new Set();
     const pending = [];
     pending.push(...missingParameterDescriptions);
+    pending.push(...notePending);
     const factsByPath = new Map();
     const requestedSection = [request.description, request.details].filter((value) => typeof value === 'string').join(' ').match(/(?<!\/)\bapi\/([a-z0-9-]+)\//iu)?.[1];
     for (const prose of parsed.articles) {
@@ -1076,7 +1108,8 @@ async function generateContentPackageCore(root, request, options = {}) {
     const withoutPage = selectable.map(publicEndpointId).find((id) => !usedEndpoints.has(id)
       && !apiPages?.pending.some((item) => item.startsWith(`${id}:`)));
     if (withoutPage) return withPending(apiPending(`endpoint sem página: ${withoutPage}`));
-    return finalizeGeneratedPages(withPending({ ...safePackage, articles, discardedQuestions: plan.discardedQuestions ?? [],
+    return finalizeGeneratedPages(withPending({ ...safePackage, articles, internalRepairs,
+      discardedQuestions: plan.discardedQuestions ?? [],
       pending: [...new Set([...(productContext.pending ?? []), ...pending, ...(apiPages?.pending ?? [])])], existing, model: response.model }), request, factsByPath);
   }
   if (parsed.articles.some((article) => article.source === 'api' || /^api\//u.test(article.path ?? ''))) {
