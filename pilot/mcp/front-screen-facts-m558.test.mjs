@@ -581,3 +581,21 @@ test('nome efetivo segue a última prop JSX e vínculo usa esse nome', async () 
   assert.match(fact.note, /vínculo não provado/u);
   assert.equal(fact.validationSource, undefined);
 });
+
+test('schema importado também conflita com required JSX', async () => {
+  const schemaPath = 'src/components/pages/Contacts/schema.ts';
+  const positive = { ...sources,
+    [page]: `import { schema } from './schema'; export default function ContactPage() {
+      const { register } = useForm({ resolver: zodResolver(schema) });
+      return <input {...register('phone')} />;
+    }`,
+    [schemaPath]: `export const schema = z.object({ phone: z.string() });`,
+  };
+  const field = async (files) => (await run(files)).facts.find((fact) => fact.kind === 'field');
+  assert.equal((await field(positive)).required, true);
+  const conflict = { ...positive, [page]: positive[page].replace("{...register('phone')}", "required={false} {...register('phone')}") };
+  const fact = await field(conflict);
+  assert.equal(fact.required, 'unknown');
+  assert.match(fact.note, /evidências conflitantes/u);
+  assert.deepEqual(fact.presenceSources, [`${page}:3`, `${schemaPath}:1`]);
+});

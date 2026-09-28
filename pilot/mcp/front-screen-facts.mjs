@@ -51,6 +51,37 @@ function attr(node, name) {
   return node.attributes?.properties?.find((item) => ts.isJsxAttribute(item) && item.name.text === name);
 }
 function attrValue(node, name) { return literal(attr(node, name)?.initializer); }
+function booleanLiteral(node) {
+  if (ts.isJsxExpression(node)) return booleanLiteral(node.expression);
+  if (node?.kind === ts.SyntaxKind.TrueKeyword) return true;
+  if (node?.kind === ts.SyntaxKind.FalseKeyword) return false;
+  return null;
+}
+function requiredRule(node, file) {
+  if (!node) return null;
+  const boolean = booleanLiteral(node);
+  if (boolean !== null) return { required: boolean };
+  const message = literal(node);
+  if (message !== null) return { required: true, message };
+  if (!ts.isObjectLiteralExpression(node)) return null;
+  const value = node.properties.find((property) => ts.isPropertyAssignment(property)
+    && property.name.getText(file) === 'value');
+  const required = booleanLiteral(value?.initializer);
+  return required === null ? null : { required };
+}
+function applyPresence(fact, evidence) {
+  fact.presenceEvidence = evidence;
+  const values = new Set(evidence.map((item) => item.required));
+  fact.required = values.size === 1 ? evidence[0].required : 'unknown';
+  if (values.size > 1) {
+    fact.note = 'evidências conflitantes';
+    fact.presenceSources = [...new Set(evidence.map((item) => item.source))];
+    delete fact.message;
+  } else if (evidence.length) {
+    delete fact.note;
+    delete fact.presenceSources;
+  }
+}
 function tooltipLabel(node) {
   for (let parent = node.parent; parent; parent = parent.parent) {
     if (!ts.isJsxElement(parent) || !TOOLTIP_WRAPPERS.has(jsxName(parent.openingElement))) continue;
@@ -458,38 +489,51 @@ function collect(filePath, source, facts, entryName) {
       if (Number.isSafeInteger(maxSize) && maxSize > 0)
         addFact(facts, filePath, file, attr(node, 'maxSize'), 'uploadLimit',
           { maxBytes: maxSize, owner: tag, subject: subjectOf(owner, title, filePath) });
-      const register = attr(node, 'register')?.initializer?.expression
-        ?? node.attributes.properties.find((item) => ts.isJsxSpreadAttribute(item)
-          && ts.isCallExpression(item.expression))?.expression;
-      const controlled = node.attributes.properties.filter(ts.isJsxSpreadAttribute)
-        .map((item) => controllerFields.get(item.expression.getText(file))).find(Boolean);
-      const fieldName = attrValue(node, 'name') ?? (register && ts.isCallExpression(register) ? literal(register.arguments[0]) : null)
-        ?? controlled?.name;
+      let fieldName = null, nameProvider = null;
+      for (const property of node.attributes.properties) {
+        if (ts.isJsxAttribute(property) && property.name.text === 'name') {
+          fieldName = literal(property.initializer);
+          nameProvider = null;
+        } else if (ts.isJsxSpreadAttribute(property)) {
+          const control = controllerFields.get(property.expression.getText(file));
+          if (control) { fieldName = control.name; nameProvider = { controlled: control }; }
+          else if (ts.isCallExpression(property.expression)) {
+            fieldName = literal(property.expression.arguments[0]);
+            nameProvider = { register: property.expression };
+          } else { fieldName = null; nameProvider = null; }
+        }
+      }
+      const registerProp = attr(node, 'register')?.initializer?.expression;
+      const register = nameProvider?.register ?? (registerProp && ts.isCallExpression(registerProp)
+        && literal(registerProp.arguments[0]) === fieldName ? registerProp : null);
+      const controlled = nameProvider?.controlled;
       if (FIELD.test(tag) && fieldName) {
         const requiredAttr = attr(node, 'required');
-        const explicitFalse = requiredAttr?.initializer && ts.isJsxExpression(requiredAttr.initializer)
-          && requiredAttr.initializer.expression?.kind === ts.SyntaxKind.FalseKeyword;
         const schema = boundSchema(node, register && ts.isCallExpression(register) ? register : null, controlled);
         const rule = schema ? schemaRule(schema, fieldName) : null;
         const controllerRules = tag === 'Controller' ? attr(node, 'rules')?.initializer?.expression : null;
         const controllerRequired = controllerRules && ts.isObjectLiteralExpression(controllerRules)
           ? controllerRules.properties.find((item) => ts.isPropertyAssignment(item) && item.name.getText(file) === 'required') : null;
-        const explicitTrue = requiredAttr && (!requiredAttr.initializer
-          || (ts.isJsxExpression(requiredAttr.initializer)
-            && requiredAttr.initializer.expression?.kind === ts.SyntaxKind.TrueKeyword));
-        const required = explicitFalse ? false : explicitTrue ? true
-          : controllerRequired ? (controllerRequired.initializer.kind === ts.SyntaxKind.FalseKeyword ? false : true)
-          : rule?.required ?? 'unknown';
+        const jsxRequired = requiredAttr && (!requiredAttr.initializer ? true : booleanLiteral(requiredAttr.initializer));
+        const controllerPresence = requiredRule(controllerRequired?.initializer, file);
+        const evidence = [
+          ...(rule ? [{ required: rule.required, source: rule.source, kind: 'schema' }] : []),
+          ...(jsxRequired !== null && jsxRequired !== undefined
+            ? [{ required: jsxRequired, source: `${filePath}:${lineOf(file, requiredAttr)}`, kind: 'jsx' }] : []),
+          ...(controllerPresence ? [{ required: controllerPresence.required,
+            source: `${filePath}:${lineOf(file, controllerRequired)}`, kind: 'rules' }] : []),
+        ];
         const values = { name: fieldName,
-          ...(attrValue(node, 'label') ? { text: attrValue(node, 'label') } : {}), required,
-          ...(controllerRequired && literal(controllerRequired.initializer) ? { message: literal(controllerRequired.initializer) } : {}),
+          ...(attrValue(node, 'label') ? { text: attrValue(node, 'label') } : {}),
+          ...(controllerPresence?.message ? { message: controllerPresence.message } : {}),
           ...(rule?.message ? { message: rule.message } : {}),
           ...Object.fromEntries(['min', 'max', 'email', 'matches'].filter((key) => rule?.[key] !== undefined).map((key) => [key, rule[key]])),
           ...(rule ? { validationSource: rule.source } : {}),
-          ...(!schema && required === 'unknown' ? { note: 'vínculo não provado' } : {}),
+          ...(!schema && !evidence.length ? { note: 'vínculo não provado' } : {}),
           type: attrValue(node, 'type') ?? 'text' };
         const previous = facts.length;
         emit(node, 'field', values);
+        if (facts.length > previous) applyPresence(facts.at(-1), evidence);
         if (schema && !found.has(schema) && facts.length > previous) {
           if (!linkedImports.has(schema)) linkedImports.set(schema, new Set());
           linkedImports.get(schema).add(facts.at(-1));
@@ -692,7 +736,7 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
       const rules = schemaFields(declaration?.initializer, importFile, target);
       for (const fact of linkedFacts) if (rules.has(fact.name)) {
         const rule = rules.get(fact.name);
-        if (fact.required === 'unknown') fact.required = rule.required;
+        applyPresence(fact, [...fact.presenceEvidence, { required: rule.required, source: rule.source, kind: 'schema' }]);
         if (rule.message) fact.message = rule.message;
         fact.validationSource = rule.source;
         for (const key of ['min', 'max', 'email', 'matches']) if (rule[key] !== undefined) fact[key] = rule[key];
@@ -779,6 +823,7 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
     code.push({ path, excerpt: source });
   }
   if (queue.length) pending.push(`limite de arquivos dos fatos da tela: ${MAX_FILES}`);
+  for (const fact of facts) delete fact.presenceEvidence;
   return { route, sha, files, facts: [...new Map(facts.map((fact) => [JSON.stringify(fact), fact])).values()], code, pending };
 }
 
