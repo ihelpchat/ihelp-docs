@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { extractScreenFacts, FRONT_ROUTER } from './front-screen-facts.mjs';
 import { adaptScreenFacts, deterministicFaqAnswer, fixedFaqSupportSection,
   renderFaqSections, validateFaqSections } from './faq-editorial.mjs';
+import { generateContentPackage } from './content-ai-service.mjs';
 
 const sha = 'a'.repeat(40);
 const nav = 'src/components/ui/components/NavBar/index.tsx';
@@ -101,4 +102,39 @@ test('texto condicional dentro de botão é ação; status condicional continua 
     readSource: async (path) => sources[path], sha });
   assert.equal(screen.facts.find((fact) => fact.text === 'Salvar')?.kind, 'action');
   assert.equal(screen.facts.find((fact) => fact.text === 'Ativo')?.kind, 'state');
+});
+
+test('conferir placeholder pede nova tentativa para preencher o campo', async () => {
+  const source = (kind, text, line, extra = {}) => ({ kind, text, source: `src/Robots.tsx:${line}`,
+    repository: 'ihelpchat/front-react', sha, ...extra });
+  const context = { groundingRequired: true,
+    code: [{ available: true, role: 'frontend', ref: sha, repository: 'ihelpchat/front-react' }],
+    matches: [{ repository: 'ihelpchat/front-react', path: 'src/Robots.tsx', line: 2,
+      ref: sha, sha, excerpt: '2: Criar novo robô' }],
+    screenFacts: [source('route', 'Robôs', 1, { route: '/bot', routeTitle: 'Bot' }),
+      source('action', 'Criar novo robô', 2),
+      source('text', 'Digite o título do robô', 3, { property: 'placeholder' }),
+      source('action', 'Salvar', 4), source('action', 'Publicar', 5), source('state', 'Ativo', 6)],
+    support: { categories: [], rules: [] }, coverage: [], pending: [], businessContext: [], faqStyleExamples: [] };
+  const reply = (acao) => ({ status: 'ready', summary: 'FAQ.', questions: [], articles: [{
+    path: 'docs/robo', title: 'Robô de atendimento', description: 'Resumo.', source: 'produto', contentType: 'faq',
+    productActions: [], assistantQuestion: 'Como criar e publicar um robô?',
+    sections: { resposta: [], paraQueServe: [], quandoUsar: [], exemplo: [], duvidas: [], erros: [], suporte: [],
+      passos: [{ acao: 'abrir', fato: 'f1' }, { acao: 'clicar', fato: 'f2' }, { acao, fato: 'f3' },
+        { acao: 'clicar', fato: 'f4' }, { acao: 'clicar', fato: 'f5' }, { acao: 'conferir', fato: 'f6' }] },
+  }] });
+  let calls = 0, retryPrompt = '';
+  const result = await generateContentPackage(new URL('../', import.meta.url).pathname,
+    { topic: 'Robô de atendimento', module: 'Robôs', description: 'Criar FAQ para criar e publicar um robô.' }, {
+      productContext: context, plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
+        calls++;
+        if (calls === 2) retryPrompt = JSON.stringify(payload.input);
+        return { model: 'fixture', output_text: JSON.stringify(reply(calls === 1 ? 'conferir' : 'preencher')) };
+      } } },
+    });
+  assert.equal(calls, 2);
+  assert.equal(retryPrompt.includes('conferir em campo'), true);
+  assert.equal(result.status, 'ready', JSON.stringify(result.questions));
+  assert.match(result.articles[0].body, /Preencha \*\*Digite o título do robô\*\*/u);
+  assert.doesNotMatch(result.articles[0].body, /Confira \*\*Digite o título do robô\*\*/u);
 });
