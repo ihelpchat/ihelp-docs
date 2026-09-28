@@ -12,7 +12,10 @@ const endpoint = { verb: 'GET', route: '/api/v2/contacts', public: true, documen
     { name: 'linkedToMe', type: 'bool', in: 'query', required: false },
     { name: 'showAll', type: 'bool', in: 'query', required: false },
     { name: 'export', type: 'bool', in: 'query', required: false },
-  ], responseFields: [] };
+  ], responseFields: [], responseHeaders: [
+    { name: 'Total-Pages', source: 'Controllers/ContactsController.cs:12' },
+    { name: 'Total-Pages-Exported', source: 'Repository/ContactsRepository.cs:48' },
+  ] };
 const article = { path: 'api/contatos/buscar-contatos', endpoint: 'GET /contacts', title: 'Buscar contatos',
   description: unit('Consulta os contatos disponíveis com filtros opcionais na referência pública.'), intro: unit('Use esta consulta para localizar contatos.'),
   notas: [
@@ -35,6 +38,8 @@ async function generate(outputs) {
     plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
       assert.deepEqual(payload.text.format.schema.properties.articles.items.properties.notas.items.properties.type.enum,
         ['Como filtrar', 'Paginação e cabeçalhos', 'Quem vê quais contatos', 'Diferenças e cuidados']);
+      assert.deepEqual(payload.text.format.schema.properties.articles.items.properties.responseHeaders.items.properties.name.enum,
+        endpoint.responseHeaders.map((header) => header.name));
       return { output_text: JSON.stringify(outputs[Math.min(calls++, outputs.length - 1)]), model: 'replay-offline' };
     } } },
   });
@@ -83,4 +88,26 @@ test('cabeçalho escrito na nota exige tabela na nova tentativa', async () => {
   assert.equal(calls, 2);
   assert.equal(result.status, 'needs_information');
   assert.match(result.summary, /cabeçalhos de resposta devem ficar na tabela/u);
+});
+
+test('cabeçalho inventado é recusado mesmo quando tem formato válido', async () => {
+  const invalid = structuredClone(output);
+  invalid.articles[0].responseHeaders[0].name = 'X-Admin-Override';
+  const { result, calls } = await generate([invalid]);
+  assert.equal(calls, 2);
+  assert.equal(result.status, 'needs_information');
+  assert.match(result.summary, /cabeçalho.*sem fato|cabeçalhos de resposta inválidos/iu);
+});
+
+test('valores inline seguem o tipo dos parâmetros dos fatos', async () => {
+  const valid = structuredClone(output);
+  valid.articles[0].notas[3].text = 'Use `departmentIds=1&departmentIds=2` e `showAll=true`; `false` e `0` são valores válidos.';
+  assert.equal((await generate([valid])).result.status, 'ready');
+  for (const value of ['`showAll=talvez`', '`inventado=1`']) {
+    const invalid = structuredClone(output);
+    invalid.articles[0].notas[3].text = `Use ${value} para filtrar.`;
+    const { result } = await generate([invalid]);
+    assert.equal(result.status, 'needs_information', value);
+    assert.match(result.summary, /código inline proibido/u);
+  }
 });
