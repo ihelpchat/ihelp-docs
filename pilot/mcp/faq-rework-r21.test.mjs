@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 import { faqSubtitle } from './faq-editorial.mjs';
+import { extractScreenFacts, FRONT_ROUTER } from './front-screen-facts.mjs';
+import navigation from '../architecture/front-navigation.json' with { type: 'json' };
 
 const sha = 'a'.repeat(40);
 const fixtures = [
@@ -43,4 +45,18 @@ test('ProductAction prefere o nome do menu para Contatos, Robôs e Canais', asyn
     ['canais', '/configuracoes/channel', 'Canais'],
   ]) assert.equal(action({ id, route }).children[0], `Abrir o módulo ${module}`);
   assert.equal(action({ id: 'outro', route: '/sem-menu' }).children[0], 'Abrir o módulo Outro');
+});
+
+test('Canais vem do item de navegação da configuração, acima do título interno', async () => {
+  const tabs = 'src/store/slices/tab/tab.slice.ts';
+  const sources = {
+    [FRONT_ROUTER]: "const pages = [{ path: '/configuracoes/channel', title: 'Configurações', element: <Channels /> }];",
+    [tabs]: "const tabs = [{ name: 'Canais', href: '/configuracoes/channel' }];",
+  };
+  const result = await extractScreenFacts({ route: '/configuracoes/channel', module: 'Configurações — canais',
+    topic: 'Canais', paths: Object.keys(sources), readSource: async (path) => sources[path], sha });
+  const route = result.facts.find((fact) => fact.kind === 'route');
+  assert.equal(route.text, 'Canais');
+  assert.match(route.source, /tab\.slice\.ts:/u);
+  assert.equal(navigation['/configuracoes/channel'], route.text);
 });
