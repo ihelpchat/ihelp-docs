@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { classifyFaqQuestions, selectFaqStyleExamples, loadBusinessContext,
   adaptScreenFacts, validateFaqSections, faqSubtitle, replaceModuleTerminology,
-  deterministicFaqAnswer, fixedFaqSupportSection, renderFreeFaqSections } from './faq-editorial.mjs';
+  deterministicFaqAnswer, fixedFaqSupportSection, renderFreeFaqSections,
+  validateFreeFaqSections, judgeClaims } from './faq-editorial.mjs';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
 import { FAQ_NEUTRAL_WORDS } from './faq-neutral-words.mjs';
 
@@ -14,15 +15,15 @@ const distinctActions = ['Adicionar Contato', 'Abrir Cadastro de Contato', 'Sele
   'Escolher Atendente Responsável', 'Conferir Dados do Contato', 'Salvar Novo Contato',
   'Voltar à Lista de Contatos', 'Localizar Contato Cadastrado'];
 
-test('subtítulo sustentado também permanece em O que é; pendência usa fallback fixo', () => {
+test('subtítulo sustentado sai de O que é; pendência usa fallback fixo', () => {
   const request = { topic: 'Robô', module: 'Robôs', description: 'Criar, editar e publicar robôs.' };
   const facts = [{ kind: 'route', text: 'Robôs', route: '/bot' },
     ...['Criar robô', 'Editar robô', 'Publicar'].map((text, line) => ({ kind: 'action', text,
       repository: 'fixture', path: 'fixture', sha: 'a', lineStart: line, lineEnd: line }))];
   const supported = { oQueE: [{ text: 'Os robôs orientam o atendimento. Eles têm um fluxo configurável.' }] };
   assert.equal(faqSubtitle(supported, request, facts), 'Os robôs orientam o atendimento.');
-  assert.equal(supported.oQueE[0].text, 'Os robôs orientam o atendimento. Eles têm um fluxo configurável.');
-  assert.match(renderFreeFaqSections(supported), /## O que é\n\nOs robôs orientam o atendimento/u);
+  assert.equal(supported.oQueE[0].text, 'Eles têm um fluxo configurável.');
+  assert.doesNotMatch(renderFreeFaqSections(supported), /Os robôs orientam o atendimento/u);
   const pending = { oQueE: [{ text: '<AConfirmar>Os robôs orientam o atendimento.</AConfirmar>' }] };
   assert.equal(faqSubtitle(pending, request, facts), 'Como criar, editar e publicar robôs de atendimento no iHelp.');
   assert.match(pending.oQueE[0].text, /AConfirmar/u);
@@ -31,10 +32,21 @@ test('subtítulo sustentado também permanece em O que é; pendência usa fallba
 });
 
 test('nome do módulo muda só a referência ao item do menu', () => {
-  assert.equal(replaceModuleTerminology('Abra a tela **Contatos**. Depois abra a tela **Importar Contatos**.', 'Contatos'),
-    'Abra o módulo **Contatos**. Depois abra a tela **Importar Contatos**.');
-  assert.equal(replaceModuleTerminology('Na tela **Contatos**, busque uma pessoa.', 'Contatos'),
-    'No módulo **Contatos**, busque uma pessoa.');
+  assert.equal(replaceModuleTerminology('A tela **Contatos**, chamada **Listar Contatos**, é a agenda.', 'Contatos'),
+    'A tela **Contatos**, chamada **Listar Contatos**, é a agenda.');
+});
+
+test('dúvida sem resposta sai inteira e gera pendência', async () => {
+  const sections = { duvidas: [{ text: 'A planilha é para uma campanha?' },
+    { text: 'Como buscar? Use o campo **Buscar contato**.' }] };
+  const checked = validateFreeFaqSections(sections, { screenFacts: [{ text: 'Buscar contato' }] });
+  assert.equal(checked.sections.duvidas.length, 1);
+  assert.match(checked.pending.join(' '), /pergunta sem resposta/u);
+  const judged = await judgeClaims(checked.sections, { request: {}, business: [] }, async (claims) => ({
+    claims: claims.map(({ id, text }) => ({ id, status: text.startsWith('Use') ? 'a confirmar' : 'sustentada', reason: 'sem prova' })),
+  }));
+  assert.equal(judged.sections.duvidas.length, 0);
+  assert.match(judged.pending.join(' '), /pergunta sem resposta/u);
 });
 test('FAQ só bloqueia dúvida sobre resposta direta ou passo principal', () => {
   const result = classifyFaqQuestions([
@@ -410,7 +422,8 @@ test('pacote FAQ livre fica ready com dúvida secundária pendente', async () =>
       } } } });
   assert.equal(result.status, 'ready', JSON.stringify(result.questions));
   assert.match(result.articles[0].description, /^Como cadastrar contatos no iHelp/u);
-  assert.doesNotMatch(result.articles[0].body, /^Na tela/u);
+  assert.doesNotMatch(result.articles[0].body, /^(?:Na tela|No módulo) \*\*Contatos\*\*, você pode/u);
+  assert.notEqual(result.articles[0].description, 'A tela Contatos organiza as pessoas da sua lista.');
   assert.doesNotMatch(result.articles[0].body, /1\. ### Cadastrar/u);
   assert.doesNotMatch(result.articles[0].body, /Erros comuns/u);
   assert.match(result.articles[0].body, /## Quando falar com o suporte\n\n/u);
