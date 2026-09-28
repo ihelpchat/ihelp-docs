@@ -5632,7 +5632,7 @@ button {
 
   .ih-header-search {
     flex: 0 0 auto;
-    width: 36px;
+    width: 44px;
     padding: 0;
     justify-content: center;
   }
@@ -5820,7 +5820,7 @@ button {
 
 /* Texto de leitura mantém o piso; chamadas acompanham a escala de produção. */
 .ih-prose { font-size: 16px; }
-.ih-prose .ih-product-action small { font-size: 12px; }
+.ih-prose .ih-product-action small { font-size: 16px; }
 .ih-breadcrumb a, .ih-prose h2 a { display: inline-flex; align-items: center; }
 .ih-ai-drawer .ih-tech-mark span, .ih-ai-drawer .ih-tech-mark strong { font-size: 16px; }
 
