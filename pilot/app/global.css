@@ -1039,6 +1039,23 @@ button {
   background: #dcfce7;
 }
 
+.ih-meta a.ih-meta-pill {
+  position: relative;
+  isolation: isolate;
+  padding-block: 10px;
+  margin-block: -7px;
+  background: transparent;
+}
+
+.ih-meta a.ih-meta-pill::before {
+  content: '';
+  position: absolute;
+  inset: 7px 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: #dcfce7;
+}
+
 .ih-meta a.ih-meta-pill:hover, .ih-meta a.ih-meta-pill:focus-visible {
   color: #166534;
   text-decoration: underline;

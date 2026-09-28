@@ -67,8 +67,16 @@ async function assertFaqGuideShortcut(page, label) {
   assert.match(await badge.getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/configuracoes\/channel\?ihelpGuide=reconectar-canal-qr$/);
   assert.equal(await pills.count(), 2, `${label}: selos do guia não estão agrupados`);
   const [faqBox, guideBox] = await Promise.all([pills.first().boundingBox(), badge.boundingBox()]);
-  assert.ok(faqBox && guideBox && Math.abs(faqBox.y - guideBox.y) < 2
-    && Math.abs(faqBox.height - guideBox.height) < 2, `${label}: selos devem ficar lado a lado no mesmo tamanho`);
+  const guideVisual = await badge.evaluate((element) => {
+    const style = getComputedStyle(element, '::before');
+    const box = element.getBoundingClientRect();
+    return { top: box.top + parseFloat(style.top), height: box.height - parseFloat(style.top) - parseFloat(style.bottom),
+      background: style.backgroundColor };
+  });
+  assert.ok(faqBox && guideBox && guideBox.height >= 44, `${label}: selo do guia precisa de alvo de 44px`);
+  assert.ok(Math.abs(faqBox.y - guideVisual.top) < 2 && Math.abs(faqBox.height - guideVisual.height) < 2,
+    `${label}: selos devem ficar lado a lado no mesmo tamanho visual`);
+  assert.equal(guideVisual.background, 'rgb(220, 252, 231)', `${label}: fundo visual do selo ausente`);
   assert.equal(await action.count(), 1, `${label}: link secundário do módulo ausente`);
   assert.match(await action.getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/configuracoes\/channel\?ihelpGuide=abrir-canais$/);
   const shortcut = await page.evaluate(() => {
