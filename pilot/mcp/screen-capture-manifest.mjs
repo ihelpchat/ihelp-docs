@@ -30,7 +30,9 @@ export function attachScreenshotsToArticle(article, manifest, expectedSha, scree
   if (!manifest?.entries?.length || !article?.body || !article?.path) return article;
   const page = article.path.split('/').at(-1);
   const lines = article.body.split('\n');
+  const numberedLines = lines.map((line, index) => /^\s*\d+[.)]\s+/u.test(line) ? index : -1).filter((index) => index >= 0);
   const steps = [...new Set(manifest.entries.filter((entry) => entry.page === page).map((entry) => entry.step))];
+  const insertions = [];
   for (const step of steps) {
     const image = screenshotForStep(manifest, page, step);
     if (!image || !image.label || /[\[\]\n\r]/u.test(image.alt)) continue;
@@ -43,10 +45,15 @@ export function attachScreenshotsToArticle(article, manifest, expectedSha, scree
     if (screenFacts.length && !screenFacts.some((fact) => normalized(fact.text ?? '') === normalized(image.label)
       && fact.route === image.route && fact.owner === image.owner && (image.source === 'upload' || fact.sha === expectedSha))) continue;
     if (lines.some((value) => value.includes(`](${image.file})`))) continue;
-    const line = lines.findIndex((value) => normalized(value).includes(normalized(image.label)) && !value.startsWith('!['));
+    const line = Number.isInteger(image.line)
+      && (image.listIndex === null || Number.isInteger(image.listIndex) && numberedLines[image.listIndex] === image.line)
+      && normalized(lines[image.line] ?? '').includes(normalized(image.label)) ? image.line
+      : image.line == null && image.listIndex == null && numberedLines.length === 0
+        ? lines.findIndex((value) => normalized(value).includes(normalized(image.label)) && !value.startsWith('![')) : -1;
     if (line < 0) continue;
-    lines.splice(line + 1, 0, '', `![${image.alt}](${image.file})`, '');
+    insertions.push({ line, value: `![${image.alt}](${image.file})` });
   }
+  for (const { line, value } of insertions.sort((a, b) => b.line - a.line)) lines.splice(line + 1, 0, '', value, '');
   return { ...article, body: lines.join('\n') };
 }
 

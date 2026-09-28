@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { launch } from '../visual/measure.mjs';
@@ -14,34 +14,37 @@ const outputRoot = resolve(import.meta.dirname, '../../public/img/mcp');
 
 const normalized = (value) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
 
-export function faqStepLabels(body, facts = []) {
+export function faqStepMatches(body, facts = []) {
   if (typeof body !== 'string') throw new Error('FAQ aprovado inválido');
   const lines = body.split('\n');
-  const headings = lines.some((line) => /^#{2,4}\s/u.test(line));
-  let guideSection = false;
   const steps = [];
-  for (const line of lines) {
+  let numberedIndex = 0;
+  let guideSection = false;
+  for (const [lineIndex, line] of lines.entries()) {
     const heading = line.match(/^#{2,4}\s+(.+)/u);
     if (heading) {
       guideSection = /passo a passo|^como (?:criar|cadastrar|fazer|funciona a importação|configurar)/iu.test(heading[1]);
       continue;
     }
     const numbered = /^\s*\d+[.)]\s+(.+)/u.exec(line);
-    const implicit = guideSection && /^\s*(?:Clique|Abra|Acesse|Escolha|Preencha)\b/iu.test(line) ? line.trim() : null;
-    if ((!numbered && !implicit) || headings && !guideSection) continue;
-    steps.push(numbered?.[1] ?? implicit);
+    if (numbered) steps.push({ text: numbered[1], listIndex: numberedIndex++, line: lineIndex });
+    else if (guideSection && /^\s*(?:Clique|Abra|Acesse|Escolha|Preencha)\b/iu.test(line))
+      steps.push({ text: line.trim(), listIndex: null, line: lineIndex });
   }
-  const labels = [];
+  const matches = [];
   for (const step of steps) {
-    const plain = normalized(step.replace(/\*\*|[“”"'`]/gu, ''));
+    const plain = normalized(step.text.replace(/\*\*|[“”"'`]/gu, ''));
     const found = facts.map((fact) => ({ label: fact.text, index: plain.indexOf(normalized(fact.text)) }))
       .filter(({ label, index }) => index >= 0 && !/[\p{L}\p{N}]/u.test(plain[index - 1] ?? '')
         && !/[\p{L}\p{N}]/u.test(plain[index + normalized(label).length] ?? ''))
       .sort((a, b) => a.index - b.index || b.label.length - a.label.length);
-    for (const item of found) if (!labels.includes(item.label)) labels.push(item.label);
+    for (const item of found) if (!matches.some((match) => match.label === item.label))
+      matches.push({ label: item.label, listIndex: step.listIndex, line: step.line });
   }
-  return labels;
+  return matches;
 }
+
+export const faqStepLabels = (body, facts) => faqStepMatches(body, facts).map((match) => match.label);
 
 export function capturePlan({ page, module, faqBody, coverage, screenFacts }) {
   if (!slug.test(page) || !Array.isArray(screenFacts)) throw new Error('Plano de captura inválido');
@@ -52,18 +55,19 @@ export function capturePlan({ page, module, faqBody, coverage, screenFacts }) {
     && fact.owner && sha.test(fact.sha ?? '') && typeof fact.text === 'string'
     && fact.text.length <= 160 && !/[\[\]\n\r]/u.test(fact.text) && !containsSensitiveData(fact.text)
     && (!fact.route || routes.includes(fact.route)));
-  const labels = faqStepLabels(faqBody, eligible);
-  if (!labels.length) throw new Error('Nenhum fato da tela confirmado nos passos do FAQ');
-  const selected = labels.map((label) => eligible.find((fact) =>
+  const matches = faqStepMatches(faqBody, eligible);
+  if (!matches.length) throw new Error('Nenhum fato da tela confirmado nos passos do FAQ');
+  const selected = matches.map((match) => ({ fact: eligible.find((fact) =>
     fact.text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')
-      === label.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')))
-    .filter((fact, index, ordered) => fact && ordered.indexOf(fact) === index);
+      === match.label.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR')), match }))
+    .filter(({ fact }, index, ordered) => fact && ordered.findIndex((item) => item.fact === fact) === index);
   if (!routes.length || !selected.length) throw new Error('Nenhum fato da tela confirmado para captura');
-  return selected.slice(0, 20).map((fact, index) => {
+  return selected.slice(0, 20).map(({ fact, match }, index) => {
     const step = `${String(index + 1).padStart(2, '0')}-${fact.text.normalize('NFD').replace(/\p{Diacritic}/gu, '')
       .toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '').slice(0, 55)}`;
     const label = fact.text;
-    return { page, step, role: fact.kind === 'field' ? 'textbox' : 'button', label,
+    return { page, step, listIndex: match.listIndex, line: match.line,
+      role: fact.kind === 'field' ? 'textbox' : 'button', label,
       route: fact.route ?? routes[0], owner: fact.owner, checkoutSha: fact.sha, alt: `Tela de ${module}: ${label}`,
       action: fact.kind === 'action' && /^(?:abrir|ver|mostrar|acessar)\b/iu.test(label)
         && !isUnsafeCaptureAction(label) ? 'click' : 'none' };
@@ -102,6 +106,7 @@ export async function addUploadedScreenshot({ manifest, page, step, file, bytes,
   manifest.entries = manifest.entries.filter((entry) => entry.page !== page || entry.step !== step);
   manifest.entries.push({ page, step, label: previous?.label ?? label ?? null, route: previous?.route ?? route ?? null,
     owner: previous?.owner ?? null, checkoutSha: previous?.checkoutSha ?? null,
+    listIndex: previous?.listIndex ?? null, line: previous?.line ?? null,
     file: `/img/mcp/${page}/${step}.${extension}`, alt, bundleSha: null, source: 'upload', status: 'pending', masked: [] });
   await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;
@@ -116,8 +121,102 @@ async function login(page, origin, { email, password }) {
   await page.waitForURL((url) => url.pathname !== '/login');
 }
 
+async function scanVisible(page) {
+  return page.evaluate(() => {
+    const items = [];
+    const add = (text, rects, reason) => {
+      if (!text?.trim()) return;
+      for (const rect of rects) if (rect.width > 0 && rect.height > 0
+        && rect.right > 0 && rect.bottom > 0 && rect.x < innerWidth && rect.y < innerHeight)
+        items.push({ text, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, reason });
+    };
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node; (node = walker.nextNode());) {
+      const element = node.parentElement;
+      if (!element || element.closest('[data-screen-capture-overlay]')
+        || !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden') continue;
+      const range = document.createRange(); range.selectNodeContents(node);
+      add(node.textContent, range.getClientRects(), 'texto não confirmado');
+    }
+    for (const element of document.querySelectorAll('input,textarea')) {
+      add(element.value, element.getClientRects(), 'campo ou conteúdo dinâmico');
+      add(element.placeholder, element.getClientRects(), 'campo ou conteúdo dinâmico');
+    }
+    for (const element of document.querySelectorAll('img,svg,canvas,video,iframe,tbody td'))
+      add('conteúdo dinâmico', element.getClientRects(), 'campo ou conteúdo dinâmico');
+    return items;
+  });
+}
+
+const visibleHash = (items) => createHash('sha256').update(JSON.stringify(items)).digest('hex');
+
+async function captureAttempt(page, cdp, rect, allowedLabels, destination, afterScreenshot) {
+  let frozen = false;
+  try {
+    await cdp.send('Emulation.setScriptExecutionDisabled', { value: true });
+    frozen = true;
+    await page.evaluate(() => {
+      const style = document.createElement('style');
+      style.setAttribute('data-screen-capture-pause', '');
+      style.textContent = '*,*::before,*::after{animation-play-state:paused!important;transition:none!important;caret-color:transparent!important}';
+      document.head.append(style);
+    });
+    const visible = await scanVisible(page);
+    const mask = [];
+    const sensitive = [];
+    for (const item of visible) {
+      const isSensitive = containsSensitiveData(item.text, { detectOpaque: true });
+      if (isSensitive) sensitive.push(item.rect);
+      if (isSensitive || item.reason === 'campo ou conteúdo dinâmico' || !allowedLabels.includes(item.text.trim()))
+        mask.push({ ...item.rect, reason: isSensitive ? 'varredura sensível' : item.reason });
+    }
+    if (!masksCoverSensitive(sensitive, mask)) return null;
+    await page.evaluate(({ masks, rect: target }) => {
+      const privacyStyle = document.createElement('style');
+      privacyStyle.setAttribute('data-screen-capture-style', '');
+      privacyStyle.textContent = 'body * {background-image:none!important} body *::before,body *::after {content:none!important}';
+      document.head.append(privacyStyle);
+      const layer = document.createElement('div');
+      layer.setAttribute('data-screen-capture-overlay', '');
+      layer.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
+      for (const area of masks) {
+        const box = document.createElement('div');
+        box.setAttribute('data-screen-capture-mask', '');
+        box.style.cssText = `position:absolute;left:${area.x}px;top:${area.y}px;width:${area.width}px;height:${area.height}px;background:#111;`;
+        layer.append(box);
+      }
+      const frame = document.createElement('div');
+      frame.style.cssText = `position:absolute;left:${target.x - 5}px;top:${target.y - 5}px;width:${target.width + 10}px;height:${target.height + 10}px;border:4px solid #ec6400;border-radius:5px;box-sizing:border-box`;
+      const arrow = document.createElement('div');
+      arrow.textContent = '➜';
+      arrow.style.cssText = `position:absolute;left:${Math.max(0, target.x - 38)}px;top:${Math.max(0, target.y - 8)}px;color:#ec6400;font:bold 32px sans-serif;text-shadow:0 1px white`;
+      layer.append(frame, arrow); document.body.append(layer);
+    }, { masks: mask, rect });
+    const renderedMasks = await page.evaluate(() => [...document.querySelectorAll('[data-screen-capture-mask]')]
+      .map((box) => { const area = box.getBoundingClientRect();
+        return { x: area.x, y: area.y, width: area.width, height: area.height }; }));
+    if (!masksCoverSensitive(sensitive, renderedMasks)) return null;
+    await page.screenshot({ path: destination, animations: 'disabled' });
+    if (afterScreenshot) await afterScreenshot(page);
+    const after = await scanVisible(page);
+    const remaining = after.filter((item) => containsSensitiveData(item.text, { detectOpaque: true })).map((item) => item.rect);
+    if (visibleHash(visible) !== visibleHash(after) || !masksCoverSensitive(remaining, renderedMasks)) return null;
+    return { mask, bytes: await readFile(destination) };
+  } finally {
+    await rm(destination, { force: true }).catch(() => {});
+    await page.evaluate(() => {
+      document.querySelector('[data-screen-capture-overlay]')?.remove();
+      document.querySelector('[data-screen-capture-style]')?.remove();
+      document.querySelector('[data-screen-capture-pause]')?.remove();
+    }).catch(() => {});
+    if (frozen) await cdp.send('Emulation.setScriptExecutionDisabled', { value: false });
+  }
+}
+
 export async function captureScreens({ baseUrl, plan, storageState, fixture = false,
-  manifest = { version: 1, entries: [] }, root = outputRoot, env = process.env }) {
+  manifest = { version: 1, entries: [] }, root = outputRoot, env = process.env, fixtureAfterScreenshot }) {
+  if (fixtureAfterScreenshot && (!fixture || typeof fixtureAfterScreenshot !== 'function'))
+    throw new Error('Hook de fixture inválido');
   const target = assertAllowedTarget(baseUrl, env);
   if (target.local !== fixture) throw new Error('Modo e host incompatíveis');
   if (!Array.isArray(plan) || !plan.length || plan.some((step) => !slug.test(step.page)
@@ -175,82 +274,28 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
       if (!['click', 'none'].includes(step.action)) throw new Error('Ação não permitida');
       const rect = await control.boundingBox();
       if (!rect) throw new Error('Elemento fora da tela');
-      const visible = await page.evaluate(() => {
-        const items = [];
-        const add = (text, rects, reason) => {
-          if (!text?.trim()) return;
-          for (const rect of rects) if (rect.width > 0 && rect.height > 0
-            && rect.right > 0 && rect.bottom > 0 && rect.x < innerWidth && rect.y < innerHeight)
-            items.push({ text, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, reason });
-        };
-        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-        for (let node; (node = walker.nextNode());) {
-          const element = node.parentElement;
-          if (!element || !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden') continue;
-          const range = document.createRange(); range.selectNodeContents(node);
-          add(node.textContent, range.getClientRects(), 'texto não confirmado');
-        }
-        for (const element of document.querySelectorAll('input,textarea')) {
-          add(element.value, element.getClientRects(), 'campo ou conteúdo dinâmico');
-          add(element.placeholder, element.getClientRects(), 'campo ou conteúdo dinâmico');
-        }
-        for (const element of document.querySelectorAll('img,svg,canvas,video,iframe,tbody td'))
-          add('conteúdo dinâmico', element.getClientRects(), 'campo ou conteúdo dinâmico');
-        return items;
-      });
-      const allowedLabels = plan.map((item) => item.label);
-      const mask = [];
-      const sensitive = [];
-      for (const item of visible) {
-        const isSensitive = containsSensitiveData(item.text, { detectOpaque: true });
-        if (isSensitive) sensitive.push(item.rect);
-        if (isSensitive || item.reason === 'campo ou conteúdo dinâmico' || !allowedLabels.includes(item.text.trim()))
-          mask.push({ ...item.rect, reason: isSensitive ? 'varredura sensível' : item.reason });
-      }
-      if (!masksCoverSensitive(sensitive, mask)) {
-        manifest.pending = [...new Set([...(manifest.pending ?? []), `print descartado: dado sensível sem máscara em ${step.route}`])];
-        continue;
-      }
-      await page.evaluate(({ masks, rect }) => {
-        const privacyStyle = document.createElement('style');
-        privacyStyle.setAttribute('data-screen-capture-style', '');
-        privacyStyle.textContent = 'body * {background-image:none!important} body *::before,body *::after {content:none!important}';
-        document.head.append(privacyStyle);
-        const layer = document.createElement('div');
-        layer.setAttribute('data-screen-capture-overlay', '');
-        layer.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
-        for (const area of masks) {
-          const box = document.createElement('div');
-          box.setAttribute('data-screen-capture-mask', '');
-          box.style.cssText = `position:absolute;left:${area.x}px;top:${area.y}px;width:${area.width}px;height:${area.height}px;background:#111;`;
-          layer.append(box);
-        }
-        const frame = document.createElement('div');
-        frame.style.cssText = `position:absolute;left:${rect.x - 5}px;top:${rect.y - 5}px;width:${rect.width + 10}px;height:${rect.height + 10}px;border:4px solid #ec6400;border-radius:5px;box-sizing:border-box`;
-        const arrow = document.createElement('div');
-        arrow.textContent = '➜';
-        arrow.style.cssText = `position:absolute;left:${Math.max(0, rect.x - 38)}px;top:${Math.max(0, rect.y - 8)}px;color:#ec6400;font:bold 32px sans-serif;text-shadow:0 1px white`;
-        layer.append(frame, arrow); document.body.append(layer);
-      }, { masks: mask, rect });
-      const renderedMasks = await page.evaluate(() => [...document.querySelectorAll('[data-screen-capture-mask]')]
-        .map((box) => { const area = box.getBoundingClientRect();
-          return { x: area.x, y: area.y, width: area.width, height: area.height }; }));
-      if (!masksCoverSensitive(sensitive, renderedMasks)) {
-        await page.evaluate(() => { document.querySelector('[data-screen-capture-overlay]')?.remove();
-          document.querySelector('[data-screen-capture-style]')?.remove(); });
-        manifest.pending = [...new Set([...(manifest.pending ?? []), `print descartado: dado sensível sem máscara em ${step.route}`])];
-        continue;
-      }
       await mkdir(join(root, step.page), { recursive: true });
-      await page.screenshot({ path: join(root, step.page, `${step.step}.png`), animations: 'disabled' });
-      await page.evaluate(() => {
-        document.querySelector('[data-screen-capture-overlay]')?.remove();
-        document.querySelector('[data-screen-capture-style]')?.remove();
-      });
+      const cdp = await context.newCDPSession(page);
+      let captured = null;
+      try {
+        for (let attempt = 0; attempt < 2 && !captured; attempt++) {
+          captured = await captureAttempt(page, cdp, rect, plan.map((item) => item.label),
+            join(root, step.page, `${step.step}.pending.png`), fixtureAfterScreenshot);
+        }
+      } finally { await cdp.detach(); }
+      if (!captured) {
+        await rm(join(root, step.page, `${step.step}.png`), { force: true });
+        manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step);
+        manifest.pending = [...new Set([...(manifest.pending ?? []), `print descartado: dado sensível sem máscara em ${step.route}`])];
+        continue;
+      }
+      await writeFile(join(root, step.page, `${step.step}.png`), captured.bytes);
+      const mask = captured.mask;
       if (step.action === 'click' && !isUnsafeCaptureAction(step.label)
         && /^(?:abrir|ver|mostrar|acessar)\b/iu.test(step.label)) await control.click();
       manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step);
       manifest.entries.push({ page: step.page, step: step.step, label: step.label, route: step.route,
+        listIndex: step.listIndex, line: step.line,
         owner: step.owner, file: image, alt: step.alt, bundleSha, checkoutSha: step.checkoutSha,
         source: 'automatic', masked: [...new Set(mask.map((item) => item.reason))] });
     }
