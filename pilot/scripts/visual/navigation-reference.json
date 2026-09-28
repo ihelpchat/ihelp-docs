@@ -1,0 +1,14 @@
+{
+  "measuredAt": "2026-09-28",
+  "source": "https://faq.ihelpchat.com/ihelp-docs/docs/sobre-o-sistema/agenda-de-contatos/",
+  "viewports": { "desktop": 1280, "mobile": 390 },
+  "fontPx": {
+    "section": 11,
+    "side": 13,
+    "breadcrumb": 12,
+    "meta": 12,
+    "tocTitle": 11,
+    "toc": 12,
+    "nav": 13
+  }
+}

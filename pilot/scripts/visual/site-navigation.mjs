@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { launch } from './measure.mjs';
 
+const reference = JSON.parse(await readFile(new URL('./navigation-reference.json', import.meta.url), 'utf8'));
+assert.match(reference.measuredAt, /^\d{4}-\d{2}-\d{2}$/, 'referência sem data de medição');
 const baseUrl = process.env.BASE_URL;
 assert.ok(baseUrl, 'BASE_URL necessário para o teste visual');
 const browser = await launch();
@@ -27,9 +30,12 @@ try {
         }).map(([key, selector]) => [key, read(selector)]));
       });
       assert.ok(metrics.section && metrics.section.height <= metrics.section.lineHeight + 1, `${name}: rótulo da seção quebrou linha`);
-      for (const [key, max] of Object.entries({ section: 11, side: 13, breadcrumb: 12, meta: 12, tocTitle: 11, toc: 12 })) {
+      for (const [key, production] of Object.entries(reference.fontPx)) {
         if (name === 'mobile' && key.startsWith('toc')) continue;
-        assert.ok(metrics[key]?.font <= max, `${name}: ${key} ${metrics[key]?.font}px > ${max}px da produção`);
+        const min = Math.max(12, production - 1);
+        const max = production + 1;
+        assert.ok(metrics[key]?.font >= min && metrics[key]?.font <= max,
+          `${name}: ${key} ${metrics[key]?.font}px fora de ${min}–${max}px (produção ${production}px)`);
       }
       assert.ok(metrics.body?.font >= 16, `${name}: corpo ${metrics.body?.font}px < 16px`);
       assert.ok(metrics.search?.width >= (name === 'desktop' ? 150 : 36), `${name}: busca não visível`);
