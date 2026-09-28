@@ -1,0 +1,39 @@
+{
+  "title": "Claricia · assistente de IA",
+  "fonts": {
+    ".ih-ai-launcher": [13, 600],
+    ".ih-ai-drawer-title": [14, 600],
+    ".ih-ai-drawer-sub": [11, 400],
+    ".ih-ai-drawer-context > span": [11, 400],
+    ".ih-ai-drawer-context strong": [11, 600],
+    ".ih-ai-drawer-empty-title": [16, 600],
+    ".ih-ai-drawer-empty > p:not(.ih-ai-drawer-empty-title)": [12, 400],
+    ".ih-ai-drawer-empty button": [13, 400],
+    ".ih-ai-drawer-meta > p": [10, 400],
+    ".ih-ai-user p": [14, 400],
+    ".ih-ai-text p": [14, 400],
+    ".ih-ai-steps li": [13, 400],
+    ".ih-ai-steps li > span": [11, 600],
+    ".ih-ai-thread[data-compact] .ih-ai-user p": [13, 400],
+    ".ih-ai-thread[data-compact] .ih-ai-text p": [13, 400],
+    ".ih-ai-thread[data-compact] .ih-ai-steps li": [12, 400],
+    ".ih-ai-thread[data-compact] .ih-ai-steps li > span": [10, 600],
+    ".ih-ai-composer textarea": [14, 400],
+    ".ih-ai-composer[data-compact] textarea": [13, 400],
+    ".ih-ai-hint": [11, 400],
+    ".ih-ai-human-action": [12, 650],
+    ".ih-ai-error-actions button": [12, 600],
+    ".ih-ai-error-actions a": [12, 600],
+    ".ih-ai-panel-list a > span:not(.ih-ai-panel-head)": [12, 400]
+  },
+  "geometry": {
+    ".ih-ai-drawer-head button": [30, 30],
+    ".ih-ai-send": [36, 36]
+  },
+  "mobileFonts": {
+    ".ih-ai-user p": [14, 400],
+    ".ih-ai-text p": [15, 400],
+    ".ih-ai-steps li": [14, 400],
+    ".ih-ai-composer textarea": [16, 400]
+  }
+}
