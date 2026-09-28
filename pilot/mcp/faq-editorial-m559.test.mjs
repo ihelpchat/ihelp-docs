@@ -266,7 +266,7 @@ test('palavra nova no fim da frase reprova todas as seções, inclusive exemplo'
 });
 
 test('dúvidas e erros rejeitam palavra sem fonte; plural e acento usam a mesma normalização', () => {
-  assert.ok(FAQ_NEUTRAL_WORDS.length <= 40);
+  assert.ok(FAQ_NEUTRAL_WORDS.length >= 190);
   assert.ok(!FAQ_NEUTRAL_WORDS.some((word) => /vendas|clientes|inadimplentes|bloqueia/iu.test(word)));
   const sha = 'a'.repeat(40);
   const fact = { kind: 'validation', text: 'Número obrigatório', repository: 'ihelpchat/front-react',

@@ -4,6 +4,7 @@ import { parse } from 'yaml';
 import { redactSensitiveData, containsSensitiveData } from './sensitive-data.mjs';
 import { valueFor } from './api-synthetic-example.mjs';
 import { FAQ_NEUTRAL_WORDS, FAQ_NEUTRAL_VERBS } from './faq-neutral-words.mjs';
+import { faqStem } from './faq-portuguese-stem.mjs';
 
 export const FAQ_SECTIONS = {
   resposta: 'Resposta direta', paraQueServe: 'Para que serve', quandoUsar: 'Quando usar',
@@ -42,9 +43,9 @@ const neutral = new Set([...FAQ_NEUTRAL_WORDS, ...FAQ_NEUTRAL_VERBS.flatMap(verb
 ].map((word) => singular(fold(word))));
 // "escolhas" também é substantivo; sem fonte não pode ser liberado pela flexão verbal.
 const contentWords = (value, request = {}) => {
-  const theme = new Set(words(`${request.topic ?? ''} ${request.description ?? ''}`).map(singular));
+  const theme = new Set(words(`${request.topic ?? ''} ${request.description ?? ''}`).map(faqStem));
   return words(value).filter((word) => word.length > 2
-    && (word === 'escolhas' || !neutral.has(singular(word))) && !theme.has(singular(word)));
+    && (word === 'escolhas' || !neutral.has(singular(word))) && !theme.has(faqStem(word)));
 };
 const PROMISES = ['aumenta', 'reduz', 'garante', 'dobra', 'sempre', 'nunca', 'melhor', 'economiza'];
 const numbers = (value) => String(value ?? '').match(/(?:R\$|US\$|€|\$)?\s*\d+(?:[.,]\d+)*(?:\s*%|\s*(?:dias?|horas?|minutos?|meses?|anos?))?/giu) ?? [];
@@ -57,17 +58,18 @@ const syntheticEvidence = ['nome', 'email', 'telefone', 'id', 'numero', 'data', 
 
 // Ponto único para um verificador semântico futuro; hoje a decisão é extrativa.
 function supportedClaim(text, sources, { example = false, request = {} } = {}) {
-  const evidence = [...sources, ...(example ? [syntheticEvidence] : [])].join(' ');
-  const theme = new Set(words(`${request.topic ?? ''} ${request.description ?? ''}`).map(singular));
-  const cited = new Set(words(evidence).map(singular));
-  const uncovered = [...new Set(contentWords(text, request).filter((word) => !cited.has(singular(word))))];
+  const evidenceSources = [...sources, request.details ?? '', ...(example ? [syntheticEvidence] : [])];
+  const evidence = evidenceSources.join(' ');
+  const theme = new Set(words(`${request.topic ?? ''} ${request.description ?? ''}`).map(faqStem));
+  const cited = new Set(words(evidence).map(faqStem));
+  const uncovered = [...new Set(contentWords(text, request).filter((word) => !cited.has(faqStem(word))))];
   // Números, nomes e promessas obedecem à mesma cobertura total, inclusive nas seções centrais.
-  if (numbers(text).some((number) => ![...sources, ...(example ? [syntheticEvidence] : [])]
+  if (numbers(text).some((number) => !evidenceSources
     .some((source) => fold(source).includes(fold(number).trim())))) {
     for (const number of numbers(text)) if (!uncovered.includes(fold(number).trim())) uncovered.push(fold(number).trim());
   }
-  if (properNames(text).some((name) => !fold(evidence).includes(name) && !theme.has(singular(name)))) {
-    for (const name of properNames(text)) if (!fold(evidence).includes(name) && !theme.has(singular(name)) && !uncovered.includes(name)) uncovered.push(name);
+  if (properNames(text).some((name) => !fold(evidence).includes(name) && !theme.has(faqStem(name)))) {
+    for (const name of properNames(text)) if (!fold(evidence).includes(name) && !theme.has(faqStem(name)) && !uncovered.includes(name)) uncovered.push(name);
   }
   if (PROMISES.some((word) => words(text).includes(word) && !words(evidence).includes(word))) {
     for (const word of PROMISES) if (words(text).includes(word) && !words(evidence).includes(word) && !uncovered.includes(word)) uncovered.push(word);
@@ -164,8 +166,12 @@ export function validateFaqSections(sections, context) {
     const units = sections?.[key] ?? [];
     if (!Array.isArray(units) || !units.length) { pending.push(`seção sem fonte: ${FAQ_SECTIONS[key]}`); continue; }
     const valid = units.filter((unit) => {
-      if (!unit || typeof unit.text !== 'string' || !normalized(unit.text)
-        || !Array.isArray(unit.citations) || !unit.citations.length) return false;
+      if (!unit || typeof unit.text !== 'string' || !normalized(unit.text)) return false;
+      if (/\b(?:pedido|sinal agregado|fonte|nao esta descrito|nao estao descritos)\b/u.test(fold(unit.text))) {
+        pending.push(`metanarração em ${unit.text}`);
+        return false;
+      }
+      if (!Array.isArray(unit.citations) || !unit.citations.length) return false;
       if (key === 'exemplo' && !unit.text.includes(valueFor({ name: 'nome' }))) return false;
       if ((key === 'paraQueServe' || key === 'quandoUsar')
         && !unit.citations.some((cite) => ['negocio', 'pagina', 'pedido'].includes(cite.source))) return false;
