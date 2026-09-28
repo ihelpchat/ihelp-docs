@@ -1,7 +1,7 @@
 import { isSyntheticNumericExample } from './api-reference-render.mjs';
 
 const PERSONAL = [/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu];
-const NUMERIC_RUN = /(?<!\d)\d(?:[\d.\/()+ -]*\d)?/gu;
+const NUMERIC_RUN = /(?<![\p{L}\p{N}])\d(?:[\d.\/()+ -]*\d)?(?![\p{L}\p{N}])/gu;
 const ISO_DATE = /\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)?(?!\d)/gu;
 
 function numericMatches(value) {

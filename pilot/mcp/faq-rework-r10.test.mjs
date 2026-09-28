@@ -1,0 +1,181 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { validateFaqSections, missingFaqTaskSteps } from './faq-editorial.mjs';
+import { generateContentPackage, planContent } from './content-ai-service.mjs';
+
+const sha = 'a'.repeat(40);
+const fact = (text, line, kind = 'action') => ({ kind, text, repository: 'ihelpchat/front-react',
+  path: 'src/Fixture.tsx', lineStart: line, lineEnd: line, sha });
+const cite = (line) => ({ repository: 'ihelpchat/front-react', path: 'src/Fixture.tsx',
+  lineStart: line, lineEnd: line, sha });
+const unit = (text, line) => ({ text, citations: [cite(line)] });
+const createStep = { acao: 'clicar', fato: 'f2' };
+const createStep2 = { acao: 'clicar', fato: 'f8' };
+const createStep3 = { acao: 'clicar', fato: 'f9' };
+const sections = (passos = [], erros = []) => ({ resposta: [], paraQueServe: [], quandoUsar: [],
+  passos, exemplo: [], duvidas: [], erros, suporte: [] });
+const request = { topic: 'Robô de atendimento', module: 'Robôs',
+  description: 'Criar a página do FAQ sobre o Robô de atendimento.',
+  details: 'Cobrir como criar e editar um robô, montar o fluxo e ativar.' };
+const facts = [fact('Robôs', 1, 'route'), fact('Criar novo robô', 2),
+  fact('Digite o título do robô', 3, 'field'), fact('Salvar', 4), fact('Publicar', 5),
+  fact('Editar robô', 6), fact('Fluxo', 7),
+  fact('Adicionar bloco de boas-vindas para o primeiro contato', 8),
+  fact('Escolher destino de atendimento para a equipe responsável', 9)];
+const context = { groundingRequired: true,
+  code: [{ available: true, role: 'frontend', ref: sha, repository: 'ihelpchat/front-react' }],
+  matches: [{ ...cite(2), line: 2, ref: sha, excerpt: '2: Criar novo robô' }],
+  screenFacts: facts.map(({ repository: _r, path: _p, lineStart, lineEnd: _e, sha: _s, ...rest }) =>
+    ({ ...rest, source: `src/Fixture.tsx:${lineStart}` })),
+  support: { categories: [], rules: [] }, coverage: [], pending: [], businessContext: [], faqStyleExamples: [] };
+const article = (path, contentType, passos) => ({ path, title: 'Robô de atendimento', description: 'Robô de atendimento.',
+  source: 'produto', contentType, sections: sections(passos), productActions: [],
+  assistantQuestion: 'Como criar um robô?' });
+const packageOf = (articles) => ({ status: 'ready', summary: 'Robô.', questions: [], articles });
+const run = async (replies) => {
+  let calls = 0; const prompts = [];
+  const result = await generateContentPackage(new URL('../', import.meta.url).pathname, request,
+    { productContext: structuredClone(context), plan: { status: 'ready' }, client: { responses: {
+      create: async (payload) => { prompts.push(JSON.stringify(payload.input));
+        return { model: 'fixture', output_text: JSON.stringify(replies[Math.min(calls++, replies.length - 1)]) }; },
+    } } });
+  return { result, calls, prompts };
+};
+
+test('replay do Robô conserva passos citados do tutorial no único FAQ pedido', async () => {
+  const raw = packageOf([article('docs/robo', 'faq', []), article('tutoriais/robo', 'tutorial', [
+    createStep, { acao: 'preencher', fato: 'f3' },
+    { acao: 'clicar', fato: 'f4' }, { acao: 'clicar', fato: 'f5' },
+  ])]);
+  const { result, prompts } = await run([raw]);
+  assert.equal(result.status, 'ready', JSON.stringify(result));
+  assert.equal(result.articles.length, 1);
+  assert.equal(result.articles[0].contentType, 'faq');
+  assert.match(result.articles[0].body, /\*\*Criar novo robô\*\*/u);
+  assert.match(result.articles[0].body, /\*\*Publicar\*\*/u);
+  assert.ok(prompts[0].includes('Criar novo robô'));
+  assert.ok(result.pending.some((item) => item.includes('seção sem fonte de negócio:')));
+});
+
+test('tarefa com fatos e sem passo entra no retry uma vez e depois vira pendência', async () => {
+  const partial = packageOf([article('docs/robo', 'faq', [createStep, createStep2, createStep3])]);
+  const { result, calls, prompts } = await run([partial, partial]);
+  assert.equal(calls, 2);
+  assert.match(prompts[1], /tarefa sem passo: editar/u);
+  assert.match(prompts[1], /tarefa sem passo: ativar/u);
+  assert.equal(result.status, 'ready', JSON.stringify(result));
+  assert.ok(result.pending.some((item) => item.includes('tarefa sem passo: editar')));
+});
+
+test('erro aceita a mensagem exata citada e recusa mensagem inventada', () => {
+  const error = fact('O nome é obrigatório', 8, 'validation');
+  const ctx = { screenFacts: [...facts, error] };
+  const good = validateFaqSections({ erros: [{ mensagem: 'f10' }] }, ctx);
+  assert.equal(good.sections.erros?.length, 1);
+  const helpful = validateFaqSections({ erros: [{ mensagem: 'f10', corrigir: { acao: 'preencher', fato: 'f3' } }] }, ctx);
+  assert.equal(helpful.sections.erros?.length, 1);
+  const bad = validateFaqSections({ erros: [{ mensagem: 'f99' }] }, ctx);
+  assert.equal(bad.sections.erros, undefined);
+});
+
+test('pedido simples gera só uma página mesmo se modelo devolver FAQ e tutorial', async () => {
+  const repeated = packageOf([article('docs/robo', 'faq', [createStep, createStep2, createStep3]),
+    article('tutoriais/robo', 'tutorial', [createStep])]);
+  const { result } = await run([repeated]);
+  assert.equal(result.articles.length, 1, JSON.stringify(result));
+  assert.equal(result.articles[0].contentType, 'faq');
+});
+
+test('Agenda cobra busca, importação e agendamento quando há fatos dessas tarefas', () => {
+  const agenda = { details: 'Cobrir buscar, cadastrar, importar e agendar mensagem.' };
+  const screen = [fact('Buscar contato...', 11, 'field'), fact('Adicionar Contato', 12),
+    fact('Mais opções', 13), fact('Importar Contatos', 14), fact('.csv, .xlsx, .xls', 15, 'upload'),
+    fact('Agendamento', 16)];
+  assert.deepEqual(missingFaqTaskSteps(agenda, screen, [unit('Clique em **Adicionar Contato**.', 12)]).sort(),
+    ['tarefa sem passo: buscar', 'tarefa sem passo: importar', 'tarefa sem passo: agendar'].sort());
+  assert.deepEqual(missingFaqTaskSteps(agenda, screen, [unit('Clique em **Buscar contato...**.', 11),
+    unit('Clique em **Adicionar Contato**.', 12), unit('Abra **Importar Contatos**.', 14),
+    unit('Clique em **Agendamento**.', 16)]), []);
+});
+
+test('pergunta canônica inválida recebe padrão determinístico', async () => {
+  const steps = [createStep, { acao: 'clicar', fato: 'f6' },
+    { acao: 'clicar', fato: 'f7' }, { acao: 'clicar', fato: 'f5' }];
+  const invalid = packageOf([article('docs/robo', 'faq', steps)]);
+  invalid.articles[0].assistantQuestion = '';
+  const { result, calls } = await run([invalid]);
+  assert.equal(calls, 1, JSON.stringify(result));
+  assert.equal(result.status, 'ready', JSON.stringify(result));
+  assert.match(result.articles[0].assistantQuestion, /^Como uso a tela .+\?$/u);
+});
+
+test('validateArticle entra na tentativa única para erro editorial não corrigível localmente', async () => {
+  const steps = [createStep, { acao: 'clicar', fato: 'f6' },
+    { acao: 'clicar', fato: 'f7' }, { acao: 'clicar', fato: 'f5' }];
+  const bad = packageOf([article('docs/robo', 'faq', steps)]);
+  bad.articles[0].title = 'X';
+  const good = packageOf([article('docs/robo', 'faq', steps)]);
+  const { result, calls, prompts } = await run([bad, good]);
+  assert.equal(calls, 2, JSON.stringify(result));
+  assert.match(prompts[1], /title precisa ter ao menos 4 caracteres/u);
+  assert.equal(result.status, 'ready', JSON.stringify(result));
+});
+
+test('plano e geração usam o mesmo núcleo: Robô com fatos segue e mantém perguntas pendentes', async () => {
+  const questions = ['Qual é o resultado de Publicar?', 'Quais opções aparecem em Encaminhar atendimento?'];
+  const planReply = { status: 'needs_information', guidance: 'Criar a página do Robô.', questions,
+    risks: [], suggestedActions: [], grounding: [] };
+  let calls = 0;
+  const plan = await planContent(new URL('../', import.meta.url).pathname, request, {
+    productContext: structuredClone(context), client: { responses: { create: async () => {
+      calls++;
+      return { model: 'fixture', output_text: JSON.stringify(planReply) };
+    } } },
+  });
+  assert.equal(calls, 1);
+  assert.equal(plan.status, 'ready', JSON.stringify(plan));
+  assert.deepEqual(plan.questions, []);
+  assert.ok(questions.every((question) => plan.pending.some((item) => item.includes(question))));
+  const blocked = { status: 'needs_information', summary: 'Faltam detalhes secundários.', questions,
+    articles: [] };
+  const complete = packageOf([article('docs/robo', 'faq', [createStep, createStep2, createStep3])]);
+  const generated = await run([blocked, complete]);
+  assert.equal(generated.calls, 2, JSON.stringify(generated.result));
+  assert.equal(generated.result.status, 'ready', JSON.stringify(generated.result));
+  assert.ok(questions.every((question) => generated.result.pending.some((item) => item.includes(question))));
+});
+
+test('recusa com fatos tenta de novo pedindo as tarefas ancoradas, e registra segunda recusa', async () => {
+  const refused = { status: 'needs_information', summary: 'Não gerei a FAQ para evitar inventar caminhos.',
+    questions: ['Não gerei a FAQ para evitar inventar caminhos.'], articles: [] };
+  const { result, calls, prompts } = await run([refused, refused]);
+  assert.equal(calls, 2);
+  assert.match(prompts[1], /Escreva os passos das tarefas que têm FATOS DA TELA:/u);
+  assert.match(prompts[1], /criar/u);
+  assert.match(prompts[1], /As outras tarefas ficam em pendência\. Não recuse a página inteira\./u);
+  assert.equal(result.status, 'needs_information');
+  assert.ok(result.pending.some((item) => item.includes('modelo recusou com fatos disponíveis')));
+});
+
+test('ready sem passos também recebe a tentativa explícita de núcleo', async () => {
+  const empty = packageOf([article('docs/robo', 'faq', [])]);
+  const { result, calls, prompts } = await run([empty, empty]);
+  assert.equal(calls, 2);
+  assert.match(prompts[1], /Escreva os passos das tarefas que têm FATOS DA TELA:/u);
+  assert.equal(result.status, 'needs_information');
+  assert.ok(result.pending.some((item) => item.includes('modelo recusou com fatos disponíveis')));
+});
+
+test('fato de tela alheio à tarefa não força nova tentativa', async () => {
+  const unrelated = structuredClone(context);
+  unrelated.screenFacts = [{ kind: 'action', text: 'Visualizar', source: 'src/Fixture.tsx:8' }];
+  let calls = 0;
+  const result = await generateContentPackage(new URL('../', import.meta.url).pathname, request,
+    { productContext: unrelated, plan: { status: 'ready' }, client: { responses: {
+      create: async () => { calls++; return { model: 'fixture', output_text: JSON.stringify({
+        status: 'needs_information', summary: 'Faltam fatos da tarefa.', questions: [], articles: [],
+      }) }; },
+    } } });
+  assert.equal(result.status, 'needs_information');
+  assert.equal(calls, 1);
+});
