@@ -132,7 +132,9 @@ const requestedFaqTaskText = (request = {}) => fold([
 
 export function faqModuleName(request = {}, screenFacts = []) {
   const route = screenFacts.find((fact) => fact.kind === 'route' && fact.route)?.route ?? request.productRoute;
-  return coverageMatrix.find((item) => item.productRoutes.includes(route))?.module
+  const menuFact = screenFacts.find((fact) => fact.kind === 'route' && fact.route === route
+    && /(?:components\/ui\/components\/NavBar\/index\.tsx|store\/slices\/tab\/tab\.slice\.ts)$/u.test(fact.path ?? ''));
+  return menuFact?.text ?? coverageMatrix.find((item) => item.productRoutes.includes(route))?.module
     ?? coverageMatrix.find((item) => fold(item.module) === fold(request.module))?.module
     ?? null;
 }
@@ -189,7 +191,7 @@ export function faqSubtitle(sections, request = {}, screenFacts = []) {
   if (sentence && !sentence.includes('<AConfirmar>') && !sentence.includes('</AConfirmar>')) {
     sections.oQueE[0] = { ...sections.oQueE[0], text: first.slice(sentence.length).trim() };
     if (!sections.oQueE[0].text) sections.oQueE.shift();
-    return sentence;
+    return replaceModuleTerminology(sentence, faqModuleName(request, screenFacts));
   }
   const direct = deterministicFaqAnswer(request, screenFacts)?.text;
   const actions = direct?.match(/você pode (.+)\.$/u)?.[1];

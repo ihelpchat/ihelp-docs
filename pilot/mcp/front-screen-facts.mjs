@@ -5,6 +5,7 @@ import { sanitizeCodeForModel } from './code-hygiene.mjs';
 
 export const FRONT_ROUTER = 'src/components/core/components/Router/utils/pagesData.tsx';
 const FRONT_MENU = 'src/components/ui/components/NavBar/index.tsx';
+const FRONT_CONFIG_TABS = 'src/store/slices/tab/tab.slice.ts';
 const MAX_FILES = 72;
 const MAX_CHARS = 1_000_000;
 const VISIBLE = new Set(['label', 'labelText', 'title', 'placeholder', 'aria-label', 'tooltip']);
@@ -846,18 +847,19 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
   }
   if (queue.length) pending.push(`limite de arquivos dos fatos da tela: ${MAX_FILES}`);
   // The router title is internal; the navigation item is the name the reader sees.
-  if (route && allowed.has(FRONT_MENU)) {
-    const source = await readSource(FRONT_MENU);
-    const file = ts.createSourceFile(FRONT_MENU, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  for (const navigationPath of [FRONT_MENU, FRONT_CONFIG_TABS]) {
+    if (!route || !allowed.has(navigationPath)) continue;
+    const source = await readSource(navigationPath);
+    const file = ts.createSourceFile(navigationPath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let visible = null;
     const visit = (node) => {
       if (!visible && ts.isObjectLiteralExpression(node)) {
         const field = (name) => node.properties.find((item) => ts.isPropertyAssignment(item)
           && item.name.getText(file) === name);
         const name = field('name');
-        if (literal(field('route')?.initializer) === route && name) {
+        if ((literal(field('route')?.initializer) ?? literal(field('href')?.initializer)) === route && name) {
           const label = safeText(literal(name.initializer));
-          if (label) visible = { text: label, source: `${FRONT_MENU}:${lineOf(file, name)}` };
+          if (label) visible = { text: label, source: `${navigationPath}:${lineOf(file, name)}` };
         }
       }
       ts.forEachChild(node, visit);
@@ -869,7 +871,7 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
         fact.text = visible.text;
         fact.source = visible.source;
       }
-      if (!files.includes(FRONT_MENU)) { files.push(FRONT_MENU); code.push({ path: FRONT_MENU, excerpt: source }); }
+      if (!files.includes(navigationPath)) { files.push(navigationPath); code.push({ path: navigationPath, excerpt: source }); }
     }
   }
   for (const fact of facts) delete fact.presenceEvidence;
