@@ -121,6 +121,44 @@ test('contexto público sob a raiz pilot chega ao prompt e pode ser citado', asy
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('SHA do front com dez dígitos consecutivos chega íntegro ao prompt e valida a citação', async () => {
+  for (const sha of ['a'.repeat(15) + '9136328159' + 'b'.repeat(15), '1234567890'.repeat(4)]) {
+  const fact = { kind: 'action', text: 'Criar novo robô', source: 'src/Fixture.tsx:12',
+    repository: 'ihelpchat/front-react', sha };
+  const context = { groundingRequired: true,
+    code: [{ available: true, role: 'frontend', repository: fact.repository, ref: sha }],
+    matches: [{ repository: fact.repository, path: 'src/Fixture.tsx', line: 12, ref: sha, sha,
+      excerpt: '12: Criar novo robô' }], screenFacts: [fact],
+    support: { categories: [], rules: [] }, coverage: [], pending: [] };
+  let prompt = '';
+  await planContent(new URL('../', import.meta.url).pathname,
+    { topic: 'Robô', module: 'Robôs', description: 'Criar FAQ para o robô.' }, {
+      productContext: context, client: { responses: { create: async (payload) => {
+        prompt = payload.input[1].content;
+        return { model: 'fixture', output_text: JSON.stringify({ status: 'ready', guidance: '', questions: [],
+          risks: [], suggestedActions: [], grounding: [] }) };
+      } } },
+    });
+  assert.ok(prompt.includes(sha));
+  assert.equal(prompt.includes('[dado removido]'), false);
+  const citation = { repository: fact.repository, path: 'src/Fixture.tsx', lineStart: 12, lineEnd: 12, sha };
+  assert.equal(validateFaqSections({ passos: [unit('Clique em Criar novo robô.', [citation])] },
+    { screenFacts: adaptScreenFacts({ facts: [fact], sha }) }).sections.passos?.length, 1);
+  }
+});
+
+test('citação aceita faixa curta contendo o fato da tela', () => {
+  const sha = 'a'.repeat(15) + '9136328159' + 'b'.repeat(15);
+  const facts = adaptScreenFacts({ sha, facts: [{ kind: 'action', text: 'Criar novo robô',
+    source: 'src/Fixture.tsx:12' }] });
+  const cite = { repository: 'ihelpchat/front-react', path: 'src/Fixture.tsx', sha,
+    lineStart: 10, lineEnd: 14 };
+  assert.equal(validateFaqSections({ passos: [unit('Clique em Criar novo robô.', [cite])] },
+    { screenFacts: facts }).sections.passos?.length, 1);
+  assert.equal(validateFaqSections({ passos: [unit('Clique em Criar novo robô.', [
+    { ...cite, lineStart: 15, lineEnd: 16 }])] }, { screenFacts: facts }).sections.passos, undefined);
+});
+
 test('quote exige ao menos 12 caracteres', () => {
   const context = { request: { description: 'Contatos bons ajudam a equipe.' } };
   const check = (quote) => validateFaqSections({ resposta: [unit('Abra Contatos.', [
@@ -326,6 +364,7 @@ test('pacote FAQ fica ready com dúvida secundária pendente e seção sem fonte
   assert.equal(result.status, 'ready', JSON.stringify(result.questions));
   assert.match(result.articles[0].body, /^Abra Contatos/u);
   assert.doesNotMatch(result.articles[0].body, /Erros comuns/u);
+  assert.match(result.articles[0].body, /## Quando falar com o suporte\n\n/u);
   assert.ok(result.pending.some((item) => item.includes('Qual formato do telefone')));
   assert.ok(result.pending.some((item) => item.includes('Erros comuns')));
 });
