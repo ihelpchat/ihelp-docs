@@ -166,6 +166,14 @@ const FAQ_TASKS = [
   ['ativar', /\bativ/u, /\bpublicar|\bativ/u],
 ];
 
+export function faqTasksWithoutFacts(request = {}, screenFacts = []) {
+  const asked = fold((request.details ?? request.description ?? '').split(/\bcobrir\b/iu).at(-1));
+  return FAQ_TASKS.flatMap(([task, requested, visible]) => requested.test(asked)
+    && !screenFacts.some((fact) => fact.text && visible.test(fold(`${fact.text} ${fact.subject ?? ''}`))
+      && ['action', 'field', 'upload', 'destination', 'text'].includes(fact.kind))
+    ? [task[0].toLocaleUpperCase('pt-BR') + task.slice(1)] : []);
+}
+
 export function missingFaqTaskSteps(request = {}, screenFacts = [], steps = []) {
   const asked = fold((request.details ?? request.description ?? '').split(/\bcobrir\b/iu).at(-1));
   return FAQ_TASKS.flatMap(([task, requested, visible]) => {
@@ -469,6 +477,13 @@ const freeUnits = (sections) => Object.entries(FREE_FAQ_SECTIONS).flatMap(([key]
   ? (sections?.passos ?? []).flatMap((task) => task?.passos ?? [])
   : sections?.[key] ?? []);
 const splitClaims = (text) => String(text).match(/[^.!?]+[.!?]+|[^.!?]+$/gu)?.map((part) => part.trim()).filter(Boolean) ?? [];
+const FAQ_METANARRATION = /\b(?:pedido|material|fonte|confirmad\w*|presumir|supondo|neste texto|aqui n[aã]o)\b/iu;
+const cleanFaqMeta = (text, pending) => String(text).split(/(?<=[.!?])\s+(?=[\p{Lu}“"'])/u).map((part) => part.trim()).filter((phrase) => {
+  if (!FAQ_METANARRATION.test(phrase)) return true;
+  pending.push(`metanarração: ${phrase}`);
+  return false;
+}).join(' ');
+const trimFaqLabels = (text) => text.replace(/\*\*([^*\n]+)\*\*/gu, (_match, label) => `**${label.trim()}**`);
 
 function rigidFaqIssue(text, context) {
   const labels = [...String(text).matchAll(/\*\*([^*\n]+)\*\*/gu)].map((match) => match[1]);
@@ -506,20 +521,26 @@ export function validateFreeFaqSections(sections, context = {}) {
         const headingIssue = !/^[\p{L}\p{N}() ,\/-]{1,80}$/u.test(heading)
           ? 'título de tarefa inválido' : rigidFaqIssue(heading, context);
         if (headingIssue) { pending.push(`${heading}: ${headingIssue}`); return []; }
-        const steps = task.passos.filter((unit) => {
-          const issue = typeof unit?.text === 'string' && unit.text.trim() ? rigidFaqIssue(unit.text, context) : 'passo vazio';
-          if (issue) { pending.push(`${task.tarefa}: ${issue}`); return false; }
-          return true;
+        if (faqTasksWithoutFacts(context.request, context.screenFacts).some((name) => fold(name) === fold(heading))) {
+          pending.push(`tarefa sem fatos de tela: ${heading}`);
+          return [];
+        }
+        const steps = task.passos.flatMap((unit) => {
+          const text = typeof unit?.text === 'string' ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
+          const issue = text ? rigidFaqIssue(text, context) : 'passo vazio';
+          if (issue) { pending.push(`${task.tarefa}: ${issue}`); return []; }
+          return [{ ...unit, text }];
         });
         if (!steps.length && task.passos.length) pending.push(`tarefa sem passo válido: ${task.tarefa}`);
         return steps.length ? [{ tarefa: heading, passos: steps }] : [];
       });
       continue;
     }
-    kept[key] = (sections?.[key] ?? []).filter((unit) => {
-      const issue = typeof unit?.text === 'string' && unit.text.trim() ? rigidFaqIssue(unit.text, context) : 'frase vazia';
-      if (issue) { pending.push(`${FREE_FAQ_SECTIONS[key]}: ${issue}`); return false; }
-      return true;
+    kept[key] = (sections?.[key] ?? []).flatMap((unit) => {
+      const text = typeof unit?.text === 'string' ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
+      const issue = text ? rigidFaqIssue(text, context) : 'frase vazia';
+      if (issue) { pending.push(`${FREE_FAQ_SECTIONS[key]}: ${issue}`); return []; }
+      return [{ ...unit, text }];
     });
   }
   if (!kept.passos.length) blocking.push('passos ausentes');
@@ -567,7 +588,7 @@ export async function judgeClaims(sections, context, provider) {
 export function renderFreeFaqSections(sections) {
   return Object.entries(FREE_FAQ_SECTIONS).flatMap(([key, title]) => {
     if (key === 'passos') return (sections.passos ?? []).length ? [`## ${title}\n\n${sections.passos.map((task) =>
-      `### ${task.tarefa}\n\n${task.passos.map((unit, index) => `${index + 1}. ${unit.text}`).join('\n')}`).join('\n\n')}`] : [];
+      `### ${String(task.tarefa).replace(/^#+\s*/u, '').trim()}\n\n${task.passos.map((unit, index) => `${index + 1}. ${trimFaqLabels(unit.text)}`).join('\n')}`).join('\n\n')}`] : [];
     const units = sections[key] ?? [];
     return units.length ? [`## ${title}\n\n${units.map((unit) => key === 'casosDeUso' ? `- ${unit.text}` : unit.text).join('\n\n')}`] : [];
   }).join('\n\n');
