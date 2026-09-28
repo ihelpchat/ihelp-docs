@@ -111,6 +111,15 @@ test('nota mista preserva assunto independente e remove a frase de cabeçalho', 
   assert.doesNotMatch(result.articles[0].body, /Total-Pages conta os contatos filtrados/u);
 });
 
+test('nota mista separada por ponto e vírgula mantém a orientação independente', async () => {
+  const mixed = structuredClone(output);
+  mixed.articles[0].notas[2].text = 'Total-Pages conta os contatos filtrados; a consulta aceita filtros combinados.';
+  const { result } = await generate([mixed]);
+  assert.equal(result.status, 'ready', result.summary);
+  assert.match(result.articles[0].body, /a consulta aceita filtros combinados/u);
+  assert.doesNotMatch(result.articles[0].body, /Total-Pages conta os contatos filtrados/u);
+});
+
 test('cabeçalho inventado é recusado mesmo quando tem formato válido', async () => {
   const invalid = structuredClone(output);
   invalid.articles[0].responseHeaders[0].name = 'X-Admin-Override';
