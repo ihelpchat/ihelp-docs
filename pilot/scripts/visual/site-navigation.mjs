@@ -42,6 +42,9 @@ try {
       assert.ok(metrics.body?.font >= 16, `${name}: corpo ${metrics.body?.font}px < 16px`);
       assert.ok(metrics.search?.width >= (name !== 'mobile' ? 150 : 36), `${name}: busca não visível`);
       if (name !== 'mobile') {
+        assert.equal(metrics.searchText?.text,
+          process.env.NEXT_PUBLIC_ASSISTANT_URL ? 'Buscar ou perguntar' : 'Buscar na documentação',
+          `${name}: rótulo da busca inesperado`);
         assert.ok(metrics.searchText?.width > 70, 'desktop: texto da busca oculto');
         assert.ok(metrics.searchText?.width + 0.5 >= metrics.searchText?.scrollWidth,
           `desktop: placeholder cortado (${metrics.searchText?.width}px < ${metrics.searchText?.scrollWidth}px)`);
