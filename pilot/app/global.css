@@ -361,11 +361,12 @@ button {
 
 .ih-header-search {
   display: flex;
-  flex: 0 0 234px;
+  flex: 0 0 auto;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  max-width: 234px;
+  width: max-content;
+  max-width: 260px;
   height: 34px;
   padding: 0 10px 0 11px;
   color: var(--ih-slate-500);
