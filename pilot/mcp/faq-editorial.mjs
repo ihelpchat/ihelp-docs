@@ -128,6 +128,11 @@ const citeOf = ({ repository, path, lineStart, lineEnd, sha }) =>
 const requestedFaqTaskText = (request = {}) => fold([
   request.topic, request.description, request.details,
 ].filter(Boolean).join(' '));
+const requestedFaqOperationalText = (request = {}) => fold([
+  request.topic,
+  String(request.description ?? '').replace(/^\s*criar\s+(?:a\s+)?(?:página|faq|guia|documentação)\b/iu, ''),
+  request.details,
+].filter(Boolean).join(' '));
 
 // The direct answer is assembled from requested tasks backed by screen facts.
 export function deterministicFaqAnswer(request = {}, screenFacts = []) {
@@ -180,7 +185,7 @@ const FAQ_TASKS = [
 ];
 
 export function faqTasksWithoutFacts(request = {}, screenFacts = []) {
-  const asked = requestedFaqTaskText(request);
+  const asked = requestedFaqOperationalText(request);
   return FAQ_TASKS.flatMap(([task, requested, visible]) => requested.test(asked)
     && !screenFacts.some((fact) => fact.text && visible.test(fold(`${fact.text} ${fact.subject ?? ''}`))
       && ['action', 'field', 'upload', 'destination', 'text'].includes(fact.kind))
@@ -188,7 +193,7 @@ export function faqTasksWithoutFacts(request = {}, screenFacts = []) {
 }
 
 export function missingFaqTaskSteps(request = {}, screenFacts = [], steps = []) {
-  const asked = requestedFaqTaskText(request);
+  const asked = requestedFaqOperationalText(request);
   return FAQ_TASKS.flatMap(([task, requested, visible]) => {
     if (!requested.test(asked)) return [];
     const relevant = screenFacts.filter((fact) => fact.text && visible.test(fold(`${fact.text} ${fact.subject ?? ''}`))
@@ -202,14 +207,15 @@ export function missingFaqTaskSteps(request = {}, screenFacts = [], steps = []) 
 }
 
 export function missingFreeFaqTaskSteps(request = {}, screenFacts = [], tasks = []) {
-  const asked = requestedFaqTaskText(request);
+  const asked = requestedFaqOperationalText(request);
   return FAQ_TASKS.flatMap(([task, requested, visible]) => {
     if (!requested.test(asked)) return [];
     const relevant = screenFacts.filter((fact) => fact.text && visible.test(fold(`${fact.text} ${fact.subject ?? ''}`))
       && ['action', 'field', 'upload', 'destination', 'text'].includes(fact.kind));
-    if (!relevant.length) return [];
     const covered = tasks.some((entry) => requested.test(fold(entry.tarefa ?? ''))
-      && entry.passos?.some((step) => relevant.some((fact) => hasLabel(step.text ?? '', fact.text))));
+      && entry.passos?.some((step) => relevant.length
+        ? relevant.some((fact) => hasLabel(step.text ?? '', fact.text))
+        : String(step.text ?? '').trim().length > 0));
     return covered ? [] : [`tarefa sem passo: ${task}`];
   });
 }
@@ -522,10 +528,14 @@ function rigidFaqIssue(text, context) {
   const labelKey = (value) => fold(String(value).replace(/[“”"']/gu, '').trim());
   const known = new Set((context.screenFacts ?? []).map((fact) => labelKey(fact.text)));
   const pages = new Set((context.existing ?? []).map((page) => labelKey(page.title)));
+  const citedPages = (context.existing ?? []).filter((page) => page.title
+    && (String(text).includes(page.title) || page.path && String(text).includes(page.path)));
   for (const label of labels) {
     const before = String(text).slice(0, String(text).indexOf(`**${label}**`));
     const pageReference = pages.has(labelKey(label)) && /\b(?:consulte|veja|leia|guia|página)\b/iu.test(before.slice(-100));
-    if (!known.has(labelKey(label)) && !pageReference) return `rótulo inexistente: ${label}`;
+    const publishedLabel = citedPages.some((page) => [...String(page.body ?? '').matchAll(/\*\*([^*\n]+)\*\*/gu)]
+      .some((match) => labelKey(match[1]) === labelKey(label)));
+    if (!known.has(labelKey(label)) && !pageReference && !publishedLabel) return `rótulo inexistente: ${label}`;
   }
   const outsideLabels = String(text).replace(/\*\*[^*\n]+\*\*/gu, ' ');
   if (destructiveVerbs(outsideLabels).length) return 'ação destrutiva fora de rótulo da tela';
@@ -554,7 +564,10 @@ export function validateFreeFaqSections(sections, context = {}) {
         const headingIssue = !/^[\p{L}\p{N}() ,\/-]{1,80}$/u.test(heading)
           ? 'título de tarefa inválido' : rigidFaqIssue(heading, context);
         if (headingIssue) { pending.push(`${heading}: ${headingIssue}`); return []; }
-        if (faqTasksWithoutFacts(context.request, context.screenFacts).some((name) => fold(name) === fold(heading))) {
+        const citedPublishedPage = task.passos.some((unit) => (context.existing ?? []).some((page) =>
+          page.title && (String(unit?.text ?? '').includes(page.title)
+            || page.path && String(unit?.text ?? '').includes(page.path))));
+        if (!citedPublishedPage && faqTasksWithoutFacts(context.request, context.screenFacts).some((name) => fold(name) === fold(heading))) {
           pending.push(`tarefa sem fatos de tela: ${heading}`);
           return [];
         }
