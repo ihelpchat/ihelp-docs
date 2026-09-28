@@ -118,7 +118,7 @@ test('conferir placeholder pede nova tentativa para preencher o campo', async ()
     support: { categories: [], rules: [] }, coverage: [], pending: [], businessContext: [], faqStyleExamples: [] };
   const reply = (acao) => ({ status: 'ready', summary: 'FAQ.', questions: [], articles: [{
     path: 'docs/robo', title: 'Robô de atendimento', description: 'Resumo.', source: 'produto', contentType: 'faq',
-    productActions: [], assistantQuestion: 'Como criar e publicar um robô?',
+    productActions: [], assistantQuestion: 'Como usar a tela Bot?',
     sections: { resposta: [], paraQueServe: [], quandoUsar: [], exemplo: [], duvidas: [], erros: [], suporte: [],
       passos: [{ acao: 'abrir', fato: 'f1' }, { acao: 'clicar', fato: 'f2' }, { acao, fato: 'f3' },
         { acao: 'clicar', fato: 'f4' }, { acao: 'clicar', fato: 'f5' }, { acao: 'conferir', fato: 'f6' }] },
@@ -137,4 +137,5 @@ test('conferir placeholder pede nova tentativa para preencher o campo', async ()
   assert.equal(result.status, 'ready', JSON.stringify(result.questions));
   assert.match(result.articles[0].body, /Preencha \*\*Digite o título do robô\*\*/u);
   assert.doesNotMatch(result.articles[0].body, /Confira \*\*Digite o título do robô\*\*/u);
+  assert.equal(result.articles[0].assistantQuestion, 'Como usar a tela Robôs?');
 });
