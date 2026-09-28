@@ -81,7 +81,7 @@ test('página com SQL não fica ready nem pode ser gravada', async () => {
 test('plano, pacote e guia usam o único guard na saída do provider', async () => {
   const source = await readFile(new URL('./content-ai-service.mjs', import.meta.url), 'utf8');
   assert.equal((source.match(/client\.responses\.create\(/gu) ?? []).length, 1);
-  assert.equal((source.match(/modelResponse\(/gu) ?? []).length, 4);
+  assert.equal((source.match(/modelResponse\(/gu) ?? []).length, 5);
   assert.equal((source.match(/guardModelOutput\(/gu) ?? []).length, 1);
   for (const operation of [
     () => planContent(root, request, { productContext: context, client: client(plan(sql)) }),

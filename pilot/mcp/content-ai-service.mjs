@@ -542,6 +542,71 @@ function publicEndpointId(endpoint) {
   return `${endpoint.verb} ${endpoint.route.replace(/^\/api\/v\d+/iu, '')}`;
 }
 
+async function generateApiPages(options, payload, productContext, selectable) {
+  const articles = [];
+  const pending = [];
+  let summary;
+  let model;
+  const state = options.apiCallState;
+  for (const endpoint of selectable) {
+    const id = publicEndpointId(endpoint);
+    if (state.cache.has(id) && !options.apiRetryEndpoints?.has(id)
+      && !(selectable.length === 1 && options.retryIssues)) {
+      articles.push(state.cache.get(id));
+      continue;
+    }
+    const schema = structuredClone(payload.text.format.schema);
+    schema.properties.articles.items.properties.endpoint.enum = [id];
+    schema.properties.articles.items.properties.responseDescriptions.items.properties.name = {
+      type: 'string', enum: (endpoint.responseFields ?? []).map((field) => responseFieldPath(endpoint, field)),
+    };
+    schema.properties.articles.items.properties.parameterDescriptions.items.properties.name = {
+      type: 'string', enum: endpoint.parameters.map((item) => item.name),
+    };
+    const input = structuredClone(payload.input);
+    input[0].content += ' Gere exatamente um artigo para o endpoint indicado nos fatos desta chamada. Não inclua páginas irmãs.';
+    input[1].content = input[1].content.replace(
+      /FATOS ESTRUTURADOS DE ENDPOINTS \(somente public=true é gerável\):\n[^\n]+/u,
+      `FATOS ESTRUTURADOS DE ENDPOINTS (somente public=true é gerável):\n${JSON.stringify([endpoint])}`);
+    input[1].content += `\nREFS POSSÍVEIS PARA PÁGINAS IRMÃS (somente referência, não gerar):\n${JSON.stringify(selectable.filter((item) => item !== endpoint)
+      .map((item) => ({ endpoint: publicEndpointId(item), route: item.route,
+        names: [...(item.parameters ?? []).map((field) => field.name), ...(item.responseFields ?? []).map((field) => field.name)] })))}`;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (state.used >= state.limit || (state.perPage.get(id) ?? 0) >= 2) {
+        pending.push(`${id}: teto global de chamadas atingido`);
+        break;
+      }
+      state.used++;
+      state.perPage.set(id, (state.perPage.get(id) ?? 0) + 1);
+      const response = await modelResponse(options, { ...payload, text: { ...payload.text,
+        format: { ...payload.text.format, schema } }, input }, productContext);
+      model = response.model;
+      const parsed = parseModelJson(response);
+      if (!parsed.ok) {
+        if (attempt === 1) pending.push(`${id}: ${parsed.reason}`);
+        continue;
+      }
+      // Older test providers return a package despite the single-page schema.
+      if (options.client && !options.budget && parsed.value.articles?.length > 1)
+        return { parsed: parsed.value, pending, model };
+      if (parsed.value.status !== 'ready' || (selectable.length === 1 && parsed.value.articles?.[0]?.endpoint !== id))
+        return { parsed: parsed.value, pending, model };
+      if (parsed.value.status !== 'ready' || !Array.isArray(parsed.value.articles)
+        || parsed.value.articles.length !== 1 || parsed.value.articles[0]?.endpoint !== id) {
+        if (attempt === 1) pending.push(`${id}: resposta de página inválida`);
+        continue;
+      }
+      articles.push(parsed.value.articles[0]);
+      state.cache.set(id, parsed.value.articles[0]);
+      summary ??= parsed.value.summary;
+      break;
+    }
+  }
+  return { parsed: { status: articles.length ? 'ready' : 'needs_information',
+    summary: selectable.length === 1 ? summary ?? articles.map((article) => article.description)
+      : articles.map((article) => article.description), questions: [], articles }, pending, model };
+}
+
 function groundingPending(context) {
   const missingCitation = context.pending?.filter((item) => item.startsWith('endpoint citado não encontrado')) ?? [];
   if (missingCitation.length) return { status: 'needs_information', summary: missingCitation.join('; '),
@@ -649,6 +714,8 @@ async function generateContentPackageCore(root, request, options = {}) {
   const explicit = request.module === 'api' && explicitEndpointsFrom(request).length > 0;
   const selectable = request.module === 'api' ? productContext.endpoints.filter((item) => item.public && (explicit ? item.explicit : item.documented)) : [];
   if (request.module === 'api' && !selectable.length) return withPending(apiPending('endpoint não público: confirmar'));
+  const apiCallState = options.apiCallState ?? { used: 0, limit: 2 * selectable.length + 2, perPage: new Map(), cache: new Map() };
+  options = { ...options, apiCallState };
   const fieldPaths = [...new Set(selectable.flatMap((endpoint) =>
     (endpoint.responseFields ?? []).map((field) => responseFieldPath(endpoint, field))))];
   const parameterNames = [...new Set(selectable.flatMap((endpoint) => endpoint.parameters.map((item) => item.name)))];
@@ -659,7 +726,7 @@ async function generateContentPackageCore(root, request, options = {}) {
   const apiSchema = { ...API_PACKAGE_SCHEMA, properties: { ...API_PACKAGE_SCHEMA.properties,
     articles: { type: 'array', items: { ...API_ARTICLE_SCHEMA, properties: { ...API_ARTICLE_SCHEMA.properties,
       endpoint: { type: 'string', enum: selectable.map(publicEndpointId) }, responseDescriptions, parameterDescriptions } } } } };
-  const response = await modelResponse(options, baseRequest('pacote_documentacao', request.module === 'api' ? apiSchema : PACKAGE_SCHEMA, [
+  const payload = baseRequest('pacote_documentacao', request.module === 'api' ? apiSchema : PACKAGE_SCHEMA, [
     {
       role: 'developer',
       content: [
@@ -677,7 +744,10 @@ async function generateContentPackageCore(root, request, options = {}) {
     },
     { role: 'user', content: redactSensitiveData(`${requestText(request, existing, productContext)}\n\nPlano aprovado:\n${JSON.stringify(planForPrompt)}`) },
     ...(options.retryIssues ? [retryPrompt(options.retryIssues)] : []),
-  ], options), productContext);
+  ], options);
+  const apiPages = request.module === 'api' ? await generateApiPages(options, payload, productContext, selectable) : null;
+  const response = apiPages ? { model: apiPages.model, output_text: JSON.stringify(apiPages.parsed) }
+    : await modelResponse(options, payload, productContext);
   const modelJson = parseModelJson(response);
   if (!modelJson.ok) return withPending(apiPending(modelJson.reason));
   const parsed = modelJson.value;
@@ -700,9 +770,11 @@ async function generateContentPackageCore(root, request, options = {}) {
     const proseProblems = [];
     const groundingProblems = [];
     const missingParameterDescriptions = [];
+    const apiRetryEndpoints = new Set();
     for (const prose of parsed.articles) {
       const endpoint = selectable.find((item) => publicEndpointId(item) === prose.endpoint);
       if (!endpoint || apiSchemaIssue(prose)) continue;
+      const before = proseProblems.length + groundingProblems.length + missingParameterDescriptions.length;
       const units = [prose.description, prose.intro, ...prose.notas];
       proseProblems.push(...proseIssues({ title: prose.title, description: '', intro: '', notas: [] }, endpoint, selectable));
       for (const unit of units) {
@@ -724,15 +796,23 @@ async function generateContentPackageCore(root, request, options = {}) {
         if (!prose.parameterDescriptions?.some((item) => item.name === parameter.name))
           missingParameterDescriptions.push('parâmetro sem descrição: ' + parameter.name);
       }
+      if (proseProblems.length + groundingProblems.length + missingParameterDescriptions.length > before)
+        apiRetryEndpoints.add(prose.endpoint);
     }
     proseProblems.push(...proseIssues({ title: safePackage.summary, description: '', intro: '', notas: [] },
       { parameters: [], responseFields: selectable.flatMap((item) => item.responseFields ?? []) }, selectable, [], true));
-    for (const unit of parsed.summary) proseProblems.push(...referenceIssues(unit, selectable, parsed.articles));
-    groundingProblems.push(...apiUnitIssues(parsed.summary, context));
+    for (const [index, unit] of parsed.summary.entries()) {
+      const before = proseProblems.length + groundingProblems.length;
+      proseProblems.push(...referenceIssues(unit, selectable, parsed.articles));
+      groundingProblems.push(...apiUnitIssues([unit], context));
+      if (proseProblems.length + groundingProblems.length > before)
+        apiRetryEndpoints.add(parsed.articles[Math.min(index, parsed.articles.length - 1)]?.endpoint);
+    }
     const retryIssues = [...new Set([...proseProblems, ...groundingProblems,
       ...(!options.retryIssues ? missingParameterDescriptions : [])])];
     if (retryIssues.length) {
-      if (!options.retryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, retryIssues });
+      if (!options.retryIssues) return generateContentPackage(root, request, { ...options, productContext, plan,
+        retryIssues, apiRetryEndpoints });
       return withPending(proseProblems.length ? apiPending(retryIssues.join('; ')) : evidencePending(retryIssues));
     }
     const articles = [];
@@ -802,10 +882,11 @@ async function generateContentPackageCore(root, request, options = {}) {
       factsByPath.set(article.path, endpoint);
       articles.push(article);
     }
-    const withoutPage = selectable.map(publicEndpointId).find((id) => !usedEndpoints.has(id));
+    const withoutPage = selectable.map(publicEndpointId).find((id) => !usedEndpoints.has(id)
+      && !apiPages?.pending.some((item) => item.startsWith(`${id}:`)));
     if (withoutPage) return withPending(apiPending(`endpoint sem página: ${withoutPage}`));
     return finalizeGeneratedPages(withPending({ ...safePackage, articles, discardedQuestions: plan.discardedQuestions ?? [],
-      pending: [...new Set([...(productContext.pending ?? []), ...pending])], existing, model: response.model }), request, factsByPath);
+      pending: [...new Set([...(productContext.pending ?? []), ...pending, ...(apiPages?.pending ?? [])])], existing, model: response.model }), request, factsByPath);
   }
   if (parsed.articles.some((article) => article.source === 'api' || /^api\//u.test(article.path ?? ''))) {
     return withPending(apiPending('página API exige fatos estruturados e módulo api'));

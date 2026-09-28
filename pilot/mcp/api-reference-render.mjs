@@ -1,26 +1,11 @@
 import { syntheticResponseExample, valueFor } from './api-synthetic-example.mjs';
+import { publicType, publicTypes } from './api-public-types.mjs';
 const safe = (value) => String(value ?? '').replace(/[<>{}"`]/gu, '');
 export { valueFor } from './api-synthetic-example.mjs';
-const publicTypes = new Map([
-  ['DateTime', 'data e hora'], ['int', 'número'], ['long', 'número'], ['decimal', 'número'],
-  ['bool', 'verdadeiro ou falso'], ['string', 'texto'], ['Guid', 'texto'],
-]);
-const publicType = (raw) => {
-  const type = String(raw ?? '').trim();
-  const optional = type.endsWith('?');
-  const base = optional ? type.slice(0, -1) : type;
-  const collection = base.match(/^(?:List|IEnumerable|ICollection|IList)<\s*(.+)\s*>$|^(.+)\[\]$/u);
-  let label;
-  if (collection) {
-    const item = publicType(collection[1] ?? collection[2]).replace(/ \(opcional\)$/u, '');
-    label = `lista de ${item === 'objeto' ? 'objetos' : item === 'número' ? 'números' : item}`;
-  } else label = publicTypes.get(base) ?? (['double', 'float', 'short', 'number'].includes(base) ? 'número' : 'objeto');
-  return `${label}${optional ? ' (opcional)' : ''}`;
-};
 export function internalTypeIssue(text) {
-  const type = String(text).match(/\b(?:List|IEnumerable)\s*<\s*[A-Za-z_]\w*\??\s*>\??|\b(?:DateTime|int|long|decimal|bool|string|Guid)\??(?=$|[^\p{L}\p{N}_])/gu)?.[0];
+  const type = String(text).match(/\b(?:List|IEnumerable)\s*<\s*[A-Za-z_]\w*\??\s*>\??|\b(?:DateTimeOffset|DateTime|DateOnly|TimeSpan|TimeOnly|int|long|decimal|bool|string|Guid)\??(?=$|[^\p{L}\p{N}_])/gu)?.[0];
   if (!type) return null;
-  const kind = /^(?:List|IEnumerable)\s*</u.test(type) ? 'lista' : publicTypes.get(type.replace(/\?$/u, ''));
+  const kind = /^(?:List|IEnumerable)\s*</u.test(type) ? 'lista' : publicTypes.get(type.replace(/\?$/u, ''))?.label;
   return `tipo interno na prosa: ${type}; use a descrição pública (${kind ?? 'data e hora, número, texto, verdadeiro ou falso, lista'})`;
 }
 export const isSyntheticNumericExample = (value) => value === valueFor({ name: 'phone', type: 'string' });
@@ -71,7 +56,7 @@ export function renderApiReference(endpoint, examples, page) {
   if (parameters.length && paramTag) {
     const title = parameters.every((item) => item.in === 'route') ? heading('parâmetros de rota', 'Parâmetros de rota') : heading('parâmetros', 'Parâmetros');
     add('parâmetros', `## ${title}\n\n<Params>\n${parameters.map((item) => {
-      const publicType = publicTypes.get(String(item.type).replace(/\?$/u, ''));
+      const publicType = publicTypes.get(String(item.type).replace(/\?$/u, ''))?.label;
       const array = /^(?:List|IEnumerable)\s*<\s*(int|long|double|decimal|float|short|number)\s*>$|^(?:int|long|double|decimal|float|short|number)\[\]$/iu.test(item.type);
       const type = array ? 'array' : publicType === 'número' || /^(?:double|float|short)$/iu.test(item.type) ? 'number'
         : publicType === 'verdadeiro ou falso' || /^boolean$/iu.test(item.type) ? 'boolean' : 'string';

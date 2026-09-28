@@ -1,4 +1,6 @@
 // Reuse the same synthetic values that M5.56 checks in API request examples.
+import { publicTypes } from './api-public-types.mjs';
+
 export function valueFor(parameter, { typed = false } = {}) {
   const name = String(parameter.name ?? '');
   const type = String(parameter.type ?? 'string').replace(/\?$/u, '');
@@ -17,10 +19,13 @@ export function valueFor(parameter, { typed = false } = {}) {
         : String(parameter.default);
   if (/^(?:int|long|double|decimal|float|short|number)$/iu.test(type)) return typed ? 1 : '1';
   if (/^bool(?:ean)?$/iu.test(type)) return typed ? false : 'false';
+  const temporal = publicTypes.get(type)?.example;
+  if (temporal) return temporal;
   if (typed && !/^(?:string|Guid|DateTime(?:Offset)?)$/iu.test(type)) return {};
   if (/(?:^|_)(?:idref)(?:$|_)/iu.test(name) || /idref$/iu.test(name)) return 'id-exemplo-1';
   if (/(?:^|_)(?:id|uuid|contactid)(?:$|_)/iu.test(name) || /id$/iu.test(name)) return 'id-exemplo-1';
-  if (/(?:phone|telefone|celular|whatsapp|numero|número)/iu.test(name)) return '5500000000000';
+  if (/(?:phone|telefone|celular|whatsapp)/iu.test(name)) return '5500000000000';
+  if (/^(?:numero|número|number|num)$/iu.test(name)) return parameter.addressSiblings ? '123' : '5500000000000';
   if (/email|e-mail/iu.test(name)) return 'pessoa@exemplo.com';
   if (/^(?:data|date)|atualizadoEm|createdAt|updatedAt/iu.test(name) || /^DateTime(?:Offset)?$/iu.test(type))
     return /^DateTime(?:Offset)?$/iu.test(type) ? '2026-09-27T00:00:00Z' : '27/09/2026';
@@ -32,9 +37,13 @@ export function valueFor(parameter, { typed = false } = {}) {
 export function syntheticResponseExample(endpoint) {
   if (!endpoint.responseFields?.length) return null;
   const fields = {};
+  const addressName = /^(?:rua|logradouro|endereco|endereço|bairro|cidade|cep|complemento|street|city|zip)$/iu;
+  const groupOf = (field) => String(field.path ?? field.name).replace(/^dados(?:\[\])?\./u, '').replace(/^\[\]\./u, '').split('.').slice(0, -1).join('.');
   for (const field of endpoint.responseFields) {
     const type = String(field.type ?? 'string').replace(/\?$/u, '');
-    const value = valueFor(field, { typed: true });
+    const addressSiblings = endpoint.responseFields.some((other) => other !== field && groupOf(other) === groupOf(field)
+      && addressName.test(other.name));
+    const value = valueFor({ ...field, addressSiblings }, { typed: true });
     const path = String(field.path ?? field.name).replace(/^dados(?:\[\])?\./u, '').replace(/^\[\]\./u, '').split('.');
     let target = fields;
     for (const part of path.slice(0, -1)) {
