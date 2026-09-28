@@ -106,6 +106,7 @@ function addFact(facts, filePath, file, node, kind, values) {
   facts.push(fact);
 }
 function schemaFields(schema, file, path) {
+  const zod = schema && ts.isCallExpression(schema) && /^z\.(?:object|objectOf)$/u.test(schema.expression.getText(file));
   if (schema && ts.isCallExpression(schema) && /^(?:yup|z)\.(?:object|objectOf)$/u.test(schema.expression.getText(file)))
     schema = schema.arguments[0];
   if (!schema || !ts.isObjectLiteralExpression(schema)) return new Map();
@@ -116,17 +117,24 @@ function schemaFields(schema, file, path) {
     if (!/^[\w.]{1,80}$/u.test(field)) continue;
     const rule = { required: 'unknown', source: `${path}:${lineOf(file, property)}` };
     let expression = property.initializer;
+    let presenceSeen = false;
     while (ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression)) {
       const method = expression.expression.name.text;
-      if (['optional', 'nullable', 'notRequired'].includes(method)) rule.required = false;
-      if (method === 'required' || (method === 'min' && numeric(expression.arguments[0]) === 1)) {
+      if (!presenceSeen && ['optional', 'nullable', 'notRequired', 'nullish'].includes(method)) {
+        rule.required = false;
+        presenceSeen = true;
+      }
+      if (!presenceSeen && (['required', 'nonNullable', 'defined'].includes(method)
+        || (method === 'min' && numeric(expression.arguments[0]) === 1))) {
         rule.required = true;
         rule.message = literal(expression.arguments[method === 'min' ? 1 : 0]) ?? rule.message;
+        presenceSeen = true;
       }
       if (['min', 'max', 'email', 'matches'].includes(method))
         rule[method] = method === 'email' ? true : numeric(expression.arguments[0]) ?? literal(expression.arguments[0]) ?? true;
       expression = expression.expression.expression;
     }
+    if (zod && !presenceSeen) rule.required = true;
     rules.set(field, rule);
   }
   return rules;
@@ -211,7 +219,8 @@ function collect(filePath, source, facts, entryName) {
   const root = entryName && (found.get(entryName) ?? (typeof defaultExport === 'string' ? found.get(defaultExport) : defaultExport));
   const visited = new Set();
   let owner = null, title = null;
-  let fieldRules = new Map();
+  let forms = [];
+  let controllerFields = new Map();
   const reachable = [];
   const emit = (node, kind, values) => addFact(facts, filePath, file, node, kind,
     { ...values, owner, ...(title ? { ownerTitle: title } : {}), subject: subjectOf(owner, title, filePath) });
@@ -301,29 +310,90 @@ function collect(filePath, source, facts, entryName) {
   function rulesFor(node) {
     const component = ts.isVariableDeclaration(node) ? node.initializer : node;
     const body = component?.body;
-    if (!body) return new Map();
-    const linked = new Set();
+    if (!body) return [];
+    const formList = [];
+    controllerFields = new Map();
+    const controllers = [];
+    const schemaOf = (call) => {
+      const options = call.arguments[0];
+      if (!options || !ts.isObjectLiteralExpression(options)) return null;
+      const property = options.properties.find((item) => ts.isPropertyAssignment(item)
+        && ['resolver', 'validationSchema'].includes(item.name.getText(file)));
+      if (!property) return null;
+      let value = property.initializer;
+      if (ts.isCallExpression(value) && /^(?:yupResolver|zodResolver)$/u.test(value.expression.getText(file))) value = value.arguments[0];
+      return ts.isIdentifier(value) ? value.text : null;
+    };
     const inspect = (child) => {
       if (child !== body && (ts.isArrowFunction(child) || ts.isFunctionExpression(child)
         || ts.isFunctionDeclaration(child))) return;
-      if (ts.isCallExpression(child) && /^(?:yupResolver|zodResolver)$/u.test(child.expression.getText(file))
-        && ts.isIdentifier(child.arguments[0])) linked.add(child.arguments[0].text);
-      if (ts.isPropertyAssignment(child) && child.name.getText(file) === 'validationSchema'
-        && ts.isIdentifier(child.initializer)) linked.add(child.initializer.text);
-      if (ts.isJsxAttribute(child) && child.name.text === 'validationSchema'
-        && ts.isJsxExpression(child.initializer) && ts.isIdentifier(child.initializer.expression))
-        linked.add(child.initializer.expression.text);
+      if (ts.isCallExpression(child) && /^(?:useForm|useFormik)$/u.test(child.expression.getText(file))) {
+        const schema = schemaOf(child);
+        if (schema) {
+          const form = { schema, registers: new Set(), controls: new Set() };
+          const declaration = child.parent;
+          if (ts.isVariableDeclaration(declaration)) {
+            if (ts.isIdentifier(declaration.name)) {
+              form.registers.add(`${declaration.name.text}.register`);
+              form.controls.add(`${declaration.name.text}.control`);
+            } else if (ts.isObjectBindingPattern(declaration.name)) for (const element of declaration.name.elements) {
+              const property = element.propertyName?.getText(file) ?? element.name.getText(file);
+              if (property === 'register') form.registers.add(element.name.getText(file));
+              if (property === 'control') form.controls.add(element.name.getText(file));
+            }
+          }
+          formList.push(form);
+        }
+      }
+      if (ts.isCallExpression(child) && child.expression.getText(file) === 'useController'
+        && ts.isVariableDeclaration(child.parent)) controllers.push(child.parent);
       ts.forEachChild(child, inspect);
     };
     inspect(body);
-    const rules = new Map();
-    for (const name of linked) {
-      const declaration = found.get(name);
-      let schema = declaration && ts.isVariableDeclaration(declaration) ? declaration.initializer : null;
-      if (!schema) { linkedImports.set(name, owner); continue; }
-      for (const [field, rule] of schemaFields(schema, file, filePath)) rules.set(field, rule);
+    for (const declaration of controllers) {
+      const options = declaration.initializer.arguments[0];
+      if (!options || !ts.isObjectLiteralExpression(options)) continue;
+      const property = (key) => options.properties.find((item) => ts.isPropertyAssignment(item)
+        && item.name.getText(file) === key)?.initializer;
+      const field = literal(property('name'));
+      const control = property('control')?.getText(file);
+      const matches = formList.filter((form) => form.controls.has(control));
+      if (!field || matches.length !== 1) continue;
+      if (ts.isIdentifier(declaration.name)) controllerFields.set(`${declaration.name.text}.field`, { name: field, schema: matches[0].schema });
+      if (ts.isObjectBindingPattern(declaration.name)) for (const element of declaration.name.elements)
+        if ((element.propertyName?.getText(file) ?? element.name.getText(file)) === 'field')
+          controllerFields.set(element.name.getText(file), { name: field, schema: matches[0].schema });
     }
-    return rules;
+    return formList;
+  }
+  function schemaRule(name, field) {
+    const declaration = found.get(name);
+    const schema = declaration && ts.isVariableDeclaration(declaration) ? declaration.initializer : null;
+    if (!schema) return null;
+    return schemaFields(schema, file, filePath).get(field) ?? null;
+  }
+  function boundSchema(node, registerCall, controlled) {
+    if (controlled) return controlled.schema;
+    if (registerCall) {
+      const name = registerCall.expression.getText(file);
+      const matches = forms.filter((form) => form.registers.has(name));
+      return matches.length === 1 ? matches[0].schema : null;
+    }
+    const control = attr(node, 'control')?.initializer?.expression;
+    if (control) {
+      const name = control.getText(file);
+      const matches = forms.filter((form) => form.controls.has(name));
+      return matches.length === 1 ? matches[0].schema : null;
+    }
+    for (let parent = node.parent; parent; parent = parent.parent) {
+      if (!ts.isJsxElement(parent) || jsxName(parent.openingElement) !== 'Formik') continue;
+      const expression = attr(parent.openingElement, 'validationSchema')?.initializer?.expression;
+      return expression && ts.isIdentifier(expression) ? expression.text : null;
+    }
+    if (forms.length !== 1) return null;
+    for (let parent = node.parent; parent; parent = parent.parent)
+      if (ts.isJsxElement(parent) && jsxName(parent.openingElement) === 'form') return forms[0].schema;
+    return null;
   }
   function visit(node) {
     if (ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)
@@ -383,13 +453,19 @@ function collect(filePath, source, facts, entryName) {
       if (Number.isSafeInteger(maxSize) && maxSize > 0)
         addFact(facts, filePath, file, attr(node, 'maxSize'), 'uploadLimit',
           { maxBytes: maxSize, owner: tag, subject: subjectOf(owner, title, filePath) });
-      const register = attr(node, 'register')?.initializer?.expression;
-      const fieldName = attrValue(node, 'name') ?? (register && ts.isCallExpression(register) ? literal(register.arguments[0]) : null);
+      const register = attr(node, 'register')?.initializer?.expression
+        ?? node.attributes.properties.find((item) => ts.isJsxSpreadAttribute(item)
+          && ts.isCallExpression(item.expression))?.expression;
+      const controlled = node.attributes.properties.filter(ts.isJsxSpreadAttribute)
+        .map((item) => controllerFields.get(item.expression.getText(file))).find(Boolean);
+      const fieldName = attrValue(node, 'name') ?? (register && ts.isCallExpression(register) ? literal(register.arguments[0]) : null)
+        ?? controlled?.name;
       if (FIELD.test(tag) && fieldName) {
         const requiredAttr = attr(node, 'required');
         const explicitFalse = requiredAttr?.initializer && ts.isJsxExpression(requiredAttr.initializer)
           && requiredAttr.initializer.expression?.kind === ts.SyntaxKind.FalseKeyword;
-        const rule = fieldRules.get(fieldName);
+        const schema = boundSchema(node, register && ts.isCallExpression(register) ? register : null, controlled);
+        const rule = schema ? schemaRule(schema, fieldName) : null;
         const controllerRules = tag === 'Controller' ? attr(node, 'rules')?.initializer?.expression : null;
         const controllerRequired = controllerRules && ts.isObjectLiteralExpression(controllerRules)
           ? controllerRules.properties.find((item) => ts.isPropertyAssignment(item) && item.name.getText(file) === 'required') : null;
@@ -399,13 +475,20 @@ function collect(filePath, source, facts, entryName) {
         const required = explicitFalse ? false : explicitTrue ? true
           : controllerRequired ? (controllerRequired.initializer.kind === ts.SyntaxKind.FalseKeyword ? false : true)
           : rule?.required ?? 'unknown';
-        emit(node, 'field', { name: fieldName,
+        const values = { name: fieldName,
           ...(attrValue(node, 'label') ? { text: attrValue(node, 'label') } : {}), required,
           ...(controllerRequired && literal(controllerRequired.initializer) ? { message: literal(controllerRequired.initializer) } : {}),
           ...(rule?.message ? { message: rule.message } : {}),
           ...Object.fromEntries(['min', 'max', 'email', 'matches'].filter((key) => rule?.[key] !== undefined).map((key) => [key, rule[key]])),
           ...(rule ? { validationSource: rule.source } : {}),
-          type: attrValue(node, 'type') ?? 'text' });
+          ...(!schema && required === 'unknown' ? { note: 'vínculo não provado' } : {}),
+          type: attrValue(node, 'type') ?? 'text' };
+        const previous = facts.length;
+        emit(node, 'field', values);
+        if (schema && !found.has(schema) && facts.length > previous) {
+          if (!linkedImports.has(schema)) linkedImports.set(schema, new Set());
+          linkedImports.get(schema).add(facts.at(-1));
+        }
       }
     }
     if (ts.isCallExpression(node) && clean.slice(node.expression.getStart(file), node.expression.getEnd()).trim()) {
@@ -554,7 +637,7 @@ function collect(filePath, source, facts, entryName) {
     };
     inspectColumns(node);
     const trees = returnedTrees(node);
-    fieldRules = rulesFor(node);
+    forms = rulesFor(node);
     title = trees.map((tree) => ownerTitle(tree, file)).find(Boolean) ?? null;
     for (const tree of trees) visit(tree);
   }
@@ -588,7 +671,7 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
     const parsed = collect(path, source, localFacts, used);
     for (const [key, meta] of parsed.translationKeys) translationKeys.set(key, meta);
     if (!files.includes(path)) { files.push(path); code.push({ path, excerpt: source }); }
-    for (const [name, formOwner] of parsed.linkedImports) {
+    for (const [name, linkedFacts] of parsed.linkedImports) {
       const binding = [...parsed.imports].find(([, names]) => names.some((item) => item.local === name));
       const target = binding && resolveImport(path, binding[0], allowed);
       if (!target || files.length >= MAX_FILES) continue;
@@ -602,7 +685,7 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
         .flatMap((statement) => statement.declarationList.declarations)
         .find((item) => ts.isIdentifier(item.name) && item.name.text === exported);
       const rules = schemaFields(declaration?.initializer, importFile, target);
-      for (const fact of localFacts) if (fact.kind === 'field' && fact.owner === formOwner && rules.has(fact.name)) {
+      for (const fact of linkedFacts) if (rules.has(fact.name)) {
         const rule = rules.get(fact.name);
         if (fact.required === 'unknown') fact.required = rule.required;
         if (rule.message) fact.message = rule.message;
