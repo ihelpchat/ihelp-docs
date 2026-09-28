@@ -41,6 +41,38 @@ test('seção sem citação é omitida com pendência; quote não literal é rec
   assert.equal(falseSupport.sections.duvidas, undefined);
 });
 
+test('resposta sem citação é recusada mesmo sem palavras que exijam cobertura lexical', () => {
+  const sentence = 'Clique na tela.';
+  const context = { request: { description: sentence } };
+  const cited = validateFaqSections({ resposta: [unit(sentence, [
+    { source: 'pedido', quote: sentence },
+  ])] }, context);
+  assert.equal(cited.sections.resposta?.length, 1);
+
+  const uncited = validateFaqSections({ resposta: [unit(sentence, [])] }, context);
+  assert.equal(uncited.sections.resposta, undefined);
+  assert.deepEqual(uncited.blocking, ['resposta', 'passos']);
+  assert.ok(uncited.pending.includes('seção sem fonte válida: Resposta direta'));
+  assert.ok(!uncited.pending.some((item) => item.startsWith('palavra sem fonte:')));
+});
+
+test('quote literal de negócio é recusado quando o path sai da pasta permitida', () => {
+  const sentence = 'Organizar clientes evita retrabalho.';
+  const context = { business: [
+    { path: 'business-context/publico.md', body: sentence },
+    { path: '../private.md', body: sentence },
+  ] };
+  const check = (path) => validateFaqSections({ paraQueServe: [unit(sentence, [
+    { source: 'negocio', path, quote: sentence },
+  ])] }, context);
+  assert.equal(check('business-context/publico.md').sections.paraQueServe?.length, 1);
+
+  const outside = check('../private.md');
+  assert.equal(outside.sections.paraQueServe, undefined);
+  assert.ok(outside.pending.includes('seção sem fonte válida: Para que serve'));
+  assert.ok(!outside.pending.some((item) => item.startsWith('palavra sem fonte:')));
+});
+
 test('few-shot usa três páginas e reage à edição', async () => {
   const root = await mkdtemp(join(tmpdir(), 'faq-style-'));
   try {
