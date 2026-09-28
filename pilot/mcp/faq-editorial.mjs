@@ -1,7 +1,7 @@
 import { readFile, readdir, lstat, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { redactSensitiveData, containsSensitiveData } from './sensitive-data.mjs';
+import { redactSensitiveData, containsSensitiveData, sensitiveKinds } from './sensitive-data.mjs';
 import { valueFor } from './api-synthetic-example.mjs';
 import { FAQ_NEUTRAL_WORDS, FAQ_NEUTRAL_VERBS } from './faq-neutral-words.mjs';
 import { faqStem } from './faq-portuguese-stem.mjs';
@@ -228,7 +228,7 @@ export function classifyFaqQuestions(questions = [], _request = {}, screenFacts 
   return { blocking, pending };
 }
 
-export async function loadBusinessContext(pilotRoot, module, directory = process.env.BUSINESS_CONTEXT_DIR) {
+export async function loadBusinessContext(pilotRoot, module, directory = process.env.BUSINESS_CONTEXT_DIR, { log = () => {} } = {}) {
   if (!directory) return [];
   if (!(await stat(directory).catch(() => null))?.isDirectory()) return [];
   const names = await readdir(directory).catch(() => []);
@@ -240,8 +240,21 @@ export async function loadBusinessContext(pilotRoot, module, directory = process
     const absolute = join(directory, name);
     if (!(await lstat(absolute)).isFile()) continue;
     const body = await readFile(absolute, 'utf8');
-    if (!/^🟢\s*PÚBLICO\b/mu.test(body) || /🟡|🔴|\b(?:INTERNO|CONFIDENCIAL)\b/iu.test(body)
-      || containsSensitiveData(body, { detectOpaque: true })) continue;
+    if (!/^🟢\s*PÚBLICO\b/mu.test(body)) {
+      log(`Contexto ignorado: ${name} (sem cabeçalho público)`);
+      continue;
+    }
+    if (/🟡|🔴|\b(?:INTERNO|CONFIDENCIAL)\b/iu.test(body)) {
+      log(`Contexto ignorado: ${name} (conteúdo interno)`);
+      continue;
+    }
+    if (containsSensitiveData(body, { detectOpaque: true })) {
+      const kinds = sensitiveKinds(body, { detectOpaque: true });
+      const reason = kinds.internal ? 'host interno' : kinds.personal ? 'dado pessoal'
+        : kinds.credential ? 'segredo' : 'dado sensível';
+      log(`Contexto ignorado: ${name} (${reason})`);
+      continue;
+    }
     result.push({ path, module, body: redactSensitiveData(body) });
   }
   return result;
