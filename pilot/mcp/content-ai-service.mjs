@@ -79,6 +79,18 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint], refs = []
     .map((name) => name.toLocaleLowerCase('pt-BR')));
   const inlineNames = new Set([...parameterNames, ...fieldNames, ...refs.map((ref) => ref.name)]
     .map((name) => name.toLocaleLowerCase('pt-BR')));
+  const literalOf = (parameter, value) => {
+    const type = String(parameter.type ?? '').replace(/\s|\?|\[\]/gu, '').toLowerCase();
+    if (type === 'bool' || type === 'boolean') return /^(?:true|false)$/u.test(value);
+    if (/^(?:int|long|short|byte|uint|ulong|ushort)$/u.test(type)) return /^-?\d+$/u.test(value);
+    const choices = parameter.enumValues ?? parameter.values ?? parameter.enum;
+    return Array.isArray(choices) && choices.some((choice) => String(choice) === value);
+  };
+  const pairsValid = (value) => value.split('&').every((part) => {
+    const match = /^([\p{L}_][\p{L}\p{N}_]*)=([^&`\s=]+)$/u.exec(part);
+    return match && parameters.some((parameter) => parameter.name.toLowerCase() === match[1].toLowerCase()
+      && literalOf(parameter, match[2]));
+  });
   for (const route of (globalScope ? packageEndpoints : [endpoint]).flatMap((item) =>
     [item.route, ...(item.optionalAliases ?? (item.optionalAlias ? [item.optionalAlias] : []))])) {
     for (const segment of (route ?? '').split('/')) {
@@ -106,10 +118,11 @@ function proseIssues(article, endpoint, packageEndpoints = [endpoint], refs = []
     const path = value.match(/\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_{}-]+)*/u);
     if (path) issues.push(`caminho proibido: ${path[0]}`);
     for (const code of value.matchAll(/`([^`\n]+)`/gu)) {
-      const query = /^(?:[\p{L}_][\p{L}\p{N}_]*=[^&`\s]+)(?:&[\p{L}_][\p{L}\p{N}_]*=[^&`\s]+)+$/u.test(code[1]);
-      const queryNames = query ? code[1].split('&').map((part) => part.split('=')[0]) : [];
-      if (query ? !queryNames.every((name) => inlineNames.has(name.toLocaleLowerCase('pt-BR')))
-        : !inlineNames.has(code[1].toLocaleLowerCase('pt-BR'))) issues.push(`código inline proibido: ${code[0]}`);
+      const value = code[1];
+      const allowed = inlineNames.has(value.toLocaleLowerCase('pt-BR'))
+        || (value.includes('=') && pairsValid(value))
+        || parameters.some((parameter) => literalOf(parameter, value));
+      if (!allowed) issues.push(`código inline proibido: ${code[0]}`);
     }
     const method = value.match(/\b(?:GET|POST|PUT|PATCH|DELETE)\b/iu);
     if (method) issues.push(`método proibido na prosa: ${method[0]}`);
@@ -183,7 +196,7 @@ function markFactNames(text, endpoints) {
       });
   }).join('');
 }
-function apiSchemaIssue(article) {
+function apiSchemaIssue(article, endpoint) {
   if (!article || typeof article !== 'object' || Array.isArray(article)) return 'schema de prosa inválido';
   const allowed = new Set(['path', 'endpoint', 'title', 'description', 'intro', 'notas', 'responseHeaders', 'responseDescriptions', 'parameterDescriptions']);
   const extra = Object.keys(article).find((key) => !allowed.has(key));
@@ -201,6 +214,7 @@ function apiSchemaIssue(article) {
       && Object.hasOwn(note, 'type') && NOTE_TYPES.includes(note.type))) return 'tipo de nota ausente ou inválido';
   if (!Array.isArray(article.responseHeaders) || !article.responseHeaders.every((header) => header
     && typeof header.name === 'string' && /^[A-Za-z][A-Za-z0-9-]*$/u.test(header.name)
+    && (endpoint?.responseHeaders ?? []).some((fact) => fact.name === header.name)
     && unit(header.meaning) && unit(header.when))) return 'cabeçalhos de resposta inválidos';
   if (!/^api\/[a-z0-9][a-z0-9/-]*$/u.test(article.path)) return `path API inválido: ${article.path}`;
   if (article.responseDescriptions !== undefined && (!Array.isArray(article.responseDescriptions)
@@ -661,6 +675,9 @@ async function generateApiPages(options, payload, productContext, selectable) {
     schema.properties.articles.items.properties.parameterDescriptions.items.properties.name = {
       type: 'string', enum: endpoint.parameters.map((item) => item.name),
     };
+    schema.properties.articles.items.properties.responseHeaders.items.properties.name = {
+      type: 'string', enum: (endpoint.responseHeaders ?? []).map((item) => item.name),
+    };
     const input = structuredClone(payload.input);
     input[0].content += ' Gere exatamente um artigo para o endpoint indicado nos fatos desta chamada. Não inclua páginas irmãs.';
     input[1].content = input[1].content.replace(
@@ -924,7 +941,7 @@ async function generateContentPackageCore(root, request, options = {}) {
       const endpoint = selectable.find((item) => publicEndpointId(item) === prose.endpoint);
       if (!endpoint) continue;
       const before = proseProblems.length + groundingProblems.length + missingParameterDescriptions.length;
-      const schemaIssue = apiSchemaIssue(prose);
+      const schemaIssue = apiSchemaIssue(prose, endpoint);
       if (schemaIssue) { proseProblems.push(schemaIssue); apiRetryEndpoints.add(prose.endpoint); continue; }
       const units = [prose.description, prose.intro, ...prose.notas];
       for (const header of prose.responseHeaders) units.push(header.meaning, header.when);
@@ -980,7 +997,7 @@ async function generateContentPackageCore(root, request, options = {}) {
     const factsByPath = new Map();
     const requestedSection = [request.description, request.details].filter((value) => typeof value === 'string').join(' ').match(/(?<!\/)\bapi\/([a-z0-9-]+)\//iu)?.[1];
     for (const prose of parsed.articles) {
-      const schemaIssue = apiSchemaIssue(prose);
+      const schemaIssue = apiSchemaIssue(prose, selectable.find((item) => publicEndpointId(item) === prose.endpoint));
       if (schemaIssue) return withPending(apiPending(schemaIssue));
       if (!apiSchema.properties.articles.items.properties.endpoint.enum.includes(prose.endpoint))
         return withPending(apiPending(`endpoint fora da lista: ${prose.endpoint}`));

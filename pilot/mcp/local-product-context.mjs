@@ -13,6 +13,21 @@ import { traceCsharpCalls } from '../lib/csharp-call-chain.mjs';
 import { routeMatches } from './api-route-match.mjs';
 import { extractScreenFacts, FRONT_ROUTER } from './front-screen-facts.mjs';
 
+function responseHeaderFacts(methods) {
+  const headers = new Map();
+  for (const method of methods) {
+    if (!method) continue;
+    const code = method.excerpt.replace(/\/\*[\s\S]*?\*\//gu, (comment) => comment.replace(/[^\n]/gu, ' '))
+      .replace(/\/\/[^\n]*/gu, (comment) => ' '.repeat(comment.length));
+    for (const match of code.matchAll(/\bResponse\.Headers\.(?:Append|Add)\s*\(\s*"([A-Za-z][A-Za-z0-9-]*)"/gu)) {
+      const name = match[1];
+      if (!headers.has(name.toLowerCase())) headers.set(name.toLowerCase(), { name,
+        source: `${method.path}:${method.start + code.slice(0, match.index).split('\n').length - 1}` });
+    }
+  }
+  return [...headers.values()];
+}
+
 const run = promisify(execFile);
 const SOURCE = /\.(?:ts|tsx|js|jsx|cs)$/iu;
 const BLOCKED = /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.git|node_modules|dist|build|out|bin|obj|logs?|backups?|coverage|migrations?|secrets?|credentials?|fixtures?|__tests__|tests?|public)(?:\/|$)/iu;
@@ -389,6 +404,7 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
             }
           }
           const trace = traceCsharpCalls(sources, Object.keys(sources), endpoint);
+          endpoint.responseHeaders = responseHeaderFacts([trace.action, ...trace.methods]);
           endpoint.pending.push(...trace.pending);
           endpoint.errors = collectCsharpErrors(content, endpoint, trace.methods)
             .filter((error) => !containsSensitiveData(error.message, { detectOpaque: true }));
