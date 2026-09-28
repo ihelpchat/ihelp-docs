@@ -226,9 +226,9 @@ function markFactNames(text, endpoints) {
     'erro', 'erros', 'canal', 'canais', 'campo', 'campos', 'lista', 'listas', 'tipo', 'tipos',
     'valor', 'valores', 'total', 'pagina', 'página', 'paginas', 'páginas', 'ativo', 'ativa',
     'estado', 'status', 'departamento', 'departamentos', 'telefone', 'email', 'endereco', 'endereço']);
-  return String(text).split(/(`[^`]*`|[\p{L}_][\p{L}\p{N}_]*=[^\s&`,;.!?]+(?:&[\p{L}_][\p{L}\p{N}_]*=[^\s&`,;.!?]+)+)/u).map((segment) => {
+  return String(text).split(/(`[^`]*`|\??[\p{L}_][\p{L}\p{N}_]*=[^\s&`,;.!?]+(?:&[\p{L}_][\p{L}\p{N}_]*=[^\s&`,;.!?]+)*)/u).map((segment) => {
     if (segment.startsWith('`')) return segment;
-    if (/^[\p{L}_][\p{L}\p{N}_]*=[^\s&`,;.!?]+(?:&[\p{L}_][\p{L}\p{N}_]*=[^\s&`,;.!?]+)+$/u.test(segment)) return '`' + segment + '`';
+    if (/^\??[\p{L}_][\p{L}\p{N}_]*=[^\s&`,;.!?]+(?:&[\p{L}_][\p{L}\p{N}_]*=[^\s&`,;.!?]+)*$/u.test(segment)) return '`' + segment + '`';
     return segment.replace(/(?<![\p{L}\p{N}_])([\p{L}_][\p{L}\p{N}_]*)(?![\p{L}\p{N}_])/gu,
       (match, name, offset) => {
         if (!facts.has(name)) return name;
