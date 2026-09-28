@@ -14,6 +14,7 @@ import { contentMaxOutputTokens } from './env-compat.mjs';
 import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 import { guardModelOutput } from './model-output-guard.mjs';
 import { PRODUCT_TERMS } from './product-terms.mjs';
+import { attachScreenshotsToArticle } from './screen-capture-manifest.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
 contentMaxOutputTokens();
@@ -904,11 +905,11 @@ async function generateContentPackageCore(root, request, options = {}) {
     if (!options.groundingRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, groundingRetryIssues: articleIssues });
     return withPending(evidencePending(articleIssues));
   }
-  const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => ({
+  const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => attachScreenshotsToArticle({
     ...article,
     productActions: article.productActions.map(normalizeCatalogLabel),
     ...(request.tangoUrl && article.contentType === 'tutorial' ? { tangoUrl: request.tangoUrl } : {}),
-  }));
+  }, options.screenCaptureManifest));
   const invalid = articles.map((article) => {
     const validation = validateArticle(article);
     const issues = [...validation.issues, ...article.productActions
@@ -991,7 +992,7 @@ export async function generateCanonicalGuide(root, request, options = {}) {
   }));
   if (article.guide.guideId !== request.guideId || article.contentType !== 'guia'
     || article.productActions.some((action) => !confirmedAction(action, request, productContext))) return evidencePending();
-  return finalizeGeneratedPages({ status: 'ready', articles: [article],
+  return finalizeGeneratedPages({ status: 'ready', articles: [attachScreenshotsToArticle(article, options.screenCaptureManifest)],
     ...(parsed.internalCodeEcho ? { internalCodeEcho: parsed.internalCodeEcho } : {}) }, request);
 }
 
