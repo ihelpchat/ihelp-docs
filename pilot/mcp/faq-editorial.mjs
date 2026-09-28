@@ -108,8 +108,8 @@ export function validateFaqSections(sections, context) {
           && cite.path === fact.path && cite.sha === fact.sha && cite.lineStart === fact.lineStart
           && cite.lineEnd === fact.lineEnd
           && (key !== 'erros' || ['validation', 'message'].includes(fact.kind))
-          && (!['passos', 'erros'].includes(key) || !fact.text
-            || unit.text.toLocaleLowerCase('pt-BR').includes(fact.text.toLocaleLowerCase('pt-BR'))));
+          && (!['passos', 'erros'].includes(key) || (fact.text
+            && unit.text.toLocaleLowerCase('pt-BR').includes(fact.text.toLocaleLowerCase('pt-BR')))));
       });
     });
     if (valid.length) kept[key] = valid;
