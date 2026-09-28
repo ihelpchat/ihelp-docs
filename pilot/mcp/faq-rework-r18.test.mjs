@@ -67,6 +67,8 @@ test('fluxo livre exige subseção com passo para cada tarefa pedida e com fato'
   const positive = await run(true);
   assert.equal(positive.result.status, 'ready', JSON.stringify(positive.result.questions));
   assert.match(positive.result.articles[0].body, /### Ativar[\s\S]*\*\*Publicar\*\*/u);
+  assert.doesNotMatch(positive.result.articles[0].body, /No módulo \*\*Robôs\*\*, você pode /u,
+    'pacote FINAL não repete a resposta determinística no corpo');
   const negative = await run(false);
   assert.equal(negative.prompts.length, 2);
   assert.match(negative.prompts[1], /tarefa sem passo: ativar/u);
