@@ -4,6 +4,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { searchLocalProductContext } from './local-product-context.mjs';
 import { screenshotForStep } from './screen-capture-manifest.mjs';
 import { readScreenshot, screenshotLocation } from './screenshot-files.mjs';
+import { containsSensitiveData } from './sensitive-data.mjs';
 
 const slug = /^[a-z0-9][a-z0-9-]{0,79}$/u;
 const MAX_IMAGES = 4;
@@ -39,6 +40,22 @@ export function captureFailureLog(error, env = process.env) {
     safe = safe.replaceAll(value, '[segredo removido]');
   }
   return `capturar_telas: ${category}: ${safe.slice(0, 700)}`;
+}
+
+export function captureStepsLog(steps) {
+  const safe = steps.map(({ step, label, status, motivo, finalPath, pageTitle, candidates }) => ({
+    step: slug.test(step) ? step : '[passo omitido]',
+    label: typeof label === 'string' && label.length <= 160 && !containsSensitiveData(label, { detectOpaque: true })
+      ? label.replace(/[\r\n]/gu, ' ') : '[rótulo omitido]',
+    status: ['capturado', 'pendente', 'descartado'].includes(status) ? status : 'pendente',
+    motivo: /^(?:capturado|alvo fora da tela|máscara não cobriu|tempo do passo esgotado|rótulo não encontrado: \d+ candidatos|rota não abriu: \/[a-z0-9/_-]*|bloqueado pela lista de hosts: [a-z0-9.-]+)$/iu.test(motivo)
+      ? motivo : '[motivo omitido]',
+    finalPath: /^\/[a-z0-9/_-]*$/iu.test(finalPath) ? finalPath : '[caminho omitido]',
+    pageTitle: typeof pageTitle === 'string' && pageTitle.length <= 100 && !/[\r\n]/u.test(pageTitle)
+      && !containsSensitiveData(pageTitle, { detectOpaque: true }) ? pageTitle : '[título omitido]',
+    candidates: Number.isInteger(candidates) && candidates >= 0 ? candidates : 0,
+  }));
+  return `capturar_telas: steps=${JSON.stringify(safe)}`;
 }
 
 export async function capturePage(input, {

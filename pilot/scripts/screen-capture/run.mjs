@@ -14,4 +14,5 @@ for (const upload of uploads) {
     base64: (await readFile(resolve(upload.file))).toString('base64') });
 }
 const result = await capturePage(request, { storageState: process.env.GUIDE_QA_STORAGE_STATE });
-console.log(JSON.stringify({ captured: result.entries.filter((entry) => entry.page === request.path?.split('/').at(-1)).length }));
+console.log(JSON.stringify({ captured: result.steps.filter((step) => step.status === 'capturado').length,
+  steps: result.steps }));

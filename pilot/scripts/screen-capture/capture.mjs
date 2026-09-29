@@ -14,6 +14,45 @@ const routePattern = /^\/(?!\/)[a-z0-9/_-]*$/u;
 const outputRoot = resolve(import.meta.dirname, '../../public/img/mcp');
 
 const normalized = (value) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
+const safePath = (url) => {
+  try { const path = new URL(url).pathname; return /^\/[a-z0-9/_-]{0,160}$/iu.test(path) ? path : '[caminho omitido]'; }
+  catch { return '[caminho omitido]'; }
+};
+const safeTitle = (title) => typeof title === 'string' && title.length <= 100
+  && /^[\p{L}\p{N} .,()–-]*$/u.test(title) && !containsSensitiveData(title, { detectOpaque: true })
+  ? title : '[título omitido]';
+
+async function closeSafeNotice(page, target) {
+  for (const frame of page.frames()) {
+    if (new URL(frame.url()).origin !== target.url) continue;
+    for (const dialog of await frame.getByRole('dialog').all()) {
+      if (!await dialog.isVisible()) continue;
+      const close = dialog.getByRole('button', { name: /^(?:fechar|dispensar|agora não|entendi)(?: aviso| janela)?$/iu });
+      if (await close.count() === 1 && await close.isVisible()) await close.click({ timeout: 1500 });
+    }
+  }
+}
+
+async function findControl(page, target, step) {
+  const roles = step.role === 'button' ? ['button', 'link', 'menuitem']
+    : step.role === 'textbox' ? ['textbox', 'combobox'] : [step.role];
+  const candidates = [];
+  for (const frame of page.frames()) {
+    if (new URL(frame.url()).origin !== target.url) continue;
+    const locators = step.role === 'text' ? [frame.getByText(step.label, { exact: true })]
+      : roles.map((role) => frame.getByRole(role, { name: step.label, exact: true }));
+    for (const locator of locators) for (let index = 0, count = await locator.count(); index < count; index++)
+      candidates.push(locator.nth(index));
+  }
+  for (const control of candidates) {
+    if (!await control.isVisible() || !await control.isEnabled()) continue;
+    const box = await control.boundingBox();
+    if (!box || box.width <= 0 || box.height <= 0) continue;
+    try { await control.click({ trial: true, timeout: 1000 }); return { control, count: candidates.length }; }
+    catch { /* outro candidato visível pode estar clicável */ }
+  }
+  return { control: null, count: candidates.length };
+}
 
 export function faqStepMatches(body, facts = []) {
   if (typeof body !== 'string') throw new Error('FAQ aprovado inválido');
@@ -119,7 +158,18 @@ export async function addUploadedScreenshot({ manifest, page, step, file, bytes,
 }
 
 async function scanVisible(page) {
-  return page.evaluate(() => {
+  const items = [];
+  for (const frame of page.frames()) {
+    let offset = { x: 0, y: 0 };
+    if (frame !== page.mainFrame()) {
+      try {
+        if (new URL(frame.url()).origin !== new URL(page.url()).origin) continue;
+        const box = await (await frame.frameElement()).boundingBox();
+        if (!box) continue;
+        offset = { x: box.x, y: box.y };
+      } catch { continue; }
+    }
+    const found = await frame.evaluate(() => {
     const items = [];
     const add = (text, rects, reason) => {
       if (!text?.trim()) return;
@@ -127,22 +177,38 @@ async function scanVisible(page) {
         && rect.right > 0 && rect.bottom > 0 && rect.x < innerWidth && rect.y < innerHeight)
         items.push({ text, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, reason });
     };
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    for (let node; (node = walker.nextNode());) {
-      const element = node.parentElement;
-      if (!element || element.closest('[data-screen-capture-overlay]')
-        || !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden') continue;
-      const range = document.createRange(); range.selectNodeContents(node);
-      add(node.textContent, range.getClientRects(), 'texto não confirmado');
+    const roots = [document.body];
+    for (let index = 0; index < roots.length; index++) {
+      const root = roots[index];
+      for (const element of root.querySelectorAll('*')) if (element.shadowRoot) roots.push(element.shadowRoot);
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node; (node = walker.nextNode());) {
+        const element = node.parentElement;
+        if (!element || element.closest('[data-screen-capture-overlay]')
+          || !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden') continue;
+        const range = document.createRange(); range.selectNodeContents(node);
+        add(node.textContent, range.getClientRects(), 'texto não confirmado');
+      }
+      for (const element of root.querySelectorAll('input,textarea')) {
+        add(element.value, element.getClientRects(), 'campo ou conteúdo dinâmico');
+        add(element.placeholder, element.getClientRects(), 'campo ou conteúdo dinâmico');
+      }
+      for (const element of root.querySelectorAll('img,svg,canvas,video,tbody td'))
+        add('conteúdo dinâmico', element.getClientRects(), 'campo ou conteúdo dinâmico');
     }
-    for (const element of document.querySelectorAll('input,textarea')) {
-      add(element.value, element.getClientRects(), 'campo ou conteúdo dinâmico');
-      add(element.placeholder, element.getClientRects(), 'campo ou conteúdo dinâmico');
-    }
-    for (const element of document.querySelectorAll('img,svg,canvas,video,iframe,tbody td'))
-      add('conteúdo dinâmico', element.getClientRects(), 'campo ou conteúdo dinâmico');
     return items;
-  });
+    });
+    items.push(...found.map((item) => ({ ...item, rect: { ...item.rect,
+      x: item.rect.x + offset.x, y: item.rect.y + offset.y } })));
+  }
+  for (const frame of page.frames().slice(1)) {
+    try {
+      if (new URL(frame.url()).origin === new URL(page.url()).origin) continue;
+      const box = await (await frame.frameElement()).boundingBox();
+      if (box) items.push({ text: 'conteúdo dinâmico', rect: box, reason: 'campo ou conteúdo dinâmico' });
+    } catch { /* frame removido durante a varredura */ }
+  }
+  return items;
 }
 
 const visibleHash = (items) => createHash('sha256').update(JSON.stringify(items)).digest('hex');
@@ -167,7 +233,7 @@ async function captureAttempt(page, cdp, rect, allowedLabels, destination, after
       if (isSensitive || item.reason === 'campo ou conteúdo dinâmico' || !allowedLabels.includes(item.text.trim()))
         mask.push({ ...item.rect, reason: isSensitive ? 'varredura sensível' : item.reason });
     }
-    if (!masksCoverSensitive(sensitive, mask)) return null;
+    if (!masksCoverSensitive(sensitive, mask)) return { failure: 'máscara não cobriu' };
     await page.evaluate(({ masks, rect: target }) => {
       const privacyStyle = document.createElement('style');
       privacyStyle.setAttribute('data-screen-capture-style', '');
@@ -192,17 +258,18 @@ async function captureAttempt(page, cdp, rect, allowedLabels, destination, after
     const renderedMasks = await page.evaluate(() => [...document.querySelectorAll('[data-screen-capture-mask]')]
       .map((box) => { const area = box.getBoundingClientRect();
         return { x: area.x, y: area.y, width: area.width, height: area.height }; }));
-    if (!masksCoverSensitive(sensitive, renderedMasks)) return null;
+    if (!masksCoverSensitive(sensitive, renderedMasks)) return { failure: 'máscara não cobriu' };
     await page.screenshot({ path: destination, animations: 'disabled' });
     const bytes = await readFile(destination);
     const width = bytes.readUInt32BE(16);
     const height = bytes.readUInt32BE(20);
     if (rect.x < 5 || rect.y < 8 || rect.x + rect.width + 5 > width || rect.y + rect.height + 5 > height)
-      return null;
+      return { failure: 'alvo fora da tela' };
     if (afterScreenshot) await afterScreenshot(page);
     const after = await scanVisible(page);
     const remaining = after.filter((item) => containsSensitiveData(item.text, { detectOpaque: true })).map((item) => item.rect);
-    if (visibleHash(visible) !== visibleHash(after) || !masksCoverSensitive(remaining, renderedMasks)) return null;
+    if (visibleHash(visible) !== visibleHash(after) || !masksCoverSensitive(remaining, renderedMasks))
+      return { failure: 'máscara não cobriu' };
     return { mask, bytes };
   } finally {
     await rm(destination, { force: true }).catch(() => {});
@@ -267,7 +334,11 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
     }
     let currentRoute = null;
     let bundleSha = null;
+    const outcomes = [];
     for (const step of plan) {
+      const outcome = { step: step.step, label: step.label, status: 'pendente', motivo: 'tempo do passo esgotado',
+        finalPath: '[caminho omitido]', pageTitle: '[título omitido]', candidates: 0 };
+      outcomes.push(outcome);
       try {
       if (fixtureBeforeStep) await fixtureBeforeStep(step);
       const pendingUpload = manifest.entries.find((entry) => entry.page === step.page && entry.step === step.step
@@ -290,7 +361,14 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         uploaded.checkoutSha = step.checkoutSha;
       }
       if (currentRoute !== step.route) {
-        await page.goto(`${target.url}${step.route}`, { waitUntil: 'domcontentloaded' });
+        try { await page.goto(`${target.url}${step.route}`, { waitUntil: 'domcontentloaded' }); }
+        catch (error) {
+          const blocked = networkGuard.blocked.at(-1);
+          outcome.motivo = blocked ? `bloqueado pela lista de hosts: ${blocked.host}` : 'tempo do passo esgotado';
+          outcome.finalPath = safePath(page.url());
+          outcome.pageTitle = safeTitle(await page.title().catch(() => ''));
+          throw error;
+        }
         currentRoute = step.route;
         const bundle = await page.locator('script[src]').evaluateAll((nodes) => nodes.map((node) => node.src)
           .find((url) => new URL(url).origin === location.origin && /\.js(?:\?|$)/u.test(url)) ?? null);
@@ -298,31 +376,36 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         bundleSha = createHash('sha1').update(content).digest('hex');
       }
       const current = new URL(page.url());
-      if (current.origin !== target.url || current.pathname !== step.route && !current.pathname.startsWith(`${step.route}/`))
+      outcome.finalPath = safePath(page.url());
+      outcome.pageTitle = safeTitle(await page.title());
+      if (current.origin !== target.url || current.pathname !== step.route && !current.pathname.startsWith(`${step.route}/`)) {
+        outcome.motivo = `rota não abriu: ${outcome.finalPath}`;
         throw new Error('Navegação fora da rota confirmada');
-      const roles = step.role === 'button' ? ['button', 'link', 'menuitem']
-        : step.role === 'textbox' ? ['textbox', 'combobox'] : [step.role];
-      const candidates = roles.map((role) => page.getByRole(role, { name: step.label, exact: true }));
-      const control = step.role === 'text' ? page.getByText(step.label, { exact: true })
-        : candidates[(await Promise.all(candidates.map((candidate) => candidate.count()))).findIndex((count) => count > 0)]
-          ?? candidates[0];
-      await control.waitFor({ state: 'visible' });
+      }
+      await closeSafeNotice(page, target);
       const loading = page.locator('[aria-busy="true"]:visible, [role="progressbar"]:visible, [class*="skeleton"]:visible').first();
       if (await loading.count()) await loading.waitFor({ state: 'hidden', timeout: 3000 });
-      if (await control.count() !== 1) throw new Error('Rótulo ausente ou ambíguo');
+      const { control, count } = await findControl(page, target, step);
+      outcome.candidates = count;
+      if (!control) {
+        outcome.motivo = count ? 'alvo fora da tela' : `rótulo não encontrado: ${count} candidatos`;
+        throw new Error('Rótulo ausente ou não clicável');
+      }
       if (!['click', 'none'].includes(step.action)) throw new Error('Ação não permitida');
       await mkdir(join(root, step.page), { recursive: true });
       const cdp = await context.newCDPSession(page);
       let captured = null;
       try {
-        for (let attempt = 0; attempt < 2 && !captured; attempt++) {
+        for (let attempt = 0; attempt < 2 && !captured?.bytes; attempt++) {
           const rect = await scrollControlIntoCapture(page, control);
-          if (!rect) throw new Error('Elemento fora da tela');
+          if (!rect) { outcome.motivo = 'alvo fora da tela'; throw new Error('Elemento fora da tela'); }
           captured = await captureAttempt(page, cdp, rect, plan.map((item) => item.label),
             join(root, step.page, `${step.step}.pending.png`), fixtureAfterScreenshot);
         }
       } finally { await cdp.detach(); }
-      if (!captured) {
+      if (!captured?.bytes) {
+        outcome.status = 'descartado';
+        outcome.motivo = captured?.failure ?? 'máscara não cobriu';
         manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step || entry.source !== 'automatic');
         manifest.pending = [...new Set([...(manifest.pending ?? []), `print descartado: destaque fora da imagem ou dado sensível sem máscara em ${step.route}`])];
         continue;
@@ -338,6 +421,8 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         listIndex: step.listIndex, line: step.line,
         owner: step.owner, file: image, sha256, alt: step.alt, bundleSha, checkoutSha: step.checkoutSha,
         source: 'automatic', masked: [...new Set(mask.map((item) => item.reason))] });
+      outcome.status = 'capturado';
+      outcome.motivo = 'capturado';
       } catch {
         manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step || entry.source !== 'automatic');
         manifest.pending = [...new Set([...(manifest.pending ?? []), `captura pendente: ${step.step}`])];
@@ -347,6 +432,7 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
     if (eventFailures.length) manifest.pending = [...new Set([...(manifest.pending ?? []), ...eventFailures])];
     await mkdir(root, { recursive: true });
     await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest, null, 2));
+    Object.defineProperty(manifest, 'steps', { value: outcomes, configurable: true });
     return manifest;
   } finally { await browser.close(); }
 }

@@ -27,6 +27,10 @@ antes de publicar.
 
 No serviço MCP, `capturar_telas` exige credencial de escrita e recebe caminho
 da página e módulo. `enviar_tela` exige a mesma credencial e PNG/JPEG em base64.
+`capturar_telas` responde com `captured` e `steps` por tentativa, incluindo status,
+motivo seguro, caminho final, título da página e contagem de candidatos. O servidor
+registra a mesma lista em uma linha sanitizada. Para confirmar a captura, procure
+`captured >= 1` e um passo com `status: "capturado"`.
 `approved` enviado pelo chamador não tem efeito. O login usa apenas os secrets do servidor.
 `baixar_telas` exige autenticação e devolve até quatro PNGs por chamada, com teto de bytes.
 Ao enviar um artigo para PR, o MCP inclui apenas as imagens citadas no corpo.

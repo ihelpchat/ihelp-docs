@@ -11,7 +11,7 @@ import { authorizeTool, registerToolPolicy, requestIdentity } from './access-con
 import { createGuide } from './create-guide.mjs';
 import { atualizarPorDeploy } from './update-by-deploy.mjs';
 import { refreshCodeProduct } from './code-refresh-offer.mjs';
-import { approvePage, capturePage, captureFailureCategory, captureFailureLog, downloadPage, uploadPage } from './screen-capture-service.mjs';
+import { approvePage, capturePage, captureFailureCategory, captureFailureLog, captureStepsLog, downloadPage, uploadPage } from './screen-capture-service.mjs';
 import { installCaptureRejectionSafety } from './capture-process-safety.mjs';
 import { syncBusinessContext } from './business-context-sync.mjs';
 import { envCompatibility } from './env-compat.mjs';
@@ -214,8 +214,10 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'attempt' });
     try {
       const manifest = await capturePage({ path, module });
+      console.error(captureStepsLog(manifest.steps));
       await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'success' });
-      return textResult({ page, captured: manifest.entries.filter((entry) => entry.page === page).length });
+      return textResult({ page, captured: manifest.steps.filter((step) => step.status === 'capturado').length,
+        steps: manifest.steps });
     } catch (error) {
       console.error(captureFailureLog(error));
       await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'failure' });
