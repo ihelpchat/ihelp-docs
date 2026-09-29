@@ -1082,12 +1082,12 @@ button {
   background: var(--ih-white);
   cursor: pointer;
 }
-.ih-guide-actions .ih-guide-app { color: var(--ih-white); border-color: var(--ih-coral-cta); background: var(--ih-coral-cta); }
+.ih-guide-actions .ih-guide-app { color: var(--ih-coral-700); border-color: var(--ih-coral-100); background: var(--ih-coral-50); font-size: 12px; font-weight: 700; }
 .ih-guide-actions a:focus-visible, .ih-guide-actions button:focus-visible, .ih-guide-phone button:focus-visible { outline: 3px solid var(--ih-coral-cta); outline-offset: 2px; }
 .ih-guide-phone { padding: 16px; border: 1px solid var(--ih-slate-200); border-radius: 10px; background: var(--ih-white); }
 .ih-guide-phone p { margin: 0 0 12px; }
 .ih-guide-phone p:last-child { margin: 12px 0 0; }
-.ih-ai-drawer-human { display: flex; align-items: center; justify-content: center; min-height: 44px; margin-bottom: 8px; color: var(--ih-ink); font-size: 16px; border: 1px solid var(--ih-slate-700); border-radius: 8px; background: var(--ih-white); }
+.ih-ai-drawer-human { color: var(--ih-slate-600); font-size: 10px; text-decoration: underline; white-space: nowrap; }
 
 .ih-prose > :first-child {
   margin-top: 0;
@@ -3809,14 +3809,14 @@ button {
 .ih-ai-drawer-title {
   margin: 0;
   color: var(--ih-ink);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 .ih-ai-drawer-sub {
   margin: 0;
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 11px;
 }
 
 .ih-ai-drawer-head button {
@@ -3824,7 +3824,7 @@ button {
   align-items: center;
   justify-content: center;
   width: 30px;
-  height: 44px;
+  height: 30px;
   color: var(--ih-slate-500);
   border: 0;
   border-radius: 6px;
@@ -3854,7 +3854,7 @@ button {
 .ih-ai-drawer-context > span {
   flex: 0 0 auto;
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 11px;
 }
 
 .ih-ai-drawer-context strong {
@@ -3862,7 +3862,7 @@ button {
   padding: 2px 8px;
   overflow: hidden;
   color: var(--ih-slate-700);
-  font-size: 16px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -3874,12 +3874,11 @@ button {
 .ih-ai-drawer-context button {
   margin-left: auto;
   color: var(--ih-slate-600);
-  font-size: 16px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
   border: 0;
   background: transparent;
-  min-height: 44px;
 }
 
 .ih-ai-drawer-context button:hover {
@@ -3906,7 +3905,7 @@ button {
 .ih-ai-drawer-empty > p:not(.ih-ai-drawer-empty-title) {
   margin: 0 0 14px;
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -3926,13 +3925,12 @@ button {
   width: 100%;
   padding: 10px 12px;
   color: var(--ih-slate-700);
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1.45;
   text-align: left;
   border: 1px solid var(--ih-slate-200);
   border-radius: 8px;
   background: var(--ih-white);
-  min-height: 44px;
 }
 
 .ih-ai-drawer-empty button:hover {
@@ -3965,7 +3963,7 @@ button {
 .ih-ai-drawer-meta > p {
   margin: 0;
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 10px;
 }
 
 /* Campo de pergunta */
@@ -3988,11 +3986,10 @@ button {
   flex: 1;
   min-width: 0;
   max-height: 160px;
-  min-height: 44px;
   padding: 6px 0;
   color: var(--ih-ink);
   font: inherit;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.55;
   resize: none;
   border: 0;
@@ -4010,7 +4007,7 @@ button {
   align-items: center;
   justify-content: center;
   width: 36px;
-  height: 44px;
+  height: 36px;
   color: var(--ih-white);
   border: 0;
   border-radius: 8px;
@@ -4023,7 +4020,6 @@ button {
 }
 
 .ih-ai-send:disabled {
-  color: var(--ih-ink);
   cursor: default;
   background: #f7bfb2;
 }
@@ -4043,7 +4039,7 @@ button {
 .ih-ai-composer[data-compact] textarea {
   max-height: 120px;
   padding: 5px 0;
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -4120,7 +4116,7 @@ button {
   max-width: 560px;
   margin: 0 0 26px;
   color: var(--ih-slate-600);
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.65;
 }
 
@@ -4137,7 +4133,7 @@ button {
   gap: 8px;
   padding: 14px 16px;
   color: var(--ih-ink);
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.5;
   text-align: left;
@@ -4171,7 +4167,7 @@ button {
 .ih-ai-scopes > span {
   margin-right: 2px;
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 12px;
 }
 
 .ih-ai-scopes > div {
@@ -4182,20 +4178,15 @@ button {
   min-width: 0;
 }
 
-.ih-ai-scopes .ih-chip {
-  min-height: 44px;
-  font-size: 16px;
-}
-
 .ih-ai-new {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 44px;
+  height: 28px;
   margin-left: auto;
   padding: 0 10px;
   color: var(--ih-slate-600);
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 500;
   border: 1px solid var(--ih-slate-200);
   border-radius: 7px;
@@ -4218,7 +4209,7 @@ button {
   gap: 12px;
   margin-top: 8px;
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 11px;
 }
 
 .ih-ai-hint kbd {
@@ -4242,20 +4233,20 @@ button {
 
 .ih-ai-panel .ih-eyebrow {
   margin-bottom: 4px;
-  font-size: 16px;
+  font-size: 11px;
 }
 
 .ih-ai-panel-sub {
   margin: 0 0 16px;
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 12px;
 }
 
 .ih-ai-panel-empty {
   margin: 0;
   padding: 16px;
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 12px;
   line-height: 1.6;
   border: 1px dashed var(--ih-slate-300);
   border-radius: 10px;
@@ -4303,31 +4294,25 @@ button {
   display: block;
   margin-bottom: 5px;
   color: var(--ih-ink);
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
 .ih-ai-panel-list a > span:last-child {
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
 .ih-ai-panel-list a > span:not(.ih-ai-panel-head) {
-  font-size: 16px;
-}
-
-.ih-ai-screen .ih-pill,
-.ih-ai-drawer .ih-pill,
-.ih-ai-screen .ih-tech-mark[data-compact] {
-  font-size: 16px;
+  font-size: 12px;
 }
 
 .ih-ai-panel-list small {
   display: inline-block;
   margin-top: 9px;
   color: var(--ih-coral-700);
-  font-size: 16px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -4341,20 +4326,20 @@ button {
   display: block;
   margin-bottom: 4px;
   color: var(--ih-ink);
-  font-size: 16px;
+  font-size: 12px;
 }
 
 .ih-ai-panel-support p {
   margin: 0 0 10px;
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
 .ih-ai-panel-support .ih-button {
   height: 44px;
   padding: 0 12px;
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 600;
   border-radius: 7px;
 }
@@ -4362,11 +4347,10 @@ button {
 .ih-ai-screen-human {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
   width: fit-content;
-  color: var(--ih-ink);
-  font-size: 16px;
-  font-weight: 600;
+  color: var(--ih-slate-600);
+  font-size: 11px;
+  font-weight: 500;
   text-decoration: underline;
 }
 
@@ -4392,7 +4376,7 @@ button {
   margin: 0;
   padding: 11px 15px;
   color: #fdfffc;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -4415,7 +4399,7 @@ button {
 .ih-ai-name {
   margin: 5px 0 10px;
   color: var(--ih-ink);
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -4424,7 +4408,7 @@ button {
   margin: 0 0 10px;
   padding: 3px 9px;
   color: #a16207;
-  font-size: 16px;
+  font-size: 11px;
   font-weight: 600;
   border: 1px solid #fde68a;
   border-radius: 999px;
@@ -4440,7 +4424,7 @@ button {
 .ih-ai-text p {
   margin: 0;
   color: var(--ih-slate-700);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.72;
   white-space: pre-wrap;
   text-wrap: pretty;
@@ -4462,7 +4446,7 @@ button {
 .ih-ai-sections h3 {
   margin: 0 0 7px;
   color: var(--ih-ink);
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -4478,7 +4462,7 @@ button {
   position: relative;
   padding-left: 14px;
   color: var(--ih-slate-700);
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -4507,7 +4491,7 @@ button {
   gap: 12px;
   padding: 8px 0;
   color: var(--ih-slate-700);
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1.65;
   border-bottom: 1px solid var(--ih-slate-100);
 }
@@ -4524,7 +4508,7 @@ button {
   height: 22px;
   margin-top: 1px;
   color: var(--ih-coral-700);
-  font-size: 16px;
+  font-size: 11px;
   font-weight: 600;
   border: 1px solid var(--ih-coral-100);
   border-radius: 999px;
@@ -4560,7 +4544,7 @@ button {
   min-height: 44px;
   padding: 0 10px;
   color: var(--ih-coral-700);
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 650;
   cursor: pointer;
   list-style: none;
@@ -4593,17 +4577,16 @@ button {
   padding: 7px 10px;
   margin-top: 8px;
   color: var(--ih-coral-700);
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 700;
   border: 1px solid var(--ih-coral-100);
   border-radius: 8px;
   background: var(--ih-coral-50);
-  min-height: 44px;
 }
 
 .ih-ai-product-action:hover {
-  color: var(--ih-coral-900);
-  border-color: var(--ih-coral-300);
+  color: var(--ih-coral-700);
+  border-color: var(--ih-coral-100);
 }
 
 .ih-ai-product-action svg {
@@ -4661,7 +4644,7 @@ button {
   flex: 1;
   color: var(--ih-slate-400);
   font-family: var(--ih-mono);
-  font-size: 16px;
+  font-size: 11px;
 }
 
 .ih-ai-code-head button {
@@ -4670,7 +4653,7 @@ button {
   gap: 6px;
   padding: 4px 8px;
   color: var(--ih-slate-300);
-  font-size: 16px;
+  font-size: 11px;
   font-weight: 500;
   border: 0;
   border-radius: 6px;
@@ -4692,7 +4675,7 @@ button {
   padding: 12px 14px;
   overflow-x: auto;
   color: var(--ih-slate-300);
-  font-size: 16px;
+  font-size: 12px;
   line-height: 1.7;
   white-space: pre;
 }
@@ -4703,7 +4686,7 @@ button {
 
 .ih-ai-sources .ih-eyebrow {
   margin-bottom: 8px;
-  font-size: 16px;
+  font-size: 11px;
 }
 
 .ih-ai-sources ul {
@@ -4738,7 +4721,7 @@ button {
   min-width: 0;
   overflow: hidden;
   color: var(--ih-ink);
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -4754,7 +4737,7 @@ button {
 
 .ih-ai-source-copy small {
   color: var(--ih-coral-700);
-  font-size: 16px;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -4785,13 +4768,13 @@ button {
   display: block;
   margin-bottom: 3px;
   color: var(--ih-ink);
-  font-size: 16px;
+  font-size: 12px;
 }
 
 .ih-ai-media-guide-copy p {
   margin: 0;
   color: var(--ih-slate-600);
-  font-size: 16px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -4800,7 +4783,7 @@ button {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 16px;
+  font-size: 11px;
 }
 
 .ih-ai-media-guide-item button,
@@ -4848,12 +4831,12 @@ button {
 .ih-ai-support-cta strong {
   margin-bottom: 3px;
   color: var(--ih-ink);
-  font-size: 16px;
+  font-size: 12px;
 }
 
 .ih-ai-support-cta span {
   color: var(--ih-slate-600);
-  font-size: 16px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -4865,7 +4848,7 @@ button {
   min-height: 44px;
   padding: 0 12px;
   color: var(--ih-white);
-  font-size: 16px;
+  font-size: 11px;
   font-weight: 650;
   border-radius: 8px;
   background: var(--ih-coral-cta);
@@ -4884,11 +4867,11 @@ button {
 .ih-ai-human-action {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
+  min-height: 34px;
   margin-top: 14px;
   padding: 0 16px;
   color: var(--ih-white);
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 650;
   border-radius: 8px;
   background: var(--ih-coral-cta);
@@ -4911,10 +4894,10 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 44px;
+  height: 28px;
   padding: 0 9px;
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 500;
   border: 0;
   border-radius: 6px;
@@ -4949,7 +4932,7 @@ button {
 .ih-ai-thanks {
   margin-left: 6px;
   color: #15803d;
-  font-size: 16px;
+  font-size: 12px;
 }
 
 .ih-ai-follow {
@@ -4963,7 +4946,7 @@ button {
   flex-basis: 100%;
   margin: 0;
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 12px;
 }
 
 .ih-ai-follow button {
@@ -4972,7 +4955,7 @@ button {
   gap: 6px;
   padding: 6px 11px;
   color: var(--ih-slate-600);
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 500;
   text-align: left;
   border: 1px solid var(--ih-slate-200);
@@ -5014,7 +4997,7 @@ button {
 .ih-ai-error span {
   flex: 1;
   color: #991b1b;
-  font-size: 16px;
+  font-size: 13px;
 }
 
 .ih-ai-error-actions {
@@ -5028,10 +5011,10 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
+  min-height: 30px;
   padding: 0 11px;
   color: #991b1b;
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   border: 1px solid #fecaca;
@@ -5050,7 +5033,7 @@ button {
   gap: 10px;
   margin: 6px 0 12px;
   color: var(--ih-slate-500);
-  font-size: 16px;
+  font-size: 13px;
 }
 
 .ih-ai-dots {
@@ -5090,14 +5073,14 @@ button {
 .ih-ai-thread[data-compact] .ih-ai-user p {
   max-width: 88%;
   padding: 9px 13px;
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-flag {
   margin-bottom: 8px;
   padding: 2px 8px;
-  font-size: 16px;
+  font-size: 10px;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-text {
@@ -5105,7 +5088,7 @@ button {
 }
 
 .ih-ai-thread[data-compact] .ih-ai-text p {
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1.7;
 }
 
@@ -5120,7 +5103,7 @@ button {
 }
 
 .ih-ai-thread[data-compact] .ih-ai-sections li {
-  font-size: 16px;
+  font-size: 12px;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-steps {
@@ -5133,14 +5116,14 @@ button {
 .ih-ai-thread[data-compact] .ih-ai-steps li {
   gap: 10px;
   padding: 7px 0;
-  font-size: 16px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-steps li > span {
   flex-basis: 20px;
   height: 20px;
-  font-size: 16px;
+  font-size: 10px;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-step-image {
@@ -5164,12 +5147,12 @@ button {
 }
 
 .ih-ai-thread[data-compact] .ih-ai-code-head span {
-  font-size: 16px;
+  font-size: 10px;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-code pre {
   padding: 10px 12px;
-  font-size: 16px;
+  font-size: 11px;
   line-height: 1.65;
 }
 
@@ -5220,9 +5203,9 @@ button {
 }
 
 .ih-ai-thread[data-compact] .ih-ai-actions button {
-  height: 44px;
+  height: 26px;
   padding: 0 8px;
-  font-size: 16px;
+  font-size: 11px;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-actions .ih-ai-rate {
@@ -5237,7 +5220,7 @@ button {
 
 .ih-ai-thread[data-compact] .ih-ai-follow button {
   padding: 5px 10px;
-  font-size: 16px;
+  font-size: 11px;
   min-height: 44px;
 }
 
@@ -5248,21 +5231,13 @@ button {
 }
 
 .ih-ai-thread[data-compact] .ih-ai-error span {
-  font-size: 16px;
-}
-
-.ih-ai-thread[data-compact] .ih-ai-error-actions button {
-  min-height: 44px;
-}
-
-.ih-ai-thread[data-compact] .ih-ai-error-actions a {
-  min-height: 44px;
+  font-size: 12px;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-busy-label {
   gap: 8px;
   margin: 0 0 8px;
-  font-size: 16px;
+  font-size: 12px;
 }
 
 .ih-ai-thread[data-compact] .ih-ai-dots span {
@@ -5405,6 +5380,20 @@ button {
 }
 
 @media (max-width: 640px) {
+  .ih-ai-drawer-meta {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 8px;
+  }
+
+  .ih-ai-drawer-meta > p {
+    grid-column: 1 / -1;
+  }
+
+  .ih-ai-drawer-meta > .ih-ai-drawer-human {
+    justify-self: start;
+  }
+
   .ih-ai-screen {
     overflow: hidden;
   }
@@ -5429,16 +5418,16 @@ button {
   .ih-ai-user p {
     max-width: 92%;
     padding: 10px 13px;
-    font-size: 16px;
+    font-size: 14px;
   }
 
   .ih-ai-name {
     margin-top: 0;
-    font-size: 16px;
+    font-size: 13px;
   }
 
   .ih-ai-text p {
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.65;
   }
 
@@ -5450,7 +5439,7 @@ button {
 
   .ih-ai-steps li {
     gap: 10px;
-    font-size: 16px;
+    font-size: 14px;
     line-height: 1.6;
   }
 
@@ -5514,8 +5503,7 @@ button {
 
   .ih-ai-scopes .ih-chip {
     flex: 0 0 auto;
-    min-height: 44px;
-    font-size: 16px;
+    min-height: 34px;
     scroll-snap-align: start;
   }
 
@@ -5523,7 +5511,7 @@ button {
     flex: 0 0 36px;
     justify-content: center;
     width: 36px;
-    min-height: 44px;
+    min-height: 36px;
     margin-left: 0;
     padding: 0;
   }
@@ -5557,7 +5545,7 @@ button {
   }
 
   .ih-ai-hint > span:first-child,
-  .ih-ai-hint-meta > span:first-child {
+  .ih-ai-hint-meta > span:not(.ih-tech-mark) {
     display: none;
   }
 
@@ -5844,7 +5832,24 @@ button {
 .ih-prose { font-size: 16px; }
 .ih-prose .ih-product-action small { font-size: 16px; }
 .ih-breadcrumb a, .ih-prose h2 a { display: inline-flex; align-items: center; }
-.ih-ai-drawer .ih-tech-mark span, .ih-ai-drawer .ih-tech-mark strong { font-size: 16px; }
+
+@media (pointer: coarse) {
+  .ih-ai-drawer-head button, .ih-ai-drawer-empty button,
+  .ih-ai-actions button, .ih-ai-thread[data-compact] .ih-ai-actions button,
+  .ih-ai-scopes .ih-chip, .ih-ai-new, .ih-ai-send,
+  .ih-ai-human-action, .ih-ai-error-actions button, .ih-ai-error-actions a { min-height: 44px; }
+  .ih-ai-drawer-context button, .ih-ai-drawer-human, .ih-ai-screen-human { position: relative; }
+  .ih-ai-drawer-context button::before, .ih-ai-drawer-human::before, .ih-ai-screen-human::before {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: 44px;
+    transform: translate(-50%, -50%);
+    content: '';
+  }
+  .ih-ai-composer textarea { min-height: 44px; }
+}
 
 @media (pointer: coarse), (max-width: 1019px) {
   .ih-header .ih-brand, .ih-header .ih-nav-link, .ih-header .ih-header-search,

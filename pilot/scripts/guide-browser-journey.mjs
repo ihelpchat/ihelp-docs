@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launch } from './visual/measure.mjs';
 import { createSitePage, startQaSite } from './visual/serve-qa-build.mjs';
+import { assistantDisplayName } from '../lib/assistant-name.ts';
 
 const root = await mkdtemp(join(tmpdir(), 'guide-browser-'));
 await mkdir(join(root, 'content/docs'), { recursive: true });
@@ -127,6 +128,7 @@ try {
 
   const initial = await post({ question: 'Começar', guide: { guideId: 'reconectar-canal-qr', stepId: 'inicio', version: 1, mode: 'real' } });
   const page = await pageWith(initial);
+  assert.equal(await page.locator('.ih-ai-screen h1').textContent(), assistantDisplayName, 'guia: título do assistente usa nome canônico');
   assert.equal(await page.locator('.ih-ai-row').last().getByRole('button', { name: 'Voltar', exact: true }).count(), 0, 'Voltar não aparece no primeiro passo');
   await support(page, 'reconectar-canal-qr', 'inicio');
   await click(page, 'Concluí este passo', { stepId: 'inicio' });

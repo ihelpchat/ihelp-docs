@@ -131,10 +131,10 @@ export function AssistantScreen() {
               ) : null}
             </div>
             <AssistantComposer placeholder="Pergunte sobre atendimento, campanhas, API, tutoriais…" autoFocus />
-            <a className="ih-ai-screen-human" href={humanHref} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a>
             <div className="ih-ai-hint">
               <span>Respostas geradas por IA a partir da documentação. Confira as fontes antes de agir.</span>
               <span className="ih-ai-hint-meta">
+                <a className="ih-ai-screen-human" href={humanHref} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a>
                 <span><kbd>↵</kbd> enviar · <kbd>shift ↵</kbd> nova linha</span>
                 <TechnologyMark compact />
               </span>
