@@ -180,8 +180,15 @@ const audit = (root, reference) => {
     if (directText || isField) {
       measured.text++;
       const size = parseFloat(style.fontSize);
+      const articleGuideChip = el.matches('.ih-prose a.ih-ai-product-action[id^="guia-"]');
+      if (articleGuideChip) {
+        const [expectedSize, expectedWeight] = reference.guideChip;
+        if (size !== expectedSize || Number(style.fontWeight) !== expectedWeight) {
+          failures.push(`${selector}: fonte ${style.fontSize}/${style.fontWeight} fora da referência ${expectedSize}px/${expectedWeight}`);
+        }
+      }
       // O corpo dos artigos mantém 16px; o assistente segue a tabela da produção.
-      const reading = !el.closest('.ih-ai-screen, .ih-ai-drawer, .ih-guide-app') && el.closest('.ih-prose, .ih-guide-page, .ih-guide-catalog, .ih-lead');
+      const reading = !articleGuideChip && !el.closest('.ih-ai-screen, .ih-ai-drawer, .ih-guide-app') && el.closest('.ih-prose, .ih-guide-page, .ih-guide-catalog, .ih-lead');
       if (reading && size < 16) failures.push(`${selector}: fonte ${size}px < 16px`);
       const fg = rgba(isField && !el.value && el.getAttribute('placeholder')
         ? getComputedStyle(el, '::placeholder').color
@@ -203,7 +210,10 @@ const audit = (root, reference) => {
 
 const site = await startQaSite(out, basePath);
 const browser = await launch();
-const auditAt = (locator) => locator.evaluate(audit, navigationReference);
+const auditAt = (locator) => locator.evaluate(audit, {
+  ...navigationReference,
+  guideChip: assistantReference.fonts['.ih-ai-product-action'],
+});
 const failures = [];
 let textCount = 0;
 let clickCount = 0;
