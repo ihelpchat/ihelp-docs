@@ -6,6 +6,7 @@ import { isIP } from 'node:net';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { buildServer } from './server.mjs';
+import { installCaptureRejectionSafety } from './capture-process-safety.mjs';
 import { answerQuestion } from './assistant-service.mjs';
 import { normalizeFeedback, saveFeedback, summarizeFeedback } from './feedback-service.mjs';
 import { sanitizeWidgetContext } from './real-state.mjs';
@@ -23,6 +24,7 @@ import { assistantRouterModel, assistantRouterEffort, conversationsRetentionDays
 import { readProductCheckoutState, restoreProductCheckouts, initializeProductCheckouts } from './product-checkouts.mjs';
 import { syncBusinessContext } from './business-context-sync.mjs';
 
+installCaptureRejectionSafety();
 const credentials = mcpCredentialsFromEnv();
 if (!credentials.length) throw new Error('Configure DOCS_MCP_CREDENTIALS ou DOCS_MCP_API_KEY antes de iniciar o MCP');
 assistantRouterModel();

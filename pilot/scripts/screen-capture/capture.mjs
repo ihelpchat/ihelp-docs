@@ -232,8 +232,11 @@ async function scrollControlIntoCapture(page, control) {
 }
 
 export async function captureScreens({ baseUrl, plan, storageState, fixture = false,
-  manifest = { version: 1, entries: [] }, root = outputRoot, env = process.env, fixtureAfterScreenshot }) {
+  manifest = { version: 1, entries: [] }, root = outputRoot, env = process.env, fixtureAfterScreenshot,
+  fixtureCredentials, fixtureOnRequestFailed, fixtureBeforeStep }) {
   if (fixtureAfterScreenshot && (!fixture || typeof fixtureAfterScreenshot !== 'function'))
+    throw new Error('Hook de fixture inválido');
+  if ((fixtureCredentials || fixtureOnRequestFailed || fixtureBeforeStep) && !fixture)
     throw new Error('Hook de fixture inválido');
   const target = assertAllowedTarget(baseUrl, env);
   if (target.local !== fixture) throw new Error('Modo e host incompatíveis');
@@ -248,13 +251,25 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
     const context = await browser.newContext({ ...(storageState ? { storageState } : {}), serviceWorkers: 'block' });
     const networkGuard = await installQaNetworkGuard(context, target, env);
     const page = await context.newPage();
-    if (!fixture && !storageState) {
-      try { await loginToQa(page, target.url, credentialsFromEnv(env).authorized, { networkGuard }); }
+    page.setDefaultTimeout(5000);
+    page.setDefaultNavigationTimeout(10000);
+    const eventFailures = [];
+    page.on('requestfailed', (request) => {
+      try {
+        // Only fixture code can inject a failure here. Never expose Playwright's
+        // raw error or headers in the capture result.
+        fixtureOnRequestFailed?.(request);
+      } catch { eventFailures.push('handler de requisição falhou'); }
+    });
+    if (fixtureCredentials || !fixture && !storageState) {
+      try { await loginToQa(page, target.url, fixtureCredentials ?? credentialsFromEnv(env).authorized, { networkGuard, timeoutMs: 5000 }); }
       catch (error) { throw new Error('Login na homologação falhou', { cause: error }); }
     }
     let currentRoute = null;
     let bundleSha = null;
     for (const step of plan) {
+      try {
+      if (fixtureBeforeStep) await fixtureBeforeStep(step);
       const pendingUpload = manifest.entries.find((entry) => entry.page === step.page && entry.step === step.step
         && entry.source === 'upload' && entry.status === 'pending');
       if (pendingUpload) {
@@ -292,6 +307,8 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         : candidates[(await Promise.all(candidates.map((candidate) => candidate.count()))).findIndex((count) => count > 0)]
           ?? candidates[0];
       await control.waitFor({ state: 'visible' });
+      const loading = page.locator('[aria-busy="true"]:visible, [role="progressbar"]:visible, [class*="skeleton"]:visible').first();
+      if (await loading.count()) await loading.waitFor({ state: 'hidden', timeout: 3000 });
       if (await control.count() !== 1) throw new Error('Rótulo ausente ou ambíguo');
       if (!['click', 'none'].includes(step.action)) throw new Error('Ação não permitida');
       await mkdir(join(root, step.page), { recursive: true });
@@ -321,7 +338,13 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         listIndex: step.listIndex, line: step.line,
         owner: step.owner, file: image, sha256, alt: step.alt, bundleSha, checkoutSha: step.checkoutSha,
         source: 'automatic', masked: [...new Set(mask.map((item) => item.reason))] });
+      } catch {
+        manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step || entry.source !== 'automatic');
+        manifest.pending = [...new Set([...(manifest.pending ?? []), `captura pendente: ${step.step}`])];
+        currentRoute = null;
+      }
     }
+    if (eventFailures.length) manifest.pending = [...new Set([...(manifest.pending ?? []), ...eventFailures])];
     await mkdir(root, { recursive: true });
     await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest, null, 2));
     return manifest;

@@ -26,7 +26,13 @@ export function captureFailureLog(error, env = process.env) {
   const diagnostic = error?.diagnostic ?? error?.cause?.diagnostic;
   const detail = diagnostic ? `outcome=${diagnostic.outcome} path=${diagnostic.path} messages=${diagnostic.messages.join(' | ')} requests=${diagnostic.requests.join(' | ')} failed=${(diagnostic.failed ?? []).join(' | ')} controls=${diagnostic.controls.join(' | ')}`
     : String(error?.cause?.message ?? error?.message ?? '').split(/\r?\n/u, 1)[0];
-  let safe = detail.replace(/https?:\/\/[^\s"'<>]+/giu, '[URL removida]')
+  let safe = detail.split(/\r?\n/u, 1)[0]
+    .replace(/\b(?:cookie|set-cookie|authorization)\s*[:=]\s*(?:Bearer\s+)?[^\s,;]+/giu, '[cabeçalho removido]')
+    .replace(/\bBearer\s+\S+/giu, '[segredo removido]')
+    .replace(/\bCfDJ8[A-Za-z0-9_+\/-]*/gu, '[segredo removido]')
+    .replace(/\beyJ[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){1,2}/gu, '[segredo removido]')
+    .replace(/\b(?:token|secret|password|api[_-]?key)\s*[:=]\s*[^\s,;]+/giu, '[segredo removido]')
+    .replace(/https?:\/\/[^\s"'<>]+/giu, '[URL removida]')
     .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, '[e-mail removido]');
   for (const [key, value] of Object.entries(env)) {
     if (!/(?:PASSWORD|TOKEN|SECRET|API_KEY|EMAIL)/iu.test(key) || typeof value !== 'string' || value.length < 4) continue;

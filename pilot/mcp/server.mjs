@@ -12,6 +12,7 @@ import { createGuide } from './create-guide.mjs';
 import { atualizarPorDeploy } from './update-by-deploy.mjs';
 import { refreshCodeProduct } from './code-refresh-offer.mjs';
 import { approvePage, capturePage, captureFailureCategory, captureFailureLog, downloadPage, uploadPage } from './screen-capture-service.mjs';
+import { installCaptureRejectionSafety } from './capture-process-safety.mjs';
 import { syncBusinessContext } from './business-context-sync.mjs';
 import { envCompatibility } from './env-compat.mjs';
 
@@ -350,6 +351,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  installCaptureRejectionSafety();
   if (!process.env.BUSINESS_CONTEXT_DIR) {
     const stateDir = process.env.MCP_STATE_DIR ?? '/data';
     try {

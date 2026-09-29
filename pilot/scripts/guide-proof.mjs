@@ -101,24 +101,33 @@ export function qaRequestDecision(value, target, env = process.env, { fixtureAll
 export async function installQaNetworkGuard(context, target, env = process.env, options = {}) {
   const guard = { blocked: [], reasons: new WeakMap() };
   await context.route('**/*', async (route) => {
-    const request = route.request();
-    const decision = qaRequestDecision(request.url(), target, env, options);
-    if (!decision.allowed) {
-      guard.blocked.push(decision);
-      guard.reasons.set(request, decision);
-      return route.abort();
-    }
-    const response = await route.fetch({ maxRedirects: 0 });
-    const location = response.headers().location;
-    if (location) {
-      const redirected = qaRequestDecision(new URL(location, request.url()).href, target, env, options);
-      if (!redirected.allowed) {
-        guard.blocked.push(redirected);
-        guard.reasons.set(request, redirected);
-        return route.abort();
+    try {
+      const request = route.request();
+      const decision = qaRequestDecision(request.url(), target, env, options);
+      if (!decision.allowed) {
+        guard.blocked.push(decision);
+        guard.reasons.set(request, decision);
+        return await route.abort();
       }
+      // route.fetch() waits for the body, so an open event stream times out and
+      // is aborted. Fetching first still lets us reject unsafe redirects.
+      const streaming = request.resourceType() === 'eventsource' || /\btext\/event-stream\b/iu.test(request.headers().accept ?? '');
+      const response = await route.fetch({ maxRedirects: 0, ...(streaming ? { timeout: 1500 } : {}) });
+      const location = response.headers().location;
+      if (location) {
+        const redirected = qaRequestDecision(new URL(location, request.url()).href, target, env, options);
+        if (!redirected.allowed) {
+          guard.blocked.push(redirected);
+          guard.reasons.set(request, redirected);
+          return await route.abort();
+        }
+      }
+      await route.fulfill({ response });
+    } catch {
+      // A route callback must not create an unhandled rejection (Playwright's
+      // own error can contain request headers). A closed context needs no abort.
+      await route.abort().catch(() => {});
     }
-    return route.fulfill({ response });
   });
   return guard;
 }
@@ -162,11 +171,16 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
   const failed = [];
   const origin = new URL(baseUrl).origin;
   const onResponse = (response) => {
-    const url = new URL(response.url());
-    if (url.origin !== origin) return;
-    responses.push(`${response.request().method()} ${safeLoginText(url.pathname, [email, password])} ${response.status()}`);
+    try {
+      const url = new URL(response.url());
+      if (url.origin !== origin) return;
+      responses.push(`${response.request().method()} ${safeLoginText(url.pathname, [email, password])} ${response.status()}`);
+    } catch { responses.push('resposta indisponível'); }
   };
-  const onFailed = (request) => failed.push(qaFailedRequest(request, networkGuard));
+  const onFailed = (request) => {
+    try { failed.push(qaFailedRequest(request, networkGuard)); }
+    catch { failed.push('requisição indisponível'); }
+  };
   page.on('response', onResponse);
   page.on('requestfailed', onFailed);
   const alert = page.locator('[role="alert"]:visible, [class*="toast"]:visible, .error:visible').first();
