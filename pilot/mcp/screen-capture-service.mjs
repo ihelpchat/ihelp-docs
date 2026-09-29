@@ -102,7 +102,11 @@ export async function capturePage(input, {
   }));
   if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error('Manifesto de telas inválido');
   return captureScreens({ baseUrl, plan, root, fixture, env, manifest, storageState,
-    vocabulary: screenFacts.map((fact) => fact.text).filter((text) => typeof text === 'string') });
+    vocabulary: [
+      ...screenFacts.map((fact) => fact.text).filter((text) => typeof text === 'string'),
+      // TabsRobots renders the static tab name from _tabs and appends a runtime count.
+      ...(module === 'Robôs' ? ['Lista de Robôs ({count})'] : []),
+    ] });
 }
 
 export async function uploadPage({ page, step, base64, alt }, { root = defaultRoot() } = {}) {

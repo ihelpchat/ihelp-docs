@@ -83,10 +83,26 @@ test('espera o ContentLoader SVG de Robôs terminar antes do print', { timeout: 
   assert.equal(result.steps[0].status, 'capturado', JSON.stringify(result.steps));
 });
 
+test('loading persistente gera print com pendência explícita', { timeout: 90000 }, async () => {
+  const { result } = await fixture('<button>Adicionar Contato</button><div class="skeleton">Carregando</div>',
+    [step('Adicionar Contato')], { vocabulary: ['Adicionar Contato'] });
+  assert.equal(result.steps[0].status, 'capturado', JSON.stringify(result.steps));
+  assert.equal(result.steps[0].motivo, 'print com carregamento');
+  assert.ok(result.pending?.includes('print com carregamento: 01-alvo'));
+});
+
 test('aba com contador e placeholder do vocabulário não recebe máscara', { timeout: 90000 }, async () => {
   const { result } = await fixture(`
     <button>Criar novo robô</button><nav><a>Lista de Robôs <span>(0)</span></a></nav>`,
   [step('Criar novo robô')], { vocabulary: ['Criar novo robô', 'Lista de Robôs ({count})'] });
   assert.equal(result.steps[0].status, 'capturado', JSON.stringify(result.steps));
   assert.ok(!result.entries[0].masked.includes('texto não confirmado'), JSON.stringify(result.entries[0].masked));
+});
+
+test('placeholder de contador não libera texto desconhecido na aba', { timeout: 90000 }, async () => {
+  const { result } = await fixture(`
+    <button>Criar novo robô</button><nav><a>Lista de Robôs <span>Nome privado</span></a></nav>`,
+  [step('Criar novo robô')], { vocabulary: ['Criar novo robô', 'Lista de Robôs ({count})'] });
+  assert.equal(result.steps[0].status, 'capturado', JSON.stringify(result.steps));
+  assert.ok(result.entries[0].masked.includes('texto não confirmado'));
 });

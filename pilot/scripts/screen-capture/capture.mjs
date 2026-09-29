@@ -40,10 +40,10 @@ async function closeSafeNotice(page, target) {
   }
 }
 
-async function findControl(page, target, step) {
+async function findControl(page, target, step, timeoutMs = 20_000) {
   const roles = step.role === 'button' ? ['button', 'link', 'menuitem']
     : step.role === 'textbox' ? ['textbox', 'combobox'] : [step.role];
-  const deadline = Date.now() + 20_000;
+  const deadline = Date.now() + timeoutMs;
   let count = 0;
   do {
     const candidates = [];
@@ -75,6 +75,51 @@ async function findControl(page, target, step) {
     await page.waitForTimeout(Math.min(500, deadline - Date.now()));
   } while (true);
   return { control: null, count };
+}
+
+async function openMenuFor(page, target, step) {
+  const labels = step.menuTrigger ? [step.menuTrigger] : [];
+  const triggers = [];
+  for (const frame of page.frames()) {
+    if (new URL(frame.url()).origin !== target.url) continue;
+    for (const role of ['button', 'link']) {
+      const controls = frame.getByRole(role);
+      for (let index = 0, length = await controls.count(); index < length; index++) {
+        const control = controls.nth(index);
+        if (!await control.isVisible().catch(() => false) || !await control.isEnabled().catch(() => false)) continue;
+        const candidate = await control.evaluate((element) => ({
+          name: element.getAttribute('aria-label') || element.innerText || element.getAttribute('title') || '',
+          popup: element.getAttribute('aria-haspopup') ?? '',
+        })).catch(() => null);
+        if (!candidate) continue;
+        const named = labels.some((label) => controlKey(label) === controlKey(candidate.name));
+        const fallback = menuTrigger(candidate.name) || /^(?:menu|listbox|true)$/iu.test(candidate.popup);
+        if (named || fallback) triggers.push({ control, named });
+      }
+    }
+  }
+  triggers.sort((a, b) => Number(b.named) - Number(a.named));
+  for (const { control } of triggers.slice(0, 2)) {
+    try {
+      await control.click({ timeout: 1500 });
+      const found = await findControl(page, target, step, 1500);
+      if (found.control) return found;
+    } catch { /* tenta somente o próximo gatilho de menu permitido */ }
+  }
+  return { control: null, count: 0 };
+}
+
+async function waitForLoading(page) {
+  const loading = () => [...document.querySelectorAll('[aria-busy="true"],[role="progressbar"],[class*="skeleton" i],[class*="spinner" i],.animate-pulse,svg')]
+    .some((element) => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0 || getComputedStyle(element).visibility === 'hidden') return false;
+      if (element.tagName.toLowerCase() !== 'svg') return true;
+      return /carregando|loading/iu.test(element.querySelector('title')?.textContent ?? '')
+        && element.querySelectorAll('rect').length >= 5;
+    });
+  try { await page.waitForFunction(`(${loading.toString()})() === false`, null, { timeout: 15_000, polling: 250 }); return false; }
+  catch { return await page.evaluate(loading).catch(() => false); }
 }
 
 async function missingControlReason(page, target, count) {
@@ -156,8 +201,16 @@ export function capturePlan({ page, module, faqBody, coverage, screenFacts }) {
     const step = `${String(index + 1).padStart(2, '0')}-${fact.text.normalize('NFD').replace(/\p{Diacritic}/gu, '')
       .toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '').slice(0, 55)}`;
     const label = fact.text;
+    const source = /^(.*):(\d+)$/u.exec(fact.source ?? '');
+    const trigger = source && screenFacts.filter((candidate) => {
+      const earlier = /^(.*):(\d+)$/u.exec(candidate.source ?? '');
+      return earlier && earlier[1] === source[1] && Number(earlier[2]) < Number(source[2])
+        && Number(source[2]) - Number(earlier[2]) <= 80 && candidate.route === fact.route
+        && candidate.owner === fact.owner && menuTrigger(candidate.text ?? '');
+    }).sort((a, b) => Number(b.source.split(':').at(-1)) - Number(a.source.split(':').at(-1)))[0];
     return { page, step, listIndex: match.listIndex, line: match.line,
       role: fact.kind === 'field' ? 'textbox' : 'button', label,
+      ...(trigger ? { menuTrigger: trigger.text } : {}),
       route: fact.route ?? routes[0], owner: fact.owner, checkoutSha: fact.sha, alt: `Tela de ${module}: ${label}`,
       action: fact.kind === 'action' && (/^(?:abrir|ver|mostrar|acessar)\b/iu.test(label)
         || menuTrigger(label) && (selected[index + 1]?.match?.line > match.line
@@ -237,7 +290,10 @@ async function scanVisible(page) {
           || !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden') continue;
         const range = document.createRange(); range.selectNodeContents(node);
         const profile = Boolean(element.closest('header [class*="profile"], header [class*="user"], [role="banner"] [class*="profile"], [role="banner"] [class*="user"]'));
+        const first = items.length;
         add(node.textContent, range.getClientRects(), inDataRegion(element) ? 'campo ou conteúdo dinâmico' : 'texto não confirmado', profile);
+        const tab = element.closest('a,[role="tab"]');
+        if (tab) for (const item of items.slice(first)) item.context = tab.innerText;
       }
       for (const element of root.querySelectorAll('input,textarea')) {
         add(element.value, element.getClientRects(), 'campo ou conteúdo dinâmico', true);
@@ -268,9 +324,12 @@ function inVocabulary(text, vocabulary) {
   const key = vocabularyKey(text);
   if (!key) return false;
   return vocabulary.some((word) => {
+    const slots = [...String(word).matchAll(/\{([^{}]+)\}/gu)].map((match) => match[1]);
     const parts = String(word).split(/\{[^{}]+\}/u).map(vocabularyKey);
-    if (parts.length === 1) return parts[0] === key;
-    const pattern = new RegExp(`^${parts.map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('.+')}$`, 'u');
+    if (parts.length === 1) return parts[0] === key || key.startsWith(parts[0]) && /^\d+$/u.test(key.slice(parts[0].length));
+    const escape = (part) => part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    const pattern = new RegExp(`^${parts.map(escape).reduce((result, part, index) =>
+      index ? `${result}${/^(?:count|contador|numero|número)$/iu.test(slots[index - 1]) ? '\\d+' : '.+'}${part}` : part, '')}$`, 'u');
     return pattern.test(key);
   });
 }
@@ -278,7 +337,7 @@ function inVocabulary(text, vocabulary) {
 function masksForVisible(visible, vocabulary) {
   return visible.flatMap((item) => {
     const sensitive = containsSensitiveData(item.text, { detectOpaque: true });
-    const known = inVocabulary(item.text, vocabulary);
+    const known = inVocabulary(item.text, vocabulary) || item.context && inVocabulary(item.context, vocabulary);
     if (!sensitive && !item.force && known) return [];
     return [{ ...item.rect, reason: sensitive ? 'varredura sensível' : item.reason }];
   });
@@ -447,13 +506,18 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         throw new Error('Navegação fora da rota confirmada');
       }
       await closeSafeNotice(page, target);
-      const { control, count } = await findControl(page, target, step);
+      let { control, count } = await findControl(page, target, step, step.menuTrigger ? 1000 : 20_000);
+      if (!control) ({ control, count } = await openMenuFor(page, target, step));
       outcome.candidates = count;
       if (!control) {
         outcome.motivo = count ? 'alvo fora da tela' : await missingControlReason(page, target, count);
         throw new Error('Rótulo ausente ou não clicável');
       }
       if (!['click', 'none'].includes(step.action)) throw new Error('Ação não permitida');
+      if (await waitForLoading(page)) {
+        outcome.motivo = 'print com carregamento';
+        manifest.pending = [...new Set([...(manifest.pending ?? []), `print com carregamento: ${step.step}`])];
+      }
       await mkdir(join(root, step.page), { recursive: true });
       const cdp = await context.newCDPSession(page);
       let captured = null;
@@ -484,7 +548,7 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         owner: step.owner, file: image, sha256, alt: step.alt, bundleSha, checkoutSha: step.checkoutSha,
         source: 'automatic', masked: [...new Set(mask.map((item) => item.reason))] });
       outcome.status = 'capturado';
-      outcome.motivo = 'capturado';
+      if (outcome.motivo !== 'print com carregamento') outcome.motivo = 'capturado';
       } catch {
         manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step || entry.source !== 'automatic');
         manifest.pending = [...new Set([...(manifest.pending ?? []), `captura pendente: ${step.step}`])];
