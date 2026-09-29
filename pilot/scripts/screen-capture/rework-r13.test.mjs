@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { captureScreens } from './capture.mjs';
 import { captureFailureLog } from '../../mcp/screen-capture-service.mjs';
+import { assertAllowedTarget, installQaNetworkGuard } from '../guide-proof.mjs';
+import { launch } from '../visual/measure.mjs';
 
 const secret = 'CfDJ8TESTE123456';
 const playwrightError = new Error(`TimeoutError: waiting for target\nCall log:\n  cookie: .AspNetCore.Identity.Application=${secret}\n  authorization: Bearer eyJhbGciOiJIUzI1NiJ9.fixture.signature`);
@@ -24,7 +26,7 @@ async function withFixture(run) {
       response.write('data: ready\n\n');
     } else if (request.url === '/app') {
       response.setHeader('Content-Type', 'text/html');
-      response.end('<button>Primeiro</button><button>Segundo</button><button>Terceiro</button><script>new EventSource("/events"); fetch("/missing").catch(()=>{});</script>');
+      response.end('<button>Primeiro</button><button>Segundo</button><button>Terceiro</button><script>new EventSource("/events"); fetch("https://outside.example.test/blocked").catch(()=>{});</script>');
     } else { response.writeHead(404); response.end(); }
   });
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
@@ -54,7 +56,8 @@ test('TimeoutError em handler e passo vira pendência e captura continua', { tim
       fixtureOnRequestFailed: () => { throw playwrightError; },
       fixtureBeforeStep: (step) => { if (step.label === 'Segundo') throw playwrightError; } });
     assert.deepEqual(manifest.entries.map((entry) => entry.label), ['Primeiro', 'Terceiro']);
-    assert.ok(manifest.pending?.some((item) => item.includes('Segundo')));
+    assert.ok(manifest.pending?.some((item) => item.includes('02-segundo')));
+    assert.ok(manifest.pending?.includes('handler de requisição falhou'));
   });
 });
 
@@ -62,4 +65,27 @@ test('log elimina headers, sessão, Bearer e call log do Playwright', () => {
   const log = captureFailureLog(new Error(`TimeoutError: cookie: .AspNetCore.Identity.Application=${secret} authorization: Bearer eyJhbGciOiJIUzI1NiJ9.fixture.signature\nCall log:\n${playwrightError.message}`));
   assert.match(log, /TimeoutError/u);
   assert.doesNotMatch(log, /CfDJ8|AspNetCore|cookie|authorization|Bearer|eyJhb|Call log|fixture\.signature/iu);
+});
+
+test('redirect de stream para fora da allowlist continua bloqueado', async () => {
+  const server = createServer((request, response) => {
+    if (request.url === '/events') { response.writeHead(302, { Location: 'https://outside.example.test/stream' }); response.end(); }
+    else { response.setHeader('Content-Type', 'text/html'); response.end('<script>new EventSource("/events")</script>'); }
+  });
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  const browser = await launch();
+  try {
+    const context = await browser.newContext();
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const guard = await installQaNetworkGuard(context, assertAllowedTarget(baseUrl));
+    const page = await context.newPage();
+    await page.goto(baseUrl);
+    await page.waitForTimeout(250);
+    assert.ok(guard.blocked.some((item) => item.host === 'outside.example.test'));
+    await context.close();
+  } finally {
+    await browser.close();
+    server.closeAllConnections();
+    await new Promise((done) => server.close(done));
+  }
 });
