@@ -5234,14 +5234,6 @@ button {
   font-size: 12px;
 }
 
-.ih-ai-thread[data-compact] .ih-ai-error-actions button {
-  min-height: 44px;
-}
-
-.ih-ai-thread[data-compact] .ih-ai-error-actions a {
-  min-height: 44px;
-}
-
 .ih-ai-thread[data-compact] .ih-ai-busy-label {
   gap: 8px;
   margin: 0 0 8px;
@@ -5388,6 +5380,20 @@ button {
 }
 
 @media (max-width: 640px) {
+  .ih-ai-drawer-meta {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 8px;
+  }
+
+  .ih-ai-drawer-meta > p {
+    grid-column: 1 / -1;
+  }
+
+  .ih-ai-drawer-meta > .ih-ai-drawer-human {
+    justify-self: start;
+  }
+
   .ih-ai-screen {
     overflow: hidden;
   }
