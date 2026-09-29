@@ -24,11 +24,21 @@
     ".ih-ai-human-action": [12, 650],
     ".ih-ai-error-actions button": [12, 600],
     ".ih-ai-error-actions a": [12, 600],
+    ".ih-ai-busy-label": [13, 400],
+    ".ih-ai-thread[data-compact] .ih-ai-busy-label": [12, 400],
     ".ih-ai-panel-list a > span:not(.ih-ai-panel-head)": [12, 400]
   },
   "geometry": {
     ".ih-ai-drawer-head button": [30, 30],
     ".ih-ai-send": [36, 36]
+  },
+  "desktopMaxHeight": {
+    ".ih-ai-error-actions button": 32,
+    ".ih-ai-error-actions a": 32
+  },
+  "mobileFooter": {
+    "disclaimerMaxLines": 2,
+    "composerMinTop": 680
   },
   "mobileFonts": {
     ".ih-ai-user p": [14, 400],

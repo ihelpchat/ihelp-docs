@@ -75,6 +75,13 @@ const assertAssistantReference = async (page, root, context) => {
             `${actualWidth}×${actualHeight}`, `${width}×${height}`]);
         }
       }
+      for (const [selector, maxHeight] of Object.entries(reference.desktopMaxHeight)) {
+        for (const node of el.querySelectorAll(selector)) {
+          if (!node.getClientRects().length) continue;
+          measured.push([selector, node.getBoundingClientRect().height <= maxHeight,
+            `${node.getBoundingClientRect().height}px`, `até ${maxHeight}px`]);
+        }
+      }
     }
     return measured;
   }, assistantReference);
@@ -207,6 +214,18 @@ try {
     await assertAssistantReference(drawerPage, drawerPage.locator('body'), `vazio/${viewport}/painel`);
     assert.equal(await drawerPage.locator('.ih-ai-drawer-empty .ih-ai-drawer-human').count(), 0, 'botão humano grande no estado vazio');
     assert.equal(await drawerPage.locator('.ih-ai-drawer-meta .ih-ai-drawer-human').count(), 1, 'link humano discreto no rodapé');
+    if (viewport === 'mobile') {
+      const footer = await drawerPage.locator('.ih-ai-drawer-foot').evaluate((el) => {
+        const disclaimer = el.querySelector('.ih-ai-drawer-meta > p');
+        const composer = el.querySelector('.ih-ai-composer');
+        const lineHeight = parseFloat(getComputedStyle(disclaimer).lineHeight);
+        return { lines: Math.round(disclaimer.getBoundingClientRect().height / lineHeight), composerTop: composer.getBoundingClientRect().top };
+      });
+      assert.ok(footer.lines <= assistantReference.mobileFooter.disclaimerMaxLines,
+        `rodapé móvel: aviso em ${footer.lines} linhas, máximo ${assistantReference.mobileFooter.disclaimerMaxLines}`);
+      assert.ok(footer.composerTop >= assistantReference.mobileFooter.composerMinTop,
+        `rodapé móvel desloca caixa de pergunta: topo ${footer.composerTop}px`);
+    }
     await drawerPage.close();
     for (const [state, messages] of Object.entries(states)) {
       const page = await browser.newPage({ viewport: dimensions, hasTouch: viewport === 'mobile' });
