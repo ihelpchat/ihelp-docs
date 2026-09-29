@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { launch } from '../visual/measure.mjs';
-import { assertAllowedTarget, loginToQa } from '../guide-proof.mjs';
+import { assertAllowedTarget, installQaNetworkGuard, loginToQa } from '../guide-proof.mjs';
 import { containsSensitiveData } from '../../mcp/sensitive-data.mjs';
 import { credentialsFromEnv } from '../guide-proof.mjs';
 import { isUnsafeCaptureAction } from '../../mcp/faq-editorial.mjs';
@@ -246,17 +246,10 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
   const browser = await launch();
   try {
     const context = await browser.newContext({ ...(storageState ? { storageState } : {}), serviceWorkers: 'block' });
-    await context.route('**/*', async (route) => {
-      const request = new URL(route.request().url());
-      if (request.origin !== target.url) return route.abort();
-      const response = await route.fetch({ maxRedirects: 0 });
-      const location = response.headers().location;
-      if (location && new URL(location, request).origin !== target.url) return route.abort();
-      return route.fulfill({ response });
-    });
+    const networkGuard = await installQaNetworkGuard(context, target, env);
     const page = await context.newPage();
     if (!fixture && !storageState) {
-      try { await loginToQa(page, target.url, credentialsFromEnv(env).authorized); }
+      try { await loginToQa(page, target.url, credentialsFromEnv(env).authorized, { networkGuard }); }
       catch (error) { throw new Error('Login na homologação falhou', { cause: error }); }
     }
     let currentRoute = null;

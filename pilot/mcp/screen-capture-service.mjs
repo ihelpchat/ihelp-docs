@@ -24,7 +24,7 @@ export function captureFailureCategory(error) {
 export function captureFailureLog(error, env = process.env) {
   const category = captureFailureCategory(error);
   const diagnostic = error?.diagnostic ?? error?.cause?.diagnostic;
-  const detail = diagnostic ? `outcome=${diagnostic.outcome} path=${diagnostic.path} messages=${diagnostic.messages.join(' | ')} requests=${diagnostic.requests.join(' | ')} controls=${diagnostic.controls.join(' | ')}`
+  const detail = diagnostic ? `outcome=${diagnostic.outcome} path=${diagnostic.path} messages=${diagnostic.messages.join(' | ')} requests=${diagnostic.requests.join(' | ')} failed=${(diagnostic.failed ?? []).join(' | ')} controls=${diagnostic.controls.join(' | ')}`
     : String(error?.cause?.message ?? error?.message ?? '').split(/\r?\n/u, 1)[0];
   let safe = detail.replace(/https?:\/\/[^\s"'<>]+/giu, '[URL removida]')
     .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, '[e-mail removido]');

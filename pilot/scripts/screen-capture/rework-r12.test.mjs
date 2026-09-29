@@ -34,6 +34,9 @@ async function fixture(run) {
   const apiUrl = `http://127.0.0.1:${apiServer.address().port}`;
   const frontServer = createServer((request, response) => {
     if (request.url === '/redirect') { response.writeHead(302, { Location: `${apiUrl}/api/login` }); response.end(); return; }
+    if (request.url === '/production-redirect') {
+      response.writeHead(302, { Location: 'https://apiv3.ihelpchat.com/api/login' }); response.end(); return;
+    }
     response.setHeader('Content-Type', 'text/html');
     response.end(`<button>Entrar</button><script>document.querySelector('button').onclick = async () => {
       try { await fetch('${apiUrl}/api/login', { mode: 'no-cors' }); document.body.dataset.login = 'ok'; }
@@ -54,8 +57,10 @@ test('fixture com front e API em origens distintas: login, bloqueio e redirect',
   await fixture(async (browser, frontUrl, apiUrl, hits) => {
     const context = await browser.newContext();
     const target = proof.assertAllowedTarget(frontUrl);
-    const guard = await proof.installQaNetworkGuard(context, target);
+    const guard = await proof.installQaNetworkGuard(context, target, {}, { fixtureAllowedOrigins: [apiUrl] });
     const page = await context.newPage();
+    const failed = [];
+    page.on('requestfailed', (request) => failed.push(proof.qaFailedRequest(request, guard)));
     await page.goto(frontUrl);
     await page.getByRole('button', { name: 'Entrar' }).click();
     await page.waitForFunction(() => document.body.dataset.login === 'ok');
@@ -63,6 +68,10 @@ test('fixture com front e API em origens distintas: login, bloqueio e redirect',
     assert.equal(guard.blocked.length, 0);
     await page.goto(`${frontUrl}/redirect`);
     assert.equal(new URL(page.url()).origin, apiUrl);
+    await assert.rejects(page.goto(`${frontUrl}/production-redirect`), /ERR_FAILED/u);
+    assert.deepEqual(guard.blocked.at(-1), { allowed: false, host: 'apiv3.ihelpchat.com',
+      reason: 'bloqueado: host de produção' });
+    assert.match(failed.at(-1), /GET apiv3\.ihelpchat\.com bloqueado: host de produção net::ERR_FAILED/u);
     await context.close();
   });
 });
@@ -72,7 +81,7 @@ test('requisição abortada aparece no diagnóstico apenas com método, host e m
   await fixture(async (browser, frontUrl, apiUrl, hits) => {
     const context = await browser.newContext();
     const target = proof.assertAllowedTarget(frontUrl);
-    const guard = await proof.installQaNetworkGuard(context, target, {}, { restrictFixtureToTarget: true });
+    const guard = await proof.installQaNetworkGuard(context, target);
     const page = await context.newPage();
     const failed = [];
     page.on('requestfailed', (request) => failed.push(proof.qaFailedRequest(request, guard)));

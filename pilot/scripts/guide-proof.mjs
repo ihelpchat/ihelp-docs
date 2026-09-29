@@ -74,14 +74,63 @@ export function assertAllowedTarget(value, env = process.env) {
   try { url = new URL(value); } catch { throw new Error('Destino recusado: URL inválida'); }
   if (url.username || url.password || url.search || url.hash) throw new Error('Destino recusado: URL com credencial ou parâmetro');
   const local = url.protocol === 'http:' && url.hostname === '127.0.0.1';
-  const allowed = new Set((env[envCompatibility.guideProof.allowedHosts] ?? '').split(',').map((host) => host.trim()).filter(Boolean));
-  const stagingName = /^(?:staging|homolog|homologacao)(?:-[a-z0-9]+)?\.ihelpchat\.com(?:\.br)?$/u.test(url.hostname);
-  const knownProduction = /^(?:app|api|www|apiv3|api3)\.ihelpchat\.com(?:\.br)?$/u.test(url.hostname)
-    || ['ihelpchat.com', 'ihelpchat.com.br'].includes(url.hostname);
-  const staging = url.protocol === 'https:' && (stagingName || allowed.has(url.hostname))
-    && allowed.has(url.hostname) && !knownProduction && !url.port;
+  const staging = qaRequestDecision(url.href, { local: false }, env).allowed;
   if (!local && !staging) throw new Error('Destino recusado: host não permitido');
   return { url: url.origin, local };
+}
+
+const productionHost = (host) => host === 'ihelpchat.com' || host === 'ihelpchat.com.br'
+  || host.endsWith('.ihelpchat.com') || host.endsWith('.ihelpchat.com.br')
+  || host === 'api.ihelp.com.br';
+
+export function qaRequestDecision(value, target, env = process.env, { fixtureAllowedOrigins = [] } = {}) {
+  let url;
+  try { url = new URL(value); } catch { return { allowed: false, host: 'inválido', reason: 'bloqueado: URL inválida' }; }
+  const host = url.host;
+  if (productionHost(url.hostname)) return { allowed: false, host, reason: 'bloqueado: host de produção' };
+  if (target.local && url.protocol === 'http:' && url.hostname === '127.0.0.1'
+    && (url.origin === target.url || fixtureAllowedOrigins.includes(url.origin))) return { allowed: true, host };
+  if (target.local) return { allowed: false, host, reason: 'bloqueado: host fora da lista permitida' };
+  const allowed = new Set((env[envCompatibility.guideProof.allowedHosts] ?? '').split(',')
+    .map((item) => item.trim()).filter((item) => /^[a-z0-9.-]+$/u.test(item)));
+  if (url.protocol === 'https:' && !url.port && !url.username && !url.password && allowed.has(url.hostname))
+    return { allowed: true, host };
+  return { allowed: false, host, reason: 'bloqueado: host fora da lista permitida' };
+}
+
+export async function installQaNetworkGuard(context, target, env = process.env, options = {}) {
+  const guard = { blocked: [], reasons: new WeakMap() };
+  await context.route('**/*', async (route) => {
+    const request = route.request();
+    const decision = qaRequestDecision(request.url(), target, env, options);
+    if (!decision.allowed) {
+      guard.blocked.push(decision);
+      guard.reasons.set(request, decision);
+      return route.abort();
+    }
+    const response = await route.fetch({ maxRedirects: 0 });
+    const location = response.headers().location;
+    if (location) {
+      const redirected = qaRequestDecision(new URL(location, request.url()).href, target, env, options);
+      if (!redirected.allowed) {
+        guard.blocked.push(redirected);
+        guard.reasons.set(request, redirected);
+        return route.abort();
+      }
+    }
+    return route.fulfill({ response });
+  });
+  return guard;
+}
+
+export function qaFailedRequest(request, guard) {
+  let host = 'inválido';
+  try { host = new URL(request.url()).host; } catch { /* no URL is logged */ }
+  const blocked = guard?.reasons.get(request);
+  if (blocked) host = blocked.host;
+  const failure = /^net::[A-Z_]+$/u.test(request.failure()?.errorText ?? '')
+    ? request.failure().errorText : 'falha';
+  return `${request.method()} ${host} ${blocked ? `${blocked.reason} ` : ''}${failure}`;
 }
 
 function safeLoginText(value, secrets) {
@@ -103,20 +152,23 @@ async function loginControls(page) {
     .filter(Boolean));
 }
 
-export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs = 30000 } = {}) {
+export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs = 30000, networkGuard } = {}) {
   if (!email || !password) throw new Error('Credenciais de QA ausentes');
   await page.goto(new URL('/login', baseUrl).href, { waitUntil: 'domcontentloaded' });
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
   const before = new Set(await loginControls(page));
   const responses = [];
+  const failed = [];
   const origin = new URL(baseUrl).origin;
   const onResponse = (response) => {
     const url = new URL(response.url());
     if (url.origin !== origin) return;
     responses.push(`${response.request().method()} ${safeLoginText(url.pathname, [email, password])} ${response.status()}`);
   };
+  const onFailed = (request) => failed.push(qaFailedRequest(request, networkGuard));
   page.on('response', onResponse);
+  page.on('requestfailed', onFailed);
   const alert = page.locator('[role="alert"]:visible, [class*="toast"]:visible, .error:visible').first();
   let outcome;
   try {
@@ -133,11 +185,12 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
       .allTextContents();
     const controls = (await loginControls(page)).filter((label) => !before.has(label));
     const diagnostic = { outcome, path, messages: messages.map((message) => safeLoginText(message, [email, password]))
-      .filter(Boolean).slice(0, 5), requests: responses.slice(0, 20),
+      .filter(Boolean).slice(0, 5), requests: responses.slice(0, 20), failed: failed.slice(0, 20),
     controls: controls.map((label) => safeLoginText(label, [email, password])).slice(0, 10) };
     throw Object.assign(new Error('Login na homologação falhou'), { diagnostic });
   } finally {
     page.off('response', onResponse);
+    page.off('requestfailed', onFailed);
   }
 }
 
@@ -196,21 +249,11 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
   try {
     for (const role of ['authorized', 'denied']) {
       const context = await browser.newContext({ serviceWorkers: 'block' });
-      const blocked = [];
-      await context.route('**/*', async (route) => {
-        const requestUrl = new URL(route.request().url());
-        if (requestUrl.origin !== target.url) { blocked.push(requestUrl.origin); return route.abort(); }
-        const response = await route.fetch({ maxRedirects: 0 });
-        const location = response.headers()['location'];
-        if (location && new URL(location, requestUrl).origin !== target.url) {
-          blocked.push(new URL(location, requestUrl).origin);
-          return route.abort();
-        }
-        return route.fulfill({ response });
-      });
+      const networkGuard = await installQaNetworkGuard(context, target);
+      const blocked = networkGuard.blocked;
       const page = await context.newPage();
       try {
-        if (!fixture || fixtureLogin) await loginToQa(page, target.url, credentials[role]);
+        if (!fixture || fixtureLogin) await loginToQa(page, target.url, credentials[role], { networkGuard });
         for (const guide of published) {
           const plans = await Promise.all(guide.steps.map(step => stepPlan(guide, step)));
           const initial = plans[0].route;
