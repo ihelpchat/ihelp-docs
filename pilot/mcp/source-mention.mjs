@@ -6,7 +6,7 @@ const attribution = /\b(?:segundo|conforme|de acordo com|com base (?:em|no|na|no
 const material = /^(?:informac|document|materi|conteud|text|font|context|dad|arquiv|trech|anotac|referenc|descric|leitur|fornec|disponibiliz|receb|inform|apresent|envi|consult|compartilh)[a-z]*$/u;
 const generation = /\b(?:nao ha informac(?:ao|oes) sobre|nao foi informado)\b/u;
 const available = /\b(?:informac(?:ao|oes)|dados|o que)\s+(?:est(?:a|ao)\s+)?disponive(?:l|is)\b/gu;
-const productPlace = /\b(?:na|no|nas|nos)\s+(?:ficha|contato|tela|modulo|ihelp|painel|atendimento|conversa)\b/u;
+const productPlace = /\b(?:(?:na|no|nas|nos)\s+(?:ficha|contato|tela|modulo|ihelp|painel|atendimento|conversa)|(?:no|neste)\s+endpoint)\b/u;
 const sourceMaterial = /^(?:document|materi|context|conteud|font|arquiv|bas|text|anotac|referenc)[a-z]*$/u;
 const sourceVerb = /\b(?:indica[mr]?|mostra[mr]?|diz(?:em)?|aponta[mr]?)\s+que\b/u;
 
