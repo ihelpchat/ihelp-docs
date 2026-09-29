@@ -37,6 +37,43 @@ test('juiz também marca depois sem sustentação', async () => {
   assert.match(renderFreeFaqSections(judged.sections), /\*\*O que acontece depois:\*\* <AConfirmar>A próxima conversa/u);
 });
 
+test('juiz omite os dois contextos quando nenhum tem fonte e registra a tarefa', async () => {
+  const checked = validateFreeFaqSections({ passos: [task()] }, context);
+  const judged = await judgeClaims(checked.sections, context, async (claims) => ({ claims: claims.map((claim) => ({
+    id: claim.id, status: claim.section === 'passos' ? 'sustentada' : 'a confirmar',
+    reason: 'sem fato', sourceMention: false,
+  })) }));
+  const published = judged.sections.passos[0];
+  assert.deepEqual(published.sobre, []);
+  assert.deepEqual(published.depois, []);
+  assert.match(renderFreeFaqSections(judged.sections), /### Responsável\n\n1\. No módulo Contatos/u);
+  assert.doesNotMatch(renderFreeFaqSections(judged.sections), /<AConfirmar>|O que acontece depois/u);
+  assert.match(judged.pending.join(' '), /contexto da tarefa Responsável sem fonte/u);
+});
+
+test('juiz conserva o contexto sustentado e marca o outro a confirmar', async () => {
+  const checked = validateFreeFaqSections({ passos: [task()] }, context);
+  const judged = await judgeClaims(checked.sections, context, async (claims) => ({ claims: claims.map((claim) => ({
+    id: claim.id, status: claim.section === 'depois' ? 'a confirmar' : 'sustentada',
+    reason: 'sem fato', sourceMention: false,
+  })) }));
+  const published = judged.sections.passos[0];
+  assert.equal(published.sobre[0].text, task().sobre[0].text);
+  assert.match(published.depois[0].text, /^<AConfirmar>A próxima conversa/u);
+  assert.doesNotMatch(judged.pending.join(' '), /contexto da tarefa Responsável sem fonte/u);
+});
+
+test('juiz não confunde a tela do produto com atribuição à fonte', async () => {
+  const efeito = 'A tela confirma a alteração e novos atendimentos iniciados pelo cliente podem ser encaminhados ao responsável.';
+  const checked = validateFreeFaqSections({ passos: [task({ depois: [{ text: efeito }] })] }, context);
+  const judged = await judgeClaims(checked.sections, context, async (claims) => ({ claims: claims.map((claim) => ({
+    id: claim.id, status: 'sustentada', reason: '',
+    sourceMention: claim.section === 'depois',
+  })) }));
+  assert.deepEqual(judged.sections.passos[0].depois, [{ text: efeito }]);
+  assert.doesNotMatch(judged.pending.join(' '), /frase omitida: mencionava a fonte/u);
+});
+
 test('tarefa sem contexto sustentado registra pendência sem travar', () => {
   const checked = validateFreeFaqSections({ passos: [task({ sobre: [], depois: [] })] }, context);
   assert.match(checked.pending.join(' '), /contexto da tarefa Responsável sem fonte/u);
