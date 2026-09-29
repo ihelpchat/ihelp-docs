@@ -7,6 +7,32 @@ import { mentionsSource } from './source-mention.mjs';
 const context = { request: { topic: 'Robô', module: 'Robôs' }, screenFacts: [], existing: [] };
 const sections = (text) => ({ oQueE: [{ text }], passos: [{ tarefa: 'Ativar', passos: [{ text: 'Clique em **Publicar**.' }] }] });
 
+test('informações disponíveis distinguem lugar do produto de material e atribuição', () => {
+  const cases = [
+    ['consultar as informações disponíveis na ficha', false],
+    ['As informações disponíveis no documento interno indicam que o robô recebe o cliente.', true],
+    ['As informações disponíveis não explicam o robô.', true],
+    ['Os dados disponíveis mostram que o robô recebe o cliente.', true],
+    ['as informações disponíveis no iHelp', false],
+    ['Consulta os dados disponíveis neste endpoint público.', false],
+    ['o que está disponível no painel', false],
+    ['o que está disponível no material indica que o robô responde.', true],
+  ];
+  for (const [phrase, expected] of cases) {
+    assert.equal(mentionsSource(phrase), expected, phrase);
+  }
+  for (const place of ['ficha', 'contato', 'tela', 'módulo', 'iHelp', 'painel', 'atendimento', 'conversa']) {
+    assert.equal(mentionsSource(`as informações disponíveis no ${place}`), false, place);
+  }
+  for (const material of ['documento', 'material', 'contexto', 'conteúdo', 'fonte', 'arquivo',
+    'base', 'texto', 'anotações', 'referência']) {
+    assert.equal(mentionsSource(`os dados disponíveis no ${material}`), true, material);
+  }
+  for (const verb of ['indicam que', 'mostram que', 'dizem que', 'apontam que']) {
+    assert.equal(mentionsSource(`as informações disponíveis ${verb} o robô responde.`), true, verb);
+  }
+});
+
 test('atribuição gramatical é recusada nas saídas públicas sem bloquear linguagem comum', () => {
   const rejected = [
     'Segundo o conteúdo fornecido, o robô recebe o cliente.',
@@ -17,13 +43,13 @@ test('atribuição gramatical é recusada nas saídas públicas sem bloquear lin
     'Pelo que consta em um documento consultado, o robô recebe o cliente.',
     'Como descrito em texto recebido, o robô recebe o cliente.',
     'Não há informação sobre o robô.',
-    'As informações disponíveis não explicam o robô.',
     'Não foi informado como o robô responde.',
   ];
   for (const phrase of rejected) {
     assert.equal(mentionsSource(phrase), true, phrase);
     const checked = validateFreeFaqSections(sections(phrase), context);
-    assert.deepEqual(checked.sections.oQueE, [], phrase);
+    assert.equal(checked.sections.oQueE.length, phrase.includes(',') ? 1 : 0, phrase);
+    if (phrase.includes(',')) assert.equal(checked.sections.oQueE[0].text, 'O robô recebe o cliente.', phrase);
     assert.doesNotMatch(renderFreeFaqSections(checked.sections), /conteúdo fornecido|material enviado|informações disponíveis/iu);
   }
   for (const phrase of [
@@ -71,7 +97,8 @@ test('atribuições por radical cobrem flexões e determinantes', () => {
     'Segundo as informações recebidas, o robô recebe o cliente.',
   ]) {
     assert.equal(mentionsSource(phrase), true, phrase);
-    assert.deepEqual(validateFreeFaqSections(sections(phrase), context).sections.oQueE, [], phrase);
+    assert.deepEqual(validateFreeFaqSections(sections(phrase), context).sections.oQueE,
+      [{ text: 'O robô recebe o cliente.' }], phrase);
   }
 });
 
@@ -116,9 +143,9 @@ test('juiz ignora rewrite inventado e remove somente atribuição destacável', 
   assert.match(judged.pending.join(' '), /frase omitida: mencionava a fonte/u);
 });
 
-test('replay do revisor: omite atribuição ao contexto em O que é', () => {
+test('replay do revisor: remove atribuição ao contexto em O que é', () => {
   const result = validateFreeFaqSections(sections('Segundo o contexto, o robô recebe o cliente.'), context);
-  assert.deepEqual(result.sections.oQueE, []);
+  assert.deepEqual(result.sections.oQueE, [{ text: 'O robô recebe o cliente.' }]);
   assert.match(result.pending.join(' '), /menção à fonte/u);
 });
 
@@ -129,8 +156,8 @@ test('omite variantes com acento, caixa e nome do arquivo, preserva frase normal
     'O segundo cérebro descreve o robô.', 'O arquivo robos.md descreve o robô.',
     'Leia business-context para entender o robô.']) {
     const result = validateFreeFaqSections(sections(phrase), context);
-    assert.deepEqual(result.sections.oQueE, [], phrase);
-    assert.match(result.pending.join(' '), /menção à fonte/u);
+    assert.equal(result.sections.oQueE.length, phrase.includes(',') ? 1 : 0, phrase);
+    assert.match(result.pending.join(' '), /menção à fonte|mencionava a fonte/u);
   }
   assert.equal(validateFreeFaqSections(sections('O robô recebe o cliente.'), context).sections.oQueE.length, 1);
 });

@@ -15,15 +15,16 @@ const distinctActions = ['Adicionar Contato', 'Abrir Cadastro de Contato', 'Sele
   'Escolher Atendente Responsável', 'Conferir Dados do Contato', 'Salvar Novo Contato',
   'Voltar à Lista de Contatos', 'Localizar Contato Cadastrado'];
 
-test('subtítulo sustentado sai de O que é; pendência usa fallback fixo', () => {
+test('subtítulo preserva O que é; pendência usa fallback fixo', () => {
   const request = { topic: 'Robô', module: 'Robôs', description: 'Criar, editar e publicar robôs.' };
   const facts = [{ kind: 'route', text: 'Robôs', route: '/bot' },
     ...['Criar robô', 'Editar robô', 'Publicar'].map((text, line) => ({ kind: 'action', text,
       repository: 'fixture', path: 'fixture', sha: 'a', lineStart: line, lineEnd: line }))];
   const supported = { oQueE: [{ text: 'Os robôs orientam o atendimento. Eles têm um fluxo configurável.' }] };
-  assert.equal(faqSubtitle(supported, request, facts), 'Os robôs orientam o atendimento.');
-  assert.equal(supported.oQueE[0].text, 'Eles têm um fluxo configurável.');
-  assert.doesNotMatch(renderFreeFaqSections(supported), /Os robôs orientam o atendimento/u);
+  assert.equal(faqSubtitle(supported, request, facts, 'Veja como criar, editar e publicar robôs no iHelp.'),
+    'Veja como criar, editar e publicar robôs no iHelp.');
+  assert.equal(supported.oQueE[0].text, 'Os robôs orientam o atendimento. Eles têm um fluxo configurável.');
+  assert.match(renderFreeFaqSections(supported), /Os robôs orientam o atendimento/u);
   const pending = { oQueE: [{ text: '<AConfirmar>Os robôs orientam o atendimento.</AConfirmar>' }] };
   assert.equal(faqSubtitle(pending, request, facts), 'Como criar, editar e publicar robôs de atendimento no iHelp.');
   assert.match(pending.oQueE[0].text, /AConfirmar/u);
@@ -425,11 +426,9 @@ test('pacote FAQ livre mantém frase única no corpo e move só a primeira de du
     support: { categories: [], rules: [] }, coverage: [], pending: [],
     businessContext: [{ module: 'Contatos', body: 'O módulo Contatos organiza as pessoas da sua lista e reúne os contatos cadastrados.' }],
     faqStyleExamples: [] };
-  for (const [intro, expectedDescription, expectedBody] of [
-    ['O módulo Contatos organiza as pessoas da sua lista.', 'Como cadastrar contatos no iHelp: veja as tarefas e os passos.',
-      'O módulo Contatos organiza as pessoas da sua lista.'],
-    ['O módulo Contatos organiza as pessoas da sua lista. Ele reúne os contatos cadastrados.',
-      'O módulo Contatos organiza as pessoas da sua lista.', 'Ele reúne os contatos cadastrados.'],
+  for (const intro of [
+    'O módulo Contatos organiza as pessoas da sua lista.',
+    'O módulo Contatos organiza as pessoas da sua lista. Ele reúne os contatos cadastrados.',
   ]) {
     reply.articles[0].sections.oQueE[0].text = intro;
     const result = await generateContentPackage(new URL('../', import.meta.url).pathname,
@@ -450,10 +449,9 @@ test('pacote FAQ livre mantém frase única no corpo e move só a primeira de du
         } } } });
     assert.equal(result.status, 'ready', JSON.stringify(result.questions));
     const { description, body } = result.articles[0];
-    assert.equal(description, expectedDescription);
-    assert.ok(body.includes(`## O que é\n\n${expectedBody}`), body);
+    assert.equal(description, 'Como cadastrar contatos no iHelp: veja as tarefas e os passos.');
+    assert.ok(body.includes(`## O que é\n\n${intro}`), body);
     assert.notEqual(description, body.match(/## O que é\n\n([^\n]+)/u)?.[1]);
-    if (intro !== expectedBody) assert.doesNotMatch(body, /O módulo Contatos organiza as pessoas da sua lista\./u);
     assert.doesNotMatch(body, /^(?:Na tela|No módulo) \*\*Contatos\*\*, você pode/u);
     assert.doesNotMatch(body, /1\. ### Cadastrar/u);
     assert.doesNotMatch(body, /Erros comuns/u);
