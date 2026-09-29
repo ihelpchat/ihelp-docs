@@ -1,0 +1,45 @@
+{
+  "uso": "Arquivo separado para o regente; abrir só depois das notas cegas do Bruno. Texto abreviado/adaptado quando indicado.",
+  "fontes": {
+    "A01": {
+      "tipo": "reescrita proposital no limite",
+      "origem": "autoral para calibração, inspirado em pilot/content/docs/docs/sobre-o-sistema/agenda-de-contatos.mdx"
+    },
+    "A02": {
+      "tipo": "baseline MCP",
+      "origem": "baseline/agenda/agenda-de-contatos.mdx, seção Editar, redução sem mudança de sentido"
+    },
+    "A03": {
+      "tipo": "reescrita proposital no limite",
+      "origem": "autoral para calibração, inspirado em pilot/content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx"
+    },
+    "A04": {
+      "tipo": "reescrita proposital no limite",
+      "origem": "autoral para calibração, inspirado em pilot/content/docs/docs/sobre-o-sistema/menu-de-opcoes-do-robo.mdx"
+    },
+    "A05": {
+      "tipo": "reescrita proposital no limite",
+      "origem": "autoral para calibração, inspirado em pilot/content/docs/docs/sobre-o-sistema/configuracoes/departamentos/index.mdx"
+    },
+    "A06": {
+      "tipo": "página do time",
+      "origem": "pilot/content/docs/docs/sobre-o-sistema/configuracoes/canais.mdx, seção Como conectar o canal, adaptada para amostra curta sem dado real"
+    },
+    "G01": {
+      "tipo": "página do time",
+      "origem": "pilot/content/docs/docs/sobre-o-sistema/agenda-de-contatos.mdx, seção O que é, trecho curto"
+    },
+    "G02": {
+      "tipo": "baseline MCP",
+      "origem": "baseline/robo/robo-de-atendimento.mdx, seção Ativar um robô, reduzida"
+    },
+    "G03": {
+      "tipo": "reescrita propositalmente ruim",
+      "origem": "autoral para calibração, contraste com baseline/agenda/agenda-de-contatos.mdx"
+    },
+    "G04": {
+      "tipo": "reescrita propositalmente ruim",
+      "origem": "autoral para calibração, contraste com página do time de Robôs"
+    }
+  }
+}
