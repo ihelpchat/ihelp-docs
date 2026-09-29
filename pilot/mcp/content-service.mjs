@@ -11,7 +11,6 @@ import { githubWriteToken } from './env-compat.mjs';
 import { guideSchema } from '../architecture/conversation-v1.mjs';
 import { assertPublicSubmit } from './public-submit-gate.mjs';
 import { finalizeSecurityResponse } from './security-review.mjs';
-import { imagesUsedByArticles } from './screen-capture-service.mjs';
 import { loadScreenshotManifest, screenshotReviewBody, screenshotVersionWarnings } from './screen-capture-manifest.mjs';
 import { searchLocalProductContext } from './local-product-context.mjs';
 
@@ -399,6 +398,7 @@ function safeArticleList(articles, deletes = []) {
 }
 
 async function createPackagePullRequest(items, deletes, actor, beforePull, options = {}) {
+  const { imagesUsedByArticles } = await import('./screen-capture-service.mjs');
   const screenshots = await imagesUsedByArticles(items.map(({ article }) => article));
   const manifest = await loadScreenshotManifest();
   const screenshotWarnings = [];

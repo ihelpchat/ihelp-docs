@@ -11,7 +11,7 @@ import { authorizeTool, registerToolPolicy, requestIdentity } from './access-con
 import { createGuide } from './create-guide.mjs';
 import { atualizarPorDeploy } from './update-by-deploy.mjs';
 import { refreshCodeProduct } from './code-refresh-offer.mjs';
-import { approvePage, capturePage, captureFailureCategory, captureFailureLog, captureStepsLog, downloadPage, uploadPage } from './screen-capture-service.mjs';
+import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 import { installCaptureRejectionSafety } from './capture-process-safety.mjs';
 import { syncBusinessContext } from './business-context-sync.mjs';
 import { envCompatibility } from './env-compat.mjs';
@@ -213,6 +213,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     const target = auditTarget(module, path);
     await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'attempt' });
     try {
+      const { capturePage, captureStepsLog } = await import('./screen-capture-service.mjs');
       const manifest = await capturePage({ path, module });
       console.error(captureStepsLog(manifest.steps));
       await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'success' });
@@ -240,6 +241,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     const target = auditTarget(page, step);
     await auditOperation(root, { actor: requestedBy, operation: 'enviar_tela', target, result: 'attempt' });
     try {
+      const { uploadPage } = await import('./screen-capture-service.mjs');
       await uploadPage({ page, step, base64, alt });
       await auditOperation(root, { actor: requestedBy, operation: 'enviar_tela', target, result: 'success' });
       return textResult({ page, step, status: 'pending' });
@@ -263,6 +265,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     const target = auditTarget(page, step);
     await auditOperation(root, { actor: requestedBy, operation: 'aprovar_tela', target, result: 'attempt' });
     try {
+      const { approvePage } = await import('./screen-capture-service.mjs');
       await approvePage({ page, step, token: adminToken, approvedBy: requestedBy });
       await auditOperation(root, { actor: requestedBy, operation: 'aprovar_tela', target, result: 'success' });
       return textResult({ page, step, status: 'approved' });
@@ -282,7 +285,10 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     }),
   }, async ({ page, limit }) => {
     if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
-    try { return textResult(await downloadPage(page, { limit })); }
+    try {
+      const { downloadPage } = await import('./screen-capture-service.mjs');
+      return textResult(await downloadPage(page, { limit }));
+    }
     catch { return textResult({ error: 'Telas indisponíveis ou acima do limite' }, true); }
   });
 

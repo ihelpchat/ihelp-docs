@@ -1,4 +1,4 @@
-import { captureFailureLog } from './screen-capture-service.mjs';
+import { captureFailureLog } from './capture-diagnostics.mjs';
 
 let installed = false;
 export function installCaptureRejectionSafety() {
