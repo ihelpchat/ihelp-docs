@@ -25,7 +25,7 @@ import { classifyFaqQuestions, hasFaqTaskFacts, loadBusinessContext, selectFaqSt
   missingFaqTaskSteps, FAQ_SECTIONS, faqSubtitle, faqModuleName } from './faq-editorial.mjs';
 import { FREE_FAQ_SECTIONS, validateFreeFaqSections, judgeClaims, renderFreeFaqSections,
   faqTasksWithoutFacts, missingFreeFaqTaskSteps, shortFreeFaqTasks, trimFaqLabels,
-  missingFaqSupportSections } from './faq-editorial.mjs';
+  missingFaqSupportSections, faqAssemblyLosses } from './faq-editorial.mjs';
 export { renderApiReference } from './api-reference-render.mjs';
 
 contentMaxOutputTokens();
@@ -992,9 +992,11 @@ async function generateContentPackageCore(root, request, options = {}) {
     const affected = mentionsSource(parsed.summary) || parsed.articles.some((article) =>
       [article.title, article.description, article.assistantQuestion, article.assistantOverview,
         ...(article.assistantSuggestions ?? [])].some(mentionsSource)
-      || Object.values(article.sections ?? {}).some((items) => Array.isArray(items) && items.some((item) =>
-        mentionsSource(item?.text) || mentionsSource(item?.tarefa)
-        || item?.passos?.some((step) => mentionsSource(step.text)))));
+      || (article.sections?.passos?.some((item) => item?.acao)
+        ? Object.values(article.sections ?? {}).some((items) => Array.isArray(items) && items.some((item) =>
+          mentionsSource(item?.text) || mentionsSource(item?.tarefa)
+          || item?.passos?.some((step) => mentionsSource(step.text))))
+        : article.sections?.passos?.some((task) => mentionsSource(task?.tarefa))));
     if (affected && !options.faqRetryIssues) return generateContentPackage(root, request, { ...options,
       productContext, plan, faqRetryIssues: ['menção à fonte'] });
     if (affected) {
@@ -1297,6 +1299,10 @@ async function generateContentPackageCore(root, request, options = {}) {
   for (const prose of parsed.articles) {
     if (!prose.sections?.passos?.some((item) => item?.acao)) {
       const checked = validateFreeFaqSections(prose.sections, faqContext);
+      const sourceRepairsBeforeJudge = checked.pending.filter((item) => item.includes('reescreva só esta frase'));
+      if (sourceRepairsBeforeJudge.length && !options.faqRetryIssues)
+        return generateContentPackage(root, request, { ...options, productContext, plan,
+          faqRetryIssues: sourceRepairsBeforeJudge });
       const missingTasks = missingFreeFaqTaskSteps(request, faqContext.screenFacts, checked.sections.passos);
       const shortTasks = shortFreeFaqTasks(checked.sections.passos, faqContext.screenFacts,
         faqModuleName(request, faqContext.screenFacts));
@@ -1334,7 +1340,7 @@ async function generateContentPackageCore(root, request, options = {}) {
         display.passos = (display.passos ?? []).map((task) => ({ ...task,
           passos: task.passos.filter((step) => !/^#{1,6}\s+\S/u.test(step.text.trim())) }))
           .filter((task) => task.passos.length);
-        article.description = faqSubtitle(display, request, faqContext.screenFacts).slice(0, 240);
+        article.description = faqSubtitle(display, request, faqContext.screenFacts, article.description);
         article.body = renderFreeFaqSections({ ...display,
           suporte: fixedFaqSupportSection(request, faqContext.screenFacts) });
         const firstStep = (display.passos.flatMap((task) => task.passos).find((step) =>
@@ -1385,8 +1391,14 @@ async function generateContentPackageCore(root, request, options = {}) {
       if (judgedSupportIssues.length && !options.faqRetryIssues) return generateContentPackage(root, request, {
         ...options, productContext, plan, faqRetryIssues: judgedSupportIssues,
       });
+      const sourceRepairs = judged.pending.filter((item) => item.includes('reescreva só esta frase'));
+      if (sourceRepairs.length && !options.faqRetryIssues) return generateContentPackage(root, request, {
+        ...options, productContext, plan, faqRetryIssues: sourceRepairs,
+      });
       sectionPending.push(...judgedSupportIssues);
       const article = materialize(judged.sections);
+      sectionPending.push(...faqAssemblyLosses(judged.sections, article.body)
+        .map((item) => `${prose.path}: ${item}`));
       sectionPending.push(...checked.pending, ...[...missingTasks, ...shortTasks].map((item) => `${prose.path}: ${item}`),
         ...judged.pending.map((item) => `${prose.path}: a confirmar: ${item}`));
       sectionPending.push(...faqTasksWithoutFacts(request, faqContext.screenFacts)

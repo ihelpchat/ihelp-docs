@@ -56,23 +56,28 @@ test('generateContentPackage mantém as frases aprovadas do redator no artigo fi
   const sha = 'a'.repeat(40);
   const reply = { status: 'ready', summary: 'FAQ de Contatos.', questions: [], articles: [{
     path: 'docs/teste/agenda', title: 'Agenda de Contatos', description: 'Consulte contatos e organize a agenda da equipe no iHelp.',
-    source: 'produto', contentType: 'faq', productActions: [], assistantQuestion: 'Como buscar contatos?', sections,
+    source: 'produto', contentType: 'faq', productActions: [], assistantQuestion: 'Como buscar contatos?',
+    sections: { ...sections, paraQueServe: [{ text: `${benefit} Segundo o material enviado, os contatos aparecem na lista.` }] },
   }] };
+  let writerCalls = 0;
   const result = await generateContentPackage(new URL('../', import.meta.url).pathname,
     { topic: 'Contatos', module: 'Contatos', productRoute: '/contact', description: 'Criar FAQ sobre Contatos.' }, {
       productContext: { groundingRequired: true, pending: [], coverage: [], support: { categories: [], rules: [] },
         businessContext: [{ module: 'Contatos', body: 'Contatos.' }], faqStyleExamples: [],
-        screenFacts: [{ kind: 'route', route: '/contact', text: 'Contatos', source: 'src/Fixture.tsx:1', sha }],
+        screenFacts: [{ kind: 'route', route: '/contact', text: 'Contatos', source: 'src/Fixture.tsx:1', sha },
+          { kind: 'action', text: 'Listar Contatos', source: 'src/Fixture.tsx:2', sha }],
         code: [{ available: true, role: 'frontend', repository: 'fixture', ref: sha }], matches: [] },
       plan: { status: 'ready' }, client: { responses: { create: async (payload) => payload.text.format.name === 'juiz_faq'
         ? { model: 'fixture', output_text: JSON.stringify({ claims: JSON.parse(payload.input[1].content).claims.map(({ id }) =>
           ({ id, status: 'sustentada', reason: '', sourceMention: false })) }) }
-        : { model: 'fixture', output_text: JSON.stringify(reply) } } },
+        : (writerCalls++, { model: 'fixture', output_text: JSON.stringify(reply) }) } },
     });
   assert.equal(result.status, 'ready', JSON.stringify(result));
   const article = result.articles[0];
   assert.equal(article.description, reply.articles[0].description);
+  assert.equal(writerCalls, 1);
   assert.match(article.body, new RegExp(definition, 'u'));
   assert.match(article.body, /consultar as informações disponíveis na ficha/u);
+  assert.match(article.body, /Os contatos aparecem na lista\./u);
   assert.doesNotMatch(result.pending.join(' '), /perda na montagem/u);
 });

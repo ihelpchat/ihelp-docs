@@ -186,16 +186,12 @@ export function deterministicFaqAnswer(request = {}, screenFacts = []) {
     citations: [...new Map(citations.map((cite) => [JSON.stringify(cite), cite])).values()] };
 }
 
-export function faqSubtitle(sections, request = {}, screenFacts = []) {
-  const first = sections.oQueE?.[0]?.text ?? '';
-  const sentence = splitClaims(first)[0];
-  if (sentence && !sentence.includes('<AConfirmar>') && !sentence.includes('</AConfirmar>')) {
-    const rest = first.slice(first.indexOf(sentence) + sentence.length).trim();
-    if (rest) {
-      sections.oQueE[0].text = rest;
-      return plainMarkdownText(sentence);
-    }
-  }
+export function faqSubtitle(sections, request = {}, screenFacts = [], description = '') {
+  const candidate = String(description ?? '').trim();
+  const first = splitClaims(sections.oQueE?.[0]?.text ?? '')[0] ?? '';
+  if (candidate.length >= 40 && candidate.length <= 200 && candidate === plainMarkdownText(candidate)
+    && !/[<>*_[\]`#]/u.test(candidate) && !/^(?:[-+*]\s|\d+\.\s|>)/u.test(candidate)
+    && !mentionsSource(candidate) && fold(candidate) !== fold(plainMarkdownText(first))) return candidate;
   const direct = deterministicFaqAnswer(request, screenFacts)?.text;
   const actions = direct?.match(/você pode (.+)\.$/u)?.[1];
   const menuModule = faqModuleName(request, screenFacts) ?? request.topic;
@@ -607,6 +603,29 @@ const cleanFaqMeta = (text, pending) => splitClaims(text).filter((phrase) => {
 }).join(' ');
 export const trimFaqLabels = (text) => text.replace(/\*\*([^*\n]+)\*\*/gu, (_match, label) => `**${label.trim()}**`);
 
+function withoutSourceAttribution(phrase, context) {
+  const introductory = phrase.match(/^(segundo|conforme|de acordo com|com base (?:em|no|na|nos|nas)|a partir (?:de|do|da|dos|das)|pelo que consta em|como (?:indicado|descrito|mencionado) em)\s+([^,]+),\s*(.+)$/iu);
+  const prefix = phrase.match(/^(.+?)\s+mostra que\s+(.+)$/iu);
+  const candidate = introductory && mentionsSource(`${introductory[1]} ${introductory[2]}`)
+    ? introductory[3] : prefix && mentionsSource(`Segundo ${prefix[1]}`) ? prefix[2] : '';
+  const clean = candidate.charAt(0).toLocaleUpperCase('pt-BR') + candidate.slice(1);
+  return clean && splitClaims(clean).length === 1 && !mentionsSource(clean)
+    && !rigidFaqIssue(clean, context) ? clean : null;
+}
+
+function cleanSourceSentences(text, context, pending) {
+  return splitClaims(text).flatMap((phrase) => {
+    if (!mentionsSource(phrase)) return [phrase];
+    const clean = withoutSourceAttribution(phrase, context);
+    if (clean) {
+      pending.push(`${phrase} — menção à fonte; atribuição removida`);
+      return [clean];
+    }
+    pending.push(`${phrase} — frase omitida: mencionava a fonte; reescreva só esta frase`);
+    return [];
+  }).join(' ');
+}
+
 function publishedStepEvidence(text, context, task, expectedLabel) {
   const requestedModule = singular(fold(context.request?.module ?? ''));
   const taskVerb = words(task).find((word) => !['como', 'de', 'do', 'da', 'o', 'a'].includes(word));
@@ -666,9 +685,8 @@ function rigidFaqIssue(text, context, { useCase = false, proseLead = false } = {
 export function validateFreeFaqSections(sections, context = {}) {
   const kept = {}, pending = [], blocking = [];
   const taskContext = (units, heading, field) => (Array.isArray(units) ? units : []).flatMap((unit) => {
-    const sourceMention = mentionsSource(unit?.text);
-    const text = typeof unit?.text === 'string' && !sourceMention ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
-    const issue = sourceMention ? 'menção à fonte' : text ? rigidFaqIssue(text, context) : 'frase vazia';
+    const text = typeof unit?.text === 'string' ? trimFaqLabels(cleanFaqMeta(cleanSourceSentences(unit.text, context, pending), pending)) : '';
+    const issue = text ? rigidFaqIssue(text, context) : 'frase vazia';
     if (issue) { pending.push(`${heading} ${field}: ${issue}`); return []; }
     return [{ ...unit, text }];
   }).slice(0, 2);
@@ -686,9 +704,8 @@ export function validateFreeFaqSections(sections, context = {}) {
           return [];
         }
         const steps = task.passos.flatMap((unit) => {
-          const sourceMention = mentionsSource(unit?.text);
-          const text = typeof unit?.text === 'string' && !sourceMention ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
-          const issue = sourceMention ? 'menção à fonte' : text
+          const text = typeof unit?.text === 'string' ? trimFaqLabels(cleanFaqMeta(cleanSourceSentences(unit.text, context, pending), pending)) : '';
+          const issue = text
             ? rigidFaqIssue(text, { ...context, taskHeading: heading }) : 'passo vazio';
           if (issue) { pending.push(`${task.tarefa}: ${issue}`); return []; }
           return [{ ...unit, text }];
@@ -707,9 +724,8 @@ export function validateFreeFaqSections(sections, context = {}) {
       continue;
     }
     kept[key] = (sections?.[key] ?? []).flatMap((unit) => {
-      const sourceMention = mentionsSource(unit?.text);
-      const text = typeof unit?.text === 'string' && !sourceMention ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
-      const issue = sourceMention ? 'menção à fonte' : text
+      const text = typeof unit?.text === 'string' ? trimFaqLabels(cleanFaqMeta(cleanSourceSentences(unit.text, context, pending), pending)) : '';
+      const issue = text
         ? rigidFaqIssue(text, context, { useCase: key === 'casosDeUso', proseLead: key === 'duvidas' || key === 'erros' }) : 'frase vazia';
       if (issue) { pending.push(`${FREE_FAQ_SECTIONS[key]}: ${issue}`); return []; }
       if (key === 'duvidas' && !faqQuestionAnswered(text)) {
@@ -766,14 +782,9 @@ export async function judgeClaims(sections, context, provider) {
       // "A tela" descreve a interface do produto, não atribui a frase ao material de apoio.
       const uiBehavior = /^a tela\b/iu.test(phrase) && !mentionsSource(phrase);
       if (verdict.sourceMention && !uiBehavior) {
-        const introductory = phrase.match(/^(segundo|conforme|de acordo com|com base (?:em|no|na|nos|nas)|a partir (?:de|do|da|dos|das)|pelo que consta em|como (?:indicado|descrito|mencionado) em)\s+([^,]+),\s*(.+)$/iu);
-        const prefix = phrase.match(/^(.+?)\s+mostra que\s+(.+)$/iu);
-        const candidate = introductory && mentionsSource(`${introductory[1]} ${introductory[2]}`)
-          ? introductory[3] : prefix && mentionsSource(`Segundo ${prefix[1]}`) ? prefix[2] : '';
-        const withoutAttribution = candidate.charAt(0).toLocaleUpperCase('pt-BR') + candidate.slice(1);
-        if (!withoutAttribution || splitClaims(withoutAttribution).length !== 1
-          || mentionsSource(withoutAttribution) || rigidFaqIssue(withoutAttribution, context)) {
-          pending.push(`${phrase} — frase omitida: mencionava a fonte`);
+        const withoutAttribution = withoutSourceAttribution(phrase, context);
+        if (!withoutAttribution) {
+          pending.push(`${phrase} — frase omitida: mencionava a fonte; reescreva só esta frase`);
           return [];
         }
         pending.push(`${phrase} — menção à fonte; atribuição removida`);
@@ -826,4 +837,23 @@ export function renderFreeFaqSections(sections) {
     const units = sections[key] ?? [];
     return units.length ? [`## ${title}\n\n${units.map((unit) => unit.text).join('\n\n')}`] : [];
   }).join('\n\n');
+}
+
+const fidelityText = (value) => plainMarkdownText(String(value ?? '').replace(/<\/?AConfirmar>/gu, ''))
+  .replace(/\s+/gu, ' ').trim();
+
+export function faqAssemblyLosses(approved, body) {
+  const rendered = new Map([...String(body).matchAll(/^## (.+)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gmu)]
+    .map((match) => [match[1], fidelityText(match[2])]));
+  const losses = [];
+  for (const [key, title] of Object.entries(FREE_FAQ_SECTIONS)) {
+    const units = key === 'passos' ? (approved.passos ?? []).flatMap((task) => [
+      ...(task.sobre ?? []), ...(task.passos ?? []), ...(task.depois ?? []),
+    ]) : approved[key] ?? [];
+    for (const unit of units) for (const phrase of splitClaims(fidelityText(unit.text))) {
+      if (!rendered.get(title)?.includes(phrase))
+        losses.push(`perda na montagem: ${title}: ${phrase.slice(0, 80)}`);
+    }
+  }
+  return [...new Set(losses)];
 }

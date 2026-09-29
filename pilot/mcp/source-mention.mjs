@@ -4,7 +4,7 @@ const fileName = /(?:^|[^a-z0-9_-])[a-z0-9_-]+\.md(?:$|[^a-z0-9_-])/u;
 const namedSource = /\b(?:contexto de negocio|business-context|segundo cerebro)\b/u;
 const attribution = /\b(?:segundo|conforme|de acordo com|com base (?:em|no|na|nos|nas)|a partir (?:de|do|da|dos|das)|pelo que consta em|como (?:indicado|descrito|mencionado) em)\b/gu;
 const material = /^(?:informac|document|materi|conteud|text|font|context|dad|arquiv|trech|anotac|referenc|descric|leitur|fornec|disponibiliz|receb|inform|apresent|envi|consult|compartilh)[a-z]*$/u;
-const generation = /\b(?:nao ha informac(?:ao|oes) sobre|as informacoes disponiveis|nao foi informado)\b/u;
+const generation = /\b(?:nao ha informac(?:ao|oes) sobre|nao foi informado)\b/u;
 
 export function mentionsSource(value) {
   const text = fold(value);
