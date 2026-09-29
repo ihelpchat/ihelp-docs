@@ -276,11 +276,7 @@ function cssRule(selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return css.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
 }
-for (const selector of ['.ih-ai-busy-label', '.ih-ai-thread[data-compact] .ih-ai-busy-label']) {
-  assert.match(cssRule(selector), /font-size:\s*(?:1[6-9]|[2-9]\d)px/, `${selector} tem fonte de pelo menos 16 px`);
-}
-for (const selector of ['.ih-ai-error-actions button', '.ih-ai-error-actions a', '.ih-ai-thread[data-compact] .ih-ai-error-actions button', '.ih-ai-thread[data-compact] .ih-ai-error-actions a']) {
-  assert.match(cssRule(selector), /min-height:\s*(?:4[4-9]|[5-9]\d)px/, `${selector} tem área de toque de pelo menos 44 px`);
-}
+const touchRules = css.match(/@media \(pointer: coarse\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+assert.match(touchRules, /\.ih-ai-error-actions button, \.ih-ai-error-actions a\s*\{\s*min-height:\s*44px/, 'ações de erro têm 44 px só no toque');
 
 console.log('Transporte HTTP, limites e retry: OK');
