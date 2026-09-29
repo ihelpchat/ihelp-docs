@@ -665,6 +665,13 @@ function rigidFaqIssue(text, context, { useCase = false, proseLead = false } = {
 
 export function validateFreeFaqSections(sections, context = {}) {
   const kept = {}, pending = [], blocking = [];
+  const taskContext = (units, heading, field) => (Array.isArray(units) ? units : []).flatMap((unit) => {
+    const sourceMention = mentionsSource(unit?.text);
+    const text = typeof unit?.text === 'string' && !sourceMention ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
+    const issue = sourceMention ? 'menção à fonte' : text ? rigidFaqIssue(text, context) : 'frase vazia';
+    if (issue) { pending.push(`${heading} ${field}: ${issue}`); return []; }
+    return [{ ...unit, text }];
+  }).slice(0, 2);
   for (const key of Object.keys(FREE_FAQ_SECTIONS)) {
     if (key === 'passos') {
       kept.passos = (sections?.passos ?? []).flatMap((task) => {
@@ -687,7 +694,15 @@ export function validateFreeFaqSections(sections, context = {}) {
           return [{ ...unit, text }];
         });
         if (!steps.length && task.passos.length) pending.push(`tarefa sem passo válido: ${task.tarefa}`);
-        return steps.length ? [{ tarefa: heading, passos: steps }] : [];
+        if (!steps.length) return [];
+        const sobre = taskContext(task.sobre, heading, 'sobre');
+        const depois = taskContext(task.depois, heading, 'depois');
+        if (!sobre.length && !depois.length) pending.push(`contexto da tarefa ${heading} sem fonte`);
+        else {
+          if (!sobre.length) pending.push(`sobre da tarefa ${heading} sem fonte — a confirmar`);
+          if (!depois.length) pending.push(`depois da tarefa ${heading} sem fonte — a confirmar`);
+        }
+        return [{ tarefa: heading, sobre, passos: steps, depois }];
       });
       continue;
     }
@@ -726,9 +741,10 @@ export function missingFaqSupportSections(sections, context = {}) {
 export async function judgeClaims(sections, context, provider) {
   const claims = [];
   for (const [key] of Object.entries(FREE_FAQ_SECTIONS)) {
-    const units = key === 'passos' ? (sections.passos ?? []).flatMap((task) => task.passos ?? []) : sections[key] ?? [];
-    for (const unit of units) for (const phrase of splitClaims(unit.text))
-      claims.push({ id: `c${claims.length + 1}`, section: key, text: phrase });
+    const groups = key === 'passos' ? (sections.passos ?? []).flatMap((task) => [
+      ['sobre', task.sobre ?? []], ['passos', task.passos ?? []], ['depois', task.depois ?? []]]) : [[key, sections[key] ?? []]];
+    for (const [section, units] of groups) for (const unit of units) for (const phrase of splitClaims(unit.text))
+      claims.push({ id: `c${claims.length + 1}`, section, text: phrase });
   }
   const answer = await provider(claims, context);
   if (!Array.isArray(answer?.claims) || answer.claims.length !== claims.length) throw new Error('juiz: número de frases inválido');
@@ -774,7 +790,10 @@ export async function judgeClaims(sections, context, provider) {
   };
   const result = {};
   for (const [key] of Object.entries(FREE_FAQ_SECTIONS)) result[key] = key === 'passos'
-    ? (sections.passos ?? []).map((task) => ({ ...task, passos: task.passos.map((unit) => mark(unit, key)).filter(Boolean) }))
+    ? (sections.passos ?? []).map((task) => ({ ...task,
+      sobre: (task.sobre ?? []).map((unit) => mark(unit, 'sobre')).filter(Boolean),
+      passos: task.passos.map((unit) => mark(unit, key)).filter(Boolean),
+      depois: (task.depois ?? []).map((unit) => mark(unit, 'depois')).filter(Boolean) }))
       .filter((task) => task.passos.length)
     : (sections[key] ?? []).map((unit) => mark(unit, key)).filter(Boolean);
   result.duvidas = result.duvidas.filter((unit) => {
@@ -789,7 +808,11 @@ export async function judgeClaims(sections, context, provider) {
 export function renderFreeFaqSections(sections) {
   return Object.entries(FREE_FAQ_SECTIONS).flatMap(([key, title]) => {
     if (key === 'passos') return (sections.passos ?? []).length ? [`## ${title}\n\n${sections.passos.map((task) =>
-      `### ${String(task.tarefa).replace(/^#+\s*/u, '').trim()}\n\n${task.passos.map((unit, index) => `${index + 1}. ${trimFaqLabels(unit.text)}`).join('\n')}`).join('\n\n')}`] : [];
+      [`### ${String(task.tarefa).replace(/^#+\s*/u, '').trim()}`,
+        ...(task.sobre?.length ? [task.sobre.map((unit) => trimFaqLabels(unit.text)).join(' ')] : []),
+        task.passos.map((unit, index) => `${index + 1}. ${trimFaqLabels(unit.text)}`).join('\n'),
+        ...(task.depois?.length ? [`**O que acontece depois:** ${task.depois.map((unit) => trimFaqLabels(unit.text)).join(' ')}`] : [])]
+        .join('\n\n')).join('\n\n')}`] : [];
     const units = sections[key] ?? [];
     return units.length ? [`## ${title}\n\n${units.map((unit) => unit.text).join('\n\n')}`] : [];
   }).join('\n\n');

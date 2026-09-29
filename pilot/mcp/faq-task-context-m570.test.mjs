@@ -28,8 +28,22 @@ test('juiz recebe sobre e depois e marca afirmação inventada como a confirmar'
   assert.equal(judged.sections.passos[0].depois.length, 1);
 });
 
+test('juiz também marca depois sem sustentação', async () => {
+  const checked = validateFreeFaqSections({ passos: [task()] }, context);
+  const judged = await judgeClaims(checked.sections, context, async (claims) => ({ claims: claims.map((claim) => ({
+    id: claim.id, status: claim.section === 'depois' ? 'a confirmar' : 'sustentada',
+    reason: 'sem fato', sourceMention: false,
+  })) }));
+  assert.match(renderFreeFaqSections(judged.sections), /\*\*O que acontece depois:\*\* <AConfirmar>A próxima conversa/u);
+});
+
 test('tarefa sem contexto sustentado registra pendência sem travar', () => {
   const checked = validateFreeFaqSections({ passos: [task({ sobre: [], depois: [] })] }, context);
   assert.match(checked.pending.join(' '), /contexto da tarefa Responsável sem fonte/u);
   assert.deepEqual(checked.blocking, []);
+});
+
+test('efeito ausente também vira pendência da tarefa', () => {
+  const checked = validateFreeFaqSections({ passos: [task({ depois: [] })] }, context);
+  assert.match(checked.pending.join(' '), /depois da tarefa Responsável sem fonte.*a confirmar/u);
 });
