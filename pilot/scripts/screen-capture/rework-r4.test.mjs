@@ -38,7 +38,8 @@ test('print capturado só entra no artigo com SHA dos fatos atuais; PR pede reca
     });
     assert.equal(renewed.entries[0].checkoutSha, currentSha);
     const withImage = attachScreenshotsToArticle(article, renewed, currentSha, currentFacts);
-    assert.match(withImage.body, /!\[Tela de Contatos: Abrir\]\(\/img\/mcp\/contatos\/01-abrir\.png\)/u);
+    assert.match(renewed.entries[0].file, /^\/img\/mcp\/contatos\/01-abrir\.automatic\.[a-f0-9]{64}\.png$/u);
+    assert.ok(withImage.body.includes(`![Tela de Contatos: Abrir](${renewed.entries[0].file})`));
     assert.deepEqual(screenshotVersionWarnings([withImage], renewed, currentSha), []);
     assert.equal(screenshotReviewBody('Pacote criado pelo MCP.', []), 'Pacote criado pelo MCP.');
   } finally {

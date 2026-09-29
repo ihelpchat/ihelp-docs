@@ -49,7 +49,8 @@ test('bundle distinto do checkout não invalida print da mesma versão dos fatos
     assert.notEqual(entry.bundleSha, entry.checkoutSha);
     assert.deepEqual(JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')), manifest);
     const article = screenshots.attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Clique em **Abrir**.' }, manifest, checkoutSha);
-    assert.match(article.body, /!\[Tela de Contatos: Abrir\]\(\/img\/mcp\/contatos\/01-abrir\.png\)/u);
+    assert.match(entry.file, /^\/img\/mcp\/contatos\/01-abrir\.automatic\.[a-f0-9]{64}\.png$/u);
+    assert.ok(article.body.includes(`![Tela de Contatos: Abrir](${entry.file})`));
     const mismatched = { ...manifest, entries: [{ ...entry, owner: 'outra-tela.tsx' }] };
     const factsForArticle = facts('/contact', 'contatos.tsx');
     assert.doesNotMatch(screenshots.attachScreenshotsToArticle({ path: 'docs/contatos', body: '1. Clique em **Abrir**.' },
