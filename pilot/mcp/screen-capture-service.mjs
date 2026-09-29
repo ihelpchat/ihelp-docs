@@ -23,14 +23,16 @@ export function captureFailureCategory(error) {
 
 export function captureFailureLog(error, env = process.env) {
   const category = captureFailureCategory(error);
-  const detail = String(error?.cause?.message ?? error?.message ?? '').split(/\r?\n/u, 1)[0];
+  const diagnostic = error?.diagnostic ?? error?.cause?.diagnostic;
+  const detail = diagnostic ? `outcome=${diagnostic.outcome} path=${diagnostic.path} messages=${diagnostic.messages.join(' | ')} requests=${diagnostic.requests.join(' | ')} controls=${diagnostic.controls.join(' | ')}`
+    : String(error?.cause?.message ?? error?.message ?? '').split(/\r?\n/u, 1)[0];
   let safe = detail.replace(/https?:\/\/[^\s"'<>]+/giu, '[URL removida]')
     .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, '[e-mail removido]');
   for (const [key, value] of Object.entries(env)) {
     if (!/(?:PASSWORD|TOKEN|SECRET|API_KEY|EMAIL)/iu.test(key) || typeof value !== 'string' || value.length < 4) continue;
     safe = safe.replaceAll(value, '[segredo removido]');
   }
-  return `capturar_telas: ${category}: ${safe.slice(0, 300)}`;
+  return `capturar_telas: ${category}: ${safe.slice(0, 700)}`;
 }
 
 export async function capturePage(input, {

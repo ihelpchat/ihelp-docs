@@ -84,13 +84,61 @@ export function assertAllowedTarget(value, env = process.env) {
   return { url: url.origin, local };
 }
 
-export async function loginToQa(page, baseUrl, { email, password }) {
+function safeLoginText(value, secrets) {
+  let text = String(value ?? '').replace(/\s+/gu, ' ')
+    .replace(/https?:\/\/[^\s"'<>]+/giu, '[URL removida]')
+    .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, '[e-mail removido]')
+    .replace(/\b(?:token|senha|password|secret|api[_-]?key)\s*[:=]\s*[^\s,;]+/giu, '[segredo removido]')
+    .replace(/\beyJ[A-Za-z0-9_.-]{20,}\b/gu, '[segredo removido]');
+  for (const secret of secrets) if (typeof secret === 'string' && secret.length >= 4)
+    text = text.replaceAll(secret, '[segredo removido]');
+  return text.slice(0, 200);
+}
+
+async function loginControls(page) {
+  return page.evaluate(() => [...document.querySelectorAll('input,button,select')]
+    .filter((node) => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden')
+    .map((node) => node.labels?.[0]?.textContent?.trim() || node.getAttribute('aria-label')
+      || node.tagName === 'BUTTON' && node.textContent?.trim() || node.getAttribute('placeholder') || '')
+    .filter(Boolean));
+}
+
+export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs = 30000 } = {}) {
   if (!email || !password) throw new Error('Credenciais de QA ausentes');
-  await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' });
+  await page.goto(new URL('/login', baseUrl).href, { waitUntil: 'domcontentloaded' });
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
-  await page.getByRole('button', { name: /^Entrar$/iu }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 10000 });
+  const before = new Set(await loginControls(page));
+  const responses = [];
+  const origin = new URL(baseUrl).origin;
+  const onResponse = (response) => {
+    const url = new URL(response.url());
+    if (url.origin !== origin) return;
+    responses.push(`${response.request().method()} ${safeLoginText(url.pathname, [email, password])} ${response.status()}`);
+  };
+  page.on('response', onResponse);
+  const alert = page.locator('[role="alert"]:visible, [class*="toast"]:visible, .error:visible').first();
+  let outcome;
+  try {
+    await page.getByRole('button', { name: /^Entrar$/iu }).click();
+    outcome = await Promise.race([
+      page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: timeoutMs })
+        .then(() => 'navigated').catch(() => 'timeout'),
+      alert.waitFor({ state: 'visible', timeout: timeoutMs })
+        .then(() => 'alert').catch(() => 'timeout'),
+    ]);
+    if (outcome === 'navigated') return;
+    const path = safeLoginText(new URL(page.url()).pathname, [email, password]);
+    const messages = await page.locator('[role="alert"]:visible, [class*="toast"]:visible, .error:visible, form .error:visible, form [aria-live]:visible, form + p:visible')
+      .allTextContents();
+    const controls = (await loginControls(page)).filter((label) => !before.has(label));
+    const diagnostic = { outcome, path, messages: messages.map((message) => safeLoginText(message, [email, password]))
+      .filter(Boolean).slice(0, 5), requests: responses.slice(0, 20),
+    controls: controls.map((label) => safeLoginText(label, [email, password])).slice(0, 10) };
+    throw Object.assign(new Error('Login na homologação falhou'), { diagnostic });
+  } finally {
+    page.off('response', onResponse);
+  }
 }
 
 async function sanitizedScreenshot(page, path) {
