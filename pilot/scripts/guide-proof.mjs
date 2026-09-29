@@ -74,19 +74,138 @@ export function assertAllowedTarget(value, env = process.env) {
   try { url = new URL(value); } catch { throw new Error('Destino recusado: URL inválida'); }
   if (url.username || url.password || url.search || url.hash) throw new Error('Destino recusado: URL com credencial ou parâmetro');
   const local = url.protocol === 'http:' && url.hostname === '127.0.0.1';
-  const allowed = new Set((env[envCompatibility.guideProof.allowedHosts] ?? '').split(',').map((host) => host.trim()).filter(Boolean));
-  const stagingName = /^(?:staging|homolog|homologacao)(?:-[a-z0-9]+)?\.ihelpchat\.com(?:\.br)?$/u.test(url.hostname);
-  const staging = url.protocol === 'https:' && stagingName && allowed.has(url.hostname) && !url.port;
+  const staging = qaRequestDecision(url.href, { local: false }, env).allowed;
   if (!local && !staging) throw new Error('Destino recusado: host não permitido');
   return { url: url.origin, local };
 }
 
-async function login(page, baseUrl, email, password) {
-  await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' });
+const productionHost = (host) => host === 'ihelpchat.com' || host === 'ihelpchat.com.br'
+  || host.endsWith('.ihelpchat.com') || host.endsWith('.ihelpchat.com.br')
+  || host === 'api.ihelp.com.br';
+
+export function qaRequestDecision(value, target, env = process.env, { fixtureAllowedOrigins = [] } = {}) {
+  let url;
+  try { url = new URL(value); } catch { return { allowed: false, host: 'inválido', reason: 'bloqueado: URL inválida' }; }
+  const host = url.host;
+  if (productionHost(url.hostname)) return { allowed: false, host, reason: 'bloqueado: host de produção' };
+  if (target.local && url.protocol === 'http:' && url.hostname === '127.0.0.1'
+    && (url.origin === target.url || fixtureAllowedOrigins.includes(url.origin))) return { allowed: true, host };
+  if (target.local) return { allowed: false, host, reason: 'bloqueado: host fora da lista permitida' };
+  const allowed = new Set((env[envCompatibility.guideProof.allowedHosts] ?? '').split(',')
+    .map((item) => item.trim()).filter((item) => /^[a-z0-9.-]+$/u.test(item)));
+  if (url.protocol === 'https:' && !url.port && !url.username && !url.password && allowed.has(url.hostname))
+    return { allowed: true, host };
+  return { allowed: false, host, reason: 'bloqueado: host fora da lista permitida' };
+}
+
+export async function installQaNetworkGuard(context, target, env = process.env, options = {}) {
+  const guard = { blocked: [], reasons: new WeakMap() };
+  await context.route('**/*', async (route) => {
+    try {
+      const request = route.request();
+      const decision = qaRequestDecision(request.url(), target, env, options);
+      if (!decision.allowed) {
+        guard.blocked.push(decision);
+        guard.reasons.set(request, decision);
+        return await route.abort();
+      }
+      // route.fetch() waits for the body, so an open event stream times out and
+      // is aborted. Fetching first still lets us reject unsafe redirects.
+      const streaming = request.resourceType() === 'eventsource' || /\btext\/event-stream\b/iu.test(request.headers().accept ?? '');
+      const response = await route.fetch({ maxRedirects: 0, ...(streaming ? { timeout: 1500 } : {}) });
+      const location = response.headers().location;
+      if (location) {
+        const redirected = qaRequestDecision(new URL(location, request.url()).href, target, env, options);
+        if (!redirected.allowed) {
+          guard.blocked.push(redirected);
+          guard.reasons.set(request, redirected);
+          return await route.abort();
+        }
+      }
+      await route.fulfill({ response });
+    } catch {
+      // A route callback must not create an unhandled rejection (Playwright's
+      // own error can contain request headers). A closed context needs no abort.
+      await route.abort().catch(() => {});
+    }
+  });
+  return guard;
+}
+
+export function qaFailedRequest(request, guard) {
+  let host = 'inválido';
+  try { host = new URL(request.url()).host; } catch { /* no URL is logged */ }
+  const blocked = guard?.reasons.get(request);
+  if (blocked) host = blocked.host;
+  const failure = /^net::[A-Z_]+$/u.test(request.failure()?.errorText ?? '')
+    ? request.failure().errorText : 'falha';
+  return `${request.method()} ${host} ${blocked ? `${blocked.reason} ` : ''}${failure}`;
+}
+
+function safeLoginText(value, secrets) {
+  let text = String(value ?? '').replace(/\s+/gu, ' ')
+    .replace(/https?:\/\/[^\s"'<>]+/giu, '[URL removida]')
+    .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, '[e-mail removido]')
+    .replace(/\b(?:token|senha|password|secret|api[_-]?key)\s*[:=]\s*[^\s,;]+/giu, '[segredo removido]')
+    .replace(/\beyJ[A-Za-z0-9_.-]{20,}\b/gu, '[segredo removido]');
+  for (const secret of secrets) if (typeof secret === 'string' && secret.length >= 4)
+    text = text.replaceAll(secret, '[segredo removido]');
+  return text.slice(0, 200);
+}
+
+async function loginControls(page) {
+  return page.evaluate(() => [...document.querySelectorAll('input,button,select')]
+    .filter((node) => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden')
+    .map((node) => node.labels?.[0]?.textContent?.trim() || node.getAttribute('aria-label')
+      || node.tagName === 'BUTTON' && node.textContent?.trim() || node.getAttribute('placeholder') || '')
+    .filter(Boolean));
+}
+
+export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs = 30000, networkGuard } = {}) {
+  if (!email || !password) throw new Error('Credenciais de QA ausentes');
+  await page.goto(new URL('/login', baseUrl).href, { waitUntil: 'domcontentloaded' });
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
-  await page.getByRole('button', { name: /^Entrar$/u }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 10000 });
+  const before = new Set(await loginControls(page));
+  const responses = [];
+  const failed = [];
+  const origin = new URL(baseUrl).origin;
+  const onResponse = (response) => {
+    try {
+      const url = new URL(response.url());
+      if (url.origin !== origin) return;
+      responses.push(`${response.request().method()} ${safeLoginText(url.pathname, [email, password])} ${response.status()}`);
+    } catch { responses.push('resposta indisponível'); }
+  };
+  const onFailed = (request) => {
+    try { failed.push(qaFailedRequest(request, networkGuard)); }
+    catch { failed.push('requisição indisponível'); }
+  };
+  page.on('response', onResponse);
+  page.on('requestfailed', onFailed);
+  const alert = page.locator('[role="alert"]:visible, [class*="toast"]:visible, .error:visible').first();
+  let outcome;
+  try {
+    await page.getByRole('button', { name: /^Entrar$/iu }).click();
+    outcome = await Promise.race([
+      page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: timeoutMs })
+        .then(() => 'navigated').catch(() => 'timeout'),
+      alert.waitFor({ state: 'visible', timeout: timeoutMs })
+        .then(() => 'alert').catch(() => 'timeout'),
+    ]);
+    if (outcome === 'navigated') return;
+    const path = safeLoginText(new URL(page.url()).pathname, [email, password]);
+    const messages = await page.locator('[role="alert"]:visible, [class*="toast"]:visible, .error:visible, form .error:visible, form [aria-live]:visible, form + p:visible')
+      .allTextContents();
+    const controls = (await loginControls(page)).filter((label) => !before.has(label));
+    const diagnostic = { outcome, path, messages: messages.map((message) => safeLoginText(message, [email, password]))
+      .filter(Boolean).slice(0, 5), requests: responses.slice(0, 20), failed: failed.slice(0, 20),
+    controls: controls.map((label) => safeLoginText(label, [email, password])).slice(0, 10) };
+    throw Object.assign(new Error('Login na homologação falhou'), { diagnostic });
+  } finally {
+    page.off('response', onResponse);
+    page.off('requestfailed', onFailed);
+  }
 }
 
 async function sanitizedScreenshot(page, path) {
@@ -144,21 +263,11 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
   try {
     for (const role of ['authorized', 'denied']) {
       const context = await browser.newContext({ serviceWorkers: 'block' });
-      const blocked = [];
-      await context.route('**/*', async (route) => {
-        const requestUrl = new URL(route.request().url());
-        if (requestUrl.origin !== target.url) { blocked.push(requestUrl.origin); return route.abort(); }
-        const response = await route.fetch({ maxRedirects: 0 });
-        const location = response.headers()['location'];
-        if (location && new URL(location, requestUrl).origin !== target.url) {
-          blocked.push(new URL(location, requestUrl).origin);
-          return route.abort();
-        }
-        return route.fulfill({ response });
-      });
+      const networkGuard = await installQaNetworkGuard(context, target);
+      const blocked = networkGuard.blocked;
       const page = await context.newPage();
       try {
-        if (!fixture || fixtureLogin) await login(page, target.url, credentials[role].email, credentials[role].password);
+        if (!fixture || fixtureLogin) await loginToQa(page, target.url, credentials[role], { networkGuard });
         for (const guide of published) {
           const plans = await Promise.all(guide.steps.map(step => stepPlan(guide, step)));
           const initial = plans[0].route;

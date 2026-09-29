@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { searchLocalProductContext } from './local-product-context.mjs';
 import { routeMatches } from './api-route-match.mjs';
 import { envCompatibility, githubReadToken } from './env-compat.mjs';
+import { FRONT_FIXED_PATHS } from './front-fixed-paths.mjs';
 import { parse } from 'yaml';
 const CACHE_MS = 5 * 60_000;
 export const MAX_API_CODE_CHARS = 30_000;
@@ -29,10 +30,7 @@ export async function selectApiStyleExamples(docsRoot) {
   return examples.sort((a, b) => b.sections - a.sections || b.notes - a.notes || a.path.localeCompare(b.path)).slice(0, 3);
 }
 const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|cs)$/;
-const PINNED_PATHS = new Set([
-  'src/components/core/components/Router/utils/pagesData.tsx',
-  'src/components/ui/components/NavBar/index.tsx',
-]);
+const PINNED_PATHS = new Set([FRONT_FIXED_PATHS.router, FRONT_FIXED_PATHS.menu]);
 const ALIASES = {
   atendimento: ['attendance', 'chat'],
   contatos: ['contact', 'contacts'],

@@ -16,6 +16,7 @@ import { contentMaxOutputTokens } from './env-compat.mjs';
 import { withCodeRefreshOffer } from './code-refresh-offer.mjs';
 import { guardModelOutput } from './model-output-guard.mjs';
 import { PRODUCT_TERMS } from './product-terms.mjs';
+import { attachScreenshotsToArticle, loadScreenshotManifest } from './screen-capture-manifest.mjs';
 import { validCanonicalQuestion } from './conversational-contract.mjs';
 import { apiCitationRegistry, apiCitationPrompt, resolveApiCitationIds } from './api-citation-ids.mjs';
 export { apiCitationRegistry, apiCitationPrompt, resolveApiCitationIds } from './api-citation-ids.mjs';
@@ -893,6 +894,7 @@ async function planContentCore(root, request, options = {}) {
 
 async function generateContentPackageCore(root, request, options = {}) {
   checkRequest(request);
+  const screenCaptureManifest = options.screenCaptureManifest ?? await loadScreenshotManifest(root);
   const existing = await related(root, request);
   const productContext = options.productContext ?? await getIhelpContext(root, request.topic, request.module, { ...options.contextOptions, requireLocal: true, ...(request.module === 'api' ? { repositoryIds: ['backend'] } : {}), explicitEndpoints: explicitEndpointsFrom(request) }).catch(() => ({ groundingRequired: true, matches: [], code: [], support: { categories: [], rules: [] }, coverage: [] }));
   if (faqRequested(request)) {
@@ -1270,10 +1272,11 @@ async function generateContentPackageCore(root, request, options = {}) {
       if (!options.groundingRetryIssues) return generateContentPackage(root, request, { ...options, productContext, plan, groundingRetryIssues: articleIssues });
       return withPending(evidencePending(articleIssues));
     }
-    const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => ({
+    const articles = parsed.articles.map(({ grounding: _grounding, ...article }) => attachScreenshotsToArticle({
       ...article, productActions: article.productActions.map(normalizeCatalogLabel),
       ...(request.tangoUrl && article.contentType === 'tutorial' ? { tangoUrl: request.tangoUrl } : {}),
-    }));
+    }, screenCaptureManifest, productContext.code?.find((item) => item.role === 'frontend')?.ref,
+    productContext.screenFacts ?? []));
     const invalid = articles.map((article) => {
       const validation = validateArticle(article);
       const issues = [...validation.issues, ...article.productActions
@@ -1441,6 +1444,9 @@ async function generateContentPackageCore(root, request, options = {}) {
     if (request.tangoUrl && article.contentType === 'tutorial') article.tangoUrl = request.tangoUrl;
     articles.push(article);
   }
+  for (let index = 0; index < articles.length; index++)
+    articles[index] = attachScreenshotsToArticle(articles[index], screenCaptureManifest,
+      productContext.code?.find((item) => item.role === 'frontend')?.ref, productContext.screenFacts ?? []);
   const invalid = articles.map((article) => {
     for (const field of ['description', 'assistantQuestion', 'assistantOverview']) if (mentionsSource(article[field])) {
       sectionPending.push(`${article.path}: menção à fonte em ${field}`);
@@ -1543,7 +1549,9 @@ export async function generateCanonicalGuide(root, request, options = {}) {
   }));
   if (article.guide.guideId !== request.guideId || article.contentType !== 'guia'
     || article.productActions.some((action) => !confirmedAction(action, request, productContext))) return evidencePending();
-  return finalizeGeneratedPages({ status: 'ready', articles: [article],
+  const screenCaptureManifest = options.screenCaptureManifest ?? await loadScreenshotManifest(root);
+  return finalizeGeneratedPages({ status: 'ready', articles: [attachScreenshotsToArticle(article, screenCaptureManifest,
+    productContext.code?.find((item) => item.role === 'frontend')?.ref, productContext.screenFacts ?? [])],
     ...(parsed.internalCodeEcho ? { internalCodeEcho: parsed.internalCodeEcho } : {}) }, request);
 }
 

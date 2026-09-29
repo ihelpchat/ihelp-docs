@@ -72,7 +72,16 @@ async function exercise(label, readToken) {
   const reached = new Map();
   for (const [name, { config, callback }] of tools) {
     const start = calls.length;
-    const source = name === 'docs_delete_article' ? { ...request, path: 'docs/teste/remocao-isolada' } : request;
+    const source = name === 'docs_delete_article' ? { ...request, path: 'docs/teste/remocao-isolada' }
+      : name === 'capturar_telas'
+        ? { ...request, path: 'docs/contatos', module: 'Contatos' }
+        : name === 'baixar_telas'
+          ? { ...request, page: 'contatos' }
+        : name === 'enviar_tela'
+          ? { ...request, page: 'contatos', step: 'abrir', alt: 'Tela revisada', base64: 'aGVsbG8=' }
+        : name === 'aprovar_tela'
+          ? { ...request, page: 'contatos', step: 'abrir', adminToken: 'admin-token-de-teste-com-mais-de-24' }
+        : request;
     const input = Object.fromEntries(Object.keys(config.inputSchema.shape).filter((key) => key in source).map((key) => [key, source[key]]));
     await callback(config.inputSchema.parse(input));
     reached.set(name, calls.slice(start));

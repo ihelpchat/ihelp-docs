@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { judgeClaims, renderFreeFaqSections, validateFreeFaqSections } from './faq-editorial.mjs';
+import { capturePlan } from '../scripts/screen-capture/capture.mjs';
+import { attachScreenshotsToArticle } from './screen-capture-manifest.mjs';
+import { screenshotFile, screenshotHash } from './screenshot-files.mjs';
 
 const context = { request: { module: 'Contatos' }, business: [{ module: 'Contatos', body: 'O proprietário do contato recebe a próxima conversa diretamente.' }], screenFacts: [{ text: 'Salvar', kind: 'action' }] };
 const task = (overrides = {}) => ({ tarefa: 'Responsável',
@@ -15,6 +18,25 @@ test('contexto da tarefa fica estruturado e aparece ao redor dos passos', () => 
   assert.equal(checked.sections.passos[0].depois.length, 1);
   const body = renderFreeFaqSections(checked.sections);
   assert.match(body, /### Responsável\n\nUse o responsável[\s\S]*1\. No módulo Contatos[\s\S]*\*\*O que acontece depois:\*\* A próxima conversa/u);
+});
+
+test('print fica logo após o passo, mesmo quando sobre e depois citam o mesmo rótulo', () => {
+  const body = renderFreeFaqSections({ passos: [task({
+    sobre: [{ text: 'Use Salvar para manter o responsável pelo contato.' }],
+    depois: [{ text: 'Depois de Salvar, a próxima conversa pode ir ao responsável.' }],
+  })] });
+  const sha = 'a'.repeat(40);
+  const [planned] = capturePlan({ page: 'contatos', module: 'Contatos', faqBody: body,
+    coverage: [{ module: 'Contatos', productRoutes: ['/contact'] }],
+    screenFacts: [{ kind: 'action', text: 'Salvar', route: '/contact', owner: 'ContactsList', sha }] });
+  assert.equal(body.split('\n')[planned.line], '1. No módulo Contatos, clique em **Salvar**.');
+  const bytes = Buffer.from('fixture');
+  const file = screenshotFile('contatos', planned.step, 'automatic', bytes, 'png');
+  const manifest = { entries: [{ ...planned, source: 'automatic', status: 'captured',
+    file, sha256: screenshotHash(bytes), bundleSha: sha }] };
+  const attached = attachScreenshotsToArticle({ path: 'docs/contatos', body }, manifest, sha).body;
+  assert.match(attached, /Use Salvar[^]*1\. No módulo Contatos, clique em \*\*Salvar\*\*\.\n\n!\[Tela de Contatos: Salvar\]\([^\n]+\)\n+\*\*O que acontece depois:\*\* Depois de Salvar/u);
+  assert.equal((attached.match(/!\[Tela de Contatos: Salvar\]/gu) ?? []).length, 1);
 });
 
 test('juiz recebe sobre e depois e marca afirmação inventada como a confirmar', async () => {

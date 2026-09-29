@@ -5,6 +5,7 @@ import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { loadBusinessContext } from './faq-editorial.mjs';
+import { safeSyncError } from './sync-diagnostics.mjs';
 
 const exec = promisify(execFile);
 const SOURCE = 'https://github.com/ihelpchat/second-brain-ihelp.git';
@@ -35,6 +36,7 @@ export async function syncBusinessContext({ stateDir, token, sourceDir, log = ()
   const temporaryLink = join(root, 'current.tmp');
   let clone;
   let published = false;
+  let stage = 'criar geração';
   try {
     let source = sourceDir;
     if (!source) {
@@ -43,14 +45,17 @@ export async function syncBusinessContext({ stateDir, token, sourceDir, log = ()
       const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1',
         GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
         GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}` };
+      stage = 'clone';
       await exec('git', ['clone', '--depth', '1', '--filter=blob:none', '--sparse', '--', SOURCE, target],
         { env, timeout: 120_000, maxBuffer: 1024 * 1024 });
+      stage = 'sparse-checkout';
       await exec('git', ['sparse-checkout', 'set', '--', SUBDIR],
         { cwd: target, env, timeout: 120_000, maxBuffer: 1024 * 1024 });
       source = join(target, SUBDIR);
     }
     const skipped = [];
     let copied = 0;
+    stage = 'ler contexto';
     for (const name of (await readdir(source)).filter((item) => FILE.test(item)).sort()) {
       const body = convertBusinessContext(name, await readFile(join(source, name), 'utf8'));
       if (!body) { skipped.push(name); continue; }
@@ -62,6 +67,7 @@ export async function syncBusinessContext({ stateDir, token, sourceDir, log = ()
       throw new Error('Contexto privado indisponível');
     }
     const previous = await readlink(current).catch(() => null);
+    stage = 'symlink';
     await rm(temporaryLink, { force: true });
     await symlink(basename(generation), temporaryLink, 'dir');
     await rename(temporaryLink, current);
@@ -72,6 +78,9 @@ export async function syncBusinessContext({ stateDir, token, sourceDir, log = ()
     }
     if (skipped.length) log(`Contexto ignorado: ${skipped.join(', ')}`);
     return { status: 'available', directory: current, copied, skipped };
+  } catch (error) {
+    log(`Sync do contexto falhou: second-brain ${stage}: ${safeSyncError(error, token)}`);
+    throw error;
   } finally {
     await rm(temporaryLink, { force: true }).catch(() => {});
     if (!published) await rm(generation, { recursive: true, force: true });

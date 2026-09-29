@@ -11,6 +11,8 @@ import { authorizeTool, registerToolPolicy, requestIdentity } from './access-con
 import { createGuide } from './create-guide.mjs';
 import { atualizarPorDeploy } from './update-by-deploy.mjs';
 import { refreshCodeProduct } from './code-refresh-offer.mjs';
+import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
+import { installCaptureRejectionSafety } from './capture-process-safety.mjs';
 import { syncBusinessContext } from './business-context-sync.mjs';
 import { envCompatibility } from './env-compat.mjs';
 
@@ -197,6 +199,99 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     catch { return textResult({ error: 'Não foi possível atualizar a cópia do código' }, true); }
   });
 
+  registerTool('capturar_telas', {
+    mutates: true,
+    description: 'Captura na homologação aprovada e grava PNGs mascarados no estado privado do serviço.',
+    inputSchema: z.strictObject({
+      path: z.string().regex(/^docs\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/),
+      module: z.string().min(2).max(80),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ requestedBy, path, module }) => {
+    if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    const page = path.split('/').at(-1);
+    const target = auditTarget(module, path);
+    await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'attempt' });
+    try {
+      const { capturePage, captureStepsLog } = await import('./screen-capture-service.mjs');
+      const manifest = await capturePage({ path, module });
+      console.error(captureStepsLog(manifest.steps));
+      await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'success' });
+      return textResult({ page, captured: manifest.steps.filter((step) => step.status === 'capturado').length,
+        steps: manifest.steps });
+    } catch (error) {
+      console.error(captureFailureLog(error));
+      await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'failure' });
+      return textResult({ error: captureFailureCategory(error) }, true);
+    }
+  });
+
+  registerTool('enviar_tela', {
+    mutates: true,
+    description: 'Recebe PNG/JPEG no volume privado como pendente de revisão.',
+    inputSchema: z.strictObject({
+      page: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+      step: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+      base64: z.string().max(3 * 1024 * 1024),
+      alt: z.string().min(1).max(240),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ requestedBy, page, step, base64, alt }) => {
+    if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    const target = auditTarget(page, step);
+    await auditOperation(root, { actor: requestedBy, operation: 'enviar_tela', target, result: 'attempt' });
+    try {
+      const { uploadPage } = await import('./screen-capture-service.mjs');
+      await uploadPage({ page, step, base64, alt });
+      await auditOperation(root, { actor: requestedBy, operation: 'enviar_tela', target, result: 'success' });
+      return textResult({ page, step, status: 'pending' });
+    } catch {
+      await auditOperation(root, { actor: requestedBy, operation: 'enviar_tela', target, result: 'failure' });
+      return textResult({ error: 'Upload recusado' }, true);
+    }
+  });
+
+  registerTool('aprovar_tela', {
+    mutates: true,
+    description: 'Aprova um upload pendente com token de administração separado.',
+    inputSchema: z.strictObject({
+      page: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+      step: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+      adminToken: z.string().min(24),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ requestedBy, page, step, adminToken }) => {
+    if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    const target = auditTarget(page, step);
+    await auditOperation(root, { actor: requestedBy, operation: 'aprovar_tela', target, result: 'attempt' });
+    try {
+      const { approvePage } = await import('./screen-capture-service.mjs');
+      await approvePage({ page, step, token: adminToken, approvedBy: requestedBy });
+      await auditOperation(root, { actor: requestedBy, operation: 'aprovar_tela', target, result: 'success' });
+      return textResult({ page, step, status: 'approved' });
+    } catch {
+      await auditOperation(root, { actor: requestedBy, operation: 'aprovar_tela', target, result: 'failure' });
+      return textResult({ error: 'Aprovação recusada' }, true);
+    }
+  });
+
+  registerTool('baixar_telas', {
+    mutates: false,
+    description: 'Devolve manifesto e até quatro PNGs de uma página como base64 para revisão e PR do FAQ.',
+    inputSchema: z.strictObject({
+      page: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+      limit: z.number().int().min(1).max(4).default(4),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ page, limit }) => {
+    if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    try {
+      const { downloadPage } = await import('./screen-capture-service.mjs');
+      return textResult(await downloadPage(page, { limit }));
+    }
+    catch { return textResult({ error: 'Telas indisponíveis ou acima do limite' }, true); }
+  });
+
   registerTool('docs_submit_package', {
     mutates: true,
     description: 'Cria ou atualiza MDX e remove artigos em uma PR; atualiza meta.json de navegação. dry_run apenas valida.',
@@ -264,6 +359,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  installCaptureRejectionSafety();
   if (!process.env.BUSINESS_CONTEXT_DIR) {
     const stateDir = process.env.MCP_STATE_DIR ?? '/data';
     try {

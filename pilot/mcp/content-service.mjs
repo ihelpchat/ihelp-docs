@@ -11,6 +11,8 @@ import { githubWriteToken } from './env-compat.mjs';
 import { guideSchema } from '../architecture/conversation-v1.mjs';
 import { assertPublicSubmit } from './public-submit-gate.mjs';
 import { finalizeSecurityResponse } from './security-review.mjs';
+import { loadScreenshotManifest, screenshotReviewBody, screenshotVersionWarnings } from './screen-capture-manifest.mjs';
+import { searchLocalProductContext } from './local-product-context.mjs';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -396,6 +398,16 @@ function safeArticleList(articles, deletes = []) {
 }
 
 async function createPackagePullRequest(items, deletes, actor, beforePull, options = {}) {
+  const { imagesUsedByArticles } = await import('./screen-capture-service.mjs');
+  const screenshots = await imagesUsedByArticles(items.map(({ article }) => article));
+  const manifest = await loadScreenshotManifest();
+  const screenshotWarnings = [];
+  for (const { article } of items) {
+    if (!manifest?.entries?.some((entry) => entry.page === article.path.split('/').at(-1)) && !manifest?.pending?.length) continue;
+    const context = await searchLocalProductContext(article.title, article.title, { repositoryIds: ['frontend'] });
+    const currentSha = context.code.find((item) => item.role === 'frontend' && item.available)?.ref;
+    screenshotWarnings.push(...screenshotVersionWarnings([article], manifest, currentSha));
+  }
   const repository = process.env.GITHUB_REPOSITORY ?? 'ihelpchat/ihelp-docs';
   const base = options.base ?? process.env.GITHUB_BASE_BRANCH ?? 'main';
   const [owner, repo] = repository.split('/');
@@ -406,7 +418,8 @@ async function createPackagePullRequest(items, deletes, actor, beforePull, optio
   const baseBody = options.body ?? `Pacote criado pelo MCP da documentação. Revise precisão, navegação, permissões e links antes do merge.\n\nArtigos: ${targets}\n\nAudit MCP: actor=${actor}; at=${submittedAt}; operation=docs_submit_package; mode=pull_request.`;
   const marked = items.filter(({ article }) => article.body.includes('<AConfirmar>'));
   const warnedBody = marked.length ? `${baseBody}\n\n## Pendências a confirmar\n\n${marked.map(({ article }) => `- ${article.path}: contém afirmações marcadas como a confirmar; revisão humana obrigatória antes da publicação.`).join('\n')}` : baseBody;
-  const body = options.securityWarnings?.length ? `${warnedBody}\n\n## Atenção de segurança\n\n${options.securityWarnings.map((warning) => `- ${warning}`).join('\n')}` : warnedBody;
+  const versionBody = screenshotReviewBody(warnedBody, [...new Set(screenshotWarnings)]);
+  const body = options.securityWarnings?.length ? `${versionBody}\n\n## Atenção de segurança\n\n${options.securityWarnings.map((warning) => `- ${warning}`).join('\n')}` : versionBody;
   rejectSensitive(`${title}\n${body}`);
   const branch = options.branch ?? `docs/ia-pacote-${Date.now()}`;
   if (options.branch && !/^docs\/deploy-[a-z0-9-]+-[a-f0-9]{16}$/.test(branch)) throw new SubmitArticleError('INVALID_BRANCH', 'Branch determinística inválida');
@@ -452,6 +465,13 @@ async function createPackagePullRequest(items, deletes, actor, beforePull, optio
       body: JSON.stringify({ message: `docs: atualiza ${article.title}`, content: Buffer.from(rendered).toString('base64'), branch, ...(previous ? { sha: previous.sha } : {}) }),
     });
     remember(article.path, 'upsert');
+  }
+  for (const image of screenshots) {
+    const previous = await githubRequest(fileAt(image.file, branch), {}, true);
+    await githubRequest(`/repos/${owner}/${repo}/contents/${image.file}`, {
+      method: 'PUT', body: JSON.stringify({ message: 'docs: adiciona print aprovado do FAQ',
+        content: image.base64, branch, ...(previous ? { sha: previous.sha } : {}) }),
+    });
   }
   for (const path of deletes) {
     const filePath = contentFile(path);
