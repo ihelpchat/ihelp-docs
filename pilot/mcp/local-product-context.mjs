@@ -57,7 +57,8 @@ const API_DTO_FOLDERS = Object.freeze(['Comzada.Domain/EntitiesV2', 'Comzada.Dom
 export function productSparseFolders(role) {
   const folders = SOURCES[role]?.folders;
   if (!folders) throw new Error('Repositório do produto inválido');
-  return [...new Set([...folders, ...(role === 'backend' ? API_DTO_FOLDERS : [])])];
+  const unique = [...new Set([...folders, ...(role === 'backend' ? API_DTO_FOLDERS : [])])];
+  return unique.filter((folder) => !unique.some((parent) => folder !== parent && folder.startsWith(`${parent}/`)));
 }
 const STOP = new Set(['para', 'pelo', 'pela', 'como', 'criar', 'configurar', 'codigo', 'code', 'de', 'com', 'uma', 'um']);
 const ALIASES = { robo: ['robot'], robos: ['robot'], canal: ['channel'], canais: ['channel'], horario: ['schedule', 'hour'], horarios: ['schedule', 'hour'], departamento: ['department'], departamentos: ['department'], atendimento: ['attendance'], reconectar: ['reconnect', 'connection'], contatos: ['contacts'], campanha: ['campaign'] };
