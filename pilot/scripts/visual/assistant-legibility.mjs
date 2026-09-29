@@ -58,7 +58,7 @@ const assertAssistantReference = async (page, root, context) => {
       for (const node of el.querySelectorAll(selector)) {
         if (!node.getClientRects().length) continue;
         if (!selector.includes('[data-compact]') && node.closest('.ih-ai-thread[data-compact], .ih-ai-composer[data-compact]') &&
-            /\.ih-ai-(user p|text p|steps li|composer textarea)/.test(selector)) continue;
+            /\.ih-ai-(user p|text p|steps li|composer textarea|busy-label)/.test(selector)) continue;
         const style = getComputedStyle(node);
         measured.push([selector, parseFloat(style.fontSize) === fontSize && Number(style.fontWeight) === fontWeight,
           `${style.fontSize}/${style.fontWeight}`, `${fontSize}px/${fontWeight}`]);
@@ -89,6 +89,17 @@ const assertAssistantReference = async (page, root, context) => {
     assert.ok(pass, `${context}: ${selector} ${actual}, referência ${expected}`);
   }
   return results.length;
+};
+const assertBusyReference = async (page, root, context, compact) => {
+  const busy = root.locator(compact ? '.ih-ai-thread[data-compact]' : '.ih-ai-thread').first();
+  await busy.evaluate((el) => {
+    const label = document.createElement('div');
+    label.className = 'ih-ai-busy-label';
+    label.textContent = 'Consultando documentos…';
+    el.append(label);
+  });
+  await assertAssistantReference(page, root, context);
+  await busy.locator('.ih-ai-busy-label').last().evaluate((el) => el.remove());
 };
 
 const audit = (root, reference) => {
@@ -238,6 +249,7 @@ try {
       const expected = { normal: '.ih-ai-sources', guia: '.ih-ai-steps li', fallback: '.ih-ai-human-action', erro: '.ih-ai-error' };
       assert.ok(await root.locator(expected[state]).first().isVisible(), `${state}/${viewport}: estado não foi renderizado`);
       await assertAssistantReference(page, root, `${state}/${viewport}/tela-cheia`);
+      await assertBusyReference(page, root, `${state}/${viewport}/busy`, false);
       assert.equal(await root.getByText(/Procedimento não documentado|Parte da resposta exige atendimento/i).count(), 0, `${state}/${viewport}: etiqueta proibida`);
       const targets = await page.locator('.ih-ai-screen a, .ih-ai-screen button, .ih-ai-screen textarea, .ih-ai-screen summary').evaluateAll((els) => els.flatMap((el, i) => el.getClientRects().length && !el.matches(':disabled') ? [i] : []));
       const collect = async (mode) => {
@@ -296,6 +308,7 @@ try {
       await catalogDrawer.evaluate(async (el) => { await Promise.all(el.getAnimations().map((animation) => animation.finished)); });
       await assertCurrentName(page);
       await assertAssistantReference(page, catalogDrawer, `guia/${viewport}/compacto`);
+      await assertBusyReference(page, catalogDrawer, `guia/${viewport}/busy compacto`, true);
       failures.push(...(await auditAt(catalogDrawer)).failures.map((item) => `catálogo/compacto/${viewport}/${zoom}: ${item}`));
       await catalogDrawer.getByRole('button', { name: 'Abrir em tela cheia' }).click();
       await page.waitForURL((url) => /\/assistente\/?$/.test(url.pathname));
