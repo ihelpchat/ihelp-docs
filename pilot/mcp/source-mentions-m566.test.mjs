@@ -7,6 +7,20 @@ import { mentionsSource } from './source-mention.mjs';
 const context = { request: { topic: 'Robô', module: 'Robôs' }, screenFacts: [], existing: [] };
 const sections = (text) => ({ oQueE: [{ text }], passos: [{ tarefa: 'Ativar', passos: [{ text: 'Clique em **Publicar**.' }] }] });
 
+test('informações disponíveis distinguem lugar do produto de material e atribuição', () => {
+  const cases = [
+    ['consultar as informações disponíveis na ficha', false],
+    ['As informações disponíveis no documento interno indicam que o robô recebe o cliente.', true],
+    ['Os dados disponíveis mostram que o robô recebe o cliente.', true],
+    ['as informações disponíveis no iHelp', false],
+    ['o que está disponível no painel', false],
+    ['o que está disponível no material indica que o robô responde.', true],
+  ];
+  for (const [phrase, expected] of cases) {
+    assert.equal(mentionsSource(phrase), expected, phrase);
+  }
+});
+
 test('atribuição gramatical é recusada nas saídas públicas sem bloquear linguagem comum', () => {
   const rejected = [
     'Segundo o conteúdo fornecido, o robô recebe o cliente.',
