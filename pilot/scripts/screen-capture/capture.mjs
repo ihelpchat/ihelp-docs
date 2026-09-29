@@ -14,6 +14,13 @@ const routePattern = /^\/(?!\/)[a-z0-9/_-]*$/u;
 const outputRoot = resolve(import.meta.dirname, '../../public/img/mcp');
 
 const normalized = (value) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
+const controlKey = (value) => normalized(String(value ?? '')).replace(/\s+/gu, '');
+const menuTrigger = (label) => /^(?:mais op(?:c|ç)(?:o|õ)es|tr[eê]s pontos|menu)$/iu.test(label.trim());
+const safeControlLabel = (value) => {
+  const label = String(value ?? '').replace(/\s+/gu, ' ').trim();
+  return label.length > 0 && label.length <= 40 && /^[\p{L}\p{N} .,:;()!?+/-]+$/u.test(label)
+    && !containsSensitiveData(label, { detectOpaque: true }) ? label : null;
+};
 const safePath = (url) => {
   try { const path = new URL(url).pathname; return /^\/[a-z0-9/_-]{0,160}$/iu.test(path) ? path : '[caminho omitido]'; }
   catch { return '[caminho omitido]'; }
@@ -36,22 +43,60 @@ async function closeSafeNotice(page, target) {
 async function findControl(page, target, step) {
   const roles = step.role === 'button' ? ['button', 'link', 'menuitem']
     : step.role === 'textbox' ? ['textbox', 'combobox'] : [step.role];
-  const candidates = [];
+  const deadline = Date.now() + 20_000;
+  let count = 0;
+  do {
+    const candidates = [];
+    for (const frame of page.frames()) {
+      if (new URL(frame.url()).origin !== target.url) continue;
+      const locators = step.role === 'text' ? [frame.getByText(step.label)]
+        : roles.map((role) => frame.getByRole(role));
+      for (const locator of locators) for (let index = 0, length = await locator.count(); index < length; index++) {
+        const control = locator.nth(index);
+        if (!await control.isVisible().catch(() => false)) continue;
+        const names = await control.evaluate((element) => {
+          const described = (element.getAttribute('aria-describedby') ?? '').split(/\s+/u)
+            .map((id) => element.ownerDocument.getElementById(id)?.textContent ?? '').filter(Boolean);
+          return [element.innerText, element.getAttribute('aria-label'), element.getAttribute('title'),
+            element.getAttribute('placeholder'), ...described];
+        }).catch(() => []);
+        if (names.some((name) => controlKey(name) === controlKey(step.label))) candidates.push(control);
+      }
+    }
+    count = candidates.length;
+    for (const control of candidates) {
+      if (!await control.isEnabled().catch(() => false)) continue;
+      const box = await control.boundingBox().catch(() => null);
+      if (!box || box.width <= 0 || box.height <= 0) continue;
+      try { await control.click({ trial: true, timeout: 1000 }); return { control, count }; }
+      catch { /* outro candidato visível pode estar clicável */ }
+    }
+    if (Date.now() >= deadline) break;
+    await page.waitForTimeout(Math.min(500, deadline - Date.now()));
+  } while (true);
+  return { control: null, count };
+}
+
+async function missingControlReason(page, target, count) {
+  const labels = [];
   for (const frame of page.frames()) {
     if (new URL(frame.url()).origin !== target.url) continue;
-    const locators = step.role === 'text' ? [frame.getByText(step.label, { exact: true })]
-      : roles.map((role) => frame.getByRole(role, { name: step.label, exact: true }));
-    for (const locator of locators) for (let index = 0, count = await locator.count(); index < count; index++)
-      candidates.push(locator.nth(index));
+    for (const role of ['button', 'link', 'menuitem']) {
+      const controls = frame.getByRole(role);
+      for (let index = 0, length = await controls.count(); index < length && labels.length < 20; index++) {
+        const control = controls.nth(index);
+        if (!await control.isVisible().catch(() => false)) continue;
+        const value = await control.evaluate((element) => {
+          if (element.closest('table,[role="table"],[role="grid"],[role="row"]')) return null;
+          return element.innerText || element.getAttribute('aria-label') || element.getAttribute('title');
+        }).catch(() => null);
+        const safe = safeControlLabel(value);
+        if (safe && !labels.includes(safe)) labels.push(safe);
+      }
+    }
   }
-  for (const control of candidates) {
-    if (!await control.isVisible() || !await control.isEnabled()) continue;
-    const box = await control.boundingBox();
-    if (!box || box.width <= 0 || box.height <= 0) continue;
-    try { await control.click({ trial: true, timeout: 1000 }); return { control, count: candidates.length }; }
-    catch { /* outro candidato visível pode estar clicável */ }
-  }
-  return { control: null, count: candidates.length };
+  const spinner = await page.locator('[aria-busy="true"]:visible, [role="progressbar"]:visible, [class*="skeleton"]:visible').count() > 0;
+  return `rótulo não encontrado: ${count} candidatos; controles: ${labels.join(' | ') || 'nenhum'}; spinner/skeleton: ${spinner ? 'sim' : 'não'}`;
 }
 
 export function faqStepMatches(body, facts = []) {
@@ -114,7 +159,9 @@ export function capturePlan({ page, module, faqBody, coverage, screenFacts }) {
     return { page, step, listIndex: match.listIndex, line: match.line,
       role: fact.kind === 'field' ? 'textbox' : 'button', label,
       route: fact.route ?? routes[0], owner: fact.owner, checkoutSha: fact.sha, alt: `Tela de ${module}: ${label}`,
-      action: fact.kind === 'action' && /^(?:abrir|ver|mostrar|acessar)\b/iu.test(label)
+      action: fact.kind === 'action' && (/^(?:abrir|ver|mostrar|acessar)\b/iu.test(label)
+        || menuTrigger(label) && selected[index + 1]?.match?.line > match.line
+          && (selected[index + 1]?.fact?.route ?? routes[0]) === (fact.route ?? routes[0]))
         && !isUnsafeCaptureAction(label) ? 'click' : 'none' };
   });
 }
@@ -383,12 +430,10 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         throw new Error('Navegação fora da rota confirmada');
       }
       await closeSafeNotice(page, target);
-      const loading = page.locator('[aria-busy="true"]:visible, [role="progressbar"]:visible, [class*="skeleton"]:visible').first();
-      if (await loading.count()) await loading.waitFor({ state: 'hidden', timeout: 3000 });
       const { control, count } = await findControl(page, target, step);
       outcome.candidates = count;
       if (!control) {
-        outcome.motivo = count ? 'alvo fora da tela' : `rótulo não encontrado: ${count} candidatos`;
+        outcome.motivo = count ? 'alvo fora da tela' : await missingControlReason(page, target, count);
         throw new Error('Rótulo ausente ou não clicável');
       }
       if (!['click', 'none'].includes(step.action)) throw new Error('Ação não permitida');
@@ -415,7 +460,7 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
       await writeScreenshot(root, { page: step.page, step: step.step, source: 'automatic', file: image, sha256 }, captured.bytes);
       const mask = captured.mask;
       if (step.action === 'click' && !isUnsafeCaptureAction(step.label)
-        && /^(?:abrir|ver|mostrar|acessar)\b/iu.test(step.label)) await control.click();
+        && (/^(?:abrir|ver|mostrar|acessar)\b/iu.test(step.label) || menuTrigger(step.label))) await control.click();
       manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step || entry.source !== 'automatic');
       manifest.entries.push({ page: step.page, step: step.step, label: step.label, route: step.route,
         listIndex: step.listIndex, line: step.line,

@@ -43,13 +43,22 @@ export function captureFailureLog(error, env = process.env) {
 }
 
 export function captureStepsLog(steps) {
+  const safeReason = (value) => {
+    if (/^(?:capturado|alvo fora da tela|máscara não cobriu|tempo do passo esgotado|rótulo não encontrado: \d+ candidatos|rota não abriu: \/[a-z0-9/_-]*|bloqueado pela lista de hosts: [a-z0-9.-]+)$/iu.test(value)) return value;
+    const match = /^rótulo não encontrado: (\d+) candidatos; controles: (.*); spinner\/skeleton: (sim|não)$/u.exec(value ?? '');
+    if (!match) return '[motivo omitido]';
+    const controls = match[2].split(' | ');
+    if (controls.length > 20 || controls.some((label) => label.length > 40
+      || !/^[\p{L}\p{N} .,:;()!?+/-]+$/u.test(label)
+      || containsSensitiveData(label, { detectOpaque: true }))) return '[motivo omitido]';
+    return value;
+  };
   const safe = steps.map(({ step, label, status, motivo, finalPath, pageTitle, candidates }) => ({
     step: slug.test(step) ? step : '[passo omitido]',
     label: typeof label === 'string' && label.length <= 160 && !containsSensitiveData(label, { detectOpaque: true })
       ? label.replace(/[\r\n]/gu, ' ') : '[rótulo omitido]',
     status: ['capturado', 'pendente', 'descartado'].includes(status) ? status : 'pendente',
-    motivo: /^(?:capturado|alvo fora da tela|máscara não cobriu|tempo do passo esgotado|rótulo não encontrado: \d+ candidatos|rota não abriu: \/[a-z0-9/_-]*|bloqueado pela lista de hosts: [a-z0-9.-]+)$/iu.test(motivo)
-      ? motivo : '[motivo omitido]',
+    motivo: safeReason(motivo),
     finalPath: /^\/[a-z0-9/_-]*$/iu.test(finalPath) ? finalPath : '[caminho omitido]',
     pageTitle: typeof pageTitle === 'string' && pageTitle.length <= 100 && !/[\r\n]/u.test(pageTitle)
       && !containsSensitiveData(pageTitle, { detectOpaque: true }) ? pageTitle : '[título omitido]',
