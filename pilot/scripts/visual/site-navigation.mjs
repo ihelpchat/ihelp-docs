@@ -37,7 +37,7 @@ try {
           body: '.ih-prose', search: '.ih-header-search', searchText: '.ih-header-search span',
           nav: '.ih-nav-link[href*="/assistente"]', launcher: '.ih-ai-launcher', menu: '.ih-menu-button',
           support: '.ih-header-cta', ask: '.ih-toc-ask', feedback: '.ih-feedback .ih-button',
-          product: '.ih-product-action small', sideLink: '.ih-side-link', sideGroup: '.ih-side-group-toggle',
+          product: '.ih-prose a.ih-ai-product-action', sideLink: '.ih-side-link', sideGroup: '.ih-side-group-toggle',
         }).map(([key, selector]) => [key, read(selector)]));
       });
       assert.ok(metrics.section && metrics.section.height <= metrics.section.lineHeight + 1, `${name}: rótulo da seção quebrou linha`);
@@ -50,7 +50,7 @@ try {
       }
       assert.ok(metrics.body?.font >= 16, `${name}: corpo ${metrics.body?.font}px < 16px`);
       assert.ok(metrics.search?.width >= (name !== 'mobile' ? 150 : 44), `${name}: busca abaixo de 44px de largura`);
-      assert.ok(metrics.product?.font >= 16, `${name}: descrição da ação ${metrics.product?.font}px < 16px`);
+      assert.ok(metrics.product, `${name}: atalho do módulo ausente`);
       if (name !== 'mobile') {
         assert.equal(metrics.searchText?.text,
           process.env.NEXT_PUBLIC_ASSISTANT_URL ? 'Buscar ou perguntar' : 'Buscar na documentação',
@@ -85,15 +85,15 @@ try {
         await page.goto(`${baseUrl}/docs/principais-duvidas/`, { waitUntil: 'networkidle' });
         if (process.env.NAVIGATION_PROBE_CSS) await page.addStyleTag({ content: process.env.NAVIGATION_PROBE_CSS });
         await page.locator('.ih-faq-item', { hasText: 'Como editar ou importar contatos' }).locator('button').click();
-        await page.locator('.ih-product-action small').waitFor({ state: 'visible' });
+        await page.locator('.ih-faq-answer .ih-ai-product-action').waitFor({ state: 'visible' });
         await page.screenshot({ path: '/tmp/m5-65-principais-duvidas-mobile.png', fullPage: true });
         const other = await page.evaluate(() => {
           const search = document.querySelector('.ih-header-search')?.getBoundingClientRect();
-          const product = document.querySelector('.ih-product-action small');
-          return { searchWidth: search?.width, searchHeight: search?.height, productFont: product && parseFloat(getComputedStyle(product).fontSize) };
+          const product = document.querySelector('.ih-faq-answer .ih-ai-product-action')?.getBoundingClientRect();
+          return { searchWidth: search?.width, searchHeight: search?.height, productHeight: product?.height };
         });
         assert.ok(other.searchWidth >= 44 && other.searchHeight >= 44, `mobile: busca em Principais dúvidas ${other.searchWidth} × ${other.searchHeight}px`);
-        assert.ok(other.productFont >= 16, `mobile: descrição em Principais dúvidas ${other.productFont}px < 16px`);
+        assert.ok(other.productHeight >= 44, `mobile: atalho em Principais dúvidas ${other.productHeight}px < 44px`);
         await assertMobileTargets(page, 'Principais dúvidas');
       }
     } finally { await page.close(); }

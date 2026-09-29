@@ -1043,15 +1043,16 @@ button {
 .ih-meta a.ih-meta-pill {
   position: relative;
   isolation: isolate;
+  min-height: 44px;
   padding-block: 10px;
-  margin-block: -7px;
+  margin-block: -10.75px;
   background: transparent;
 }
 
 .ih-meta a.ih-meta-pill::before {
   content: '';
   position: absolute;
-  inset: 7px 0;
+  inset: 10.75px 0;
   z-index: -1;
   border-radius: inherit;
   background: #dcfce7;
@@ -1174,7 +1175,7 @@ button {
 }
 
 
-.ih-prose a {
+.ih-prose a:not(.ih-ai-product-action) {
   color: var(--ih-coral-600);
   font-weight: 500;
   text-decoration: underline;
@@ -1183,7 +1184,7 @@ button {
   text-underline-offset: 3px;
 }
 
-.ih-prose a:hover {
+.ih-prose a:not(.ih-ai-product-action):hover {
   color: var(--ih-coral-700);
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -4632,17 +4633,6 @@ button {
   color: var(--ih-coral-900);
   border-color: var(--ih-coral-300);
 }
-
-.ih-prose a.ih-ai-product-action {
-  padding-inline: 0;
-  color: var(--ih-coral-700);
-  border: 0;
-  background: transparent;
-  font-weight: 500;
-  text-decoration: underline;
-}
-
-.ih-prose a.ih-ai-product-action:hover { text-decoration: underline; }
 
 .ih-ai-product-action svg {
   width: 14px;
