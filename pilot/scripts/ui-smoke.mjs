@@ -75,6 +75,13 @@ async function assertFaqGuideShortcut(page, label) {
   });
   assert.equal(await action.count(), 1, `${label}: link secundário do módulo ausente`);
   assert.match(await action.getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/configuracoes\/channel\?ihelpGuide=abrir-canais$/);
+  const headingAnchor = page.locator('.ih-prose h2 a').first();
+  assert.ok(await headingAnchor.count(), `${label}: artigo sem âncora no título de seção`);
+  assert.deepEqual(await headingAnchor.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { color: style.color, textDecorationLine: style.textDecorationLine };
+  }), { color: 'rgb(15, 23, 42)', textDecorationLine: 'none' },
+  `${label}: âncora do título deve manter o estilo da base`);
   const shortcut = await page.evaluate(() => {
     const guide = document.querySelector('.ih-guide-actions .ih-guide-app');
     const secondary = document.querySelector('.ih-prose a.ih-ai-product-action');
