@@ -4,6 +4,8 @@ import { faqSubtitle, validateFreeFaqSections, judgeClaims, renderFreeFaqSection
 import * as editorial from './faq-editorial.mjs';
 import { mentionsSource } from './source-mention.mjs';
 import { generateContentPackage } from './content-ai-service.mjs';
+import { attachScreenshotsToArticle } from './screen-capture-manifest.mjs';
+import { screenshotFile, screenshotHash } from './screenshot-files.mjs';
 
 const definition = 'A Agenda de Contatos é a lista de clientes da empresa no iHelp.';
 const navigation = 'No menu, abra **Contatos**; a tela se chama **Listar Contatos**.';
@@ -50,6 +52,22 @@ test('fidelidade detecta perda na seção, normalizando Markdown e AConfirmar', 
   assert.match(faqAssemblyLosses(approved, changed).join(' '), /perda na montagem: O que é: A Agenda/u);
   assert.deepEqual(faqAssemblyLosses({ oQueE: [{ text: '<AConfirmar>Use **Contatos**.</AConfirmar>' }] },
     '## O que é\n\nUse Contatos.'), []);
+});
+
+test('print após o passo não cria frase nem encobre perda na montagem', () => {
+  const approved = { passos: [{ tarefa: 'Buscar', passos: [{ text: 'Clique em **Salvar**.' }] }] };
+  const body = renderFreeFaqSections(approved);
+  const bytes = Buffer.from('fixture');
+  const image = screenshotFile('agenda', 'salvar', 'upload', bytes, 'png');
+  const line = body.split('\n').findIndex((part) => part.includes('Clique em **Salvar**.'));
+  const manifest = { entries: [{ page: 'agenda', step: 'salvar', source: 'upload', status: 'approved',
+    file: image, sha256: screenshotHash(bytes), label: 'Salvar', alt: 'Clique em Salvar.', line,
+    listIndex: 0, route: '/contact', owner: 'ContactsList' }] };
+  const withPrint = attachScreenshotsToArticle({ path: 'docs/agenda', body }, manifest).body;
+  assert.match(withPrint, /1\. Clique em \*\*Salvar\*\*\.\n\n!\[Clique em Salvar\.\]/u);
+  assert.deepEqual(editorial.faqAssemblyLosses(approved, withPrint), []);
+  assert.match(editorial.faqAssemblyLosses(approved,
+    withPrint.replace('1. Clique em **Salvar**.', '1.')).join(' '), /perda na montagem/u);
 });
 
 test('generateContentPackage mantém as frases aprovadas do redator no artigo final', async () => {
