@@ -763,7 +763,9 @@ export async function judgeClaims(sections, context, provider) {
   const mark = (unit, key) => {
     const text = splitClaims(unit.text).flatMap((phrase) => {
       const claim = claims[cursor++], verdict = statuses.get(claim.id);
-      if (verdict.sourceMention) {
+      // "A tela" descreve a interface do produto, não atribui a frase ao material de apoio.
+      const uiBehavior = /^a tela\b/iu.test(phrase) && !mentionsSource(phrase);
+      if (verdict.sourceMention && !uiBehavior) {
         const introductory = phrase.match(/^(segundo|conforme|de acordo com|com base (?:em|no|na|nos|nas)|a partir (?:de|do|da|dos|das)|pelo que consta em|como (?:indicado|descrito|mencionado) em)\s+([^,]+),\s*(.+)$/iu);
         const prefix = phrase.match(/^(.+?)\s+mostra que\s+(.+)$/iu);
         const candidate = introductory && mentionsSource(`${introductory[1]} ${introductory[2]}`)
@@ -789,11 +791,19 @@ export async function judgeClaims(sections, context, provider) {
     return text ? { ...unit, text } : null;
   };
   const result = {};
+  const hasSupportedContext = (units) => units.some((unit) =>
+    unit.text.replace(/<AConfirmar>[\s\S]*?<\/AConfirmar>/gu, '').trim().length > 0);
   for (const [key] of Object.entries(FREE_FAQ_SECTIONS)) result[key] = key === 'passos'
-    ? (sections.passos ?? []).map((task) => ({ ...task,
-      sobre: (task.sobre ?? []).map((unit) => mark(unit, 'sobre')).filter(Boolean),
-      passos: task.passos.map((unit) => mark(unit, key)).filter(Boolean),
-      depois: (task.depois ?? []).map((unit) => mark(unit, 'depois')).filter(Boolean) }))
+    ? (sections.passos ?? []).map((task) => {
+      const sobre = (task.sobre ?? []).map((unit) => mark(unit, 'sobre')).filter(Boolean);
+      const passos = task.passos.map((unit) => mark(unit, key)).filter(Boolean);
+      const depois = (task.depois ?? []).map((unit) => mark(unit, 'depois')).filter(Boolean);
+      if (!hasSupportedContext(sobre) && !hasSupportedContext(depois)) {
+        pending.push(`contexto da tarefa ${task.tarefa} sem fonte`);
+        return { ...task, sobre: [], passos, depois: [] };
+      }
+      return { ...task, sobre, passos, depois };
+    })
       .filter((task) => task.passos.length)
     : (sections[key] ?? []).map((unit) => mark(unit, key)).filter(Boolean);
   result.duvidas = result.duvidas.filter((unit) => {
