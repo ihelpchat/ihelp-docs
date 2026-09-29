@@ -12,7 +12,7 @@ const facts = [
 const sections = {
   oQueE: [{ text: 'O robô recebe a primeira mensagem do cliente.' }],
   paraQueServe: [{ text: 'Ajuda a equipe a organizar o atendimento.' }],
-  casosDeUso: [{ text: 'Quando chegam pedidos fora do horário → monte uma resposta → o cliente recebe orientação.' }],
+  casosDeUso: [{ text: '**Uma clínica fecha à noite.** O robô recebe pedidos fora do horário e orienta o cliente.' }],
   passos: [{ tarefa: 'Criar', passos: [{ text: 'Abra **Robôs** e clique em **Criar novo robô**.' }] }],
   duvidas: [], erros: [], suporte: [],
 };
@@ -21,7 +21,11 @@ const context = { request: { module: 'Robôs', topic: 'Robô' }, screenFacts: fa
 test('redação livre mantém seções e passos naturais por tarefa', () => {
   const checked = validateFreeFaqSections(sections, context);
   assert.equal(checked.blocking.length, 0);
-  assert.match(renderFreeFaqSections(checked.sections), /## O que é[\s\S]*## Casos de uso[\s\S]*- Quando chegam[\s\S]*### Criar[\s\S]*\*\*Criar novo robô\*\*/u);
+  assert.match(renderFreeFaqSections(checked.sections), /## O que é[\s\S]*## Casos de uso\n\n\*\*Uma clínica fecha à noite\.\*\*[\s\S]*### Criar[\s\S]*\*\*Criar novo robô\*\*/u);
+  assert.doesNotMatch(renderFreeFaqSections(checked.sections), /→|^- /mu);
+  const arrows = validateFreeFaqSections({ ...sections, casosDeUso: [{ text: 'Cliente pergunta → robô responde.' }] }, context);
+  assert.equal(arrows.sections.casosDeUso.length, 0);
+  assert.ok(arrows.pending.some((item) => item.includes('caso de uso')));
   const heading = validateFreeFaqSections({ ...sections, passos: [{ tarefa: '### Criar', passos: sections.passos[0].passos }] }, context);
   assert.doesNotMatch(renderFreeFaqSections(heading.sections), /### ###/u);
   const injected = validateFreeFaqSections({ ...sections, passos: [{ tarefa: '<script>', passos: sections.passos[0].passos }] }, context);

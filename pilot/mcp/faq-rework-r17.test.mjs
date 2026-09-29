@@ -91,9 +91,9 @@ test('replay Robô: segunda geração recebe novo julgamento com os mesmos fatos
         const sections = { ...base,
           oQueE: [{ text: 'O robô recebe a primeira mensagem do cliente.' }],
           paraQueServe: [{ text: 'Ajuda a equipe a organizar o atendimento.' }],
-          casosDeUso: [{ text: 'Quando chegam pedidos fora do horário → monte uma resposta → o cliente recebe orientação.' }],
+          casosDeUso: [{ text: '**Uma clínica fecha à noite.** O robô recebe pedidos fora do horário e orienta o cliente.' }],
           passos: [{ tarefa: 'Criar', passos: [{ text: generated === 1
-            ? 'Na tela **Robôs**, clique em **Criar novo robô**.'
+            ? 'No módulo **Robôs**, clique em **Criar novo robô**.'
             : 'Clique em **Criar novo robô**.' }] }] };
         return { model: 'fixture', output_text: JSON.stringify({ status: 'ready', summary: 'FAQ.', questions: [],
           articles: [{ path: '/docs/teste/robo-novo', title: 'Robô novo', description: 'Ajuda.', source: 'produto',

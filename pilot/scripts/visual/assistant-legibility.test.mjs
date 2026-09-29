@@ -6,6 +6,16 @@ const probeTimeout = parseProbeTimeout(process.env);
 
 const probes = [
   {
+    name: 'chip do artigo fora da referência do assistente',
+    css: '.ih-prose a.ih-ai-product-action { font-size: 16px !important }',
+    expected: /(?:desktop|mobile).*#guia-.*referência.*12px\/700/,
+  },
+  {
+    name: 'chip do artigo sem área de toque no celular',
+    css: '@media (max-width: 640px) { .ih-prose a.ih-ai-product-action { height: 20px !important; min-height: 20px !important; padding: 0 !important } }',
+    expected: /mobile.*#guia-.*altura 20\.0px < 44px/,
+  },
+  {
     name: 'navegação desktop fora da escala de produção',
     css: '@media (min-width: 1020px) and (pointer: fine) { .ih-side-link { font-size: 16px !important } }',
     expected: /desktop.*ih-side-link.*fora da escala de produção/,

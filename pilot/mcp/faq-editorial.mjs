@@ -5,6 +5,8 @@ import { redactSensitiveData, containsSensitiveData, sensitiveKinds } from './se
 import { valueFor } from './api-synthetic-example.mjs';
 import { FAQ_NEUTRAL_WORDS, FAQ_NEUTRAL_VERBS } from './faq-neutral-words.mjs';
 import { faqStem } from './faq-portuguese-stem.mjs';
+import coverageMatrix from '../architecture/coverage-matrix.json' with { type: 'json' };
+import { plainMarkdownText } from './faq-mdx-safety.mjs';
 import { mentionsSource } from './source-mention.mjs';
 
 export const FAQ_SECTIONS = {
@@ -135,6 +137,21 @@ const requestedFaqOperationalText = (request = {}) => fold([
   request.details,
 ].filter(Boolean).join(' '));
 
+export function faqModuleName(request = {}, screenFacts = []) {
+  const route = screenFacts.find((fact) => fact.kind === 'route' && fact.route)?.route ?? request.productRoute;
+  const menuFact = screenFacts.find((fact) => fact.kind === 'route' && fact.route === route
+    && /(?:components\/ui\/components\/NavBar\/index\.tsx|store\/slices\/tab\/tab\.slice\.ts):\d+$/u.test(fact.source ?? ''));
+  return menuFact?.text ?? coverageMatrix.find((item) => item.productRoutes.includes(route))?.module
+    ?? coverageMatrix.find((item) => fold(item.module) === fold(request.module))?.module
+    ?? null;
+}
+
+export function replaceModuleTerminology(text, menuModule) {
+  // A troca gramatical exige reescrita; preserve o texto do modelo para revisão.
+  void menuModule;
+  return String(text);
+}
+
 // The direct answer is assembled from requested tasks backed by screen facts.
 export function deterministicFaqAnswer(request = {}, screenFacts = []) {
   const screenFact = screenFacts.find((fact) => fact.kind === 'route' && fact.text)
@@ -164,8 +181,27 @@ export function deterministicFaqAnswer(request = {}, screenFacts = []) {
   const list = actions.length === 1 ? actions[0] : `${actions.slice(0, -1).join(', ')} e ${actions.at(-1)}`;
   const citations = [screenFact?.repository && screenFact.path && screenFact.sha ? citeOf(screenFact) : null,
     ...supported.map((item) => item.citation)].filter(Boolean);
-  return { text: `Na tela **${screen}**, você pode ${list}.`,
+  const menuModule = faqModuleName(request, screenFacts);
+  return { text: `${menuModule ? 'No módulo' : 'Na tela'} **${menuModule ?? screen}**, você pode ${list}.`,
     citations: [...new Map(citations.map((cite) => [JSON.stringify(cite), cite])).values()] };
+}
+
+export function faqSubtitle(sections, request = {}, screenFacts = []) {
+  const first = sections.oQueE?.[0]?.text ?? '';
+  const sentence = splitClaims(first)[0];
+  if (sentence && !sentence.includes('<AConfirmar>') && !sentence.includes('</AConfirmar>')) {
+    const rest = first.slice(first.indexOf(sentence) + sentence.length).trim();
+    if (rest) {
+      sections.oQueE[0].text = rest;
+      return plainMarkdownText(sentence);
+    }
+  }
+  const direct = deterministicFaqAnswer(request, screenFacts)?.text;
+  const actions = direct?.match(/você pode (.+)\.$/u)?.[1];
+  const menuModule = faqModuleName(request, screenFacts) ?? request.topic;
+  const object = fold(menuModule) === 'robos' ? 'robôs de atendimento' : menuModule.toLocaleLowerCase('pt-BR');
+  const fallback = actions ? `Como ${actions} ${object} no iHelp.` : `Como usar ${object} no iHelp.`;
+  return fallback.length >= 40 ? fallback : `${fallback.slice(0, -1)}: veja as tarefas e os passos.`;
 }
 
 export const hasFaqTaskFacts = (screenFacts) => Array.isArray(screenFacts) && screenFacts.some((fact) =>
@@ -507,7 +543,9 @@ export function fixedFaqSupportSection(request, screenFacts = []) {
   const topic = normalized(request.topic);
   const screen = screenFacts.find((fact) => fact.kind === 'route' && fact.text)?.text;
   const location = screen && screen.length <= 80 ? screen : topic;
-  return [{ text: `Se não conseguir concluir um passo na tela ${location}, fale com o suporte. Informe qual passo tentou e o que apareceu na tela.`, citations: [] }];
+  const menuModule = faqModuleName(request, screenFacts);
+  const place = menuModule ? `no módulo ${menuModule}` : `na tela ${location}`;
+  return [{ text: `Se não conseguir concluir um passo ${place}, fale com o suporte. Informe qual passo tentou e o que apareceu na tela.`, citations: [] }];
 }
 
 export const FREE_FAQ_SECTIONS = {
@@ -522,14 +560,54 @@ const faqAllowedHosts = new Set(['app.tango.us', 'apiv3.ihelpchat.com', 'ihelpch
 const freeUnits = (sections) => Object.entries(FREE_FAQ_SECTIONS).flatMap(([key]) => key === 'passos'
   ? (sections?.passos ?? []).flatMap((task) => task?.passos ?? [])
   : sections?.[key] ?? []);
-const splitClaims = (text) => String(text).match(/[^.!?]+[.!?]+|[^.!?]+$/gu)?.map((part) => part.trim()).filter(Boolean) ?? [];
+// Punctuation inside Markdown spans belongs to the span, not to a sentence boundary.
+const markdownSpan = /\*\*[^*\n]+\*\*|\*[^*\n]+\*|__[^_\n]+__|_[^_\n]+_|`[^`\n]+`|!?\[[^\]\n]+\]\([^\s)]+\)/gu;
+export function splitClaims(text) {
+  const source = String(text);
+  const protectedUntil = Array(source.length).fill(false);
+  for (const match of source.matchAll(markdownSpan))
+    for (let index = match.index; index < match.index + match[0].length; index++) protectedUntil[index] = true;
+  const claims = [];
+  let start = 0;
+  for (let index = 0; index < source.length; index++) {
+    if (protectedUntil[index] || !/[.!?]/u.test(source[index])) continue;
+    while (index + 1 < source.length && !protectedUntil[index + 1] && /[.!?]/u.test(source[index + 1])) index++;
+    if (index + 1 < source.length && !/\s/u.test(source[index + 1])) continue;
+    const part = source.slice(start, index + 1).trim();
+    if (part) claims.push(part);
+    start = index + 1;
+  }
+  const last = source.slice(start).trim();
+  if (last) claims.push(last);
+  return claims;
+}
+export function shortFreeFaqTasks(tasks = [], screenFacts = [], menuModule = null) {
+  return tasks.flatMap((task) => {
+    if (!task.passos?.length) return [];
+    const issues = [];
+    const first = task.passos[0].text ?? '';
+    if (menuModule && (!/\b(?:módulo|menu)\b/iu.test(first) || !fold(first).includes(fold(menuModule))))
+      issues.push(`passo a passo sem ponto de partida em ${task.tarefa}`);
+    const matching = screenFacts.filter((fact) => fold(fact.subject ?? '').includes(fold(task.tarefa ?? ''))
+      && ['action', 'field', 'upload', 'destination'].includes(fact.kind));
+    const changesState = /\b(?:cadastr|cri|edit|agend|import|public|ativ|export|salv|exclu)/iu.test(task.tarefa ?? '');
+    if (task.passos.length === 1 && (matching.length > 1 || changesState))
+      issues.push(`passo a passo curto em ${task.tarefa}`);
+    const completion = matching.find((fact) => fact.kind === 'action' && /^(?:salvar|importar|publicar|concluir|confirmar|agendar)$/iu.test(fact.text));
+    if (completion && !task.passos.some((step) => hasLabel(step.text ?? '', completion.text)))
+      issues.push(`passo a passo sem confirmação em ${task.tarefa}`);
+    if (changesState && !completion && task.passos.length > 1)
+      issues.push(`confirmação sem fatos do fluxo em ${task.tarefa}`);
+    return issues;
+  });
+}
 const FAQ_METANARRATION = /\b(?:pedido|material|fonte|confirmad\w*|presumir|supondo|neste texto|aqui n[aã]o)\b/iu;
-const cleanFaqMeta = (text, pending) => String(text).split(/(?<=[.!?])\s+(?=[\p{Lu}“"'])/u).map((part) => part.trim()).filter((phrase) => {
+const cleanFaqMeta = (text, pending) => splitClaims(text).filter((phrase) => {
   if (!FAQ_METANARRATION.test(phrase)) return true;
   pending.push(`metanarração: ${phrase}`);
   return false;
 }).join(' ');
-const trimFaqLabels = (text) => text.replace(/\*\*([^*\n]+)\*\*/gu, (_match, label) => `**${label.trim()}**`);
+export const trimFaqLabels = (text) => text.replace(/\*\*([^*\n]+)\*\*/gu, (_match, label) => `**${label.trim()}**`);
 
 function publishedStepEvidence(text, context, task, expectedLabel) {
   const requestedModule = singular(fold(context.request?.module ?? ''));
@@ -554,7 +632,8 @@ function publishedStepEvidence(text, context, task, expectedLabel) {
   });
 }
 
-function rigidFaqIssue(text, context) {
+function rigidFaqIssue(text, context, { useCase = false, proseLead = false } = {}) {
+  if (String(text).includes('→')) return 'caso de uso com seta';
   const labels = [...String(text).matchAll(/\*\*([^*\n]+)\*\*/gu)].map((match) => match[1]);
   const labelKey = (value) => fold(String(value).replace(/[“”"']/gu, '').trim());
   const known = new Set((context.screenFacts ?? []).map((fact) => labelKey(fact.text)));
@@ -562,6 +641,7 @@ function rigidFaqIssue(text, context) {
   const citedPages = (context.existing ?? []).filter((page) => page.title
     && (String(text).includes(page.title) || page.path && String(text).includes(page.path)));
   for (const label of labels) {
+    if ((useCase || proseLead) && String(text).startsWith(`**${label}**`) && /[.!?]$/u.test(label)) continue;
     const before = String(text).slice(0, String(text).indexOf(`**${label}**`));
     const pageReference = pages.has(labelKey(label)) && /\b(?:consulte|veja|leia|guia|página)\b/iu.test(before.slice(-100));
     const publishedLabel = context.taskHeading && citedPages.length
@@ -616,13 +696,33 @@ export function validateFreeFaqSections(sections, context = {}) {
     kept[key] = (sections?.[key] ?? []).flatMap((unit) => {
       const sourceMention = mentionsSource(unit?.text);
       const text = typeof unit?.text === 'string' && !sourceMention ? trimFaqLabels(cleanFaqMeta(unit.text, pending)) : '';
-      const issue = sourceMention ? 'menção à fonte' : text ? rigidFaqIssue(text, context) : 'frase vazia';
+      const issue = sourceMention ? 'menção à fonte' : text
+        ? rigidFaqIssue(text, context, { useCase: key === 'casosDeUso', proseLead: key === 'duvidas' || key === 'erros' }) : 'frase vazia';
       if (issue) { pending.push(`${FREE_FAQ_SECTIONS[key]}: ${issue}`); return []; }
+      if (key === 'duvidas' && !faqQuestionAnswered(text)) {
+        pending.push(`Dúvidas comuns: pergunta sem resposta: ${text}`);
+        return [];
+      }
       return [{ ...unit, text }];
     });
   }
   if (!kept.passos.length) blocking.push('passos ausentes');
   return { sections: kept, pending: [...new Set(pending)], blocking: [...new Set(blocking)] };
+}
+
+const faqQuestionAnswered = (text) => {
+  const parts = splitClaims(String(text).replace(/\*\*([^*]+)\*\*/gu, '$1'));
+  const question = parts.findIndex((part) => part.endsWith('?'));
+  return question < 0 || parts.slice(question + 1).some((part) => part.replace(/<\/?AConfirmar>/gu, '').trim());
+};
+
+export function missingFaqSupportSections(sections, context = {}) {
+  const facts = context.screenFacts ?? [];
+  const business = context.business ?? [];
+  const hasError = facts.some((fact) => /\b(?:nenhum|erro|falha|vazi[oa]|n[aã]o encontrad[oa]|inv[aá]lid[oa])\b/iu.test(fact.text ?? ''));
+  const hasQuestion = business.some((item) => /\?|\bd[uú]vida\b/iu.test(item.body ?? ''));
+  return [hasQuestion && !(sections.duvidas ?? []).length ? 'Dúvidas comuns' : null,
+    hasError && !(sections.erros ?? []).length ? 'Erros comuns e o que fazer' : null].filter(Boolean);
 }
 
 export async function judgeClaims(sections, context, provider) {
@@ -679,6 +779,11 @@ export async function judgeClaims(sections, context, provider) {
     ? (sections.passos ?? []).map((task) => ({ ...task, passos: task.passos.map((unit) => mark(unit, key)).filter(Boolean) }))
       .filter((task) => task.passos.length)
     : (sections[key] ?? []).map((unit) => mark(unit, key)).filter(Boolean);
+  result.duvidas = result.duvidas.filter((unit) => {
+    if (faqQuestionAnswered(unit.text) && !/<AConfirmar>/u.test(unit.text)) return true;
+    pending.push(`Dúvidas comuns: pergunta sem resposta: ${unit.text}`);
+    return false;
+  });
   return { sections: result, pending, contradictions,
     verdicts: claims.map((claim) => ({ text: claim.text, ...statuses.get(claim.id) })) };
 }
@@ -688,6 +793,6 @@ export function renderFreeFaqSections(sections) {
     if (key === 'passos') return (sections.passos ?? []).length ? [`## ${title}\n\n${sections.passos.map((task) =>
       `### ${String(task.tarefa).replace(/^#+\s*/u, '').trim()}\n\n${task.passos.map((unit, index) => `${index + 1}. ${trimFaqLabels(unit.text)}`).join('\n')}`).join('\n\n')}`] : [];
     const units = sections[key] ?? [];
-    return units.length ? [`## ${title}\n\n${units.map((unit) => key === 'casosDeUso' ? `- ${unit.text}` : unit.text).join('\n\n')}`] : [];
+    return units.length ? [`## ${title}\n\n${units.map((unit) => unit.text).join('\n\n')}`] : [];
   }).join('\n\n');
 }

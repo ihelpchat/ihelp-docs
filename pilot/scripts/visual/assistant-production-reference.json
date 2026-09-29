@@ -2,6 +2,7 @@
   "title": "Claricia · assistente de IA",
   "fonts": {
     ".ih-ai-launcher": [13, 600],
+    ".ih-ai-product-action": [12, 700],
     ".ih-ai-drawer-title": [14, 600],
     ".ih-ai-drawer-sub": [11, 400],
     ".ih-ai-drawer-context > span": [11, 400],
