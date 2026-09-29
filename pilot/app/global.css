@@ -1175,7 +1175,7 @@ button {
 }
 
 
-.ih-prose a:not(.ih-ai-product-action) {
+.ih-prose a:where(:not(.ih-ai-product-action)) {
   color: var(--ih-coral-600);
   font-weight: 500;
   text-decoration: underline;
@@ -1184,7 +1184,7 @@ button {
   text-underline-offset: 3px;
 }
 
-.ih-prose a:not(.ih-ai-product-action):hover {
+.ih-prose a:where(:not(.ih-ai-product-action)):hover {
   color: var(--ih-coral-700);
   text-decoration: underline;
   text-underline-offset: 3px;
