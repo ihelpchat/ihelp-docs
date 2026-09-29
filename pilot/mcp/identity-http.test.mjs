@@ -49,6 +49,15 @@ try {
   assert.match(forged.content[0].text, /requestedBy/);
 
   await reader.listTools();
+  assert.ok(registered.has('capturar_telas'), 'captura administrativa precisa estar no MCP');
+  assert.ok(registered.has('enviar_tela'), 'upload precisa estar no MCP autenticado');
+  const captureSchema = registered.get('capturar_telas').inputSchema;
+  for (const injected of [{ appSha: 'a'.repeat(40) }, { steps: [] }, { screenFacts: [] }, { owner: 'fixture' }, { tasks: ['Salvar'] }])
+    assert.equal(captureSchema.safeParse({ path: 'docs/contatos', module: 'Contatos', ...injected }).success, false);
+  assert.ok(registered.has('baixar_telas'), 'leitura das telas precisa estar no MCP');
+  const emptyScreens = await reader.callTool({ name: 'baixar_telas', arguments: { page: 'contatos' } });
+  assert.equal(emptyScreens.isError, false);
+  assert.deepEqual(JSON.parse(emptyScreens.content[0].text).images, []);
   assert.ok(registered.size > 0, 'registro de ferramentas deve ser exercitado');
   const article = await readArticle(new URL('../', import.meta.url).pathname, 'api/crm/funis/listar-funis');
   const writeArguments = {
@@ -59,6 +68,9 @@ try {
     criar_guia: { guideId: 'usuario-acesso', topic: 'Adicionar pessoa', module: 'usuarios', description: 'Criar acesso para uma pessoa da equipe.' },
     atualizar_por_deploy: { before: {}, after: {} },
     atualizar_codigo_produto: {},
+    capturar_telas: { path: 'docs/contatos', module: 'Contatos' },
+    enviar_tela: { page: 'contatos', step: 'abrir', alt: 'Botão Abrir contato', base64: 'aGVsbG8=' },
+    aprovar_tela: { page: 'contatos', step: 'abrir', adminToken: 'admin-token-de-teste-com-mais-de-24' },
   };
   for (const [name, config] of registered) {
     assert.equal(typeof config.mutates, 'boolean', `${name} deve declarar mutates explicitamente`);

@@ -1,20 +1,24 @@
-FROM node:24-alpine
-RUN apk add --no-cache git
+FROM node:24-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends git chromium ca-certificates \
+    && ln -s /usr/bin/chromium /usr/bin/google-chrome \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 ENV NODE_ENV=production
 ENV MCP_STATE_DIR=/data
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --include=dev && npm cache clean --force
 
 COPY architecture ./architecture
+COPY lib ./lib
+COPY product-map ./product-map
 COPY content ./content
 COPY public/guides ./public/guides
 COPY deploy-release.json ./public/release.json
 COPY mcp ./mcp
+COPY scripts ./scripts
 
 EXPOSE 3100
-VOLUME /data
 
 CMD ["npm", "run", "mcp:http"]

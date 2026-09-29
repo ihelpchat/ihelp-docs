@@ -52,8 +52,11 @@ try {
   await client.connect(transport);
   const tools = await client.listTools();
   assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
+    'aprovar_tela',
     'atualizar_codigo_produto',
     'atualizar_por_deploy',
+    'baixar_telas',
+    'capturar_telas',
     'criar_guia',
     'docs_audit_content',
     'docs_delete_article',
@@ -67,6 +70,7 @@ try {
     'docs_submit_package',
     'docs_update_article',
     'docs_validate_article',
+    'enviar_tela',
     'lacunas',
   ]);
   for (const name of ['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_update_article', 'docs_delete_article', 'docs_submit_article']) {

@@ -2,10 +2,11 @@ import ts from 'typescript';
 import { posix } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { sanitizeCodeForModel } from './code-hygiene.mjs';
+import { FRONT_FIXED_PATHS } from './front-fixed-paths.mjs';
 
-export const FRONT_ROUTER = 'src/components/core/components/Router/utils/pagesData.tsx';
-const FRONT_MENU = 'src/components/ui/components/NavBar/index.tsx';
-const FRONT_CONFIG_TABS = 'src/store/slices/tab/tab.slice.ts';
+export const FRONT_ROUTER = FRONT_FIXED_PATHS.router;
+const FRONT_MENU = FRONT_FIXED_PATHS.menu;
+const FRONT_CONFIG_TABS = FRONT_FIXED_PATHS.configTabs;
 const MAX_FILES = 72;
 const MAX_CHARS = 1_000_000;
 const VISIBLE = new Set(['label', 'labelText', 'title', 'placeholder', 'aria-label', 'tooltip']);
@@ -841,8 +842,8 @@ export async function extractScreenFacts({ route, topic, module, paths, readSour
         queue.push([target, depth + 1, binding.exported ?? binding.local]);
     }
   }
-  if (translationKeys.size && allowed.has('src/translate/pt.ts') && files.length < MAX_FILES) {
-    const path = 'src/translate/pt.ts';
+  if (translationKeys.size && allowed.has(FRONT_FIXED_PATHS.translations) && files.length < MAX_FILES) {
+    const path = FRONT_FIXED_PATHS.translations;
     const source = await readSource(path);
     const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
     const visit = (node) => {

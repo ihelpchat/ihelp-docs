@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { productSparseFolders } from './local-product-context.mjs';
+import { safeSyncError } from './sync-diagnostics.mjs';
 
 const exec = promisify(execFile);
 const DEFAULT_REPOSITORIES = Object.freeze({
@@ -53,18 +54,25 @@ export async function syncProductCheckouts({ stateDir, token, now = () => new Da
   const current = join(root, 'current');
   const temporaryLink = join(root, 'current.tmp');
   let active;
+  let stage = 'criar geração';
   let published = false;
   try {
     for (const id of ['front', 'back']) {
       active = id;
       const { url, ref, role } = repositories[id];
       const target = join(generation, id);
+      stage = 'clone';
       await git(root, token, 'clone', '--depth', '1', '--filter=blob:none', '--sparse', '--branch', ref, '--', url, target);
+      stage = 'sparse-checkout';
       await git(target, token, 'sparse-checkout', 'set', '--', ...productSparseFolders(role));
+      stage = 'rev-parse';
       await shaOf(target);
     }
+    stage = 'rev-parse';
     const result = { front: { sha: await shaOf(join(generation, 'front')) }, back: { sha: await shaOf(join(generation, 'back')) }, updatedAt: new Date(now()).toISOString() };
+    stage = 'status';
     await writeFile(join(generation, 'status.json'), JSON.stringify(result));
+    stage = 'symlink';
     const previous = await readlink(current).catch(() => null);
     await rm(temporaryLink, { force: true });
     await symlink(basename(generation), temporaryLink, 'dir');
@@ -78,9 +86,11 @@ export async function syncProductCheckouts({ stateDir, token, now = () => new Da
     }
     log('Checkouts do produto atualizados');
     return result;
-  } catch {
-    log(`Sync do produto falhou: ${active ?? 'estado'}`);
-    throw new Error(`Sync do produto falhou: ${active ?? 'estado'}`);
+  } catch (error) {
+    log(`Sync do produto falhou: ${active ?? 'estado'} ${stage}: ${safeSyncError(error, token)}`);
+    const failure = new Error(`Sync do produto falhou: ${active ?? 'estado'}`);
+    failure.stage = `${active ?? 'estado'} ${stage}`;
+    throw failure;
   } finally {
     await rm(temporaryLink, { force: true }).catch(() => {});
     if (!published) await rm(generation, { recursive: true, force: true });

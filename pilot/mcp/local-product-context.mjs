@@ -12,6 +12,7 @@ import { readCsharpEndpoints, collectCsharpErrors } from '../lib/csharp-endpoint
 import { traceCsharpCalls } from '../lib/csharp-call-chain.mjs';
 import { routeMatches } from './api-route-match.mjs';
 import { extractScreenFacts, FRONT_ROUTER } from './front-screen-facts.mjs';
+import { FRONT_FIXED_PATHS } from './front-fixed-paths.mjs';
 
 function responseHeaderFacts(methods) {
   const headers = new Map();
@@ -45,7 +46,8 @@ const fileCache = new Map();
 const controllerCache = new Map();
 const SOURCES = Object.freeze({
   frontend: { repository: 'ihelpchat/front-react', role: 'frontend', env: envCompatibility.localCheckouts.frontend,
-    folders: ['src/components', 'src/pages', 'src/features', 'src/routes'] },
+    folders: ['src/components', 'src/pages', 'src/features', 'src/routes',
+      ...Object.values(FRONT_FIXED_PATHS).map((path) => dirname(path))] },
   backend: { repository: 'ihelpchat/olah-ihelp', role: 'backend', env: envCompatibility.localCheckouts.backend,
     folders: ['Controllers', 'Comzada.Application/Controllers', 'ihelp.PublicApi',
       'Comzada.Application/Services', 'Comzada.Application/Repositories', 'Comzada.Application/Data',
@@ -55,7 +57,8 @@ const API_DTO_FOLDERS = Object.freeze(['Comzada.Domain/EntitiesV2', 'Comzada.Dom
 export function productSparseFolders(role) {
   const folders = SOURCES[role]?.folders;
   if (!folders) throw new Error('Repositório do produto inválido');
-  return [...new Set([...folders, ...(role === 'backend' ? API_DTO_FOLDERS : [])])];
+  const unique = [...new Set([...folders, ...(role === 'backend' ? API_DTO_FOLDERS : [])])];
+  return unique.filter((folder) => !unique.some((parent) => folder !== parent && folder.startsWith(`${parent}/`)));
 }
 const STOP = new Set(['para', 'pelo', 'pela', 'como', 'criar', 'configurar', 'codigo', 'code', 'de', 'com', 'uma', 'um']);
 const ALIASES = { robo: ['robot'], robos: ['robot'], canal: ['channel'], canais: ['channel'], horario: ['schedule', 'hour'], horarios: ['schedule', 'hour'], departamento: ['department'], departamentos: ['department'], atendimento: ['attendance'], reconectar: ['reconnect', 'connection'], contatos: ['contacts'], campanha: ['campaign'] };
@@ -115,7 +118,7 @@ export function isAllowedSourcePath(path, role = 'frontend', includeApiDto = fal
 export function canReadFrontFile(path) {
   return typeof path === 'string' && path.startsWith('src/') && /\.tsx?$/u.test(path)
     && !path.includes('\\') && !path.split('/').some((part) => !part || part === '.' || part === '..')
-    && (isAllowedSourcePath(path, 'frontend') || path === FRONT_ROUTER || path === 'src/translate/pt.ts');
+    && (isAllowedSourcePath(path, 'frontend') || Object.values(FRONT_FIXED_PATHS).includes(path));
 }
 
 function pathRelevance(path, terms, moduleTerms) {
@@ -331,7 +334,8 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
         const content = await deadline.wait(fileRead(path, { encoding: 'utf8', signal: deadline.signal }));
         return content;
       } }));
-      screen = { facts: screens.flatMap((item) => item.facts), code: [...new Map(screens.flatMap((item) => item.code).map((item) => [item.path, item])).values()],
+      screen = { facts: screens.flatMap((item) => item.facts.map((fact) => ({ ...fact, route: item.route }))),
+        code: [...new Map(screens.flatMap((item) => item.code).map((item) => [item.path, item])).values()],
         files: [...new Set(screens.flatMap((item) => item.files))], pending: [...screens.flatMap((item) => item.pending),
           ...(screens.every((item) => !item.facts.length) ? [`tela não identificada para ${module || topic}`] : [])] };
     }
