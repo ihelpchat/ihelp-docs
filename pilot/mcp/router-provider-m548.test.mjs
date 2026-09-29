@@ -48,12 +48,23 @@ try {
   });
 
   await test('esforço inválido impede inicialização com motivo', () => {
+    const started = performance.now();
     const result = spawnSync(process.execPath, [new URL('./http.mjs', import.meta.url).pathname], {
       env: { ...process.env, DOCS_MCP_API_KEY: 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz', ASSISTANT_ROUTER_EFFORT: 'foo', PORT: '0' },
       encoding: 'utf8', timeout: 2000,
     });
+    assert.ok(performance.now() - started < 1000, 'configuração inválida deve ser recusada em menos de 1000 ms');
     assert.notEqual(result.status, 0, 'http.mjs deve rejeitar foo antes de ouvir porta');
     assert.match(result.stderr, /ASSISTANT_ROUTER_EFFORT.*foo/u, 'erro deve nomear configuração e valor');
+  });
+
+  await test('entrada HTTP não carrega captura estaticamente', async () => {
+    const entry = await readFile(new URL('./http.mjs', import.meta.url), 'utf8');
+    assert.doesNotMatch(entry, /(?:import|export)\s+(?:[^;]*?\s+from\s+)?['"][^'"]*(?:scripts\/screen-capture\/|playwright-core)[^'"]*['"]/u);
+    const safety = await readFile(new URL('./capture-process-safety.mjs', import.meta.url), 'utf8');
+    assert.doesNotMatch(safety, /(?:import|export)\s+(?:[^;]*?\s+from\s+)?['"][^'"]*(?:screen-capture-service|scripts\/screen-capture\/|playwright-core)[^'"]*['"]/u);
+    const server = await readFile(new URL('./server.mjs', import.meta.url), 'utf8');
+    assert.doesNotMatch(server, /^import\s+[^;]*?from\s+['"]\.\/screen-capture-service\.mjs['"]/mu);
   });
 
   await test('4xx inválido libera reserva e não aumenta spent; 408, 429 e 500 cobram', async () => {
