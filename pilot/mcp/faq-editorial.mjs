@@ -555,7 +555,7 @@ export const FREE_FAQ_SECTIONS = {
 };
 const destructiveVerbs = (text) => actionVerbs(text).filter((verb) => FAQ_DESTRUCTIVE_VERBS.includes(verb));
 export const isUnsafeCaptureAction = (text) => destructiveVerbs(text).length > 0
-  || /\b(?:salvar|salve|publicar|publique|importar|importe|confirmar|confirme|enviar|envie|criar|crie|cadastrar|cadastre|ativar|ative|finalizar|finalize|transferir|transfira)\b/iu.test(text);
+  || /\b(?:salvar|salve|publicar|publique|importar|importe|exportar|exporte|confirmar|confirme|enviar|envie|criar|crie|cadastrar|cadastre|ativar|ative|finalizar|finalize|transferir|transfira)\b/iu.test(text);
 const faqAllowedHosts = new Set(['app.tango.us', 'apiv3.ihelpchat.com', 'ihelpchat.com.br', 'www.ihelpchat.com.br']);
 const freeUnits = (sections) => Object.entries(FREE_FAQ_SECTIONS).flatMap(([key]) => key === 'passos'
   ? (sections?.passos ?? []).flatMap((task) => task?.passos ?? [])

@@ -20,6 +20,7 @@ const normalized = (value) => value.normalize('NFD').replace(/\p{Diacritic}/gu, 
 export function screenshotForStep(manifest, page, step) {
   if (!manifest || !Array.isArray(manifest.entries)) return null;
   const matches = manifest.entries.filter((entry) => entry.page === page && entry.step === step
+    && entry.status !== 'discarded' && entry.status !== 'pending'
     && (() => { try { screenshotLocation('', entry); return true; } catch { return false; } })()
     && (entry.source !== 'upload' || entry.status === 'approved')
     && (entry.source === 'upload' || /^[a-f0-9]{40}$/u.test(entry.bundleSha ?? entry.appSha ?? ''))

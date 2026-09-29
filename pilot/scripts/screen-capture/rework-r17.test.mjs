@@ -36,7 +36,7 @@ test('fato anterior do mesmo menu abre Importar contatos sem clicar no item', { 
   const plan = capturePlan({ page: 'fixture', module: 'Contatos',
     faqBody: '1. Clique em **Importar contatos**.',
     coverage: [{ module: 'Contatos', productRoutes: ['/contact'] }],
-    screenFacts: [{ ...fact('Mais opções', 121), kind: 'text' }, fact('Importar contatos', 139)] });
+    screenFacts: [{ ...fact('Mais opções', 121), kind: 'text', opensMenuFor: 'Importar contatos' }, fact('Importar contatos', 139)] });
   assert.equal(plan[0].menuTrigger, 'Mais opções');
   const { result, writes } = await fixture(`
     <button aria-label="Mais opções" onclick="document.querySelector('#menu').hidden=false">⋮</button>
@@ -46,13 +46,13 @@ test('fato anterior do mesmo menu abre Importar contatos sem clicar no item', { 
   assert.equal(writes, 0);
 });
 
-test('fallback tenta só controles de menu e fotografa item sem gravação', { timeout: 90000 }, async () => {
+test('sem fato de menu não clica em controles e deixa o item pendente', { timeout: 90000 }, async () => {
   const { result, writes } = await fixture(`
     <button onclick="fetch('/write')">Excluir</button>
     <button aria-label="Mais opções" onclick="document.querySelector('#menu').hidden=false">⋮</button>
     <div id="menu" role="menu" hidden><button role="menuitem" onclick="fetch('/write')">Importar contatos</button></div>`,
   [step('Importar contatos')], { vocabulary: ['Mais opções', 'Importar contatos', 'Excluir'] });
-  assert.equal(result.steps[0].status, 'capturado', JSON.stringify(result.steps));
+  assert.equal(result.steps[0].status, 'pendente', JSON.stringify(result.steps));
   assert.equal(writes, 0);
 });
 
@@ -86,7 +86,7 @@ test('espera o ContentLoader SVG de Robôs terminar antes do print', { timeout: 
 test('loading persistente gera print com pendência explícita', { timeout: 90000 }, async () => {
   const { result } = await fixture('<button>Adicionar Contato</button><div class="skeleton">Carregando</div>',
     [step('Adicionar Contato')], { vocabulary: ['Adicionar Contato'] });
-  assert.equal(result.steps[0].status, 'capturado', JSON.stringify(result.steps));
+  assert.equal(result.steps[0].status, 'descartado', JSON.stringify(result.steps));
   assert.equal(result.steps[0].motivo, 'print com carregamento');
   assert.ok(result.pending?.includes('print com carregamento: 01-alvo'));
 });

@@ -9,7 +9,8 @@ import { capturePlan, captureScreens } from './capture.mjs';
 
 const sha = 'a'.repeat(40);
 const screenFacts = ['Mais opções', 'Importar Contatos'].map((text) => ({ kind: 'action', text,
-  route: '/contact', owner: 'fixture', sha }));
+  route: '/contact', owner: 'fixture', sha,
+  ...(text === 'Mais opções' ? { opensMenuFor: 'Importar Contatos' } : {}) }));
 const faqBody = '1. Clique em **Mais opções** e escolha **Importar Contatos**.';
 const html = `<!doctype html><html><head><style>
 body{margin:0;background:white;font:18px Arial} h1{position:absolute;left:80px;top:30px;margin:0}

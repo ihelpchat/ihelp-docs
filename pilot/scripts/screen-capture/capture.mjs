@@ -78,8 +78,10 @@ async function findControl(page, target, step, timeoutMs = 20_000) {
 }
 
 async function openMenuFor(page, target, step) {
-  const labels = step.menuTrigger ? [step.menuTrigger] : [];
-  const triggers = [];
+  const fact = step.menuTriggerFact;
+  if (!fact || fact.opensMenuFor !== step.label || fact.text !== step.menuTrigger
+    || fact.route !== step.route || fact.owner !== step.owner || fact.sha !== step.checkoutSha
+    || isUnsafeCaptureAction(fact.text)) return { control: null, count: 0 };
   for (const frame of page.frames()) {
     if (new URL(frame.url()).origin !== target.url) continue;
     for (const role of ['button', 'link']) {
@@ -87,24 +89,17 @@ async function openMenuFor(page, target, step) {
       for (let index = 0, length = await controls.count(); index < length; index++) {
         const control = controls.nth(index);
         if (!await control.isVisible().catch(() => false) || !await control.isEnabled().catch(() => false)) continue;
-        const candidate = await control.evaluate((element) => ({
-          name: element.getAttribute('aria-label') || element.innerText || element.getAttribute('title') || '',
-          popup: element.getAttribute('aria-haspopup') ?? '',
-        })).catch(() => null);
-        if (!candidate) continue;
-        const named = labels.some((label) => controlKey(label) === controlKey(candidate.name));
-        const fallback = menuTrigger(candidate.name) || /^(?:menu|listbox|true)$/iu.test(candidate.popup);
-        if (named || fallback) triggers.push({ control, named });
+        const names = await control.evaluate((element) => [element.getAttribute('aria-label'),
+          element.innerText, element.getAttribute('title')].filter(Boolean)).catch(() => []);
+        if (!names.some((name) => controlKey(name) === controlKey(fact.text))
+          || names.some(isUnsafeCaptureAction)) continue;
+        try {
+          await control.click({ timeout: 1500 });
+          const found = await findControl(page, target, step, 1500);
+          if (found.control) return found;
+        } catch { /* o fato pode apontar para um controle indisponível */ }
       }
     }
-  }
-  triggers.sort((a, b) => Number(b.named) - Number(a.named));
-  for (const { control } of triggers.slice(0, 2)) {
-    try {
-      await control.click({ timeout: 1500 });
-      const found = await findControl(page, target, step, 1500);
-      if (found.control) return found;
-    } catch { /* tenta somente o próximo gatilho de menu permitido */ }
   }
   return { control: null, count: 0 };
 }
@@ -206,11 +201,14 @@ export function capturePlan({ page, module, faqBody, coverage, screenFacts }) {
       const earlier = /^(.*):(\d+)$/u.exec(candidate.source ?? '');
       return earlier && earlier[1] === source[1] && Number(earlier[2]) < Number(source[2])
         && Number(source[2]) - Number(earlier[2]) <= 80 && candidate.route === fact.route
-        && candidate.owner === fact.owner && menuTrigger(candidate.text ?? '');
+        && candidate.owner === fact.owner && candidate.sha === fact.sha
+        && candidate.opensMenuFor === fact.text && !isUnsafeCaptureAction(candidate.text ?? '');
     }).sort((a, b) => Number(b.source.split(':').at(-1)) - Number(a.source.split(':').at(-1)))[0];
     return { page, step, listIndex: match.listIndex, line: match.line,
       role: fact.kind === 'field' ? 'textbox' : 'button', label,
-      ...(trigger ? { menuTrigger: trigger.text } : {}),
+      ...(trigger ? { menuTrigger: trigger.text, menuTriggerFact: {
+        text: trigger.text, opensMenuFor: trigger.opensMenuFor, route: trigger.route,
+        owner: trigger.owner, sha: trigger.sha } } : {}),
       route: fact.route ?? routes[0], owner: fact.owner, checkoutSha: fact.sha, alt: `Tela de ${module}: ${label}`,
       action: fact.kind === 'action' && (/^(?:abrir|ver|mostrar|acessar)\b/iu.test(label)
         || menuTrigger(label) && (selected[index + 1]?.match?.line > match.line
@@ -228,7 +226,7 @@ function checkedPath(page, step) {
 export function chooseScreenshot(manifest, page, step) {
   const matches = manifest.entries.filter((entry) => entry.page === page && entry.step === step);
   return matches.find((entry) => entry.source === 'upload' && entry.status === 'approved')
-    ?? matches.find((entry) => entry.source === 'automatic') ?? null;
+    ?? matches.find((entry) => entry.source === 'automatic' && entry.status !== 'discarded' && entry.status !== 'pending') ?? null;
 }
 
 export function masksCoverSensitive(sensitive, masks) {
@@ -516,7 +514,12 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
       if (!['click', 'none'].includes(step.action)) throw new Error('Ação não permitida');
       if (await waitForLoading(page)) {
         outcome.motivo = 'print com carregamento';
+        outcome.status = 'descartado';
+        manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step || entry.source !== 'automatic');
+        manifest.entries.push({ page: step.page, step: step.step, label: step.label, route: step.route,
+          owner: step.owner, source: 'automatic', status: 'discarded', reason: 'print com carregamento' });
         manifest.pending = [...new Set([...(manifest.pending ?? []), `print com carregamento: ${step.step}`])];
+        continue;
       }
       await mkdir(join(root, step.page), { recursive: true });
       const cdp = await context.newCDPSession(page);
@@ -541,12 +544,17 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
       await writeScreenshot(root, { page: step.page, step: step.step, source: 'automatic', file: image, sha256 }, captured.bytes);
       const mask = captured.mask;
       if (step.action === 'click' && !isUnsafeCaptureAction(step.label)
-        && (/^(?:abrir|ver|mostrar|acessar)\b/iu.test(step.label) || menuTrigger(step.label))) await control.click();
+        && (/^(?:abrir|ver|mostrar|acessar)\b/iu.test(step.label) || menuTrigger(step.label))) {
+        const names = await control.evaluate((element) => [element.getAttribute('aria-label'),
+          element.innerText, element.getAttribute('title')].filter(Boolean)).catch(() => []);
+        if (!names.some(isUnsafeCaptureAction)) await control.click();
+      }
       manifest.entries = manifest.entries.filter((entry) => entry.page !== step.page || entry.step !== step.step || entry.source !== 'automatic');
       manifest.entries.push({ page: step.page, step: step.step, label: step.label, route: step.route,
         listIndex: step.listIndex, line: step.line,
         owner: step.owner, file: image, sha256, alt: step.alt, bundleSha, checkoutSha: step.checkoutSha,
-        source: 'automatic', masked: [...new Set(mask.map((item) => item.reason))] });
+        source: 'automatic', status: 'captured', masked: [...new Set(mask.map((item) => item.reason))] });
+      manifest.pending = (manifest.pending ?? []).filter((item) => item !== `print com carregamento: ${step.step}`);
       outcome.status = 'capturado';
       if (outcome.motivo !== 'print com carregamento') outcome.motivo = 'capturado';
       } catch {

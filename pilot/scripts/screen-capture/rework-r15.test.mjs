@@ -45,7 +45,8 @@ test('plano abre gatilho de menu anterior antes de procurar item', { timeout: 30
     faqBody: '1. Clique em **Mais opções**.\n2. Escolha **Importar Contatos**.',
     coverage: [{ module: 'Contatos', productRoutes: ['/contact'] }],
     screenFacts: ['Mais opções', 'Importar Contatos'].map((text) => ({ kind: 'action', text,
-      route: '/contact', owner: 'fixture', sha })) });
+      route: '/contact', owner: 'fixture', sha,
+      ...(text === 'Mais opções' ? { opensMenuFor: 'Importar Contatos' } : {}) })) });
   assert.equal(plan[0].action, 'click');
   await fixture('<button onclick="document.querySelector(\'#menu\').hidden=false">Mais opções</button><div id="menu" role="menu" hidden><button role="menuitem">Importar Contatos</button></div>',
     plan, (result) => assert.deepEqual(result.steps.map((item) => item.status), ['capturado', 'capturado']));
