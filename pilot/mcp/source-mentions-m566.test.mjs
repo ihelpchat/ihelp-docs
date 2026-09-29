@@ -11,6 +11,7 @@ test('informações disponíveis distinguem lugar do produto de material e atrib
   const cases = [
     ['consultar as informações disponíveis na ficha', false],
     ['As informações disponíveis no documento interno indicam que o robô recebe o cliente.', true],
+    ['As informações disponíveis não explicam o robô.', true],
     ['Os dados disponíveis mostram que o robô recebe o cliente.', true],
     ['as informações disponíveis no iHelp', false],
     ['Consulta os dados disponíveis neste endpoint público.', false],

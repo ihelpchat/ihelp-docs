@@ -99,3 +99,39 @@ test('generateContentPackage mantém as frases aprovadas do redator no artigo fi
   assert.match(article.body, /Os contatos aparecem na lista\./u);
   assert.doesNotMatch(result.pending.join(' '), /perda na montagem/u);
 });
+
+test('generateContentPackage pede reescrita localizada antes do juiz e publica a frase corrigida', async () => {
+  const sha = 'a'.repeat(40);
+  const sourcePhrase = 'As informações disponíveis no documento interno indicam que o cadastro aparece na lista.';
+  const correctedPhrase = 'O cadastro aparece na lista.';
+  const makeReply = (phrase) => ({ status: 'ready', summary: 'FAQ de Contatos.', questions: [], articles: [{
+    path: 'docs/teste/agenda', title: 'Agenda de Contatos',
+    description: 'Consulte contatos e organize a agenda da equipe no iHelp.',
+    source: 'produto', contentType: 'faq', productActions: [], assistantQuestion: 'Como buscar contatos?',
+    sections: { ...sections, paraQueServe: [{ text: `${benefit} ${phrase}` }] },
+  }] });
+  let writerCalls = 0;
+  const result = await generateContentPackage(new URL('../', import.meta.url).pathname,
+    { topic: 'Contatos', module: 'Contatos', productRoute: '/contact', description: 'Criar FAQ sobre Contatos.' }, {
+      productContext: { groundingRequired: true, pending: [], coverage: [], support: { categories: [], rules: [] },
+        businessContext: [{ module: 'Contatos', body: 'Contatos.' }], faqStyleExamples: [],
+        screenFacts: [{ kind: 'route', route: '/contact', text: 'Contatos', source: 'src/Fixture.tsx:1', sha },
+          { kind: 'action', text: 'Listar Contatos', source: 'src/Fixture.tsx:2', sha }],
+        code: [{ available: true, role: 'frontend', repository: 'fixture', ref: sha }], matches: [] },
+      plan: { status: 'ready' }, client: { responses: { create: async (payload) => {
+        if (payload.text.format.name === 'juiz_faq') {
+          const { claims } = JSON.parse(payload.input[1].content);
+          return { model: 'fixture', output_text: JSON.stringify({ claims: claims.map(({ id }) =>
+            ({ id, status: 'sustentada', reason: '', sourceMention: false })) }) };
+        }
+        writerCalls++;
+        if (writerCalls === 2) assert.match(JSON.stringify(payload.input), /reescreva só esta frase/u);
+        return { model: 'fixture', output_text: JSON.stringify(makeReply(writerCalls === 1 ? sourcePhrase : correctedPhrase)) };
+      } } },
+    });
+  assert.equal(writerCalls, 2);
+  assert.equal(result.status, 'ready', JSON.stringify(result));
+  assert.match(result.articles[0].body, /O cadastro aparece na lista\./u);
+  assert.doesNotMatch(result.articles[0].body, /documento interno|informações disponíveis no documento/u);
+  assert.doesNotMatch(result.pending.join(' '), /frase omitida|perda na montagem/u);
+});
