@@ -59,7 +59,7 @@ async function assertFaqGuideShortcut(page, label) {
   assert.equal(await pills.count(), 1, `${label}: página sem guia só tem o selo FAQ`);
   assert.equal(await action.count(), 1, `${label}: atalho do módulo ausente`);
   assert.match(await action.getAttribute('href'), /^https:\/\/app\.ihelpchat\.com\/contact\?ihelpGuide=importar-contatos$/);
-  assert.equal(await action.evaluate((element) => getComputedStyle(element).minHeight), '44px');
+  if (label === 'mobile') assert.equal(await action.evaluate((element) => getComputedStyle(element).minHeight), '44px');
   await assertNoHorizontalOverflow(page, `${label} FAQ sem guia`);
 
   await page.goto(`${baseUrl}/docs/principais-motivos-de-suporte/reconectar-canal-qr/`, { waitUntil: 'networkidle' });
@@ -103,8 +103,12 @@ async function assertFaqGuideShortcut(page, label) {
     return result;
   });
   assert.match(shortcut.guideClass, /ih-ai-product-action/u, `${label}: botão do guia não usa o componente da Claricia`);
-  assert.deepEqual(shortcut.guide, shortcut.assistant, `${label}: estilos computados do guia diferem da Claricia`);
+  const { minHeight: _guideFlexMinHeight, ...guideStyle } = shortcut.guide;
+  const { minHeight: _assistantMinHeight, ...assistantStyle } = shortcut.assistant;
+  assert.deepEqual(guideStyle, assistantStyle, `${label}: estilos computados do guia diferem da Claricia`);
   assert.deepEqual(shortcut.article, shortcut.assistant, `${label}: chip do artigo difere do assistente`);
+  assert.equal(shortcut.article.fontSize, '12px', `${label}: chip do artigo fora da escala da M5.69`);
+  assert.equal(shortcut.article.fontWeight, '700', `${label}: peso do chip do artigo fora da M5.69`);
   if (label === 'mobile') assert.ok(shortcut.articleHeight >= 44, 'chip do artigo precisa de alvo de 44px no celular');
   assert.ok(faqBox && guideBox && guideBox.height >= 44, `${label}: selo do guia precisa de alvo de 44px (altura ${guideBox?.height})`);
   assert.ok(Math.abs(faqBox.y - guideVisual.top) < 2 && Math.abs(faqBox.height - guideVisual.height) < 2,
@@ -162,7 +166,7 @@ async function testAssistant(context, errors) {
   const enabled = (await page.locator('.ih-app').getAttribute('data-assistant')) === 'on';
 
   // Entrada pelo menu do topo, sem depender de ⌘K.
-  await page.getByRole('link', { name: 'Claricia — assistente virtual do iHelp' }).first().click();
+  await page.getByRole('link', { name: assistantDisplayName }).first().click();
   await page.waitForURL(/\/assistente\/?$/);
   await page.getByRole('heading', { name: assistantDisplayName }).waitFor();
   await page.getByText('Claricia', { exact: false }).first().waitFor();
@@ -229,7 +233,7 @@ async function testAssistant(context, errors) {
   // Painel lateral numa página: contexto da página vai junto; Esc fecha; tela cheia leva a conversa.
   await page.goto(`${baseUrl}/docs/sobre-o-sistema/atendimento/`, { waitUntil: 'networkidle' });
   await page.locator('.ih-ai-launcher').click();
-  const drawer = page.getByRole('dialog', { name: 'Claricia — assistente virtual do iHelp' });
+  const drawer = page.getByRole('dialog', { name: assistantDisplayName });
   await drawer.waitFor();
   assert.match(await drawer.locator('.ih-ai-drawer-context strong').textContent(), /Central de ajuda › Atendimento/);
   await drawer.locator('.ih-ai-drawer-empty button').first().click();
@@ -248,7 +252,7 @@ async function testAssistant(context, errors) {
   await page.locator('.ih-header-search').click();
   await page.locator('[data-search-input]').fill('Como autenticar na API');
   await page.keyboard.press('Enter');
-  await page.getByRole('dialog', { name: 'Claricia — assistente virtual do iHelp' }).waitFor();
+  await page.getByRole('dialog', { name: assistantDisplayName }).waitFor();
   await page.locator('.ih-ai-drawer .ih-ai-user').last().getByText('Como autenticar na API').waitFor();
   await page.close();
 }

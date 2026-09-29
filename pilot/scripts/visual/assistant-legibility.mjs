@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { launch } from './measure.mjs';
 import { viewports } from './probes.mjs';
 import { startQaSite } from './serve-qa-build.mjs';
+import { assistantDisplayName } from '../../lib/assistant-name.ts';
 
 const out = new URL('../../out/', import.meta.url).pathname;
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '/ihelp-docs';
@@ -18,6 +19,7 @@ const manifest = JSON.parse(await readFile(new URL('../../public/guides/manifest
 const catalog = JSON.parse(await readFile(new URL(`../../public/guides/${manifest.current}/catalog.json`, import.meta.url), 'utf8'));
 // Mesma medição de produção usada por site-navigation.mjs (decisão do regente, 28/09).
 const navigationReference = JSON.parse(await readFile(new URL('./navigation-reference.json', import.meta.url), 'utf8'));
+const assistantReference = JSON.parse(await readFile(new URL('./assistant-production-reference.json', import.meta.url), 'utf8'));
 for (const file of ['app/(home)/page.tsx', 'components/site/header.tsx', 'components/assistant/assistant-screen.tsx']) {
   const source = await readFile(new URL(`../../${file}`, import.meta.url), 'utf8');
   assert.doesNotMatch(source, /Claricia.{0,24}assistente de IA do iHelp|assistente de IA do iHelp.{0,24}Claricia/i, `${file}: nome fora de assistantDisplayName`);
@@ -26,6 +28,17 @@ const guidePaths = catalog.guides.map(({ pathSegments, guide }) => ({ path: `/${
 assert.ok(guidePaths.length > 0, 'pacote publicado sem guias');
 const injectProbe = async (page) => {
   if (process.env.ASSISTANT_LEGIBILITY_PROBE_CSS) await page.addStyleTag({ content: process.env.ASSISTANT_LEGIBILITY_PROBE_CSS });
+  if (process.env.ASSISTANT_LEGIBILITY_PROBE_TITLE) await page.evaluate(() => {
+    for (const selector of ['.ih-ai-drawer-title', '.ih-ai-empty h1']) {
+      const node = document.querySelector(selector);
+      if (node) node.textContent = ['Claricia', '—', 'assistente', 'virtual', 'do', 'iHelp'].join(' ');
+    }
+  });
+  if (process.env.ASSISTANT_LEGIBILITY_PROBE_HUMAN) await page.evaluate(() => {
+    const link = document.querySelector('.ih-ai-drawer-meta .ih-ai-drawer-human');
+    const foot = document.querySelector('.ih-ai-drawer-foot');
+    if (link && foot) foot.prepend(link);
+  });
 };
 const assertSupportContext = async (link, id, stepId) => {
   const href = await link.getAttribute('href');
@@ -34,8 +47,61 @@ const assertSupportContext = async (link, id, stepId) => {
   assert.match(message, new RegExp(`Guia: ${id}; passo: ${stepId}`), 'handoff sem guia e passo do catálogo');
 };
 const assertCurrentName = async (page) => {
-  assert.equal(await page.getByText(/Claricia, assistente de IA do iHelp|A Claricia é a assistente de IA do iHelp/i).count(), 0, 'nome antigo visível');
-  assert.equal(await page.locator('[aria-label="Claricia, assistente de IA do iHelp"]').count(), 0, 'nome antigo acessível');
+  assert.equal(assistantReference.title, assistantDisplayName, 'referência do título divergiu da fonte canônica');
+  assert.equal(await page.locator('.ih-ai-drawer-title').count() ? await page.locator('.ih-ai-drawer-title').textContent() : assistantReference.title, assistantReference.title, 'título do painel fora da produção');
+  assert.equal(await page.locator('.ih-ai-empty h1').count() ? await page.locator('.ih-ai-empty h1').textContent() : assistantReference.title, assistantReference.title, 'título da tela cheia fora da produção');
+};
+
+const assertAssistantReference = async (page, root, context) => {
+  const results = await root.evaluate((el, reference) => {
+    const measured = [];
+    const fonts = { ...reference.fonts, ...(matchMedia('(pointer: coarse)').matches ? reference.mobileFonts : {}) };
+    for (const [selector, [fontSize, fontWeight]] of Object.entries(fonts)) {
+      for (const node of el.querySelectorAll(selector)) {
+        if (!node.getClientRects().length) continue;
+        if (!selector.includes('[data-compact]') && node.closest('.ih-ai-thread[data-compact], .ih-ai-composer[data-compact]') &&
+            /\.ih-ai-(user p|text p|steps li|composer textarea|busy-label)/.test(selector)) continue;
+        const style = getComputedStyle(node);
+        measured.push([selector, parseFloat(style.fontSize) === fontSize && Number(style.fontWeight) === fontWeight,
+          `${style.fontSize}/${style.fontWeight}`, `${fontSize}px/${fontWeight}`]);
+      }
+    }
+    if (matchMedia('(pointer: fine)').matches) {
+      for (const [selector, [width, height]] of Object.entries(reference.geometry)) {
+        for (const node of el.querySelectorAll(selector)) {
+          if (!node.getClientRects().length) continue;
+          const style = getComputedStyle(node);
+          const actualWidth = parseFloat(style.width);
+          const actualHeight = parseFloat(style.height);
+          measured.push([selector, actualWidth === width && actualHeight === height,
+            `${actualWidth}×${actualHeight}`, `${width}×${height}`]);
+        }
+      }
+      for (const [selector, maxHeight] of Object.entries(reference.desktopMaxHeight)) {
+        for (const node of el.querySelectorAll(selector)) {
+          if (!node.getClientRects().length) continue;
+          measured.push([selector, node.getBoundingClientRect().height <= maxHeight,
+            `${node.getBoundingClientRect().height}px`, `até ${maxHeight}px`]);
+        }
+      }
+    }
+    return measured;
+  }, assistantReference);
+  for (const [selector, pass, actual, expected] of results) {
+    assert.ok(pass, `${context}: ${selector} ${actual}, referência ${expected}`);
+  }
+  return results.length;
+};
+const assertBusyReference = async (page, root, context, compact) => {
+  const busy = root.locator(compact ? '.ih-ai-thread[data-compact]' : '.ih-ai-thread').first();
+  await busy.evaluate((el) => {
+    const label = document.createElement('div');
+    label.className = 'ih-ai-busy-label';
+    label.textContent = 'Consultando documentos…';
+    el.append(label);
+  });
+  await assertAssistantReference(page, root, context);
+  await busy.locator('.ih-ai-busy-label').last().evaluate((el) => el.remove());
 };
 
 const audit = (root, reference) => {
@@ -114,9 +180,8 @@ const audit = (root, reference) => {
     if (directText || isField) {
       measured.text++;
       const size = parseFloat(style.fontSize);
-      // Leitura tem 16px nos dois ponteiros; navegação segue a escala de produção no ponteiro fino.
-      const reading = root.matches('.ih-ai-screen, .ih-ai-drawer')
-        || el.closest('.ih-prose, .ih-guide-page, .ih-guide-catalog, .ih-lead, .ih-ai-screen, .ih-ai-drawer');
+      // O corpo dos artigos mantém 16px; o assistente segue a tabela da produção.
+      const reading = !el.closest('.ih-ai-screen, .ih-ai-drawer, .ih-guide-app') && el.closest('.ih-prose, .ih-guide-page, .ih-guide-catalog, .ih-lead');
       if (reading && size < 16) failures.push(`${selector}: fonte ${size}px < 16px`);
       const fg = rgba(isField && !el.value && el.getAttribute('placeholder')
         ? getComputedStyle(el, '::placeholder').color
@@ -128,7 +193,9 @@ const audit = (root, reference) => {
     if (el.matches('a,button,summary,[role="button"],textarea,input') && !el.matches(':disabled')) {
       measured.clickable++;
       const height = el.getBoundingClientRect().height;
-      if (touch && height < 44) failures.push(`${selector}: altura ${height.toFixed(1)}px < 44px`);
+      const hitArea = el.matches('.ih-ai-drawer-context button, .ih-ai-drawer-human, .ih-ai-screen-human')
+        ? parseFloat(getComputedStyle(el, '::before').height) : height;
+      if (touch && Math.max(height, hitArea || 0) < 44) failures.push(`${selector}: altura ${height.toFixed(1)}px < 44px`);
     }
   }
   return { failures, measured };
@@ -143,6 +210,36 @@ let clickCount = 0;
 try {
   const url = `${site.url}${basePath}/assistente/`;
   for (const [viewport, dimensions] of Object.entries(viewports)) {
+    const emptyPage = await browser.newPage({ viewport: dimensions, hasTouch: viewport === 'mobile' });
+    await emptyPage.goto(url, { waitUntil: 'networkidle' });
+    await injectProbe(emptyPage);
+    await assertCurrentName(emptyPage);
+    await assertAssistantReference(emptyPage, emptyPage.locator('body'), `vazio/${viewport}/tela-cheia`);
+    await emptyPage.close();
+    const drawerPage = await browser.newPage({ viewport: dimensions, hasTouch: viewport === 'mobile' });
+    await drawerPage.goto(`${site.url}${basePath}/docs/guias/`, { waitUntil: 'networkidle' });
+    await assertAssistantReference(drawerPage, drawerPage.locator('body'), `fechado/${viewport}`);
+    assert.equal(await drawerPage.locator('.ih-ai-launcher').evaluate((el) => getComputedStyle(el).height), '44px', `fechado/${viewport}: launcher fora da produção`);
+    await drawerPage.locator('.ih-ai-launcher').click();
+    await drawerPage.locator('.ih-ai-drawer-empty button').first().waitFor();
+    await injectProbe(drawerPage);
+    await assertCurrentName(drawerPage);
+    await assertAssistantReference(drawerPage, drawerPage.locator('body'), `vazio/${viewport}/painel`);
+    assert.equal(await drawerPage.locator('.ih-ai-drawer-empty .ih-ai-drawer-human').count(), 0, 'botão humano grande no estado vazio');
+    assert.equal(await drawerPage.locator('.ih-ai-drawer-meta .ih-ai-drawer-human').count(), 1, 'link humano discreto no rodapé');
+    if (viewport === 'mobile') {
+      const footer = await drawerPage.locator('.ih-ai-drawer-foot').evaluate((el) => {
+        const disclaimer = el.querySelector('.ih-ai-drawer-meta > p');
+        const composer = el.querySelector('.ih-ai-composer');
+        const lineHeight = parseFloat(getComputedStyle(disclaimer).lineHeight);
+        return { lines: Math.round(disclaimer.getBoundingClientRect().height / lineHeight), composerTop: composer.getBoundingClientRect().top };
+      });
+      assert.ok(footer.lines <= assistantReference.mobileFooter.disclaimerMaxLines,
+        `rodapé móvel: aviso em ${footer.lines} linhas, máximo ${assistantReference.mobileFooter.disclaimerMaxLines}`);
+      assert.ok(footer.composerTop >= assistantReference.mobileFooter.composerMinTop,
+        `rodapé móvel desloca caixa de pergunta: topo ${footer.composerTop}px`);
+    }
+    await drawerPage.close();
     for (const [state, messages] of Object.entries(states)) {
       const page = await browser.newPage({ viewport: dimensions, hasTouch: viewport === 'mobile' });
       await page.addInitScript((value) => sessionStorage.setItem('ih-assistant-v1', JSON.stringify({ messages: value, scope: 'Tudo', sessionId: 'qa-session' })), messages);
@@ -153,6 +250,8 @@ try {
       await page.locator('.ih-ai-thread').waitFor();
       const expected = { normal: '.ih-ai-sources', guia: '.ih-ai-steps li', fallback: '.ih-ai-human-action', erro: '.ih-ai-error' };
       assert.ok(await root.locator(expected[state]).first().isVisible(), `${state}/${viewport}: estado não foi renderizado`);
+      await assertAssistantReference(page, root, `${state}/${viewport}/tela-cheia`);
+      await assertBusyReference(page, root, `${state}/${viewport}/busy`, false);
       assert.equal(await root.getByText(/Procedimento não documentado|Parte da resposta exige atendimento/i).count(), 0, `${state}/${viewport}: etiqueta proibida`);
       const targets = await page.locator('.ih-ai-screen a, .ih-ai-screen button, .ih-ai-screen textarea, .ih-ai-screen summary').evaluateAll((els) => els.flatMap((el, i) => el.getClientRects().length && !el.matches(':disabled') ? [i] : []));
       const collect = async (mode) => {
@@ -209,6 +308,9 @@ try {
       const catalogDrawer = page.locator('.ih-ai-drawer');
       await catalogDrawer.locator('.ih-ai-thread[data-compact] .ih-ai-steps li').first().waitFor();
       await catalogDrawer.evaluate(async (el) => { await Promise.all(el.getAnimations().map((animation) => animation.finished)); });
+      await assertCurrentName(page);
+      await assertAssistantReference(page, catalogDrawer, `guia/${viewport}/compacto`);
+      await assertBusyReference(page, catalogDrawer, `guia/${viewport}/busy compacto`, true);
       failures.push(...(await auditAt(catalogDrawer)).failures.map((item) => `catálogo/compacto/${viewport}/${zoom}: ${item}`));
       await catalogDrawer.getByRole('button', { name: 'Abrir em tela cheia' }).click();
       await page.waitForURL((url) => /\/assistente\/?$/.test(url.pathname));
@@ -242,6 +344,7 @@ try {
         const guide = guidePage.locator('.ih-guide-page');
         assert.ok(await guide.isVisible(), `${path}: página do guia publicado`);
         assert.equal(await guide.locator('a.ih-guide-app').count(), 1, `${path}: Fazer no app`);
+        assert.equal(await guide.locator('a.ih-guide-app').evaluate((el) => parseFloat(getComputedStyle(el).fontSize)), 12, `${path}: Fazer no app fora da escala do chip`);
         assert.match(await guide.locator('a.ih-guide-app').getAttribute('href'), new RegExp(`ihelpGuide=${id}`), `${path}: app usa guia publicado`);
         const guideHuman = guide.getByRole('link', { name: 'Falar com uma pessoa' });
         assert.ok(await guideHuman.isVisible(), `${path}: humano sempre disponível`);
@@ -256,7 +359,7 @@ try {
         const guideAudit = await auditAt(guidePage.locator('body'));
         assert.ok(guideAudit.measured.text > 10, `${path}: página completa não medida`);
         failures.push(...guideAudit.failures.map((item) => `${path}/${viewport}/${zoom}: ${item}`));
-        await guide.getByRole('button', { name: /Perguntar à Claricia/ }).click();
+        await guide.getByRole('button', { name: `Perguntar à ${assistantDisplayName.split(' · ')[0]}`, exact: true }).click();
         const drawer = guidePage.locator('.ih-ai-drawer');
         assert.ok(await drawer.locator('.ih-ai-thread[data-compact] .ih-ai-text p').first().isVisible(), `${path}: resposta compacta`);
         assert.ok(await drawer.locator('.ih-ai-thread[data-compact] .ih-ai-steps li').first().isVisible(), `${path}: passo compacto`);

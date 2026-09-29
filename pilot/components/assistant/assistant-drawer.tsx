@@ -55,7 +55,7 @@ export function AssistantLauncher() {
   return (
     <button type="button" className="ih-ai-launcher" onClick={openDrawer} aria-haspopup="dialog">
       <Sparkles aria-hidden="true" />
-      Claricia · assistente virtual
+      {assistantDisplayName.replace('assistente de IA', 'assistente virtual')}
       {messages.length ? <span className="ih-ai-launcher-dot" aria-label="conversa em andamento" /> : null}
     </button>
   );
@@ -138,10 +138,10 @@ export function AssistantDrawer() {
         )}
       </div>
       <div className="ih-ai-drawer-foot">
-        <a className="ih-ai-drawer-human" href={supportLink({ guide, message: latestReply ? supportMessageFor(latestReply) : undefined })} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a>
         <AssistantComposer compact autoFocus placeholder="Pergunte sobre esta página ou qualquer outra coisa" page={ref} />
         <div className="ih-ai-drawer-meta">
           <p>Gerado por IA a partir da documentação. Confira as fontes.</p>
+          <a className="ih-ai-drawer-human" href={supportLink({ guide, message: latestReply ? supportMessageFor(latestReply) : undefined })} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a>
           <TechnologyMark compact />
         </div>
       </div>
