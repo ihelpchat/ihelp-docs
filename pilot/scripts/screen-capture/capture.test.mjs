@@ -57,7 +57,7 @@ test('fixture local: rota, clique, destaque, máscara e manifesto', async () => 
         const bytes = context.getImageData(0, 0, image.width, image.height).data;
         let mask = 0, frame = 0;
         for (let i = 0; i < bytes.length; i += 4) {
-          if (bytes[i] === 17 && bytes[i + 1] === 17 && bytes[i + 2] === 17) mask++;
+          if (bytes[i] === 226 && bytes[i + 1] === 232 && bytes[i + 2] === 240) mask++;
           if (bytes[i] === 236 && bytes[i + 1] === 100 && bytes[i + 2] === 0) frame++;
         }
         return { mask, frame };

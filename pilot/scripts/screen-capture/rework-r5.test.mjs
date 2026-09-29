@@ -58,7 +58,7 @@ test('texto direto com filho e value de input ficam opacos no PNG', async () => 
         const context = canvas.getContext('2d'); context.drawImage(image, 0, 0);
         return [[55, 85], [55, 155], [55, 205]].map(([x, y]) => [...context.getImageData(x, y, 1, 1).data].slice(0, 3));
       }, `data:image/png;base64,${png.toString('base64')}`);
-      assert.deepEqual(pixels, [[17, 17, 17], [17, 17, 17], [17, 17, 17]]);
+      assert.deepEqual(pixels, [[226, 232, 240], [226, 232, 240], [226, 232, 240]]);
     } finally { await browser.close(); }
   } finally { await new Promise((done) => server.close(done)); await rm(root, { recursive: true, force: true }); }
 });

@@ -101,7 +101,8 @@ export async function capturePage(input, {
     throw error;
   }));
   if (manifest.version !== 1 || !Array.isArray(manifest.entries)) throw new Error('Manifesto de telas inválido');
-  return captureScreens({ baseUrl, plan, root, fixture, env, manifest, storageState });
+  return captureScreens({ baseUrl, plan, root, fixture, env, manifest, storageState,
+    vocabulary: screenFacts.map((fact) => fact.text).filter((text) => typeof text === 'string') });
 }
 
 export async function uploadPage({ page, step, base64, alt }, { root = defaultRoot() } = {}) {

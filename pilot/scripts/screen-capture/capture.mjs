@@ -128,7 +128,7 @@ export function faqStepMatches(body, facts = []) {
       const end = item.index + normalized(item.label).length;
       if (selected.some((previous) => item.index < previous.end && end > previous.index)) continue;
       selected.push({ index: item.index, end });
-      matches.push({ label: item.label, listIndex: step.listIndex, line: step.line });
+      matches.push({ label: item.label, listIndex: step.listIndex, line: step.line, column: item.index });
     }
   }
   return matches;
@@ -160,7 +160,8 @@ export function capturePlan({ page, module, faqBody, coverage, screenFacts }) {
       role: fact.kind === 'field' ? 'textbox' : 'button', label,
       route: fact.route ?? routes[0], owner: fact.owner, checkoutSha: fact.sha, alt: `Tela de ${module}: ${label}`,
       action: fact.kind === 'action' && (/^(?:abrir|ver|mostrar|acessar)\b/iu.test(label)
-        || menuTrigger(label) && selected[index + 1]?.match?.line > match.line
+        || menuTrigger(label) && (selected[index + 1]?.match?.line > match.line
+          || selected[index + 1]?.match?.line === match.line && selected[index + 1]?.match?.column > match.column)
           && (selected[index + 1]?.fact?.route ?? routes[0]) === (fact.route ?? routes[0]))
         && !isUnsafeCaptureAction(label) ? 'click' : 'none' };
   });
@@ -218,11 +219,12 @@ async function scanVisible(page) {
     }
     const found = await frame.evaluate(() => {
     const items = [];
-    const add = (text, rects, reason) => {
+    const inDataRegion = (element) => Boolean(element.closest('tbody tr,[role="rowgroup"] [role="row"], [role="listitem"], [data-testid*="contact"], [data-testid*="conversation"], header [class*="profile"], header [class*="user"], [role="banner"] [class*="profile"], [role="banner"] [class*="user"]'));
+    const add = (text, rects, reason, force = false) => {
       if (!text?.trim()) return;
       for (const rect of rects) if (rect.width > 0 && rect.height > 0
         && rect.right > 0 && rect.bottom > 0 && rect.x < innerWidth && rect.y < innerHeight)
-        items.push({ text, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, reason });
+        items.push({ text, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, reason, force });
     };
     const roots = [document.body];
     for (let index = 0; index < roots.length; index++) {
@@ -231,17 +233,18 @@ async function scanVisible(page) {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       for (let node; (node = walker.nextNode());) {
         const element = node.parentElement;
-        if (!element || element.closest('[data-screen-capture-overlay]')
+        if (!element || element.closest('[data-screen-capture-overlay],svg,[aria-hidden="true"]')
           || !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden') continue;
         const range = document.createRange(); range.selectNodeContents(node);
-        add(node.textContent, range.getClientRects(), 'texto não confirmado');
+        const profile = Boolean(element.closest('header [class*="profile"], header [class*="user"], [role="banner"] [class*="profile"], [role="banner"] [class*="user"]'));
+        add(node.textContent, range.getClientRects(), inDataRegion(element) ? 'campo ou conteúdo dinâmico' : 'texto não confirmado', profile);
       }
       for (const element of root.querySelectorAll('input,textarea')) {
-        add(element.value, element.getClientRects(), 'campo ou conteúdo dinâmico');
-        add(element.placeholder, element.getClientRects(), 'campo ou conteúdo dinâmico');
+        add(element.value, element.getClientRects(), 'campo ou conteúdo dinâmico', true);
+        add(element.placeholder, element.getClientRects(), 'texto não confirmado');
       }
-      for (const element of root.querySelectorAll('img,svg,canvas,video,tbody td'))
-        add('conteúdo dinâmico', element.getClientRects(), 'campo ou conteúdo dinâmico');
+      for (const element of root.querySelectorAll('img,canvas,video')) if (inDataRegion(element))
+        add('conteúdo dinâmico', element.getClientRects(), 'campo ou conteúdo dinâmico', true);
     }
     return items;
     });
@@ -260,7 +263,28 @@ async function scanVisible(page) {
 
 const visibleHash = (items) => createHash('sha256').update(JSON.stringify(items)).digest('hex');
 
-async function captureAttempt(page, cdp, rect, allowedLabels, destination, afterScreenshot) {
+const vocabularyKey = (value) => controlKey(value).replace(/[\p{P}\p{S}]/gu, '');
+function inVocabulary(text, vocabulary) {
+  const key = vocabularyKey(text);
+  if (!key) return false;
+  return vocabulary.some((word) => {
+    const parts = String(word).split(/\{[^{}]+\}/u).map(vocabularyKey);
+    if (parts.length === 1) return parts[0] === key;
+    const pattern = new RegExp(`^${parts.map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('.+')}$`, 'u');
+    return pattern.test(key);
+  });
+}
+
+function masksForVisible(visible, vocabulary) {
+  return visible.flatMap((item) => {
+    const sensitive = containsSensitiveData(item.text, { detectOpaque: true });
+    const known = inVocabulary(item.text, vocabulary);
+    if (!sensitive && !item.force && known) return [];
+    return [{ ...item.rect, reason: sensitive ? 'varredura sensível' : item.reason }];
+  });
+}
+
+async function captureAttempt(page, cdp, rect, vocabulary, destination, afterScreenshot) {
   let frozen = false;
   try {
     await cdp.send('Emulation.setScriptExecutionDisabled', { value: true });
@@ -272,27 +296,21 @@ async function captureAttempt(page, cdp, rect, allowedLabels, destination, after
       document.head.append(style);
     });
     const visible = await scanVisible(page);
-    const mask = [];
+    const mask = masksForVisible(visible, vocabulary);
     const sensitive = [];
     for (const item of visible) {
       const isSensitive = containsSensitiveData(item.text, { detectOpaque: true });
       if (isSensitive) sensitive.push(item.rect);
-      if (isSensitive || item.reason === 'campo ou conteúdo dinâmico' || !allowedLabels.includes(item.text.trim()))
-        mask.push({ ...item.rect, reason: isSensitive ? 'varredura sensível' : item.reason });
     }
     if (!masksCoverSensitive(sensitive, mask)) return { failure: 'máscara não cobriu' };
     await page.evaluate(({ masks, rect: target }) => {
-      const privacyStyle = document.createElement('style');
-      privacyStyle.setAttribute('data-screen-capture-style', '');
-      privacyStyle.textContent = 'body * {background-image:none!important} body *::before,body *::after {content:none!important}';
-      document.head.append(privacyStyle);
       const layer = document.createElement('div');
       layer.setAttribute('data-screen-capture-overlay', '');
       layer.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
       for (const area of masks) {
         const box = document.createElement('div');
         box.setAttribute('data-screen-capture-mask', '');
-        box.style.cssText = `position:absolute;left:${area.x}px;top:${area.y}px;width:${area.width}px;height:${area.height}px;background:#111;`;
+        box.style.cssText = `position:absolute;left:${area.x}px;top:${area.y}px;width:${area.width}px;height:${area.height}px;background:#E2E8F0;border-radius:4px;`;
         layer.append(box);
       }
       const frame = document.createElement('div');
@@ -314,7 +332,7 @@ async function captureAttempt(page, cdp, rect, allowedLabels, destination, after
       return { failure: 'alvo fora da tela' };
     if (afterScreenshot) await afterScreenshot(page);
     const after = await scanVisible(page);
-    const remaining = after.filter((item) => containsSensitiveData(item.text, { detectOpaque: true })).map((item) => item.rect);
+    const remaining = masksForVisible(after, vocabulary).map((item) => item);
     if (visibleHash(visible) !== visibleHash(after) || !masksCoverSensitive(remaining, renderedMasks))
       return { failure: 'máscara não cobriu' };
     return { mask, bytes };
@@ -322,7 +340,6 @@ async function captureAttempt(page, cdp, rect, allowedLabels, destination, after
     await rm(destination, { force: true }).catch(() => {});
     await page.evaluate(() => {
       document.querySelector('[data-screen-capture-overlay]')?.remove();
-      document.querySelector('[data-screen-capture-style]')?.remove();
       document.querySelector('[data-screen-capture-pause]')?.remove();
     }).catch(() => {});
     if (frozen) await cdp.send('Emulation.setScriptExecutionDisabled', { value: false });
@@ -347,7 +364,7 @@ async function scrollControlIntoCapture(page, control) {
 
 export async function captureScreens({ baseUrl, plan, storageState, fixture = false,
   manifest = { version: 1, entries: [] }, root = outputRoot, env = process.env, fixtureAfterScreenshot,
-  fixtureCredentials, fixtureOnRequestFailed, fixtureBeforeStep }) {
+  fixtureCredentials, fixtureOnRequestFailed, fixtureBeforeStep, vocabulary = [] }) {
   if (fixtureAfterScreenshot && (!fixture || typeof fixtureAfterScreenshot !== 'function'))
     throw new Error('Hook de fixture inválido');
   if ((fixtureCredentials || fixtureOnRequestFailed || fixtureBeforeStep) && !fixture)
@@ -444,7 +461,7 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
         for (let attempt = 0; attempt < 2 && !captured?.bytes; attempt++) {
           const rect = await scrollControlIntoCapture(page, control);
           if (!rect) { outcome.motivo = 'alvo fora da tela'; throw new Error('Elemento fora da tela'); }
-          captured = await captureAttempt(page, cdp, rect, plan.map((item) => item.label),
+          captured = await captureAttempt(page, cdp, rect, [...vocabulary, ...plan.map((item) => item.label)],
             join(root, step.page, `${step.step}.pending.png`), fixtureAfterScreenshot);
         }
       } finally { await cdp.detach(); }

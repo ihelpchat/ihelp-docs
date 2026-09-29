@@ -25,6 +25,12 @@ O host de produção é recusado. PNGs e manifesto ficam em
 `MCP_STATE_DIR/screens/` (padrão `/data/screens/`), fora do Git. Revise os PNGs
 antes de publicar.
 
+A máscara mantém textos presentes nos fatos da tela e traduções do front, além
+dos ícones da interface. Textos desconhecidos e dados de tabelas, campos e perfil
+recebem faixas cinza; padrões sensíveis sempre são cobertos. Gatilhos de menu
+citados antes do item são abertos para fotografar o item sem executá-lo.
+Os PNGs em `fixtures/r16-*.png` são sintéticos e mostram antes, depois e menu.
+
 No serviço MCP, `capturar_telas` exige credencial de escrita e recebe caminho
 da página e módulo. `enviar_tela` exige a mesma credencial e PNG/JPEG em base64.
 `capturar_telas` responde com `captured` e `steps` por tentativa, incluindo status,
