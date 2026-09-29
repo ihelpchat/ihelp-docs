@@ -13,11 +13,22 @@ test('informações disponíveis distinguem lugar do produto de material e atrib
     ['As informações disponíveis no documento interno indicam que o robô recebe o cliente.', true],
     ['Os dados disponíveis mostram que o robô recebe o cliente.', true],
     ['as informações disponíveis no iHelp', false],
+    ['Consulta os dados disponíveis neste endpoint público.', false],
     ['o que está disponível no painel', false],
     ['o que está disponível no material indica que o robô responde.', true],
   ];
   for (const [phrase, expected] of cases) {
     assert.equal(mentionsSource(phrase), expected, phrase);
+  }
+  for (const place of ['ficha', 'contato', 'tela', 'módulo', 'iHelp', 'painel', 'atendimento', 'conversa']) {
+    assert.equal(mentionsSource(`as informações disponíveis no ${place}`), false, place);
+  }
+  for (const material of ['documento', 'material', 'contexto', 'conteúdo', 'fonte', 'arquivo',
+    'base', 'texto', 'anotações', 'referência']) {
+    assert.equal(mentionsSource(`os dados disponíveis no ${material}`), true, material);
+  }
+  for (const verb of ['indicam que', 'mostram que', 'dizem que', 'apontam que']) {
+    assert.equal(mentionsSource(`as informações disponíveis ${verb} o robô responde.`), true, verb);
   }
 });
 
