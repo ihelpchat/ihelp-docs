@@ -84,11 +84,12 @@ export function assertAllowedTarget(value, env = process.env) {
   return { url: url.origin, local };
 }
 
-async function login(page, baseUrl, email, password) {
+export async function loginToQa(page, baseUrl, { email, password }) {
+  if (!email || !password) throw new Error('Credenciais de QA ausentes');
   await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' });
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
-  await page.getByRole('button', { name: /^Entrar$/u }).click();
+  await page.getByRole('button', { name: /^Entrar$/iu }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 10000 });
 }
 
@@ -161,7 +162,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
       });
       const page = await context.newPage();
       try {
-        if (!fixture || fixtureLogin) await login(page, target.url, credentials[role].email, credentials[role].password);
+        if (!fixture || fixtureLogin) await loginToQa(page, target.url, credentials[role]);
         for (const guide of published) {
           const plans = await Promise.all(guide.steps.map(step => stepPlan(guide, step)));
           const initial = plans[0].route;

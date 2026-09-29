@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { launch } from '../visual/measure.mjs';
-import { assertAllowedTarget } from '../guide-proof.mjs';
+import { assertAllowedTarget, loginToQa } from '../guide-proof.mjs';
 import { containsSensitiveData } from '../../mcp/sensitive-data.mjs';
 import { credentialsFromEnv } from '../guide-proof.mjs';
 import { isUnsafeCaptureAction } from '../../mcp/faq-editorial.mjs';
@@ -116,15 +116,6 @@ export async function addUploadedScreenshot({ manifest, page, step, file, bytes,
     file: imageFile, sha256: screenshotHash(image), alt, bundleSha: null, source: 'upload', status: 'pending', masked: [] });
   await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;
-}
-
-async function login(page, origin, { email, password }) {
-  if (!email || !password) throw new Error('Credenciais de QA ausentes');
-  await page.goto(`${origin}/login`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('textbox', { name: /e-mail|email/iu }).fill(email);
-  await page.getByLabel(/senha|password/iu).fill(password);
-  await page.getByRole('button', { name: /^entrar$/iu }).click();
-  await page.waitForURL((url) => url.pathname !== '/login');
 }
 
 async function scanVisible(page) {
@@ -265,8 +256,8 @@ export async function captureScreens({ baseUrl, plan, storageState, fixture = fa
     });
     const page = await context.newPage();
     if (!fixture && !storageState) {
-      try { await login(page, target.url, credentialsFromEnv(env).authorized); }
-      catch { throw new Error('Login na homologação falhou'); }
+      try { await loginToQa(page, target.url, credentialsFromEnv(env).authorized); }
+      catch (error) { throw new Error('Login na homologação falhou', { cause: error }); }
     }
     let currentRoute = null;
     let bundleSha = null;

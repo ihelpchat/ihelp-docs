@@ -21,6 +21,18 @@ export function captureFailureCategory(error) {
   return 'captura indisponível';
 }
 
+export function captureFailureLog(error, env = process.env) {
+  const category = captureFailureCategory(error);
+  const detail = String(error?.cause?.message ?? error?.message ?? '').split(/\r?\n/u, 1)[0];
+  let safe = detail.replace(/https?:\/\/[^\s"'<>]+/giu, '[URL removida]')
+    .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, '[e-mail removido]');
+  for (const [key, value] of Object.entries(env)) {
+    if (!/(?:PASSWORD|TOKEN|SECRET|API_KEY|EMAIL)/iu.test(key) || typeof value !== 'string' || value.length < 4) continue;
+    safe = safe.replaceAll(value, '[segredo removido]');
+  }
+  return `capturar_telas: ${category}: ${safe.slice(0, 300)}`;
+}
+
 export async function capturePage(input, {
   baseUrl = process.env.GUIDE_QA_STAGING_URL,
   root = defaultRoot(), fixture = false, env = process.env, coverage, storageState,
