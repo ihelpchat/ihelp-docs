@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { launch } from './measure.mjs';
+import { assistantDisplayName } from '../../lib/assistant-name.ts';
 
 const reference = JSON.parse(await readFile(new URL('./navigation-reference.json', import.meta.url), 'utf8'));
 assert.match(reference.measuredAt, /^\d{4}-\d{2}-\d{2}$/, 'referência sem data de medição');
@@ -68,7 +69,7 @@ try {
         const tocSingleLine = await page.locator('.ih-toc-link').evaluateAll((links) => Math.min(...links.filter((link) => link.textContent.trim().length <= 32).map((link) => link.getBoundingClientRect().height)));
         assert.ok(Number.isFinite(tocSingleLine) && tocSingleLine <= reference.desktop1440.tocSingleLineHeight + 4,
           `desktop: item do índice alto demais (${tocSingleLine}px)`);
-        assert.equal(metrics.nav?.text, 'Claricia', 'desktop: rótulo curto no topo');
+        assert.equal(metrics.nav?.text, assistantDisplayName.split(' · ')[0], 'desktop: rótulo curto no topo');
       } else {
         assert.ok(metrics.menu?.height >= 44, 'mobile: menu abaixo de 44px');
         assert.ok(metrics.sideLink?.height >= 44 && metrics.sideGroup?.height >= 44, 'mobile: menu abaixo de 44px');
@@ -79,7 +80,7 @@ try {
         await assertMobileTargets(page, 'Agenda de Contatos com título em foco');
       }
       assert.ok(metrics.search?.height >= (name === 'mobile' ? 44 : 34), `${name}: busca abaixo da altura esperada`);
-      assert.match(metrics.launcher?.text ?? '', /^Claricia.*assistente virtual$/, `${name}: subtítulo ausente no botão flutuante`);
+      assert.equal(metrics.launcher?.text, assistantDisplayName.replace('assistente de IA', 'assistente virtual'), `${name}: rótulo do botão flutuante fora do design`);
       assert.ok(metrics.launcher?.height >= 44, `${name}: botão flutuante abaixo de 44px`);
       if (name === 'mobile') {
         await page.goto(`${baseUrl}/docs/principais-duvidas/`, { waitUntil: 'networkidle' });

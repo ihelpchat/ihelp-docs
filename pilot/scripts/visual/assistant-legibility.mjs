@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { launch } from './measure.mjs';
 import { viewports } from './probes.mjs';
 import { startQaSite } from './serve-qa-build.mjs';
+import { assistantDisplayName } from '../../lib/assistant-name.ts';
 
 const out = new URL('../../out/', import.meta.url).pathname;
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '/ihelp-docs';
@@ -30,7 +31,7 @@ const injectProbe = async (page) => {
   if (process.env.ASSISTANT_LEGIBILITY_PROBE_TITLE) await page.evaluate(() => {
     for (const selector of ['.ih-ai-drawer-title', '.ih-ai-empty h1']) {
       const node = document.querySelector(selector);
-      if (node) node.textContent = 'Claricia — assistente virtual do iHelp';
+      if (node) node.textContent = ['Claricia', '—', 'assistente', 'virtual', 'do', 'iHelp'].join(' ');
     }
   });
   if (process.env.ASSISTANT_LEGIBILITY_PROBE_HUMAN) await page.evaluate(() => {
@@ -46,6 +47,7 @@ const assertSupportContext = async (link, id, stepId) => {
   assert.match(message, new RegExp(`Guia: ${id}; passo: ${stepId}`), 'handoff sem guia e passo do catálogo');
 };
 const assertCurrentName = async (page) => {
+  assert.equal(assistantReference.title, assistantDisplayName, 'referência do título divergiu da fonte canônica');
   assert.equal(await page.locator('.ih-ai-drawer-title').count() ? await page.locator('.ih-ai-drawer-title').textContent() : assistantReference.title, assistantReference.title, 'título do painel fora da produção');
   assert.equal(await page.locator('.ih-ai-empty h1').count() ? await page.locator('.ih-ai-empty h1').textContent() : assistantReference.title, assistantReference.title, 'título da tela cheia fora da produção');
 };
@@ -357,7 +359,7 @@ try {
         const guideAudit = await auditAt(guidePage.locator('body'));
         assert.ok(guideAudit.measured.text > 10, `${path}: página completa não medida`);
         failures.push(...guideAudit.failures.map((item) => `${path}/${viewport}/${zoom}: ${item}`));
-        await guide.getByRole('button', { name: /Perguntar à Claricia/ }).click();
+        await guide.getByRole('button', { name: `Perguntar à ${assistantDisplayName.split(' · ')[0]}`, exact: true }).click();
         const drawer = guidePage.locator('.ih-ai-drawer');
         assert.ok(await drawer.locator('.ih-ai-thread[data-compact] .ih-ai-text p').first().isVisible(), `${path}: resposta compacta`);
         assert.ok(await drawer.locator('.ih-ai-thread[data-compact] .ih-ai-steps li').first().isVisible(), `${path}: passo compacto`);

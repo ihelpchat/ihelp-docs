@@ -42,7 +42,7 @@ export function GuideExperience({ guideId, appUrl, steps }: {
       <OriginLink href="/docs/guias" className="ih-guide-back">Ver todos os guias</OriginLink>
       <div className="ih-guide-actions">
         <a className="ih-guide-app" href={appUrl} target="_blank" rel="noreferrer noopener">Fazer no app</a>
-        <button type="button" onClick={openDrawer}>Perguntar à {assistantDisplayName}</button>
+        <button type="button" onClick={openDrawer}>Perguntar à {assistantDisplayName.split(' · ')[0]}</button>
         <a href={help} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a>
       </div>
       {steps.some((step) => step.stepId === 'android') && steps.some((step) => step.stepId === 'iphone') ? (
