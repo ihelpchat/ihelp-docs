@@ -1013,7 +1013,7 @@ button {
   border-bottom: 1px solid var(--ih-slate-200);
 }
 
-.ih-meta > span {
+.ih-meta > span, .ih-meta > a {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1025,6 +1025,12 @@ button {
   color: var(--ih-slate-400);
 }
 
+.ih-meta > .ih-meta-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 .ih-meta-pill {
   padding: 3px 9px;
   color: #15803d;
@@ -1032,6 +1038,29 @@ button {
   font-weight: 600;
   border-radius: 999px;
   background: #dcfce7;
+}
+
+.ih-meta a.ih-meta-pill {
+  position: relative;
+  isolation: isolate;
+  min-height: 44px;
+  padding-block: 10px;
+  margin-block: -10.75px;
+  background: transparent;
+}
+
+.ih-meta a.ih-meta-pill::before {
+  content: '';
+  position: absolute;
+  inset: 10.75px 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: #dcfce7;
+}
+
+.ih-meta a.ih-meta-pill:hover, .ih-meta a.ih-meta-pill:focus-visible {
+  color: #166534;
+  text-decoration: underline;
 }
 
 .ih-meta-pill > span {
@@ -1069,7 +1098,7 @@ button {
 .ih-guide-page { display: grid; gap: 16px; margin: 24px 0; color: var(--ih-ink); font-size: 16px; }
 .ih-guide-back { display: inline-flex; align-items: center; min-height: 44px; color: var(--ih-slate-700); }
 .ih-guide-actions, .ih-guide-phone-options { display: flex; flex-wrap: wrap; gap: 10px; }
-.ih-guide-actions a, .ih-guide-actions button, .ih-guide-phone button {
+.ih-guide-actions a:not(.ih-guide-app), .ih-guide-actions button, .ih-guide-phone button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1147,7 +1176,7 @@ button {
 }
 
 
-.ih-prose a {
+.ih-prose a:where(:not(.ih-ai-product-action)) {
   color: var(--ih-coral-600);
   font-weight: 500;
   text-decoration: underline;
@@ -1156,7 +1185,7 @@ button {
   text-underline-offset: 3px;
 }
 
-.ih-prose a:hover {
+.ih-prose a:where(:not(.ih-ai-product-action)):hover {
   color: var(--ih-coral-700);
   text-decoration: underline;
   text-underline-offset: 3px;

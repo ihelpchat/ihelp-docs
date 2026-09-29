@@ -106,7 +106,7 @@ test('pergunta canônica inválida recebe padrão determinístico', async () => 
   const { result, calls } = await run([invalid]);
   assert.equal(calls, 1, JSON.stringify(result));
   assert.equal(result.status, 'ready', JSON.stringify(result));
-  assert.match(result.articles[0].assistantQuestion, /^Como uso a tela .+\?$/u);
+  assert.match(result.articles[0].assistantQuestion, /^Como uso o módulo Robôs\?$/u);
 });
 
 test('validateArticle entra na tentativa única para erro editorial não corrigível localmente', async () => {

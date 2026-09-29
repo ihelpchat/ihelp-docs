@@ -118,7 +118,10 @@ export async function ArticleLayout({
               <div className="ih-meta">
                 <span><Clock aria-hidden="true" />{minutes} min de leitura</span>
                 {page.data.lastModified ? <span>Atualizado em {updatedFormat.format(page.data.lastModified)}</span> : null}
-                <span className="ih-meta-pill"><span aria-hidden="true" />{contentLabel[page.data.contentType]}</span>
+                <span className="ih-meta-badges">
+                  <span className="ih-meta-pill"><span aria-hidden="true" />{contentLabel[page.data.contentType]}</span>
+                  {canonical ? <a className="ih-meta-pill" href={canonical.appUrl} target="_blank" rel="noreferrer noopener"><span aria-hidden="true" />Guia passo a passo</a> : null}
+                </span>
               </div>
             ) : null}
           </>

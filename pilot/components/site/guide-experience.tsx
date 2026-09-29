@@ -5,6 +5,7 @@ import { useAssistant } from '@/components/assistant/assistant-context';
 import { supportLink } from '@/lib/links';
 import { assistantDisplayName } from '@/lib/assistant-name';
 import { withBasePath } from '@/lib/shared';
+import { GuideActionLink } from '@/components/guide-action-link';
 
 export function OriginLink({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
   return <a className={className} href={withBasePath(href)} onClick={(event) => {
@@ -41,7 +42,7 @@ export function GuideExperience({ guideId, appUrl, steps }: {
     <section className="ih-guide-page" aria-label="Acompanhar este guia" data-guide-id={guideId} data-step-id={stepId}>
       <OriginLink href="/docs/guias" className="ih-guide-back">Ver todos os guias</OriginLink>
       <div className="ih-guide-actions">
-        <a className="ih-guide-app" href={appUrl} target="_blank" rel="noreferrer noopener">Fazer no app</a>
+        <GuideActionLink className="ih-guide-app" href={appUrl}>Fazer no app</GuideActionLink>
         <button type="button" onClick={openDrawer}>Perguntar à {assistantDisplayName.split(' · ')[0]}</button>
         <a href={help} target="_blank" rel="noreferrer noopener">Falar com uma pessoa</a>
       </div>

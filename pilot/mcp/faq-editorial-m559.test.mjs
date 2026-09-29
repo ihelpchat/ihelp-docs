@@ -4,7 +4,9 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { classifyFaqQuestions, selectFaqStyleExamples, loadBusinessContext,
-  adaptScreenFacts, validateFaqSections } from './faq-editorial.mjs';
+  adaptScreenFacts, validateFaqSections, faqSubtitle, replaceModuleTerminology,
+  deterministicFaqAnswer, fixedFaqSupportSection, renderFreeFaqSections,
+  validateFreeFaqSections, judgeClaims, missingFaqSupportSections } from './faq-editorial.mjs';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
 import { FAQ_NEUTRAL_WORDS } from './faq-neutral-words.mjs';
 
@@ -12,6 +14,59 @@ const unit = (text, citations) => ({ text, citations });
 const distinctActions = ['Adicionar Contato', 'Abrir Cadastro de Contato', 'Selecionar Departamento do Contato',
   'Escolher Atendente Responsável', 'Conferir Dados do Contato', 'Salvar Novo Contato',
   'Voltar à Lista de Contatos', 'Localizar Contato Cadastrado'];
+
+test('subtítulo sustentado sai de O que é; pendência usa fallback fixo', () => {
+  const request = { topic: 'Robô', module: 'Robôs', description: 'Criar, editar e publicar robôs.' };
+  const facts = [{ kind: 'route', text: 'Robôs', route: '/bot' },
+    ...['Criar robô', 'Editar robô', 'Publicar'].map((text, line) => ({ kind: 'action', text,
+      repository: 'fixture', path: 'fixture', sha: 'a', lineStart: line, lineEnd: line }))];
+  const supported = { oQueE: [{ text: 'Os robôs orientam o atendimento. Eles têm um fluxo configurável.' }] };
+  assert.equal(faqSubtitle(supported, request, facts), 'Os robôs orientam o atendimento.');
+  assert.equal(supported.oQueE[0].text, 'Eles têm um fluxo configurável.');
+  assert.doesNotMatch(renderFreeFaqSections(supported), /Os robôs orientam o atendimento/u);
+  const pending = { oQueE: [{ text: '<AConfirmar>Os robôs orientam o atendimento.</AConfirmar>' }] };
+  assert.equal(faqSubtitle(pending, request, facts), 'Como criar, editar e publicar robôs de atendimento no iHelp.');
+  assert.match(pending.oQueE[0].text, /AConfirmar/u);
+  assert.match(deterministicFaqAnswer(request, facts)?.text ?? '', /^No módulo \*\*Robôs\*\*/u);
+  assert.match(fixedFaqSupportSection(request, facts)[0].text, /no módulo Robôs/u);
+});
+
+test('nome do módulo muda só a referência ao item do menu', () => {
+  assert.equal(replaceModuleTerminology('A tela **Contatos**, chamada **Listar Contatos**, é a agenda.', 'Contatos'),
+    'A tela **Contatos**, chamada **Listar Contatos**, é a agenda.');
+});
+
+test('dúvida sem resposta sai inteira e gera pendência', async () => {
+  const sections = { duvidas: [{ text: 'A planilha é para uma campanha?' },
+    { text: 'Como buscar? Use o campo **Buscar contato**.' }] };
+  const checked = validateFreeFaqSections(sections, { screenFacts: [{ text: 'Buscar contato' }] });
+  assert.equal(checked.sections.duvidas.length, 1);
+  assert.match(checked.pending.join(' '), /pergunta sem resposta/u);
+  const judged = await judgeClaims(checked.sections, { request: {}, business: [] }, async (claims) => ({
+    claims: claims.map(({ id, text }) => ({ id, status: text.startsWith('Use') ? 'a confirmar' : 'sustentada', reason: 'sem prova' })),
+  }));
+  assert.equal(judged.sections.duvidas.length, 0);
+  assert.match(judged.pending.join(' '), /pergunta sem resposta/u);
+});
+
+test('material de negócio e estado vazio exigem seções de apoio', () => {
+  const context = { business: [{ body: 'Como publico o robô? Selecione Publicar.' }],
+    screenFacts: [{ kind: 'text', text: 'Nenhum robô encontrado' }] };
+  assert.deepEqual(missingFaqSupportSections({}, context), ['Dúvidas comuns', 'Erros comuns e o que fazer']);
+  assert.deepEqual(missingFaqSupportSections({ duvidas: [{ text: 'Como publico? Use Publicar.' }],
+    erros: [{ text: 'Se não houver robô, crie um.' }] }, context), []);
+});
+
+test('pergunta e sintoma em negrito são prosa, mas dúvida sem resposta sai', () => {
+  const sections = { duvidas: [{ text: '**Como importo os contatos?** Use **Importar Contatos**.' },
+    { text: '**A planilha é para uma campanha?**' }],
+  erros: [{ text: '**Nenhum contato encontrado.** Revise os filtros.' }] };
+  const context = { screenFacts: [{ text: 'Importar Contatos' }, { text: 'Nenhum contato encontrado' }] };
+  const checked = validateFreeFaqSections(sections, context);
+  assert.equal(checked.sections.duvidas.length, 1);
+  assert.equal(checked.sections.erros.length, 1);
+  assert.match(checked.pending.join(' '), /pergunta sem resposta/u);
+});
 test('FAQ só bloqueia dúvida sobre resposta direta ou passo principal', () => {
   const result = classifyFaqQuestions([
     'Como entrar na tela de Contatos para cadastrar?',
@@ -344,14 +399,15 @@ test('dúvidas rejeitam palavra sem fonte; erro usa só mensagem estruturada', (
   assert.equal(plural.sections.resposta?.length, 1);
 });
 
-test('pacote FAQ livre fica ready com dúvida secundária pendente', async () => {
+test('pacote FAQ livre mantém frase única no corpo e move só a primeira de duas frases', async () => {
   const sha = 'a'.repeat(40);
   const citation = (line) => ({ repository: 'ihelpchat/front-react', path: 'src/Contact.tsx', lineStart: line, lineEnd: line, sha });
   const sections = Object.fromEntries(['oQueE', 'paraQueServe', 'casosDeUso', 'passos', 'duvidas', 'erros', 'suporte'].map((key) => [key, []]));
   const direct = 'Abra Contatos no menu e clique em Adicionar Contato para cadastrar uma pessoa da sua lista.';
   const steps = distinctActions;
-  sections.oQueE = [{ text: 'A tela Contatos organiza as pessoas da sua lista.' }];
+  sections.oQueE = [{ text: 'O módulo Contatos organiza as pessoas da sua lista.' }];
   sections.passos = [{ tarefa: 'Cadastrar', passos: [
+    { text: '### Cadastrar' },
     { text: 'Clique em **Adicionar Contato**.' },
     ...steps.map((text) => ({ text: `Clique em **${text}**.` })),
   ] }];
@@ -366,28 +422,44 @@ test('pacote FAQ livre fica ready com dúvida secundária pendente', async () =>
     screenFacts: [{ kind: 'route', text: 'Contatos', source: 'src/Contact.tsx:11', sha }, ...[direct, ...steps].map((text, index) => ({ kind: 'action', text: index ? text : 'Adicionar Contato',
       property: 'translate', owner: 'ContactPage', subject: 'contato',
       source: `src/Contact.tsx:${index + 12}`, repository: 'ihelpchat/front-react', sha }))],
-    support: { categories: [], rules: [] }, coverage: [], pending: [], businessContext: [], faqStyleExamples: [] };
-  const result = await generateContentPackage(new URL('../', import.meta.url).pathname,
-    { topic: 'Contatos', module: 'Contatos', description: 'Criar FAQ para cadastrar contatos.' },
-    { productContext: context, plan: { status: 'ready', pending: ['pergunta pendente: Qual formato do telefone?'] },
-      client: { responses: { create: async (payload) => {
-        if (payload.text.format.name === 'juiz_faq') {
-          const claims = JSON.parse(payload.input[1].content).claims;
-          return { model: 'fixture', output_text: JSON.stringify({ claims: claims.map(({ id }) =>
-            ({ id, status: 'sustentada', reason: '' })) }) };
-        }
-        assert.ok(payload.text.format.schema.properties.articles.items.properties.sections);
-        assert.ok(!payload.text.format.schema.properties.articles.items.properties.body);
-        const schema = payload.text.format.schema.properties.articles.items.properties.sections.properties;
-        assert.equal(schema.passos.items.properties.passos.items.properties.text.type, 'string');
-        assert.equal(schema.passos.items.properties.fato, undefined);
-        return { model: 'fixture', output_text: JSON.stringify(reply) };
-      } } } });
-  assert.equal(result.status, 'ready', JSON.stringify(result.questions));
-  assert.match(result.articles[0].body, /^Na tela \*\*Contatos\*\*/u);
-  assert.doesNotMatch(result.articles[0].body, /Erros comuns/u);
-  assert.match(result.articles[0].body, /## Quando falar com o suporte\n\n/u);
-  assert.ok(result.pending.some((item) => item.includes('Qual formato do telefone')));
+    support: { categories: [], rules: [] }, coverage: [], pending: [],
+    businessContext: [{ module: 'Contatos', body: 'O módulo Contatos organiza as pessoas da sua lista e reúne os contatos cadastrados.' }],
+    faqStyleExamples: [] };
+  for (const [intro, expectedDescription, expectedBody] of [
+    ['O módulo Contatos organiza as pessoas da sua lista.', 'Como cadastrar contatos no iHelp: veja as tarefas e os passos.',
+      'O módulo Contatos organiza as pessoas da sua lista.'],
+    ['O módulo Contatos organiza as pessoas da sua lista. Ele reúne os contatos cadastrados.',
+      'O módulo Contatos organiza as pessoas da sua lista.', 'Ele reúne os contatos cadastrados.'],
+  ]) {
+    reply.articles[0].sections.oQueE[0].text = intro;
+    const result = await generateContentPackage(new URL('../', import.meta.url).pathname,
+      { topic: 'Contatos', module: 'Contatos', description: 'Criar FAQ para cadastrar contatos.' },
+      { productContext: context, plan: { status: 'ready', pending: ['pergunta pendente: Qual formato do telefone?'] },
+        client: { responses: { create: async (payload) => {
+          if (payload.text.format.name === 'juiz_faq') {
+            const claims = JSON.parse(payload.input[1].content).claims;
+            return { model: 'fixture', output_text: JSON.stringify({ claims: claims.map(({ id }) =>
+              ({ id, status: 'sustentada', reason: '' })) }) };
+          }
+          assert.ok(payload.text.format.schema.properties.articles.items.properties.sections);
+          assert.ok(!payload.text.format.schema.properties.articles.items.properties.body);
+          const schema = payload.text.format.schema.properties.articles.items.properties.sections.properties;
+          assert.equal(schema.passos.items.properties.passos.items.properties.text.type, 'string');
+          assert.equal(schema.passos.items.properties.fato, undefined);
+          return { model: 'fixture', output_text: JSON.stringify(reply) };
+        } } } });
+    assert.equal(result.status, 'ready', JSON.stringify(result.questions));
+    const { description, body } = result.articles[0];
+    assert.equal(description, expectedDescription);
+    assert.ok(body.includes(`## O que é\n\n${expectedBody}`), body);
+    assert.notEqual(description, body.match(/## O que é\n\n([^\n]+)/u)?.[1]);
+    if (intro !== expectedBody) assert.doesNotMatch(body, /O módulo Contatos organiza as pessoas da sua lista\./u);
+    assert.doesNotMatch(body, /^(?:Na tela|No módulo) \*\*Contatos\*\*, você pode/u);
+    assert.doesNotMatch(body, /1\. ### Cadastrar/u);
+    assert.doesNotMatch(body, /Erros comuns/u);
+    assert.match(body, /## Quando falar com o suporte\n\n/u);
+    assert.ok(result.pending.some((item) => item.includes('Qual formato do telefone')));
+  }
 });
 
 test('plano da Agenda sai ready quando só pergunta detalhes secundários', async () => {
