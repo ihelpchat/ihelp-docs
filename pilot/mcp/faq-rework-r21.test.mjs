@@ -12,12 +12,13 @@ const fixtures = [
   { route: '/bot', module: 'Robôs', sentence: 'O módulo Robôs organiza as respostas de atendimento.' },
 ];
 
-test('subtítulo sustentado usa módulo do menu em Contatos e Robôs e remove a primeira frase', () => {
+test('subtítulo independente preserva a definição no corpo', () => {
   for (const fixture of fixtures) {
     const sections = { oQueE: [{ text: `${fixture.sentence} Outra frase de contexto.` }] };
     const facts = [{ kind: 'route', route: fixture.route, text: fixture.module, sha }];
-    assert.equal(faqSubtitle(sections, { topic: fixture.module }, facts), fixture.sentence);
-    assert.equal(sections.oQueE[0].text, 'Outra frase de contexto.');
+    assert.equal(faqSubtitle(sections, { topic: fixture.module }, facts,
+      `Veja como usar ${fixture.module} no iHelp em cada etapa.`), `Veja como usar ${fixture.module} no iHelp em cada etapa.`);
+    assert.equal(sections.oQueE[0].text, `${fixture.sentence} Outra frase de contexto.`);
   }
 });
 
@@ -80,8 +81,8 @@ test('pacotes de Canais, Contatos e Robôs usam o nome visível e módulo no sub
       path: 'src/Screen.tsx', lineStart: 1, lineEnd: 1, sha };
     assert.match(deterministicFaqAnswer(request, [...facts, action])?.text ?? '',
       new RegExp(`^No módulo \\*\\*${visible}\\*\\*`), `${visible}: resposta direta`);
-    assert.equal(faqSubtitle({ oQueE: [{ text: `O módulo ${visible} mostra ${visible}. Outro detalhe.` }] }, request, facts),
-      `O módulo ${visible} mostra ${visible}.`, `${visible}: subtítulo sustentado`);
+    assert.match(faqSubtitle({ oQueE: [{ text: `O módulo ${visible} mostra ${visible}. Outro detalhe.` }] }, request, facts),
+      /no iHelp/u, `${visible}: subtítulo fallback`);
     assert.match(faqSubtitle({ oQueE: [{ text: '<AConfirmar>Sem prova</AConfirmar>' }] }, request, [...facts, action]),
       new RegExp(visible === 'Robôs' ? 'robôs de atendimento' : visible.toLocaleLowerCase('pt-BR')),
       `${visible}: subtítulo fallback usa menu`);

@@ -18,8 +18,8 @@ test('MDX do modelo não executa expressões nem aceita ESM ou JSX estranho', as
   await assert.doesNotReject(validateRenderedFaq('Use \\{nome\\} para indicar o campo.'));
 });
 
-test('subtítulo usa texto simples de Markdown sustentado, inclusive link', () => {
+test('subtítulo rejeita Markdown e preserva o texto do corpo', () => {
   const sections = { oQueE: [{ text: 'O módulo **Robôs** organiza o [atendimento](https://example.com/ajuda). Ele segue um fluxo.' }] };
-  assert.equal(faqSubtitle(sections, { topic: 'Robôs' }, []), 'O módulo Robôs organiza o atendimento.');
-  assert.equal(sections.oQueE[0].text, 'Ele segue um fluxo.');
+  assert.match(faqSubtitle(sections, { topic: 'Robôs' }, [], 'Veja **Robôs** e o atendimento no iHelp com este guia.'), /no iHelp/u);
+  assert.match(sections.oQueE[0].text, /O módulo \*\*Robôs\*\* organiza/u);
 });
