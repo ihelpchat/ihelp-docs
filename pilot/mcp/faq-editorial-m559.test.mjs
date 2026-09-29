@@ -399,13 +399,13 @@ test('dúvidas rejeitam palavra sem fonte; erro usa só mensagem estruturada', (
   assert.equal(plural.sections.resposta?.length, 1);
 });
 
-test('pacote FAQ livre fica ready com dúvida secundária pendente', async () => {
+test('pacote FAQ livre mantém frase única no corpo e move só a primeira de duas frases', async () => {
   const sha = 'a'.repeat(40);
   const citation = (line) => ({ repository: 'ihelpchat/front-react', path: 'src/Contact.tsx', lineStart: line, lineEnd: line, sha });
   const sections = Object.fromEntries(['oQueE', 'paraQueServe', 'casosDeUso', 'passos', 'duvidas', 'erros', 'suporte'].map((key) => [key, []]));
   const direct = 'Abra Contatos no menu e clique em Adicionar Contato para cadastrar uma pessoa da sua lista.';
   const steps = distinctActions;
-  sections.oQueE = [{ text: 'A tela Contatos organiza as pessoas da sua lista.' }];
+  sections.oQueE = [{ text: 'O módulo Contatos organiza as pessoas da sua lista.' }];
   sections.passos = [{ tarefa: 'Cadastrar', passos: [
     { text: '### Cadastrar' },
     { text: 'Clique em **Adicionar Contato**.' },
@@ -422,31 +422,44 @@ test('pacote FAQ livre fica ready com dúvida secundária pendente', async () =>
     screenFacts: [{ kind: 'route', text: 'Contatos', source: 'src/Contact.tsx:11', sha }, ...[direct, ...steps].map((text, index) => ({ kind: 'action', text: index ? text : 'Adicionar Contato',
       property: 'translate', owner: 'ContactPage', subject: 'contato',
       source: `src/Contact.tsx:${index + 12}`, repository: 'ihelpchat/front-react', sha }))],
-    support: { categories: [], rules: [] }, coverage: [], pending: [], businessContext: [], faqStyleExamples: [] };
-  const result = await generateContentPackage(new URL('../', import.meta.url).pathname,
-    { topic: 'Contatos', module: 'Contatos', description: 'Criar FAQ para cadastrar contatos.' },
-    { productContext: context, plan: { status: 'ready', pending: ['pergunta pendente: Qual formato do telefone?'] },
-      client: { responses: { create: async (payload) => {
-        if (payload.text.format.name === 'juiz_faq') {
-          const claims = JSON.parse(payload.input[1].content).claims;
-          return { model: 'fixture', output_text: JSON.stringify({ claims: claims.map(({ id }) =>
-            ({ id, status: 'sustentada', reason: '' })) }) };
-        }
-        assert.ok(payload.text.format.schema.properties.articles.items.properties.sections);
-        assert.ok(!payload.text.format.schema.properties.articles.items.properties.body);
-        const schema = payload.text.format.schema.properties.articles.items.properties.sections.properties;
-        assert.equal(schema.passos.items.properties.passos.items.properties.text.type, 'string');
-        assert.equal(schema.passos.items.properties.fato, undefined);
-        return { model: 'fixture', output_text: JSON.stringify(reply) };
-      } } } });
-  assert.equal(result.status, 'ready', JSON.stringify(result.questions));
-  assert.match(result.articles[0].description, /^Como cadastrar contatos no iHelp/u);
-  assert.doesNotMatch(result.articles[0].body, /^(?:Na tela|No módulo) \*\*Contatos\*\*, você pode/u);
-  assert.notEqual(result.articles[0].description, 'A tela Contatos organiza as pessoas da sua lista.');
-  assert.doesNotMatch(result.articles[0].body, /1\. ### Cadastrar/u);
-  assert.doesNotMatch(result.articles[0].body, /Erros comuns/u);
-  assert.match(result.articles[0].body, /## Quando falar com o suporte\n\n/u);
-  assert.ok(result.pending.some((item) => item.includes('Qual formato do telefone')));
+    support: { categories: [], rules: [] }, coverage: [], pending: [],
+    businessContext: [{ module: 'Contatos', body: 'O módulo Contatos organiza as pessoas da sua lista e reúne os contatos cadastrados.' }],
+    faqStyleExamples: [] };
+  for (const [intro, expectedDescription, expectedBody] of [
+    ['O módulo Contatos organiza as pessoas da sua lista.', 'Como cadastrar contatos no iHelp: veja as tarefas e os passos.',
+      'O módulo Contatos organiza as pessoas da sua lista.'],
+    ['O módulo Contatos organiza as pessoas da sua lista. Ele reúne os contatos cadastrados.',
+      'O módulo Contatos organiza as pessoas da sua lista.', 'Ele reúne os contatos cadastrados.'],
+  ]) {
+    reply.articles[0].sections.oQueE[0].text = intro;
+    const result = await generateContentPackage(new URL('../', import.meta.url).pathname,
+      { topic: 'Contatos', module: 'Contatos', description: 'Criar FAQ para cadastrar contatos.' },
+      { productContext: context, plan: { status: 'ready', pending: ['pergunta pendente: Qual formato do telefone?'] },
+        client: { responses: { create: async (payload) => {
+          if (payload.text.format.name === 'juiz_faq') {
+            const claims = JSON.parse(payload.input[1].content).claims;
+            return { model: 'fixture', output_text: JSON.stringify({ claims: claims.map(({ id }) =>
+              ({ id, status: 'sustentada', reason: '' })) }) };
+          }
+          assert.ok(payload.text.format.schema.properties.articles.items.properties.sections);
+          assert.ok(!payload.text.format.schema.properties.articles.items.properties.body);
+          const schema = payload.text.format.schema.properties.articles.items.properties.sections.properties;
+          assert.equal(schema.passos.items.properties.passos.items.properties.text.type, 'string');
+          assert.equal(schema.passos.items.properties.fato, undefined);
+          return { model: 'fixture', output_text: JSON.stringify(reply) };
+        } } } });
+    assert.equal(result.status, 'ready', JSON.stringify(result.questions));
+    const { description, body } = result.articles[0];
+    assert.equal(description, expectedDescription);
+    assert.ok(body.includes(`## O que é\n\n${expectedBody}`), body);
+    assert.notEqual(description, body.match(/## O que é\n\n([^\n]+)/u)?.[1]);
+    if (intro !== expectedBody) assert.doesNotMatch(body, /O módulo Contatos organiza as pessoas da sua lista\./u);
+    assert.doesNotMatch(body, /^(?:Na tela|No módulo) \*\*Contatos\*\*, você pode/u);
+    assert.doesNotMatch(body, /1\. ### Cadastrar/u);
+    assert.doesNotMatch(body, /Erros comuns/u);
+    assert.match(body, /## Quando falar com o suporte\n\n/u);
+    assert.ok(result.pending.some((item) => item.includes('Qual formato do telefone')));
+  }
 });
 
 test('plano da Agenda sai ready quando só pergunta detalhes secundários', async () => {
