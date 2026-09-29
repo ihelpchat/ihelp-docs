@@ -16,7 +16,7 @@ const plan = ['Primeiro', 'Segundo', 'Terceiro'].map((label, index) => ({
   route: '/app', action: 'none', alt: label, owner: 'fixture', checkoutSha: 'a'.repeat(40),
 }));
 
-async function withFixture(run) {
+async function withFixture(run, { missingSecond = false } = {}) {
   const server = createServer((request, response) => {
     if (request.url === '/login') {
       response.setHeader('Content-Type', 'text/html');
@@ -26,7 +26,7 @@ async function withFixture(run) {
       response.write('data: ready\n\n');
     } else if (request.url === '/app') {
       response.setHeader('Content-Type', 'text/html');
-      response.end('<button>Primeiro</button><button>Segundo</button><button>Terceiro</button><script>new EventSource("/events"); fetch("https://outside.example.test/blocked").catch(()=>{});</script>');
+      response.end(`<button>Primeiro</button>${missingSecond ? '' : '<button>Segundo</button>'}<button>Terceiro</button><script>new EventSource("/events"); fetch("https://outside.example.test/blocked").catch(()=>{});</script>`);
     } else { response.writeHead(404); response.end(); }
   });
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
@@ -47,6 +47,15 @@ test('login, stream infinito e três passos concluem em menos de 60 s', { timeou
     assert.equal(manifest.entries.length, 3);
     assert.ok(Date.now() - started < 60000);
   });
+});
+
+test('timeout real de um passo marca pendência e segue para o terceiro', { timeout: 30000 }, async () => {
+  await withFixture(async (baseUrl, root) => {
+    const manifest = await captureScreens({ baseUrl, root, fixture: true, plan,
+      fixtureCredentials: { email: 'fixture@example.test', password: 'fixture-password' } });
+    assert.deepEqual(manifest.entries.map((entry) => entry.label), ['Primeiro', 'Terceiro']);
+    assert.ok(manifest.pending?.some((item) => item.includes('02-segundo')));
+  }, { missingSecond: true });
 });
 
 test('TimeoutError em handler e passo vira pendência e captura continua', { timeout: 60000 }, async () => {
