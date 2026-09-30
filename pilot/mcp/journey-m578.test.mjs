@@ -24,6 +24,9 @@ test('menu exige pergunta, duas opções do gerador e destinos existentes', asyn
     'menu: mensagem');
   assert.equal((await verify('robos.montar_menu', [menu, events[1]], ['Menu de opções'])).observed,
     'menu: destino');
+  const split = [{ ...menu, idRef: 'wrong-message', message: 'Outro texto' },
+    { ...menu, idRef: 'wrong-options', botReactionRules: [] }, ...events.slice(1)];
+  assert.equal((await verify('robos.montar_menu', split, ['Menu de opções'])).confirmed, false);
 });
 
 test('encaminhamento independente exige destino das fixtures', async () => {
