@@ -4,6 +4,7 @@ import { chromium } from 'playwright-core';
 import { chromeExecutablePath } from '../scripts/visual/measure.mjs';
 import { journeyRequestAllowed, observeJourneyDom, verifyUniqueRecord } from './journey-runtime.mjs';
 import { fixtureValue } from './journey-service.mjs';
+import { qaRequestDecision } from '../scripts/guide-proof.mjs';
 
 test('fichas opacas omitem placeholder, opção vazia e opção desabilitada', async () => {
   const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
@@ -49,4 +50,11 @@ test('editar só exige título persistido; menu pertence à tarefa de montar flu
     getPersisted: async () => ({ status: 200,
       body: { id: 7, idRef: 'ref-1', title, status: false, botEvents: [] } }) });
   assert.equal(result.confirmed, true);
+});
+
+test('host Railway com production no nome é recusado mesmo na allowlist de QA', () => {
+  const host = 'olah-ihelp-production.up.railway.app';
+  const result = qaRequestDecision(`https://${host}/api/v2/contacts`, { local: false },
+    { GUIDE_QA_ALLOWED_HOSTS: host });
+  assert.equal(result.allowed, false);
 });
