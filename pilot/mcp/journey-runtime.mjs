@@ -383,13 +383,31 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
     title: raw.title, targets };
 }
 
-export async function actJourneyAction(page, action, targets) {
+export function journeyActionCategory(error) {
+  const message = String(error?.message ?? '');
+  if (/not enabled|disabled/iu.test(message)) return 'desabilitado';
+  if (/not visible|hidden|outside of the viewport/iu.test(message)) return 'invisível';
+  if (/intercepts pointer events|receives pointer events/iu.test(message)) return 'coberto';
+  if (/not stable|unstable/iu.test(message)) return 'instável';
+  if (/detached|not attached/iu.test(message)) return 'desanexado';
+  return 'tempo';
+}
+
+export async function actJourneyAction(page, action, targets, { vocabulary = [], generated = new Set() } = {}) {
   const target = targets[journeyTargetKey(action.role, action.name)];
-  if (!target) throw new Error('alvo ausente da observação');
-  const locator = page.locator(target.selector).nth(target.index);
-  if (action.type === 'click') return locator.click();
-  if (action.type === 'fill') return locator.fill(action.value);
-  if (action.type === 'select') return locator.selectOption({ label: action.value });
+  const changed = () => Object.assign(new Error('alvo mudou; observe de novo'), { code: 'JOURNEY_TARGET_CHANGED' });
+  if (!target) throw changed();
+  const names = Object.keys(targets).map((key) => JSON.parse(key)[1]);
+  const fresh = await observeJourneyDom(page, { vocabulary: [...vocabulary, ...names], generated });
+  const matches = fresh.controls.filter((control) => control.role === action.role && control.name === action.name);
+  if (matches.length !== 1 || !matches[0].enabled || !fresh.targets[journeyTargetKey(action.role, action.name)]) throw changed();
+  const selected = fresh.targets[journeyTargetKey(action.role, action.name)];
+  const locator = page.locator(selected.selector).nth(selected.index);
+  try {
+    if (action.type === 'click') return await locator.click({ timeout: 8_000 });
+    if (action.type === 'fill') return await locator.fill(action.value, { timeout: 8_000 });
+    if (action.type === 'select') return await locator.selectOption({ label: action.value }, { timeout: 8_000 });
+  } catch (error) { error.actionCategory = journeyActionCategory(error); throw error; }
   throw new Error('ação inválida');
 }
 
@@ -454,6 +472,7 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
 }
 export async function journeyCreationResponse(response, section) {
   const capture = { postSeen: true, status: response.status(), jsonParsed: false, topKeys: [], refFound: false };
+  if (!response.ok()) return { capture };
   let data;
   try { data = await response.json(); capture.jsonParsed = true; }
   catch { return { capture }; }
@@ -488,6 +507,9 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
   let thirdPartyDenied = {};
   let observedTargets = {};
   let creationCapture = null;
+  let creationPostStarted = false;
+  const creationResults = [];
+  const creationWaiters = new Set();
   const pendingPosts = new Set();
   const createdIds = new Set();
   const readIds = (name) => new Set(String(env[name] ?? '').split(',').filter((value) => /^\d+$/u.test(value)).map(Number));
@@ -514,6 +536,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       blockedWrite = null;
       observedTargets = {};
       creationCapture = null;
+      creationPostStarted = false;
+      creationResults.length = 0;
       thirdPartyDenied = {};
       lastDownload = null;
       browser = await launch();
@@ -526,6 +550,10 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         const authorization = request.headers().authorization;
         if (url.pathname.startsWith('/api/v2/') && /^Bearer (?!undefined$|null$)\S+$/iu.test(authorization ?? '')
           && qaRequestDecision(url.href, target, env).allowed) qaApi = { origin: url.origin, authorization };
+        if (request.method() === 'POST' && url.origin === qaApi?.origin
+          && (currentTask === 'contatos.cadastrar' && /^\/api\/(?:v2\/)?contacts\/?$/u.test(url.pathname)
+            || currentTask === 'robos.criar' && /^\/api\/(?:v2\/)?bot\/?$/u.test(url.pathname)))
+          creationPostStarted = true;
       });
       page.on('download', (download) => { lastDownload = download; });
       await loginToQa(page, target.url, credentialsFromEnv(env).authorized, { timeoutMs: 15000 });
@@ -535,12 +563,15 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         onBlocked: (decision) => { blockedWrite = decision; },
       }));
       page.on('response', (response) => {
-        if (response.request().method() !== 'POST' || !/^\/(?:api\/(?:v2\/)?)?(?:contacts|bot|tags)\/?$/u.test(new URL(response.url()).pathname)) return;
+        const url = new URL(response.url());
+        if (response.request().method() !== 'POST' || url.origin !== qaApi?.origin
+          || !/^\/api\/(?:v2\/)?(?:contacts|bot)\/?$/u.test(url.pathname)) return;
         const pending = (async () => {
-          const path = new URL(response.url()).pathname;
+          const path = url.pathname;
           const section = path.includes('contacts') ? 'contatos' : path.includes('bot') ? 'robos' : null;
           const found = await journeyCreationResponse(response, section);
-          if (section === 'robos') creationCapture = found.capture;
+          if (section !== currentTask?.split('.')[0]) return;
+          creationCapture = found.capture;
           if (response.ok() && found.ref && section) {
             createdRefs[section].add(found.ref);
             createdIds.add(found.ref);
@@ -550,6 +581,10 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
               if (found.departmentId) fixedIds.department.add(found.departmentId);
             }
           }
+          const result = { ...found, ...(response.ok() ? {} : { saveOutcome: `erro ${response.status()}` }) };
+          creationResults.push(result);
+          for (const resolve of creationWaiters) resolve();
+          creationWaiters.clear();
         })().catch(() => {});
         pendingPosts.add(pending);
         pending.finally(() => pendingPosts.delete(pending));
@@ -636,7 +671,9 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       }
       try {
         const beforeUrl = page.url();
-        await actJourneyAction(page, action, observedTargets);
+        if (currentTask === 'contatos.cadastrar' && action.type === 'click' && action.name === 'Salvar')
+          await page.waitForLoadState('networkidle', { timeout: 2_500 }).catch(() => {});
+        await actJourneyAction(page, action, observedTargets, { vocabulary: [...known], generated: fixtures() });
         if (page.url() !== beforeUrl) await page.waitForLoadState('domcontentloaded', { timeout: 10_000 });
       } catch (error) {
         if (!blockedWrite) throw error;
@@ -646,6 +683,17 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         error.blocked = blockedWrite;
         throw error;
       }
+    },
+    async awaitCreation(timeoutMs = 20_000) {
+      if (!creationResults.length) await new Promise((resolve) => {
+        const timer = setTimeout(() => { creationWaiters.delete(done); resolve(); }, timeoutMs);
+        const done = () => { clearTimeout(timer); resolve(); };
+        creationWaiters.add(done);
+      });
+      if (creationResults.length) return creationResults.shift();
+      const observed = await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures() });
+      return { capture: { postSeen: creationPostStarted, status: null, jsonParsed: false, topKeys: [], refFound: false },
+        saveOutcome: creationPostStarted ? 'sem resposta' : 'sem requisição', messages: observed.messages };
     },
     async verify(task, prepared, actions = []) {
       await Promise.all([...pendingPosts]);
@@ -667,6 +715,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         if (await page.getByText(name, { exact: true }).count() !== 1)
           return { confirmed: false, observed: 'Robô fictício não localizado de forma única' };
       }
+      if (task.id === 'robos.criar' && createdRefs.robos.size === 1)
+        await page.waitForURL(new RegExp(`/bot/${[...createdRefs.robos][0]}/?$`, 'u'), { timeout: 5_000 }).catch(() => {});
       const checked = await verifyUniqueRecord({ page, task, refs: [...createdRefs[task.modulo]],
         targetUrl: target.url, name, expectedValue, expectedExtra });
       const identity = checked.confirmed ? { refs: [...createdRefs[task.modulo]],

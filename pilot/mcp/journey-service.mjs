@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-9';
+export const JOURNEY_POLICY_VERSION = 'm571-10';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -264,6 +264,25 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       try {
         const openedFixtures = await browser.open(task, prepared); opened = true;
         if (Array.isArray(openedFixtures?.fixtures)) record.fixtures.push(...openedFixtures.fixtures);
+        const complete = async (screen) => {
+          if (!actionEvidence(task.id, record.actions, fixtureFor)) {
+            record.reason = 'ações necessárias não observadas'; return;
+          }
+          const checked = await browser.verify(task, prepared, record.actions);
+          record.verification = { confirmed: Boolean(checked.confirmed), observed: safeString(checked.observed ?? '') };
+          record.observed = record.verification.observed;
+          record.after = screen.state;
+          record.status = checked.confirmed ? 'concluída' : 'inconclusiva';
+          record.reason = checked.confirmed ? null : 'resultado não conferido';
+          if (checked.confirmed && checked.created) {
+            if (Object.entries(checked.created).some(([key, value]) =>
+              key === 'robotRef' ? value !== checked.identity?.refs?.[0]
+                : key === 'robotId' ? !checked.identity?.ids?.includes(value) : !generatedFor().has(value)))
+              throw new SanitizationError('dado de preparo inválido');
+            record.created = checked.created;
+            if (checked.identity) record.identity = checked.identity;
+          }
+        };
         let feedback = null;
         for (let index = 0; index < maxActionsPerTask; index++) {
           if (moduleActions >= maxActionsPerModule || Date.now() - started > maxMs || costUsd >= maxCostUsd) {
@@ -346,21 +365,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
               record.status = 'falhou'; record.reason = 'valor do gerador ausente para campo obrigatório';
               break;
             }
-            if (!actionEvidence(task.id, record.actions, fixtureFor)) { record.reason = 'ações necessárias não observadas'; break; }
-            const checked = await browser.verify(task, prepared, record.actions);
-            record.verification = { confirmed: Boolean(checked.confirmed), observed: safeString(checked.observed ?? '') };
-            record.observed = record.verification.observed;
-            record.after = sanitized.state;
-            record.status = checked.confirmed ? 'concluída' : 'inconclusiva';
-            record.reason = checked.confirmed ? null : 'resultado não conferido';
-            if (checked.confirmed && checked.created) {
-              if (Object.entries(checked.created).some(([key, value]) =>
-                key === 'robotRef' ? value !== checked.identity?.refs?.[0]
-                  : key === 'robotId' ? !checked.identity?.ids?.includes(value) : !generatedFor().has(value)))
-                throw new SanitizationError('dado de preparo inválido');
-              record.created = checked.created;
-              if (checked.identity) record.identity = checked.identity;
-            }
+            await complete(sanitized);
             break;
           }
           if (action.type !== 'upload_csv' && !sanitized.controls.some((control) => control.role === action.role && control.name === action.name && control.enabled)
@@ -372,10 +377,35 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
               && previous.name === action.name && previous.value === action.value))) {
             record.status = 'falhou'; record.reason = 'preenchimento repetido'; break;
           }
-          await browser.act(action);
+          try { await browser.act(action); }
+          catch (error) {
+            if (error?.code === 'JOURNEY_TARGET_CHANGED') {
+              feedback = 'alvo mudou; observe de novo'; continue;
+            }
+            if (error?.actionCategory) record.actionError = { categoria: error.actionCategory };
+            throw error;
+          }
           record.actions.push(action);
           moduleActions++;
           record.usage.actions++;
+          if (['contatos.cadastrar', 'robos.criar'].includes(task.id)
+            && action.type === 'click' && /^(?:Salvar|Adicionar robô)$/iu.test(action.name)) {
+            const outcome = await browser.awaitCreation?.(20_000);
+            if (outcome) {
+              record.creationCapture = outcome.capture;
+              if (outcome.saveOutcome) record.saveOutcome = outcome.saveOutcome;
+              if (outcome.messages) record.saveMessages = outcome.messages.map((message) => screenString(message, allowedScreenLabels));
+              if (outcome.ref && outcome.capture?.refFound && outcome.capture?.status >= 200
+                && outcome.capture.status < 300) { await complete(sanitized); break; }
+              if (outcome.capture?.postSeen && outcome.capture.status >= 400) {
+                record.status = 'falhou'; record.reason = record.saveOutcome ?? `erro ${outcome.capture.status}`; break;
+              }
+              if (outcome.capture?.postSeen) {
+                record.reason = outcome.saveOutcome ?? 'POST sem referência conferível'; break;
+              }
+              feedback = outcome.saveOutcome;
+            }
+          }
         }
         if (!record.reason && record.status === 'inconclusiva') {
           record.reason = 'limite de ações por tarefa';
@@ -391,11 +421,12 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
         }
         console.error(record.observeError
           ? `gravar_jornada: observe ${record.observeError.stage}: ${record.observeError.category}`
-          : journeyFailureLog(error));
+          : record.actionError ? `gravar_jornada: ação: ${record.actionError.categoria}` : journeyFailureLog(error));
       } finally {
         const diagnostics = browser.diagnostics?.() ?? {};
         record.thirdPartyDenied = diagnostics.thirdPartyDenied ?? {};
-        if (diagnostics.creationCapture) record.creationCapture = diagnostics.creationCapture;
+        if (['contatos.cadastrar', 'robos.criar'].includes(task.id)) record.creationCapture ??=
+          diagnostics.creationCapture ?? { postSeen: false, status: null, jsonParsed: false, topKeys: [], refFound: false };
         await browser.close().catch(() => {});
       }
     }

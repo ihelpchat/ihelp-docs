@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { chromeExecutablePath } from '../scripts/visual/measure.mjs';
 import { fixtureValue, runJourneys } from './journey-service.mjs';
-import { actJourneyAction, observeJourneyDom } from './journey-runtime.mjs';
+import { journeyTaskSummary } from './server.mjs';
+import { actJourneyAction, journeyActionCategory, journeyCreationResponse, observeJourneyDom } from './journey-runtime.mjs';
 
 const task = (id) => ({ id, modulo: id.split('.')[0], tarefa: id });
 const frontSha = 'a'.repeat(40);
@@ -69,6 +70,8 @@ test('Salvar sem POST registra diagnóstico e devolve ao modelo', async () => {
     assert.equal(record.saveOutcome, 'sem requisição');
     assert.equal(record.creationCapture.postSeen, false);
     assert.deepEqual(record.saveMessages, ['Informe o telefone com DDD']);
+    assert.equal(journeyTaskSummary(record).saveOutcome, 'sem requisição');
+    assert.deepEqual(journeyTaskSummary(record).saveMessages, ['Informe o telefone com DDD']);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -76,14 +79,52 @@ test('alvo é reidentificado quando DOM muda e ambiguidade falha rápido', async
   const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
   try {
     const page = await browser.newPage();
-    await page.setContent('<button>Salvar</button>');
+    await page.setContent('<button onclick="this.dataset.clicked = 1">Salvar</button>');
     const initial = await observeJourneyDom(page, { vocabulary: ['Salvar'] });
     await page.evaluate(() => document.body.insertAdjacentHTML('afterbegin', '<button>Outro</button>'));
     await actJourneyAction(page, { type: 'click', role: 'button', name: 'Salvar' }, initial.targets,
       { vocabulary: ['Salvar'] });
-    assert.equal(await page.getByRole('button', { name: 'Salvar' }).count(), 1);
+    assert.equal(await page.getByRole('button', { name: 'Salvar' }).getAttribute('data-clicked'), '1');
     await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<button>Salvar</button>'));
     await assert.rejects(actJourneyAction(page, { type: 'click', role: 'button', name: 'Salvar' }, initial.targets,
       { vocabulary: ['Salvar'] }), /alvo mudou; observe de novo/u);
   } finally { await browser.close(); }
+});
+
+test('POST de criação com erro registra somente status', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-r9-error-'));
+  const name = fixtureValue('contactName'); const phone = fixtureValue('phone');
+  const browser = { async open() {}, async close() {},
+    async observe() { return { title: 'Contatos', path: '/contact', controls: [
+      { role: 'button', name: 'Salvar', enabled: true }], fields: [
+      { role: 'textbox', name: 'Nome', value: name }, { role: 'textbox', name: 'Telefone', value: phone }],
+    messages: [], state: {}, screenshot: Buffer.from('masked') }; },
+    async act() {}, async awaitCreation() { return { capture: { postSeen: true, status: 409,
+      jsonParsed: false, topKeys: [], refFound: false }, saveOutcome: 'erro 409' }; } };
+  try {
+    const [record] = await runJourneys({ module: 'contatos', tasks: [task('contatos.cadastrar')], root,
+      frontSha, profile: 'qa', browser, model: { async decide() {
+        return { type: 'click', role: 'button', name: 'Salvar' }; } }, maxActionsPerTask: 1 });
+    assert.equal(record.status, 'falhou');
+    assert.equal(record.saveOutcome, 'erro 409');
+    assert.equal(record.creationCapture.status, 409);
+    assert.doesNotMatch(JSON.stringify(record), /response body|secret/u);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('erros de ação são classificados sem texto da página', () => {
+  for (const [message, category] of [
+    ['Element is not enabled', 'desabilitado'], ['Element is not visible', 'invisível'],
+    ['intercepts pointer events', 'coberto'], ['Element is not stable', 'instável'],
+    ['Element is detached from DOM', 'desanexado'], ['Timeout 8000ms exceeded', 'tempo'],
+  ]) assert.equal(journeyActionCategory(new Error(message)), category);
+  assert.deepEqual(journeyTaskSummary({ task: 'contatos.cadastrar', actionError: { categoria: 'tempo' } }).actionError,
+    { categoria: 'tempo' });
+});
+
+test('resposta de erro do POST não lê corpo', async () => {
+  const response = { status: () => 409, ok: () => false,
+    json: async () => { throw new Error('corpo não pode ser lido'); } };
+  assert.deepEqual((await journeyCreationResponse(response, 'contatos')).capture,
+    { postSeen: true, status: 409, jsonParsed: false, topKeys: [], refFound: false });
 });

@@ -53,7 +53,10 @@ export function journeyTaskSummary(record) {
   return { task: record.task, status: record.status, reason: record.reason,
     blocked: blocked ?? null, validation, fixtures, actions: record.actions?.length ?? 0,
     thirdPartyDenied: record.thirdPartyDenied ?? {}, ...(record.observeError ? { observeError: record.observeError } : {}),
-    ...(record.creationCapture ? { creationCapture: record.creationCapture } : {}) };
+    ...(record.creationCapture ? { creationCapture: record.creationCapture } : {}),
+    ...(record.saveOutcome ? { saveOutcome: record.saveOutcome } : {}),
+    ...(record.saveMessages ? { saveMessages: record.saveMessages } : {}),
+    ...(record.actionError ? { actionError: record.actionError } : {}) };
 }
 
 export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname) {
