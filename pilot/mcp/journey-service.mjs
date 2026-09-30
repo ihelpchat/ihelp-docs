@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-11';
+export const JOURNEY_POLICY_VERSION = 'm571-12';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -76,6 +76,7 @@ export function policyDecision(action, generated = fixtureValues, taskId = '') {
   if (action.type === 'select' && (action.role !== 'combobox' || !generated.has(action.value)
     && !(taskId === 'contatos.importar' && ['Nome', 'Contato', 'Email'].includes(action.value)))) return deny('valor fora do gerador');
   if (action.type === 'click' && !['button', 'link', 'menuitem', 'checkbox', 'tab', 'combobox', 'option'].includes(action.role)) return deny('clique inválido');
+  if (taskId === 'contatos.exportar' && /limpar filtros/iu.test(action.name)) return deny('ação proibida');
   if (action.role === 'option' && !/^opção [1-9]\d{0,2}$/u.test(action.name)) return deny('opção inválida');
   return { allowed: true };
 }
@@ -104,6 +105,7 @@ function screenString(value, allowedLabels) {
   if (typeof value !== 'string' || value.length > 180 || /[\r\n<>]/u.test(value)) throw new Error('sanitização falhou');
   return !fixtureValues.has(value) && !fictionalPhone.test(value)
     && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
+    && !/^Selecionar Contato Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
     && (containsSensitiveData(value, { detectOpaque: true })
       || personLike.test(value) && !allowedLabels.has(value) && !commonLabels.has(value))
     ? '[conteúdo oculto]' : value;
@@ -158,7 +160,7 @@ function orderTasks(tasks) {
   return [...tasks].sort((a, b) => (priority[a.id] ?? 1) - (priority[b.id] ?? 1));
 }
 function prerequisites(id, prepared) {
-  if (id.startsWith('contatos.') && id !== 'contatos.cadastrar' && !prepared.contact) return false;
+  if (id.startsWith('contatos.') && !['contatos.cadastrar', 'contatos.importar'].includes(id) && !prepared.contact) return false;
   if (id.startsWith('robos.') && id !== 'robos.criar' && !prepared.robot) return false;
   return true;
 }
@@ -171,8 +173,9 @@ function actionEvidence(id, actions, fixtureFor = fixtureValue) {
   if (id === 'robos.criar') return fills.includes(fixtureFor('robotName')) && clickedSave;
   if (id === 'contatos.buscar') return fills.includes(fixtureFor('contactName'));
   if (id === 'contatos.definir_responsavel') return actions.some((action) => action.type === 'select') && clickedSave;
-  if (id === 'contatos.marcar_tags') return fills.includes(fixtureFor('tagName'))
-    && actions.some((action) => action.type === 'click' && /criar|adicionar|salvar/iu.test(action.name));
+  if (id === 'contatos.marcar_tags') return actions.some((action) => action.type === 'click' && action.role === 'option')
+    || fills.includes(fixtureFor('tagName'))
+      && actions.some((action) => action.type === 'click' && /criar|adicionar|salvar/iu.test(action.name));
   if (id === 'contatos.importar') return actions.some((action) => action.type === 'upload_csv')
     && actions.some((action) => action.type === 'click' && /^importar$/iu.test(action.name));
   if (id === 'contatos.exportar') return actions.some((action) => action.type === 'click' && /exportar contatos/iu.test(action.name));
@@ -248,7 +251,10 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
   const started = Date.now();
   try {
   for (const task of orderTasks(tasks)) {
-    const key = digest({ task, frontSha, backSha, profile, policy: JOURNEY_POLICY_VERSION,
+    const dependency = ['contatos.cadastrar', 'robos.criar'].includes(task.id) ? null
+      : { marker: currentMarker, contact: prepared.contact, robot: prepared.robot,
+        robotRef: prepared.robotRef, robotId: prepared.robotId, identity: prepared.identity };
+    const key = digest({ task, frontSha, backSha, profile, policy: JOURNEY_POLICY_VERSION, dependency,
       config: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd, ...cacheConfig } });
     const cached = cacheBypass ? null : await loadCache(root, module, task.id, key, true);
     if (cached) {
@@ -288,6 +294,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             ...(typeof checked.createdRefInRefs === 'boolean' ? { createdRefInRefs: checked.createdRefInRefs } : {}),
             ...(Number.isSafeInteger(checked.foundCount) ? { foundCount: checked.foundCount } : {}) };
           if (checked.importCapture) record.importCapture = checked.importCapture;
+          if (checked.persistedCapture) record.persistedCapture = checked.persistedCapture;
           if (checked.importResultMessage) record.importResultMessage = screenString(checked.importResultMessage, allowedScreenLabels);
           record.observed = record.verification.observed;
           record.after = screen.state;
@@ -331,6 +338,13 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           record.screens.push(screen);
           images.push([screenshotId, sanitized.screenshot]);
           const validation = screen.messages.find((message) => /^(?:Informe o telefone com DDD|Já existe um contato com este número de telefone|O telefone é obrigatório|Precisa ter pelo menos um canal)$/iu.test(message));
+          if (task.id === 'contatos.importar' && screen.controls.some((control) => /importar contatos/iu.test(control.name) && !control.enabled)) {
+            record.importInProgress = true;
+            if (!await browser.waitImportReady?.(30_000)) {
+              record.reason = 'importação anterior em andamento'; break;
+            }
+            continue;
+          }
           const plan = task.id === 'contatos.cadastrar' ? { Nome: 'contactName', Telefone: 'phone' }
             : task.id === 'robos.criar' ? { 'Título do Robô': 'robotName' } : {};
           const channelSelected = selectedRobotChannel(record.actions);
@@ -348,9 +362,12 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             break;
           }
           if (validation && missingPlanned) feedback = `${missingPlanned[0]} ainda sem o valor do gerador (${missingPlanned[1]})`;
-          const decision = await model.decide({ task: { id: task.id, objective: task.tarefa, expected: record.expected,
+          const decision = task.id === 'contatos.exportar' && browser.exportAction
+            ? await browser.exportAction(screen, prepared, record.actions)
+            : await model.decide({ task: { id: task.id, objective: task.tarefa, expected: record.expected,
             verification: task.verificacaoM571 }, screen, actions: record.actions, feedback,
           });
+          if (!decision) { record.reason = 'seleção fictícia não comprovada'; break; }
           feedback = null;
           const charge = Number(decision.costUsd ?? 0);
           if (!Number.isFinite(charge) || charge < 0) { record.reason = 'custo inválido'; break; }
@@ -405,7 +422,8 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             if (error?.code === 'JOURNEY_TARGET_CHANGED') {
               feedback = 'alvo mudou; observe de novo'; continue;
             }
-            if (error?.actionCategory) record.actionError = { categoria: error.actionCategory };
+            if (error?.actionCategory) record.actionError = { categoria: error.actionCategory,
+              ...(error.coveredBy ? { coveredBy: error.coveredBy } : {}) };
             throw error;
           }
           record.actions.push(action);

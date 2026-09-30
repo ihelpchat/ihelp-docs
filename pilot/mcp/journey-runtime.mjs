@@ -79,6 +79,21 @@ export function verifyExportRows(sheet, strings, allowedNames) {
   }
   return found.size === allowedNames.size;
 }
+export function exportActionForScreen(screen, name, actions = []) {
+  if (actions.some((action) => action.type === 'click' && /exportar contatos/iu.test(action.name)))
+    return { type: 'finish', role: null, name: null, value: null };
+  const search = screen.fields?.find((field) => field.role === 'textbox' && /buscar contato/iu.test(field.name));
+  if (!search) return null;
+  if (search.value !== name) return { type: 'fill', role: 'textbox', name: search.name, value: name };
+  if (screen.state?.visibleRows !== '1' || screen.state?.generatedRows !== '1') return null;
+  const selected = screen.controls?.find((control) => control.role === 'checkbox' && control.name === `Selecionar ${name}`);
+  if (!selected?.enabled) return null;
+  if (!selected.checked) return { type: 'click', role: 'checkbox', name: selected.name, value: null };
+  const item = screen.controls?.find((control) => /exportar contatos/iu.test(control.name) && control.enabled);
+  if (item) return { type: 'click', role: item.role, name: item.name, value: null };
+  const menu = screen.controls?.find((control) => /^Mais opções(?: \(cabeçalho(?: \d+)?\))?$/iu.test(control.name) && control.enabled);
+  return menu ? { type: 'click', role: menu.role, name: menu.name, value: null } : null;
+}
 const writeRules = {
   'contatos.cadastrar': [{ method: 'POST', path: /^\/contacts\/?$/u,
     keys: ['nome', 'contatoTelefones', 'contatoEmails'], nested: ['numero', 'tipoTelefone', 'email'], required: ['nome', 'contatoTelefones'] }],
@@ -116,6 +131,7 @@ function validValue(key, value, generated, createdIds, fixedIds) {
     && /^contato\d{2}@example\.com$/u.test(value);
   if (key === 'idRef') return createdIds.has(value);
   if (key === 'fieldName') return value === 'nome';
+  if (key === 'tagsId') return createdIds.has(value) || (fixedIds.tag?.has(value) ?? false);
   if (idKeys.has(key)) return createdIds.has(value);
   if (Object.hasOwn(fixedIdKinds, key)) return fixedIds[fixedIdKinds[key]]?.has(value) ?? false;
   if (key === 'type' && value === 'Native') return true;
@@ -294,7 +310,7 @@ export async function loadQaFixtureIds(get) {
   const fixtures = [];
   const fixedIds = {};
   for (const [kind, path] of [['department', '/configurations/departments'],
-    ['channel', '/configurations/channels'], ['user', '/configurations/users']]) {
+    ['channel', '/configurations/channels'], ['user', '/configurations/users'], ['tag', '/tags']]) {
     const payload = await get(path);
     const rows = payload?.dados;
     if (!Array.isArray(rows) || rows.length > 5000 || rows.some((row) =>
@@ -303,6 +319,11 @@ export async function loadQaFixtureIds(get) {
     fixtures.push({ source: `GET /api/v2${path}`, kind, ids: [...fixedIds[kind]] });
   }
   return { fixedIds, fixtures };
+}
+export function newLinkedTag(rows, before, allowed) {
+  if (!Array.isArray(rows)) return null;
+  const ids = rows.map((row) => row?.tagsId).filter((id) => Number.isSafeInteger(id) && id > 0);
+  return ids.find((id) => allowed.has(id) && !before.has(id)) ?? null;
 }
 
 const journeyControlSelector = 'button,a,input,select,textarea,[role="menuitem"],[role="tab"],[role="combobox"],[role="option"],[data-value]';
@@ -353,6 +374,8 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
         SELECT: 'combobox', TEXTAREA: 'textbox' }[node.tagName]) || '';
     const nodes = [...document.querySelectorAll(selector)];
     const controls = nodes.flatMap((node, index) => visible(node) ? [{ index, role: role(node), name: name(node),
+      region: node.closest('tr') ? `linha ${[...node.closest('tr').parentElement.children].indexOf(node.closest('tr')) + 1}`
+        : node.closest('[role="dialog"]') ? 'janela' : 'cabeçalho',
       enabled: !node.disabled && node.getAttribute('aria-disabled') !== 'true',
       checked: node.getAttribute('aria-checked') === 'true' || node.checked === true,
       required: node.required || node.getAttribute('aria-required') === 'true' || Boolean(visualLabel(node)?.textContent?.includes('*')),
@@ -361,23 +384,38 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
       defaultValue: 'defaultValue' in node ? node.defaultValue : null,
       phoneCountry: node.matches('select,[role="combobox"]') && Boolean(node.closest('.phoneInputWrapper,.PhoneInput,[class*="phoneInput" i]')?.querySelector('input[type="tel"]')),
       field: node.matches('input:not([type="hidden"]),textarea,select,[role="combobox"]') }] : []);
-    return { controls, title: document.title,
+    const rows = [...document.querySelectorAll('tbody tr')].filter(visible).map((row) => compact(row.innerText));
+    return { controls, rows, title: document.title,
       messages: [...document.querySelectorAll('[role="alert"],[role="status"],[aria-live],[class*="toast" i],.error,[class*="text-red"]')]
         .filter(visible).map((node) => compact(node.textContent)).filter(Boolean),
       headings: [...document.querySelectorAll('h1,h2,h3')].filter(visible).map((node) => compact(node.textContent)).join(' | ').slice(0, 180) };
   }, journeyControlSelector);
-  const known = new Set(vocabulary);
+  const known = new Set([...vocabulary, 'Buscar contato...', 'Mais opções', 'Exportar Contatos', 'Importar Contatos']);
   const targets = {};
   const controls = [];
   const fields = [];
   let fieldNumber = 0;
   let optionNumber = 0;
+  const repeated = new Map();
+  for (const node of raw.controls) {
+    const key = journeyTargetKey(node.role, node.name);
+    repeated.set(key, (repeated.get(key) ?? 0) + 1);
+  }
+  const regionCounts = new Map();
   for (const node of raw.controls) {
     if (node.phoneCountry) continue;
     if (node.field) fieldNumber++;
     if (node.role === 'option') optionNumber++;
     let name = node.role === 'option' ? `opção ${optionNumber}` : node.name;
-    if (!known.has(name) && !generated.has(name)) {
+    if (node.role !== 'option' && repeated.get(journeyTargetKey(node.role, node.name)) > 1) {
+      const regionKey = journeyTargetKey(node.role, `${name} (${node.region})`);
+      const count = (regionCounts.get(regionKey) ?? 0) + 1;
+      regionCounts.set(regionKey, count);
+      name += ` (${node.region}${count > 1 ? ` ${count}` : ''})`;
+    }
+    const generatedSelection = node.role === 'checkbox' && [...generated].some((value) =>
+      /^Contato Exemplo/u.test(value) && node.name === `Selecionar ${value}`);
+    if (!generatedSelection && !known.has(node.name) && !generated.has(node.name) && !known.has(name) && !generated.has(name)) {
       if (node.field) name = `campo ${fieldNumber} do formulário (${node.role === 'combobox' ? 'seleção'
         : ({ tel: 'telefone', email: 'e-mail', date: 'data' }[node.type] ?? 'texto')})`;
       else if (node.role !== 'option') continue;
@@ -395,7 +433,9 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
           && value.replace(/\D/gu, '') === String(node.value).replace(/\D/gu, '')) ?? null : null });
   }
   return { controls, fields, messages: raw.messages.map((value) => known.has(value) ? value : '[conteúdo oculto]'),
-    state: { headings: raw.headings.split(' | ').map((value) => known.has(value) ? value : '[conteúdo oculto]').join(' | ') },
+    state: { headings: raw.headings.split(' | ').map((value) => known.has(value) ? value : '[conteúdo oculto]').join(' | '),
+      visibleRows: String(raw.rows.length), generatedRows: String(raw.rows.filter((row) => [...generated].some((value) =>
+        /^Contato Exemplo/u.test(value) && row.includes(value))).length) },
     title: raw.title, targets };
 }
 
@@ -409,6 +449,23 @@ export function journeyActionCategory(error) {
   return 'tempo';
 }
 
+export async function coveringElement(page, selected) {
+  return page.evaluate(({ selector, index }) => {
+    const target = document.querySelectorAll(selector)[index];
+    const rect = target?.getBoundingClientRect();
+    if (!rect) return null;
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    if (!hit || target === hit || target.contains(hit)) return null;
+    const style = getComputedStyle(hit);
+    const classes = String(hit.className ?? '');
+    return { tag: hit.tagName.toLowerCase(), role: hit.getAttribute('role') || null,
+      fixedOverlay: ['fixed', 'sticky'].includes(style.position),
+      backdrop: /backdrop|overlay|modal/i.test(classes) || hit.getAttribute('aria-modal') === 'true',
+      toast: /toast|notification/i.test(classes) || ['alert', 'status'].includes(hit.getAttribute('role')),
+      thirdPartyWidget: hit.tagName === 'IFRAME' || Boolean(hit.closest('iframe,[data-third-party]')) };
+  }, selected);
+}
+
 export async function actJourneyAction(page, action, targets, { vocabulary = [], generated = new Set() } = {}) {
   const target = targets[journeyTargetKey(action.role, action.name)];
   const changed = () => Object.assign(new Error('alvo mudou; observe de novo'), { code: 'JOURNEY_TARGET_CHANGED' });
@@ -420,7 +477,23 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
   const selected = fresh.targets[journeyTargetKey(action.role, action.name)];
   const locator = page.locator(selected.selector).nth(selected.index);
   try {
-    if (action.type === 'click') return await locator.click({ timeout: 8_000 });
+    if (action.type === 'click') {
+      await locator.scrollIntoViewIfNeeded({ timeout: 4_000 });
+      try { return await locator.click({ timeout: 4_000 }); }
+      catch (firstError) {
+        if (journeyActionCategory(firstError) !== 'coberto') throw firstError;
+        const cover = await coveringElement(page, selected).catch(() => null);
+        if (cover?.toast) await page.keyboard.press('Escape');
+        if (cover?.backdrop || cover?.toast || cover?.fixedOverlay) {
+          await page.waitForTimeout(500);
+          await locator.scrollIntoViewIfNeeded({ timeout: 4_000 });
+          try { return await locator.click({ timeout: 4_000 }); }
+          catch (error) { error.coveredBy = await coveringElement(page, selected).catch(() => cover); throw error; }
+        }
+        firstError.coveredBy = cover;
+        throw firstError;
+      }
+    }
     if (action.type === 'fill') return await locator.fill(action.value, { timeout: 8_000 });
     if (action.type === 'select') return await locator.selectOption({ label: action.value }, { timeout: 8_000 });
   } catch (error) { error.actionCategory = journeyActionCategory(error); throw error; }
@@ -428,7 +501,7 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
 }
 
 export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, expectedValue, expectedExtra,
-  screenTimeoutMs = 10_000 }) {
+  screenTimeoutMs = 10_000, getPersisted }) {
   if (refs.length !== 1 || !/^[a-z0-9-]{1,80}$/iu.test(refs[0]))
     return { confirmed: false, observed: 'ref' };
   if (task.id === 'robos.criar' && new URL(page.url()).pathname !== `/bot/${refs[0]}`)
@@ -438,10 +511,6 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
     ? page.waitForResponse((response) => response.request().method() === 'GET' && response.ok()
       && new URL(response.url()).pathname.match(new RegExp(`/contacts/details/${refs[0]}/?$`, 'iu')),
     { timeout: 10_000 }).catch(() => null) : null;
-  const robotResponse = task.modulo === 'robos' && page.waitForResponse
-    ? page.waitForResponse((response) => response.request().method() === 'GET' && response.ok()
-      && new URL(response.url()).pathname.match(new RegExp(`/bot/${refs[0]}/?$`, 'iu')), { timeout: 10_000 }).catch(() => null)
-    : null;
   await page.goto(new URL(route, targetUrl).href, { waitUntil: 'domcontentloaded' });
   await page.reload({ waitUntil: 'domcontentloaded' });
   if (new URL(page.url()).pathname !== route) return { confirmed: false, observed: 'Ficha não reaberta' };
@@ -488,21 +557,25 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
   if (task.id === 'robos.salvar' || task.id === 'robos.editar') confirmed = confirmed
     && await page.getByText('Menu de opções', { exact: true }).count() > 0;
   let recordId;
+  let persistedCapture;
   if (task.modulo === 'robos') {
-    const response = await robotResponse;
     let persisted;
     try {
-      const json = await response?.json();
+      const response = await getPersisted?.(`/bot/${refs[0]}`);
+      const json = response?.body;
+      persistedCapture = { status: Number.isSafeInteger(response?.status) ? response.status : null,
+        topKeys: json && typeof json === 'object' && !Array.isArray(json)
+          ? Object.keys(json).filter((key) => /^[A-Za-z][A-Za-z0-9]{0,39}$/u.test(key)).slice(0, 20) : [] };
       persisted = json?.dados?.bot ?? json?.dados ?? json;
-    } catch { /* sem leitura persistida não há prova */ }
+    } catch { persistedCapture = { status: null, topKeys: [] }; }
     const events = Array.isArray(persisted?.botEvents) ? persisted.botEvents : [];
-    if (persisted?.idRef !== refs[0]) return { confirmed: false, observed: 'ref' };
-    if (persisted?.title !== expectedValue) return { confirmed: false, observed: 'título persistido' };
-    if (persisted?.status !== false) return { confirmed: false, observed: 'status persistido' };
-    if (!confirmed) return { confirmed: false, observed: 'título na tela' };
+    if (persisted?.idRef !== refs[0]) return { confirmed: false, observed: 'ref', persistedCapture };
+    if (persisted?.title !== expectedValue) return { confirmed: false, observed: 'título persistido', persistedCapture };
+    if (persisted?.status !== false) return { confirmed: false, observed: 'status persistido', persistedCapture };
+    if (!confirmed) return { confirmed: false, observed: 'título na tela', persistedCapture };
     if (task.id === 'robos.criar') {
       if (!Number.isSafeInteger(persisted.id) || persisted.id <= 0)
-        return { confirmed: false, observed: 'ref' };
+        return { confirmed: false, observed: 'ref', persistedCapture };
       recordId = persisted.id;
     }
     if (['robos.montar_menu', 'robos.encaminhar', 'robos.salvar', 'robos.editar'].includes(task.id)) {
@@ -517,7 +590,7 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
     }
   }
   return { confirmed, observed: confirmed ? 'Ficha única reaberta com valor esperado' : 'Ficha reaberta sem valor esperado',
-    recordId };
+    recordId, ...(persistedCapture ? { persistedCapture } : {}) };
 }
 export function creationRefsForTask(taskId, refs, createdRef) {
   return ['contatos.cadastrar', 'robos.criar'].includes(taskId)
@@ -584,6 +657,7 @@ export async function verifyImportedContacts({ names, lookup, timeoutMs = 30_000
 
 function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
   let browser; let context; let page;
+  let qaApi;
   let currentTask;
   let currentPrepared;
   let lastDownload;
@@ -595,18 +669,28 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
   let taskCreatedRef = null;
   let importCapture = null;
   let importResultMessage = null;
+  let beforeTagIds = new Set();
   const creationResults = [];
   const creationWaiters = new Set();
   const pendingPosts = new Set();
   const createdIds = new Set();
   const readIds = (name) => new Set(String(env[name] ?? '').split(',').filter((value) => /^\d+$/u.test(value)).map(Number));
   const fixedIds = { department: readIds('CAPTURE_QA_DEPARTMENT_IDS'), user: readIds('CAPTURE_QA_USER_IDS'),
-    channel: readIds('CAPTURE_QA_CHANNEL_IDS'), company: readIds('CAPTURE_QA_COMPANY_IDS') };
+    channel: readIds('CAPTURE_QA_CHANNEL_IDS'), tag: new Set(), company: readIds('CAPTURE_QA_COMPANY_IDS') };
   const createdRefs = { contatos: new Set(), robos: new Set() };
   const target = assertAllowedTarget(baseUrl, env);
   if (target.local) throw new Error('homologação deve usar HTTPS');
   const known = new Set(vocabulary);
   let fixturesMarker; let fixturesSet;
+  const authenticatedGet = async (path) => {
+    const href = new URL(`/api/v2${path}`, qaApi.origin).href;
+    if (!qaRequestDecision(href, target, env).allowed) throw new Error('API de QA fora da lista');
+    return page.evaluate(async ({ href, authorization }) => {
+      const response = await fetch(href, { method: 'GET', headers: { Authorization: authorization,
+        Accept: 'application/json' }, credentials: 'same-origin' });
+      return { status: response.status, body: response.ok ? await response.json() : null };
+    }, { href, authorization: qaApi.authorization });
+  };
   const fixtures = () => {
     if (fixturesMarker !== markerFor()) {
       fixturesMarker = markerFor();
@@ -627,6 +711,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       taskCreatedRef = null;
       importCapture = null;
       importResultMessage = null;
+      beforeTagIds = new Set();
       creationResults.length = 0;
       thirdPartyDenied = {};
       lastDownload = null;
@@ -634,7 +719,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
       await installQaNetworkGuard(context, target, env);
       page = await context.newPage();
-      let qaApi;
+      qaApi = null;
       page.on('request', (request) => {
         const url = new URL(request.url());
         const authorization = request.headers().authorization;
@@ -727,8 +812,15 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
           return response.json();
         }, { href: url.href, authorization: qaApi.authorization });
       });
-      for (const kind of ['department', 'channel', 'user'])
+      for (const kind of ['department', 'channel', 'user', 'tag'])
         for (const id of loaded.fixedIds[kind]) fixedIds[kind].add(id);
+      if (task.id === 'contatos.marcar_tags') {
+        const contactId = prepared.identity?.ids?.[0];
+        if (!Number.isSafeInteger(contactId)) throw new Error('ID de contato ausente');
+        const response = await authenticatedGet(`/contactTags/getContactsTagByContactId/${contactId}`);
+        if (response.status !== 200 || !Array.isArray(response.body)) throw new Error('tags de preparo inválidas');
+        beforeTagIds = new Set(response.body.map((row) => row?.tagsId).filter(Number.isSafeInteger));
+      }
       return { fixtures: [...loaded.fixtures, ...[
         ['department', 'CAPTURE_QA_DEPARTMENT_IDS'], ['channel', 'CAPTURE_QA_CHANNEL_IDS'],
         ['user', 'CAPTURE_QA_USER_IDS']].filter(([, name]) => readIds(name).size).map(([kind, name]) =>
@@ -754,6 +846,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       return { ...safeData, path, screenshot };
     },
     async act(action) {
+      if (currentTask === 'contatos.exportar' && /limpar filtros/iu.test(action.name ?? ''))
+        throw new Error('ação proibida pela política');
       if (action.type === 'upload_csv') {
         if (currentTask !== 'contatos.importar') throw new Error('upload fora da tarefa');
         const rows = [2, 3].map((n) => [fixtureValue('contactName', n, markerFor()), fixtureValue('phone', n, markerFor()),
@@ -763,10 +857,11 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         return;
       }
       if (currentTask === 'contatos.exportar' && action.type === 'click' && /exportar contatos/iu.test(action.name)) {
+        const rows = await page.locator('tbody tr').allInnerTexts();
         const selected = page.getByRole('checkbox', { name: `Selecionar ${currentPrepared.contact}`, exact: true });
         if (await page.getByPlaceholder('Buscar contato...').inputValue() !== currentPrepared.contact
+          || rows.length !== 1 || !rows.every((row) => row.includes(currentPrepared.contact))
           || await selected.count() !== 1 || !await selected.isChecked()
-          || await page.locator('tbody tr').count() !== 1
           || await page.locator('tbody input[type="checkbox"]:checked').count() !== 1)
           throw new Error('seleção fictícia não comprovada');
       }
@@ -797,6 +892,27 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         error.blocked = blockedWrite;
         throw error;
       }
+    },
+    async exportAction(screen, prepared, actions) {
+      let next = exportActionForScreen(screen, prepared.contact, actions);
+      if (!next && screen.fields.some((field) => /buscar contato/iu.test(field.name) && field.value === prepared.contact)) {
+        await page.waitForFunction((name) => {
+          const rows = [...document.querySelectorAll('tbody tr')].filter((row) => row.getClientRects().length);
+          return rows.length === 1 && rows[0].innerText.includes(name);
+        }, prepared.contact, { timeout: 15_000 }).catch(() => {});
+        const fresh = await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures() });
+        next = exportActionForScreen(fresh, prepared.contact, actions);
+      }
+      return next;
+    },
+    async waitImportReady(timeoutMs = 30_000) {
+      try {
+        await page.waitForFunction(() => [...document.querySelectorAll('button,[role="menuitem"]')].some((node) =>
+          /Importar Contatos/iu.test(node.getAttribute('aria-label') ?? node.textContent ?? '')
+          && node.getClientRects().length && !node.disabled && node.getAttribute('aria-disabled') !== 'true'),
+        null, { timeout: timeoutMs });
+        return true;
+      } catch { return false; }
     },
     async awaitCreation(timeoutMs = 20_000) {
       if (!creationResults.length) await new Promise((resolve) => {
@@ -835,7 +951,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       const name = task.modulo === 'contatos' ? prepared.contact ?? fixtureValue('contactName', 1, markerFor()) : prepared.robot ?? fixtureValue('robotName', 1, markerFor());
       const expectedValue = task.id === 'contatos.editar' ? fixtureValue('editedName', 1, markerFor())
         : task.id === 'robos.editar' ? fixtureValue('robotName', 2, markerFor())
-        : task.id === 'contatos.marcar_tags' ? fixtureValue('tagName', 1, markerFor()) : name;
+        : name;
       const expectedExtra = ['contatos.cadastrar', 'contatos.buscar'].includes(task.id)
         ? fixtureValue('phone', 1, markerFor())
         : task.id === 'contatos.definir_responsavel' ? actions.findLast((action) => action.type === 'select')?.value : null;
@@ -848,7 +964,16 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       if (task.id === 'robos.criar' && refs.length === 1)
         await page.waitForURL(new RegExp(`/bot/${refs[0]}/?$`, 'u'), { timeout: 5_000 }).catch(() => {});
       const checked = await verifyUniqueRecord({ page, task, refs,
-        targetUrl: target.url, name, expectedValue, expectedExtra });
+        targetUrl: target.url, name, expectedValue, expectedExtra,
+        getPersisted: task.modulo === 'robos' ? authenticatedGet : undefined });
+      if (task.id === 'contatos.marcar_tags' && checked.confirmed) {
+        const contactId = prepared.identity?.ids?.[0];
+        const response = await authenticatedGet(`/contactTags/getContactsTagByContactId/${contactId}`);
+        const tagId = response.status === 200 ? newLinkedTag(response.body, beforeTagIds,
+          new Set([...fixedIds.tag, ...createdIds].filter(Number.isSafeInteger))) : null;
+        checked.confirmed = tagId != null;
+        if (!checked.confirmed) checked.observed = 'tag persistida não conferida';
+      }
       const identity = checked.confirmed ? { refs,
         ids: [...createdIds].filter((value) => Number.isSafeInteger(value)) } : undefined;
       if (identity && Number.isSafeInteger(checked.recordId) && !identity.ids.includes(checked.recordId))
@@ -907,6 +1032,8 @@ export function makeLazyJourneyBrowser(createBrowser) {
     async open(...args) { liveBrowser ??= await createBrowser(); return liveBrowser.open(...args); },
     async observe(...args) { return liveBrowser.observe(...args); },
     async act(...args) { return liveBrowser.act(...args); },
+    async exportAction(...args) { return liveBrowser.exportAction?.(...args); },
+    async waitImportReady(...args) { return liveBrowser.waitImportReady?.(...args); },
     async awaitCreation(...args) { return liveBrowser.awaitCreation(...args); },
     async verify(...args) { return liveBrowser.verify(...args); },
     diagnostics() { return liveBrowser?.diagnostics(); },
