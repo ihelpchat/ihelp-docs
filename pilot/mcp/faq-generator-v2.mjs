@@ -53,6 +53,8 @@ const unitsOf = (page) => page.sections.flatMap((section) => section.units.map((
   ({ ...unit, text: proseOf(unit), taskId: section.taskId })));
 const referenceIds = (units) => [...new Set(units.flatMap((unit) => unit.evidenceIds ?? []))];
 const markdownLabels = /(!?)\[([^\]\n]+)\]\([^\s)]+\)/gu;
+const structuralHeadings = new Set(['O que é', 'Para que serve', 'Casos de uso']);
+const isStructuralHeading = ({ field, text }) => field?.endsWith('.heading') && structuralHeadings.has(text);
 function publishedFields(page) {
   const fields = page.sections.flatMap((section, sectionIndex) => section.units.map((unit, unitIndex) => ({
     text: proseOf(unit), kind: unit.kind, taskId: section.taskId, evidenceIds: unit.evidenceIds,
@@ -93,7 +95,8 @@ function preflight(page, evidence, plan) {
     problems.push(`tarefa ausente: ${task.id}`);
   for (const field of publishedFields(page)) {
     if (!field.text?.trim()) problems.push(`texto vazio: ${field.field}`);
-    if (!field.evidenceIds?.length) problems.push(`afirmação sem evidência: ${field.field}`);
+    if (!field.evidenceIds?.length && !isStructuralHeading(field))
+      problems.push(`afirmação sem evidência: ${field.field}`);
     for (const id of field.evidenceIds ?? []) if (!known.has(id)) problems.push(`evidência ausente: ${id}`);
     if (field.evidenceIds?.length && field.evidenceIds.every((id) =>
       known.get(id)?.type === 'verificacao')) problems.push(`afirmação apoiada só na verificação: ${field.field}`);
@@ -133,7 +136,8 @@ export async function runFaqJudgment(page, evidence, providers, { plan } = {}) {
       const linked = verdict?.evidenceIds?.length && verdict.evidenceIds.every((id) =>
         evidence.some((item) => item.id === id)) && verdict.evidenceIds.some((id) =>
         evidence.some((item) => item.id === id && item.type !== 'verificacao'));
-      if (!verdict || verdict.status !== 'sustentada' || !linked || mentionsSource(claim.text))
+      if (!verdict || verdict.status !== 'sustentada' || (!linked && !isStructuralHeading(claim))
+        || mentionsSource(claim.text))
         diagnostic.push(`${claim.id}: ${verdict?.status ?? 'sem julgamento'}: ${verdict?.reason ?? 'sem evidência válida'}`);
       const afterAnchor = claim.kind === 'depois' ? claim.evidenceIds?.find((id) => evidence.some((item) =>
         item.id === id && item.type === 'jornada' && item.task === claim.taskId && item.status === 'concluída')) : null;
