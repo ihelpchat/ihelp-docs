@@ -47,7 +47,8 @@ test('criar primeiro, editar com conferência, responsável e cache compatível 
   } };
   try {
     const options = { module: 'contatos', tasks, root, frontSha: 'a'.repeat(40), backSha: 'b'.repeat(40),
-      profile: 'qa', browser, model, sanitize: async (value) => value };
+      profile: 'qa', browser, model, sanitize: async (value) => value,
+      accountIdentity: async () => ({ credentialHash: 'a'.repeat(64) }) };
     const first = await runJourneys(options);
     assert.deepEqual(first.map((x) => x.status), ['concluída', 'concluída', 'concluída']);
     assert.equal(first[1].verification.confirmed, true);
@@ -58,7 +59,8 @@ test('criar primeiro, editar com conferência, responsável e cache compatível 
     assert.deepEqual(cached.map((x) => x.status), first.map((x) => x.status));
     const changed = await runJourneys({ ...options, frontSha: 'c'.repeat(40) });
     assert.equal(opens, 6);
-    assert.equal((await readJourney({ root, module: 'contatos', task: 'contatos.editar' })).status, 'concluída');
+    assert.equal((await readJourney({ root, module: 'contatos', task: 'contatos.editar',
+      accountHash: 'a'.repeat(64) })).status, 'concluída');
     assert.ok(actions.length >= 6);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

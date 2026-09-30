@@ -194,15 +194,23 @@ function validTree(value, rule, generated, createdIds, fixedIds, depth = 0, key 
 function validRobotEvent(event, generated, createdIds, fixedIds) {
   if (!event || typeof event !== 'object' || Array.isArray(event)) return false;
   const allowed = new Set(['idRef', 'title', 'message', 'type', 'messageType', 'botId', 'firstStep',
-    'positionX', 'positionY', 'botEventRedirectRef', 'reactionType', 'botReactionRules', 'configuration']);
+    'positionX', 'positionY', 'botEventRedirectRef', 'reactionType', 'botReactionRules', 'configuration',
+    'messages', 'groupBlockId']);
   if (Object.keys(event).some((key) => !allowed.has(key))) return false;
   if (![0, 1, 3, 4].includes(event.type) || !ownRef(event.idRef) || !createdIds.has(event.botId)
     || event.firstStep != null && typeof event.firstStep !== 'boolean'
     || event.botEventRedirectRef != null && !ownRef(event.botEventRedirectRef)
     || ['positionX', 'positionY'].some((key) => event[key] != null && (!Number.isFinite(event[key]) || Math.abs(event[key]) > 100000))) return false;
-  if (event.title != null && !generated.has(event.title) && !['Menu de opções', 'Encaminhar atendimento', 'Transferir com mensagem'].includes(event.title)) return false;
+  if (event.title != null && !generated.has(event.title) && !['Menu de opções', 'Mensagem simples', 'Encaminhar atendimento', 'Transferir com mensagem'].includes(event.title)) return false;
   if (event.message != null && !generated.has(event.message) && event.message !== '') return false;
   if (event.messageType != null && event.messageType !== 0 || event.reactionType != null && event.reactionType !== 0) return false;
+  if (event.type === 0) return event.configuration == null && event.botReactionRules == null
+    && (event.messages == null && event.groupBlockId == null || /^[a-f0-9]{24}$/u.test(event.groupBlockId ?? '')
+    && Array.isArray(event.messages) && event.messages.length > 0 && event.messages.length <= 5
+    && event.messages.every((item) => item && typeof item === 'object' && !Array.isArray(item)
+      && Object.keys(item).every((key) => ['message', 'type', 'delay'].includes(key))
+      && generated.has(item.message) && item.type === 0
+      && (item.delay == null || Number.isInteger(item.delay) && item.delay >= 0 && item.delay <= 60)));
   if (event.type === 1) return event.configuration == null && Array.isArray(event.botReactionRules) && event.botReactionRules.length > 0
     && event.botReactionRules.length <= 10 && event.botReactionRules.every((rule, index) => rule
       && Object.keys(rule).every((key) => ['idRef', 'botEventRedirectRef', 'rule', 'message', 'positionX', 'positionY', 'botId'].includes(key))
@@ -224,7 +232,7 @@ function validRobotSave(body, pathRef, generated, createdIds, fixedIds) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
   const allowed = new Set(['id', 'idRef', 'departmentId', 'empresaId', 'title', 'status', 'active',
     'published', 'type', 'botTrigger', 'botEvents']);
-  return Object.keys(body).every((key) => allowed.has(key)) && body.idRef === pathRef
+  return Object.keys(body).every((key) => allowed.has(key)) && (body.idRef == null || body.idRef === pathRef)
     && createdIds.has(body.id) && generated.has(body.title)
     && (body.departmentId == null || fixedIds.department?.has(body.departmentId)) && fixedValues.has(body.type)
     && fixedValues.has(body.botTrigger) && ['status', 'active', 'published'].every((key) =>
@@ -232,6 +240,69 @@ function validRobotSave(body, pathRef, generated, createdIds, fixedIds) {
     && (body.empresaId == null || fixedIds.company?.has(body.empresaId))
     && Array.isArray(body.botEvents) && body.botEvents.length > 0 && body.botEvents.length <= 30
     && body.botEvents.every((event) => validRobotEvent(event, generated, createdIds, fixedIds));
+}
+function invalidRobotPath(body, pathRef, generated, createdIds, fixedIds) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return 'body';
+  const safePathKey = (key) => /^[A-Za-z][A-Za-z0-9]{0,39}$/u.test(key) ? key : '[chave removida]';
+  const allowedRoot = new Set(['id', 'idRef', 'departmentId', 'empresaId', 'title', 'status', 'active',
+    'published', 'type', 'botTrigger', 'botEvents']);
+  for (const key of Object.keys(body)) if (!allowedRoot.has(key)) return safePathKey(key);
+  if (body.idRef != null && body.idRef !== pathRef) return 'idRef';
+  if (!createdIds.has(body.id)) return 'id';
+  if (!generated.has(body.title)) return 'title';
+  if (body.departmentId != null && !fixedIds.department?.has(body.departmentId)) return 'departmentId';
+  if (body.empresaId != null && !fixedIds.company?.has(body.empresaId)) return 'empresaId';
+  for (const key of ['status', 'active', 'published'])
+    if (Object.hasOwn(body, key) && !inactiveState(body[key])) return key;
+  if (!Object.hasOwn(body, 'status')) return 'status';
+  if (!fixedValues.has(body.type)) return 'type';
+  if (!fixedValues.has(body.botTrigger)) return 'botTrigger';
+  if (!Array.isArray(body.botEvents) || !body.botEvents.length || body.botEvents.length > 30) return 'botEvents';
+  const allowedEventKeys = new Set(['idRef', 'title', 'message', 'type', 'messageType', 'botId', 'firstStep',
+    'positionX', 'positionY', 'botEventRedirectRef', 'reactionType', 'botReactionRules', 'configuration',
+    'messages', 'groupBlockId']);
+  const standard = new Set(['', 'Menu de opções', 'Mensagem simples', 'Encaminhar atendimento', 'Transferir com mensagem']);
+  for (const [index, event] of (body?.botEvents ?? []).entries()) {
+    const prefix = `botEvents[${index}]`;
+    if (!event || typeof event !== 'object') return prefix;
+    for (const [key, value] of Object.entries(event)) {
+      if (!allowedEventKeys.has(key)) return `${prefix}.${safePathKey(key)}`;
+      if (['title', 'message'].includes(key) && !generated.has(value) && !standard.has(value))
+        return `${prefix}.${key}`;
+      if (['idRef', 'botEventRedirectRef'].includes(key) && value != null && !ownRef(value))
+        return `${prefix}.${key}`;
+      if (key === 'botId' && !createdIds.has(value)) return `${prefix}.${key}`;
+      if (key === 'groupBlockId' && !/^[a-f0-9]{24}$/u.test(value)) return `${prefix}.${key}`;
+      if (key === 'messages' && Array.isArray(value)) for (const [messageIndex, message] of value.entries()) {
+        const messagePath = `${prefix}.messages[${messageIndex}]`;
+        if (!message || typeof message !== 'object') return messagePath;
+        for (const [messageKey, messageValue] of Object.entries(message))
+          if (!['message', 'type', 'delay'].includes(messageKey)
+            || messageKey === 'message' && !generated.has(messageValue)
+            || messageKey === 'type' && messageValue !== 0)
+            return `${messagePath}.${safePathKey(messageKey)}`;
+      }
+      if (key === 'type' && ![0, 1, 3, 4].includes(value)) return `${prefix}.${key}`;
+      if (key === 'firstStep' && value != null && typeof value !== 'boolean') return `${prefix}.${key}`;
+      if (['positionX', 'positionY'].includes(key) && value != null && (!Number.isFinite(value) || Math.abs(value) > 100000))
+        return `${prefix}.${key}`;
+      if (key === 'messageType' && value != null && value !== 0 || key === 'reactionType' && value != null && value !== 0)
+        return `${prefix}.${key}`;
+      if (key === 'botReactionRules' && Array.isArray(value)) for (const [ruleIndex, rule] of value.entries()) {
+        if (!rule || typeof rule !== 'object') return `${prefix}.botReactionRules[${ruleIndex}]`;
+        for (const [ruleKey, ruleValue] of Object.entries(rule)) {
+          const rulePath = `${prefix}.botReactionRules[${ruleIndex}].${safePathKey(ruleKey)}`;
+          if (!['idRef', 'botEventRedirectRef', 'rule', 'message', 'positionX', 'positionY', 'botId'].includes(ruleKey)
+            || ruleKey === 'message' && !generated.has(ruleValue)
+            || ['idRef', 'botEventRedirectRef'].includes(ruleKey) && !ownRef(ruleValue)
+            || ruleKey === 'rule' && ruleValue !== ruleIndex + 1
+            || ruleKey === 'botId' && !createdIds.has(ruleValue)) return rulePath;
+        }
+      }
+    }
+    if (!validRobotEvent(event, generated, createdIds, fixedIds)) return prefix;
+  }
+  return 'botEvents';
 }
 function validContactOwnerPut(body, snapshot, generated, fixedIds) {
   if (!snapshot || !body || typeof body !== 'object' || Array.isArray(body)) return false;
@@ -313,7 +384,10 @@ export function journeyWriteDecision(request, context = {}) {
     return { ...blocked, reason: 'estado ativo' };
   if (all.some(([key]) => forbiddenKeys.test(key)) || rule.keys && keys.some((key) =>
     !rule.keys.includes(key))) return { ...blocked, reason: 'chave desconhecida' };
-  return { ...blocked, reason: 'valor fora do gerador' };
+  return { ...blocked, reason: 'valor fora do gerador',
+    ...(context.taskId?.startsWith('robos.') && path.endsWith('/save')
+      ? { keyPath: invalidRobotPath(body, path.split('/')[2], context.generated ?? new Set(),
+        context.createdIds ?? new Set(), context.fixedIds ?? {}) } : {}) };
 }
 export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdPartyDenied, onBlocked, ...context }) {
   const request = route.request();
@@ -553,7 +627,11 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
   const selected = fresh.targets[journeyTargetKey(action.role, action.name)];
   const exactBlock = action.type === 'click' && action.role === 'button' && action.name === 'Adicionar bloco'
     ? page.locator('button').filter({ hasText: /^Adicionar bloco$/u }) : null;
-  const locator = exactBlock && await exactBlock.count() === 1 ? exactBlock
+  const sidebarBlock = action.type === 'click' && action.role === 'button'
+    && /^Adicionar bloco \(cabeçalho(?: \d+)?\)$/u.test(action.name)
+    ? page.locator('.custom-height-sidebar button').filter({ hasText: /^Adicionar bloco$/u }) : null;
+  const locator = sidebarBlock && await sidebarBlock.count() === 1 ? sidebarBlock
+    : exactBlock && await exactBlock.count() === 1 ? exactBlock
     : page.locator(selected.selector).nth(selected.index);
   try {
     if (action.type === 'click') {
@@ -574,10 +652,11 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
       }
     }
     if (action.type === 'fill') return await locator.fill(action.value, { timeout: 8_000 });
+    if (action.type === 'press') return await locator.press('Enter', { timeout: 8_000 });
     if (action.type === 'select') return await locator.selectOption({ label: action.value }, { timeout: 8_000 });
   } catch (error) {
     error.actionCategory = journeyActionCategory(error);
-    if (action.name === 'Adicionar bloco' && error.actionCategory === 'desabilitado')
+    if (/^Adicionar bloco(?: \(cabeçalho(?: \d+)?\))?$/u.test(action.name) && error.actionCategory === 'desabilitado')
       error.controlProbe = await page.evaluate(({ selector, index }) => {
         const node = document.querySelectorAll(selector)[index];
         return { present: Boolean(node), nativeDisabled: Boolean(node?.disabled),
@@ -586,7 +665,10 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
           ariaDisabledAncestor: Boolean(node?.closest('[aria-disabled="true"]')),
           inertAncestor: Boolean(node?.closest('[inert]')),
           visible: Boolean(node?.getClientRects().length),
-          exactButtons: [...document.querySelectorAll('button')].filter((item) => item.textContent?.trim() === 'Adicionar bloco').length };
+          exactButtons: [...document.querySelectorAll('button')].filter((item) => item.textContent?.trim() === 'Adicionar bloco').length,
+          sidebarButtons: [...document.querySelectorAll('.custom-height-sidebar button')]
+            .filter((item) => item.textContent?.trim() === 'Adicionar bloco')
+            .map((item) => ({ disabled: item.matches(':disabled'), visible: Boolean(item.getClientRects().length) })) };
       }, selected).catch(() => null);
     throw error;
   }
@@ -782,6 +864,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
   let filteredContactVerified = false;
   let verifiedExportSearchTerm = null;
   let searchProbe = null;
+  let apiError = null;
   let searchTraffic = { requests: 0, matchingRequests: 0, lastStatus: null, matchingStatus: null,
     baseStatus: null, baseQueryKeys: [], badQueryKeys: [] };
   let ownerWriteStatus = null;
@@ -837,6 +920,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       filteredContactVerified = false;
       verifiedExportSearchTerm = null;
       searchProbe = null;
+      apiError = null;
       searchTraffic = { requests: 0, matchingRequests: 0, lastStatus: null, matchingStatus: null,
         baseStatus: null, baseQueryKeys: [], badQueryKeys: [] };
       ownerWriteStatus = null;
@@ -897,6 +981,24 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       }));
       page.on('response', (response) => {
         const url = new URL(response.url());
+        if (response.status() >= 400 && url.origin === qaApi?.origin
+          && ['contatos.buscar', 'contatos.exportar', 'contatos.definir_responsavel', 'contatos.importar'].includes(currentTask)) {
+          const method = response.request().method();
+          const path = url.pathname.replace(/^\/api(?:\/v2)?(?=\/)/u, '');
+          const expected = ['contatos.buscar', 'contatos.exportar'].includes(currentTask)
+            ? method === 'GET' && path === '/contacts' && url.searchParams.has('searchData')
+            : currentTask === 'contatos.definir_responsavel'
+              ? method === 'PUT' && /^\/contacts\/[a-z0-9-]+(?:\/owner)?\/?$/iu.test(path)
+              : method === 'POST' && path === '/contacts/import';
+          if (expected) {
+            const body = parseWriteBody(response.request());
+            const requestKeys = method === 'GET' ? [...url.searchParams.keys()]
+              : Array.isArray(body) ? body.flatMap((item) => item && typeof item === 'object' ? Object.keys(item) : [])
+                : body && typeof body === 'object' ? Object.keys(body) : [];
+            apiError = { status: response.status(), rota: publicPath(path),
+              nomes: [...new Set(requestKeys.filter((key) => /^[A-Za-z][A-Za-z0-9]{0,39}$/u.test(key)))].sort() };
+          }
+        }
         if (['contatos.buscar', 'contatos.exportar'].includes(currentTask)
           && response.request().method() === 'GET' && /^\/api\/(?:v2\/)?contacts\/?$/u.test(url.pathname)) {
           searchTraffic.lastStatus = response.status();
@@ -1175,10 +1277,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         observedTargets = screen.targets;
       }
       const searchValue = screen.fields.find((field) => /buscar contato/iu.test(field.name))?.value;
-      if (searchTraffic.matchingStatus === 400 && searchValue != null
-        && actions.some((action) => action.type === 'fill' && action.value === prepared.contact)
-        && !actions.some((action) => action.type === 'fill' && action.value === phone))
-        return { type: 'fill', role: 'textbox', name: 'Buscar contato...', value: phone };
+      if (apiError) return null;
       if ([prepared.contact, phone].includes(searchValue)) {
         const response = await filteredContactsResponse;
         const payload = await response?.json().catch(() => null);
@@ -1186,9 +1285,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
           rows: Array.isArray(payload?.dados) ? payload.dados.length : null,
           matchingRef: Array.isArray(payload?.dados) && payload.dados.some((row) =>
             row?.idRef === prepared.identity?.refs?.[0] && row?.nome === prepared.contact) };
-        if ((response?.status() === 400 || searchTraffic.matchingStatus === 400) && searchValue === prepared.contact
-          && !actions.some((action) => action.type === 'fill' && action.value === phone))
-          return { type: 'fill', role: 'textbox', name: 'Buscar contato...', value: phone };
+        if (apiError) return null;
         if (!(await verifyFilteredContactSearch(page, prepared.contact, prepared.identity?.refs?.[0], response)).confirmed)
           return null;
         await page.waitForFunction((name) => {
@@ -1224,9 +1321,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       }
       const search = screen.fields.find((field) => /buscar contato/iu.test(field.name));
       if (!search) return null;
-      const term = actions.some((action) => action.type === 'fill' && action.value === phone)
-        || searchTraffic.matchingStatus === 400 && actions.some((action) => action.type === 'fill' && action.value === name)
-        ? phone : name;
+      const term = name;
       if (search.value !== term) return { type: 'fill', role: 'textbox', name: search.name, value: term };
       const response = await filteredContactsResponse;
       const ref = prepared.identity?.refs?.[0];
@@ -1235,9 +1330,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         rows: Array.isArray(payload?.dados) ? payload.dados.length : null,
         matchingRef: Array.isArray(payload?.dados) && payload.dados.some((row) =>
           row?.idRef === ref && row?.nome === name) };
-      if ((response?.status() === 400 || searchTraffic.matchingStatus === 400) && term === name
-        && !actions.some((action) => action.type === 'fill' && action.value === phone))
-        return { type: 'fill', role: 'textbox', name: search.name, value: phone };
+      if (apiError) return null;
       const checked = await verifyFilteredContactSearch(page, name, ref, response);
       if (!checked.confirmed) return null;
       await page.waitForFunction((value) => {
@@ -1359,7 +1452,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
             : checked.confirmed && task.id === 'robos.criar' ? { robot: name,
               robotRef: identity.refs[0], robotId: checked.recordId } : {} };
     },
-    diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, creationCapture, searchProbe, ownerProbe,
+    diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, creationCapture, searchProbe, ownerProbe, apiError,
       menuProbe, tagProbe: currentTask === 'contatos.marcar_tags' ? { createdTagIdCaptured: [...createdIds].some((id) =>
         Number.isSafeInteger(id) && !fixedIds.tag.has(id) && id !== currentPrepared?.identity?.ids?.[0]),
         tagWriteStatus, tagLinkStatus } : null }; },
@@ -1460,8 +1553,17 @@ export function configuredJourneyIdentity(env) {
   const { email, password } = credentialsFromEnv(env).authorized;
   if (!email || !password) throw new Error('credencial de homologação ausente');
   return { credentialHash: createHash('sha256').update(JSON.stringify([
-    target.url, email.trim().toLowerCase(), password,
+    target.url, email.trim().toLowerCase(), env.CAPTURE_PROFILE ?? 'qa-autorizado',
   ])).digest('hex') };
+}
+
+async function probeJourneyAccount(env) {
+  const target = assertAllowedTarget(env.GUIDE_QA_STAGING_URL, env);
+  let response;
+  try { response = await fetch(target.url, { signal: AbortSignal.timeout(5000) }); }
+  catch { return null; }
+  if (response.status >= 500) return null;
+  return authenticatedJourneyIdentity(env);
 }
 
 export async function recordJourneys(module, selectedTasks, { env = process.env, browser, model, root } = {}) {
@@ -1497,10 +1599,12 @@ export async function recordJourneys(module, selectedTasks, { env = process.env,
   const lazyModel = model ?? { async decide(...args) { liveModel ??= makeModel(env, markerFor); return liveModel.decide(...args); } };
   const engineSha = createHash('sha256').update(await readFile(new URL(import.meta.url)))
     .update(await readFile(new URL('./journey-service.mjs', import.meta.url))).digest('hex');
+  let accountProbe;
   const options = { module, tasks, frontSha, backSha, profile, root, marker, browser: lazyBrowser,
     deterministicPlans: !browser && !model,
     model: lazyModel, allowedScreenLabels, markerChanged: (value) => { marker = value; },
     accountIdentity: browser ? undefined : () => configuredJourneyIdentity(env),
+    probeAccount: browser ? undefined : () => accountProbe ??= probeJourneyAccount(env),
     cacheConfig: { engineSha, qaUrl: env.GUIDE_QA_STAGING_URL ?? '', model: env.CAPTURE_AGENT_MODEL ?? '',
       allowedHosts: env.GUIDE_QA_ALLOWED_HOSTS ?? '',
       fixtureIds: ['CAPTURE_QA_DEPARTMENT_IDS', 'CAPTURE_QA_CHANNEL_IDS',

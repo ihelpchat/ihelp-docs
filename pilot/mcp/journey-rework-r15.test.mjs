@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { chromeExecutablePath } from '../scripts/visual/measure.mjs';
-import { journeyRequestAllowed, observeJourneyDom, verifyUniqueRecord } from './journey-runtime.mjs';
+import { actJourneyAction, journeyRequestAllowed, observeJourneyDom, verifyUniqueRecord } from './journey-runtime.mjs';
 import { fixtureValue } from './journey-service.mjs';
 import { qaRequestDecision } from '../scripts/guide-proof.mjs';
 
@@ -13,6 +13,19 @@ test('fichas opacas omitem placeholder, opção vazia e opção desabilitada', a
     await page.setContent('<div role="option" data-value="">Selecione...</div><div role="option" data-value="7">Teste</div><div role="option" data-value="8" aria-disabled="true">Indisponível</div>');
     const screen = await observeJourneyDom(page);
     assert.deepEqual(screen.controls.filter((item) => item.role === 'option').map((item) => item.name), ['opção 1']);
+  } finally { await browser.close(); }
+});
+
+test('Adicionar bloco no editor aciona botão do sidebar, não o canvas', async () => {
+  const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<button onclick="window.canvas=true">Adicionar bloco</button><div class="custom-height-sidebar"><button onclick="window.sidebar=true">Adicionar bloco</button></div>');
+    const observed = await observeJourneyDom(page, { vocabulary: ['Adicionar bloco'] });
+    await actJourneyAction(page, { type: 'click', role: 'button', name: 'Adicionar bloco (cabeçalho)', value: null },
+      observed.targets, { vocabulary: ['Adicionar bloco'] });
+    assert.deepEqual(await page.evaluate(() => ({ canvas: Boolean(window.canvas), sidebar: Boolean(window.sidebar) })),
+      { canvas: false, sidebar: true });
   } finally { await browser.close(); }
 });
 

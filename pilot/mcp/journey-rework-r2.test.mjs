@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile, rm, realpath, readFile } from 'node:fs/promi
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { searchLocalProductContext } from './local-product-context.mjs';
-import { recordJourneys, journeyRequestAllowed, inactiveRobotCreateRequest, verifyUniqueRecord } from './journey-runtime.mjs';
+import { recordJourneys, journeyRequestAllowed, journeyWriteDecision, inactiveRobotCreateRequest, verifyUniqueRecord } from './journey-runtime.mjs';
 import { runJourneys, journeyCoverage } from './journey-service.mjs';
 
 const request = (method, path, body) => ({ method: () => method,
@@ -90,9 +90,23 @@ test('menu e encaminhamento só aceitam save inativo do robô criado', () => {
   const body = { id: 5, idRef: 'owned-ref', title: 'Robô Exemplo 01', status: false, type: 1,
     departmentId: 2, botTrigger: 1, botEvents: [event] };
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', body), policy), true);
+  const { idRef: _unused, ...frontSave } = body;
+  assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', frontSave), policy), true);
+  assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
+    botEvents: [{ idRef: 'event-ref', title: 'Mensagem simples', type: 0, message: '', botId: 5 }] }), policy), true);
+  const messageBlock = { idRef: 'event-ref', title: 'Mensagem simples', type: 0, botId: 5,
+    groupBlockId: 'a'.repeat(24), messages: [{ message: 'Tag Exemplo 01', type: 0 }] };
+  assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
+    botEvents: [messageBlock] }), policy), true);
+  assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
+    botEvents: [{ ...messageBlock, messages: [{ message: 'Texto livre', type: 0 }] }] }), policy), false);
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/other-ref/save', body), policy), false);
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body, status: true }), policy), false);
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body, botEvents: [{ ...event, type: 7 }] }), policy), false);
+  const denied = journeyWriteDecision(request('PUT', 'bot/owned-ref/save', { ...body,
+    botEvents: [{ ...event, message: 'Texto privado da conta' }] }), policy);
+  assert.equal(denied.keyPath, 'botEvents[0].message');
+  assert.doesNotMatch(JSON.stringify(denied), /Texto privado da conta/u);
 });
 
 test('robô criado e menu só confirmam estado persistido na ficha reaberta', async () => {

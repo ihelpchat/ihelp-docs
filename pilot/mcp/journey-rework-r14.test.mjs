@@ -36,6 +36,34 @@ test('menu preenche a segunda opção sem sobrescrever a primeira', () => {
     { type: 'fill', role: 'textbox', name: 'Adicione uma opção (cabeçalho 2)', value: second });
 });
 
+test('menu confirma mensagem no controle de cabeçalho antes de abrir outro bloco', () => {
+  const actions = [
+    { type: 'click', name: 'Fluxo de Robô' },
+    ...Array.from({ length: 3 }, () => ({ type: 'click', name: 'Adicionar bloco' })),
+    { type: 'click', name: 'Menu de opções' },
+    { type: 'click', name: 'Mensagem simples' },
+    { type: 'fill', name: 'Mensagem de onboarding', value: service.fixtureValue('menuQuestion') },
+    { type: 'fill', name: 'Mensagem', value: service.fixtureValue('menuQuestion') },
+    { type: 'click', name: 'Adicionar opção +' },
+    { type: 'fill', name: 'Adicione uma opção', value: service.fixtureValue('menuOption', 1) },
+    { type: 'click', name: 'Adicionar opção +' },
+    { type: 'fill', name: 'Adicione uma opção (cabeçalho 2)', value: service.fixtureValue('menuOption', 2) },
+    { type: 'fill', name: 'Título da mensagem', value: service.fixtureValue('menuOption', 1) },
+    { type: 'fill', name: 'campo 2 do formulário (texto)', value: service.fixtureValue('menuOption', 1) },
+  ];
+  const screen = { controls: [{ role: 'button', name: 'Adicionar bloco (cabeçalho)', enabled: true },
+    { role: 'button', name: 'Adicionar bloco (cabeçalho 2)', enabled: true }], fields: [] };
+  assert.deepEqual(service.plannedJourneyAction('robos.montar_menu', screen, actions),
+    { type: 'press', role: 'textbox', name: 'campo 2 do formulário (texto)', value: 'Enter' });
+  actions.push({ type: 'press', name: 'campo 2 do formulário (texto)' });
+  assert.deepEqual(service.plannedJourneyAction('robos.montar_menu', screen, actions),
+    { type: 'click', role: 'button', name: 'Adicionar bloco (cabeçalho 2)', value: null });
+  assert.equal(service.policyDecision({ type: 'press', role: 'textbox',
+    name: 'campo 2 do formulário (texto)', value: 'Enter' }, undefined, 'robos.montar_menu').allowed, true);
+  assert.equal(service.policyDecision({ type: 'press', role: 'textbox',
+    name: 'campo 2 do formulário (texto)', value: 'Escape' }, undefined, 'robos.montar_menu').allowed, false);
+});
+
 test('edição do título encerra pelo blur sem salvar o fluxo', () => {
   const actions = [{ type: 'click', name: 'Fluxo de Robô' }, { type: 'click', name: 'Editar título do Robô' },
     { type: 'fill', name: 'Digite o título do robô', value: fixtureValue('robotName', 2) }];
@@ -75,13 +103,13 @@ const model = { async decide({ actions }) { return [
 
 test('cache da credencial configurada funciona sem homologação e outra credencial não o lê', async () => {
   const root = await mkdtemp(join(tmpdir(), 'journey-r14-account-'));
-  const browser = browserFor(); let credential = 'a';
+  const browser = browserFor(); let credential = 'a'.repeat(64);
   try {
     const options = { module: 'contatos', tasks: [task], root, marker, frontSha: 'a'.repeat(40), profile: 'qa', browser, model,
       accountIdentity: async () => ({ credentialHash: credential }) };
     assert.equal((await runJourneys(options))[0].status, 'concluída');
     assert.equal((await runJourneys({ ...options, browser: { async open() { throw Error('homologação fora'); } } }))[0].status, 'concluída');
-    credential = 'b';
+    credential = 'b'.repeat(64);
     await runJourneys(options);
     assert.equal(browser.opens, 2);
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -95,7 +123,7 @@ test('cache confere conta autenticada no ar e sinaliza identidade não verificad
   browser.open = async () => { await originalOpen(); return { account: { userId: 'user-1', companyId: account } }; };
   try {
     const options = { module: 'contatos', tasks: [task], root, marker, frontSha: 'a'.repeat(40),
-      profile: 'qa', browser, model, accountIdentity: async () => ({ credentialHash: 'configured-a' }),
+      profile: 'qa', browser, model, accountIdentity: async () => ({ credentialHash: 'a'.repeat(64) }),
       probeAccount: async () => online ? { userId: 'user-1', companyId: account } : null };
     const first = (await runJourneys(options))[0];
     assert.equal(first.status, 'concluída');
@@ -106,6 +134,8 @@ test('cache confere conta autenticada no ar e sinaliza identidade não verificad
     online = false;
     const cached = (await runJourneys(options))[0];
     assert.equal(cached.identityVerified, false);
+    assert.equal((await service.readJourney({ root, module: 'contatos', task: task.id,
+      accountHash: 'a'.repeat(64) })).identityVerified, false);
     assert.equal(browser.opens, 2);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
@@ -115,12 +145,12 @@ test('ler jornada segrega ponteiro por identidade configurada', async () => {
   const browser = browserFor();
   try {
     const options = { module: 'contatos', tasks: [task], root, marker, frontSha: 'a'.repeat(40),
-      profile: 'qa', browser, model, accountIdentity: async () => ({ credentialHash: 'configured-a' }) };
+      profile: 'qa', browser, model, accountIdentity: async () => ({ credentialHash: 'a'.repeat(64) }) };
     await runJourneys(options);
     assert.equal((await service.readJourney({ root, module: 'contatos', task: task.id,
-      accountHash: 'configured-a' })).task, task.id);
+      accountHash: 'a'.repeat(64) })).task, task.id);
     await assert.rejects(service.readJourney({ root, module: 'contatos', task: task.id,
-      accountHash: 'configured-b' }), /ENOENT|indisponível/u);
+      accountHash: 'b'.repeat(64) }), /ENOENT|indisponível/u);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

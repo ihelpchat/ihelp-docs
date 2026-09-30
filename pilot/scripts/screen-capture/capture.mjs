@@ -337,7 +337,11 @@ function masksForVisible(visible, vocabulary) {
     const sensitive = containsSensitiveData(item.text, { detectOpaque: true });
     const known = inVocabulary(item.text, vocabulary) || item.context && inVocabulary(item.context, vocabulary);
     if (!sensitive && !item.force && known) return [];
-    return [{ ...item.rect, reason: sensitive ? 'varredura sensível' : item.reason }];
+    const x = Math.floor(item.rect.x) - 3;
+    const y = Math.floor(item.rect.y) - 3;
+    return [{ x, y, width: Math.ceil(item.rect.x + item.rect.width) - x + 3,
+      height: Math.ceil(item.rect.y + item.rect.height) - y + 3,
+      reason: sensitive ? 'varredura sensível' : item.reason }];
   });
 }
 
@@ -428,10 +432,11 @@ export async function waitForStableScreen(page) {
       await new Promise((done) => requestAnimationFrame(done));
       const active = document.getAnimations().some((animation) => animation.playState === 'running'
         && animation.effect?.getComputedTiming().iterations !== Infinity);
-      const boxes = [...document.querySelectorAll('main,[role="main"],[role="dialog"],dialog,[class*="modal" i]')]
+      const boxes = [...document.querySelectorAll('main,[role="main"],[role="dialog"],dialog,[class*="modal" i],.react-flow__viewport,.react-flow__node')]
         .filter((element) => element.getClientRects().length).map((element) => {
           const rect = element.getBoundingClientRect();
-          return [rect.x, rect.y, rect.width, rect.height].map((value) => Math.round(value * 100) / 100);
+          return [...[rect.x, rect.y, rect.width, rect.height].map((value) => Math.round(value * 100) / 100),
+            getComputedStyle(element).transform];
         });
       const position = JSON.stringify(boxes);
       frames = !active && position === previous ? frames + 1 : 0;

@@ -43,6 +43,7 @@ export function journeyTaskSummary(record) {
   const blocked = record.blocked && {
     host: record.blocked.host, method: record.blocked.method, path: record.blocked.path,
     keys: record.blocked.keys, reason: record.blocked.reason,
+    ...(record.blocked.keyPath ? { keyPath: record.blocked.keyPath } : {}),
   };
   const validation = /^validação do formulário: (Informe o telefone com DDD|Já existe um contato com este número de telefone|O telefone é obrigatório|Precisa ter pelo menos um canal)$/u
     .exec(record.reason ?? '')?.[1] ?? null;
@@ -53,7 +54,9 @@ export function journeyTaskSummary(record) {
     .map(({ source, kind, ids }) => ({ source, kind, count: Array.isArray(ids) ? ids.length : 0 }));
   return { task: record.task, status: record.status, reason: record.reason,
     blocked: blocked ?? null, validation, fixtures, actions: record.actions?.length ?? 0,
+    ...(typeof record.identityVerified === 'boolean' ? { identityVerified: record.identityVerified } : {}),
     thirdPartyDenied: record.thirdPartyDenied ?? {}, ...(record.observeError ? { observeError: record.observeError } : {}),
+    ...(record.apiError ? { apiError: record.apiError } : {}),
     ...(record.creationCapture ? { creationCapture: record.creationCapture } : {}),
     ...(record.importCapture ? { importCapture: record.importCapture } : {}),
     ...(record.importResultMessage ? { importResultMessage: record.importResultMessage } : {}),
@@ -302,7 +305,9 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     await auditOperation(root, { actor: requestedBy, operation: 'ler_jornada', target: auditTarget(module, task), result: 'attempt' });
     try {
       const { readJourney } = await import('./journey-service.mjs');
-      return textResult(await readJourney({ module, task }));
+      const { configuredJourneyIdentity } = await import('./journey-runtime.mjs');
+      return textResult(await readJourney({ module, task,
+        accountHash: configuredJourneyIdentity(process.env).credentialHash }));
     } catch { return textResult({ error: 'Jornada indisponível' }, true); }
   });
 

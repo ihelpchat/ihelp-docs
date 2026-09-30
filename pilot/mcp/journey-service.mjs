@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-15';
+export const JOURNEY_POLICY_VERSION = 'm571-16';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -72,10 +72,13 @@ export function journeyCoverage(records) {
 
 export function policyDecision(action, generated = fixtureValues, taskId = '') {
   if (!action || typeof action !== 'object' || Array.isArray(action)) return deny('ação inválida');
-  if (!['click', 'fill', 'select', 'finish', 'upload_csv'].includes(action.type)) return deny('tipo inválido');
+  if (!['click', 'fill', 'select', 'press', 'finish', 'upload_csv'].includes(action.type)) return deny('tipo inválido');
   if (action.type === 'finish') return { allowed: true };
   if (action.type === 'upload_csv') return action.role == null && action.name == null && action.value == null
     ? { allowed: true } : deny('upload inválido');
+  if (action.type === 'press') return taskId === 'robos.montar_menu' && action.role === 'textbox'
+    && action.name === 'campo 2 do formulário (texto)' && action.value === 'Enter'
+    ? { allowed: true } : deny('ação proibida');
   if (!['button', 'link', 'menuitem', 'textbox', 'combobox', 'option', 'checkbox', 'tab'].includes(action.role)
     || typeof action.name !== 'string' || !action.name.trim() || action.name.length > 100) return deny('alvo inválido');
   const name = normalized(action.name);
@@ -153,6 +156,7 @@ function safeJourney(record) {
   if (copy.createdRef != null && (typeof copy.createdRef !== 'string' || !/^[a-z0-9-]{1,80}$/iu.test(copy.createdRef)))
     throw new Error('sanitização falhou');
   if (copy.accountProof != null && !/^[a-f0-9]{64}$/u.test(copy.accountProof)) throw new Error('sanitização falhou');
+  if (copy.configuredIdentityHash != null && !/^[a-f0-9]{64}$/u.test(copy.configuredIdentityHash)) throw new Error('sanitização falhou');
   const check = (value) => {
     if (typeof value === 'string' && !sha.test(value) && !/^[a-f0-9]{64}$/u.test(value)
       && !fixtureValues.has(value) && !fictionalPhone.test(value)
@@ -207,6 +211,10 @@ function actionEvidence(id, actions, fixtureFor = fixtureValue) {
 }
 const plannedClick = (screen, pattern, role = null) => {
   const target = screen.controls.find((item) => item.enabled && (!role || item.role === role) && pattern.test(item.name));
+  return target ? { type: 'click', role: target.role, name: target.name, value: null } : null;
+};
+const plannedClickLast = (screen, pattern) => {
+  const target = screen.controls.filter((item) => item.enabled && item.role === 'button' && pattern.test(item.name)).at(-1);
   return target ? { type: 'click', role: target.role, name: target.name, value: null } : null;
 };
 const plannedFill = (screen, pattern, value, roles = ['textbox']) => {
@@ -299,7 +307,9 @@ export function plannedJourneyAction(id, screen, actions, fixtureFor = fixtureVa
     if (!actions.some((action) => action.type === 'fill' && action.name === 'campo 2 do formulário (texto)'
       && action.value === fixtureFor('menuOption', 1)))
       return plannedFill(screen, /^campo 2 do formulário \(texto\)$/iu, fixtureFor('menuOption', 1));
-    if (addCount < 4) return plannedClick(screen, /^Adicionar bloco$/iu);
+    if (!actions.some((action) => action.type === 'press' && action.name === 'campo 2 do formulário (texto)'))
+      return { type: 'press', role: 'textbox', name: 'campo 2 do formulário (texto)', value: 'Enter' };
+    if (addCount < 4) return plannedClickLast(screen, /^Adicionar bloco(?: \(cabeçalho(?: \d+)?\))?$/iu);
     if (addCount < 5) return plannedClick(screen, /^Adicionar bloco(?: \(cabeçalho(?: \d+)?\))?$/iu);
     if (messageCount < 2) return plannedClick(screen, /^Mensagem simples$/iu);
     if (!actions.some((action) => action.type === 'fill' && action.name === 'Título da mensagem'
@@ -308,7 +318,9 @@ export function plannedJourneyAction(id, screen, actions, fixtureFor = fixtureVa
     if (!actions.some((action) => action.type === 'fill' && action.name === 'campo 2 do formulário (texto)'
       && action.value === fixtureFor('menuOption', 2)))
       return plannedFill(screen, /^campo 2 do formulário \(texto\)$/iu, fixtureFor('menuOption', 2));
-    if (addCount < 6) return plannedClick(screen, /^Adicionar bloco$/iu);
+    if (actions.filter((action) => action.type === 'press' && action.name === 'campo 2 do formulário (texto)').length < 2)
+      return { type: 'press', role: 'textbox', name: 'campo 2 do formulário (texto)', value: 'Enter' };
+    if (addCount < 6) return plannedClickLast(screen, /^Adicionar bloco(?: \(cabeçalho(?: \d+)?\))?$/iu);
     return !done(/^Salvar$/iu) ? plannedClick(screen, /^Salvar$/iu) : finished();
   }
   if (id === 'robos.encaminhar') {
@@ -361,21 +373,25 @@ export async function saveJourney(root, module, record, images) {
   });
   const name = fileFor(root, module, record.task, record.cacheKey);
   await writeFile(name, JSON.stringify(safeRecord, null, 2), { mode: 0o600 });
-  await writeFile(join(dir, `${record.task}.latest`), record.cacheKey, { mode: 0o600 });
+  if (record.configuredIdentityHash) await writeFile(join(dir,
+    `${record.task}.${digest(record.configuredIdentityHash)}.latest`), record.cacheKey, { mode: 0o600 });
 }
 
-export async function readJourney({ root = resolve(process.env.MCP_STATE_DIR ?? '/data', 'journeys'), module, task }) {
+export async function readJourney({ root = resolve(process.env.MCP_STATE_DIR ?? '/data', 'journeys'), module, task, accountHash }) {
   if (!modules.has(module) || !taskId.test(task) || !task.startsWith(`${module}.`)) throw new Error('tarefa inválida');
-  const key = await readFile(join(root, module, `${task}.latest`), 'utf8');
+  if (!accountHash || typeof accountHash !== 'string') throw new Error('identidade configurada indisponível');
+  const key = await readFile(join(root, module, `${task}.${digest(accountHash)}.latest`), 'utf8');
   if (!/^[a-f0-9]{64}$/u.test(key)) throw new Error('cache inválido');
-  return loadCache(root, module, task, key);
+  const record = await loadCache(root, module, task, key);
+  if (record?.configuredIdentityHash !== accountHash) throw new Error('identidade configurada divergente');
+  return record;
 }
 
 export async function runJourneys({ module, tasks, root = resolve(process.env.MCP_STATE_DIR ?? '/data', 'journeys'), marker = '',
   frontSha, backSha = 'unavailable', profile, browser, model, sanitize = async (value) => value,
   allowedScreenLabels = new Set(),
   maxActionsPerTask = 30, maxActionsPerModule = 300, maxMs = 900_000, maxCostUsd = 5,
-  cacheConfig = {}, cacheBypass = false, markerChanged = () => {}, accountIdentity,
+  cacheConfig = {}, cacheBypass = false, markerChanged = () => {}, accountIdentity, probeAccount,
   deterministicPlans = false }) {
   const invalid = [
     ['module', !modules.has(module)],
@@ -408,7 +424,17 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
         robotRef: prepared.robotRef, robotId: prepared.robotId, identity: prepared.identity };
     const key = digest({ task, frontSha, backSha, profile, accountHash, policy: JOURNEY_POLICY_VERSION, dependency,
       config: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd, ...cacheConfig } });
-    const cached = cacheBypass ? null : await loadCache(root, module, task.id, key, true);
+    let cached = cacheBypass ? null : await loadCache(root, module, task.id, key, true);
+    if (cached && accountHash && cached.configuredIdentityHash !== accountHash) cached = null;
+    if (cached && probeAccount) {
+      const live = await probeAccount();
+      if (live) {
+        const proof = digest([live.userId, live.companyId]);
+        if (cached.accountProof !== proof) cached = null;
+        else cached.identityVerified = true;
+      } else cached.identityVerified = false;
+      if (cached) await writeFile(fileFor(root, module, task.id, key), JSON.stringify(cached, null, 2), { mode: 0o600 });
+    }
     if (cached) {
       results.push(cached); Object.assign(prepared, cached.created ?? {});
       if (cached.created && Object.keys(cached.created).length) {
@@ -426,6 +452,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       expected: task.resultadoEsperadoObservavel, observed: null, verification: null, created: {},
       status: 'inconclusiva', reason: null, limits: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd },
       blocked: null, thirdPartyDenied: {},
+      ...(accountHash ? { configuredIdentityHash: accountHash } : {}),
       usage: { actions: 0, costUsd: 0, elapsedMs: 0 }, cacheKey: key, policyVersion: JOURNEY_POLICY_VERSION };
     const images = [];
     if (task.id === 'robos.publicar_ativar' || task.id === 'contatos.agendar_mensagem') {
@@ -442,6 +469,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           if (!/^[a-z0-9-]{1,80}$/iu.test(userId ?? '') || !/^[a-z0-9-]{1,80}$/iu.test(companyId ?? ''))
             throw new Error('identidade autenticada indisponível');
           record.accountProof = digest([userId, companyId]);
+          record.identityVerified = true;
           if (prepared.accountProof && prepared.accountProof !== record.accountProof) {
             const stale = new Error('conta de cache mudou'); stale.code = 'STALE_JOURNEY_REFERENCE'; throw stale;
           }
@@ -659,6 +687,11 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
         const diagnostics = browser.diagnostics?.() ?? {};
         record.thirdPartyDenied = diagnostics.thirdPartyDenied ?? {};
         if (diagnostics.searchProbe) record.searchProbe = diagnostics.searchProbe;
+        if (diagnostics.apiError && ['contatos.buscar', 'contatos.exportar', 'contatos.definir_responsavel', 'contatos.importar'].includes(task.id)) {
+          record.apiError = diagnostics.apiError;
+          record.status = 'bloqueada';
+          record.reason = `ambiente: API da homologação respondeu ${diagnostics.apiError.status}`;
+        }
         if (diagnostics.ownerProbe) record.ownerProbe = diagnostics.ownerProbe;
         if (diagnostics.menuProbe) record.menuProbe = diagnostics.menuProbe;
         if (diagnostics.tagProbe) record.tagProbe = diagnostics.tagProbe;
