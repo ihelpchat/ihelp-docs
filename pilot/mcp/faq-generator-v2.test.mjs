@@ -133,10 +133,11 @@ test('redator recebe só observações do produto e glossário, sem texto da ver
     messages: ['Contato criado com sucesso!'], state: { headings: 'Contatos', generatedRows: '1' } }] };
   const plan = planFaqPage('contatos', [{ ...task, pontoDePartida: 'Ficha reaberta para conferir' }], [journey]);
   const evidence = generator.projectFaqEvidence(plan, [journey], { screenFacts: [] }, []);
-  const prompt = generator.faqWriterInput(plan, [{ ...task, pontoDePartida: 'Ficha reaberta para conferir' }], evidence, []);
+  const prompt = generator.faqWriterInput(plan, [{ ...task, pontoDePartida: 'Ficha reaberta para conferir' }],
+    evidence, [{ task: task.id, screenshotId: 'a'.repeat(64), approval: 'pendente' }]);
   assert.match(prompt, /Contato criado com sucesso!/u);
   assert.match(prompt, /"concluida":true/u);
-  assert.doesNotMatch(prompt, /Ficha reaberta|identidade|persistência|marcador|"ref"|generatedRows/u);
+  assert.doesNotMatch(prompt, /Ficha reaberta|identidade|persistência|marcador|"ref"|generatedRows|screenshotId/u);
   const instructions = generator.faqWriterInstructions(['regras de seções']);
   assert.match(instructions, /gloss[aá]rio|vocabulario/iu);
   assert.match(instructions, /ficha.*contato/isu);
