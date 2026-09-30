@@ -228,3 +228,21 @@ test('passo sem vínculo não contorna uma jornada bloqueada', async () => {
   assert.ok(result.diagnostic.some((item) => /passo.*sem.*(?:tarefa|jornada|vínculo)/iu.test(item)));
   assert.deepEqual(plan.reviewTasks, [blocked.id]);
 });
+
+test('headings estruturais sem afirmação dispensam prova, promessa continua bloqueada', async () => {
+  const structural = { title: 'Contatos', sections: [{ heading: 'O que é', units: [
+    { text: 'O botão Salvar aparece na tela.', kind: 'contexto', evidenceIds: ['J1'] },
+  ] }] };
+  const providers = {
+    judgeFacts: async (claims) => claims.map(({ id, field }) => ({ id, status: 'sustentada',
+      evidenceIds: field.endsWith('.heading') ? [] : ['J1'], reason: '' })),
+    judgeEditorial: async () => passing,
+  };
+  const accepted = await runFaqJudgment(structural, evidence, providers);
+  assert.equal(accepted.status, 'aprovado');
+  assert.ok(accepted.trace.some(({ field, evidence }) => field.endsWith('.heading') && evidence.length === 0));
+  const deceptive = await runFaqJudgment({ ...structural, sections: [
+    { ...structural.sections[0], heading: 'Contatos garantem vendas em dobro' },
+  ] }, evidence, providers);
+  assert.equal(deceptive.status, 'precisa de revisão humana');
+});
