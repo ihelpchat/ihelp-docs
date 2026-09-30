@@ -25,6 +25,24 @@ test('telefone fictício tem DDI britânico, 12 dígitos e varia com o marcador'
     contatoTelefones: [{ numero: '442079460999', tipoTelefone: 1 }] }), context), false);
 });
 
+test('POST /contacts aceita multipart contato do formulário; import aceita array real', () => {
+  const phone = fixtureValue('phone', 2).replace(/\D/gu, '');
+  const contact = { nome: fixtureValue('contactName', 2),
+    contatoTelefones: [{ numero: phone, tipoTelefone: 1 }] };
+  const multipart = `--fixture\r\nContent-Disposition: form-data; name="contato"\r\n\r\n${JSON.stringify(contact)}\r\n--fixture--\r\n`;
+  const request = { method: () => 'POST', url: () => 'https://qa.example.test/api/v2/contacts',
+    postData: () => multipart };
+  const generated = new Set([fixtureValue('contactName', 2), fixtureValue('phone', 2),
+    fixtureValue('contactName', 3), fixtureValue('phone', 3), fixtureValue('email', 2), fixtureValue('email', 3)]);
+  assert.equal(journeyRequestAllowed(request, { taskId: 'contatos.cadastrar', generated }), true);
+  const rows = [2, 3].map((n) => ({ Nome: fixtureValue('contactName', n),
+    Contato: fixtureValue('phone', n), Email: fixtureValue('email', n) }));
+  assert.equal(journeyRequestAllowed(call('POST', '/contacts/import', rows),
+    { taskId: 'contatos.importar', generated }), true);
+  assert.equal(journeyRequestAllowed(call('POST', '/contacts/import', [{ ...rows[0], Nome: 'Pessoa Real' }]),
+    { taskId: 'contatos.importar', generated }), false);
+});
+
 test('IDs vêm de três GETs da conta autenticada e falham fechados', async () => {
   assert.equal(typeof runtime.loadQaFixtureIds, 'function');
   const loadQaFixtureIds = runtime.loadQaFixtureIds;

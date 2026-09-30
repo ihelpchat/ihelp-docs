@@ -205,7 +205,7 @@ test('marcador único pertence ao gerador e persiste na jornada sanitizada', asy
           created: { contact: markedName } }; } },
       model: { async decide({ actions }) { return [
         { type: 'fill', role: 'textbox', name: 'Nome', value: markedName },
-        { type: 'fill', role: 'textbox', name: 'Telefone', value: fixtureValue('phone') },
+        { type: 'fill', role: 'textbox', name: 'Telefone', value: fixtureValue('phone', 1, marker) },
         { type: 'click', role: 'button', name: 'Salvar' },
       ][actions.length] ?? { type: 'finish' }; } } });
     assert.equal(record.status, 'concluída');
