@@ -925,6 +925,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
   let beforeBotLastChange = null;
   let taskStartedAt = null;
   let botSaveStatus = null;
+  let botWriteProbe = [];
   const sessionFlowEventRefs = new Set();
   let menuProbe = null;
   let contactSnapshot = null;
@@ -988,6 +989,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       beforeBotEventRefs = new Set();
       beforeBotLastChange = null;
       botSaveStatus = null;
+      botWriteProbe = [];
       beforeTagIds = new Set();
       creationResults.length = 0;
       thirdPartyDenied = {};
@@ -1004,6 +1006,9 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       qaApi = null;
       page.on('request', (request) => {
         const url = new URL(request.url());
+        if (currentTask?.startsWith('robos.') && request.method() === 'PUT'
+          && url.origin === qaApi?.origin && /^\/api\/(?:v2\/)?bot\//iu.test(url.pathname))
+          botWriteProbe.push({ route: /\/save\/?$/iu.test(url.pathname) ? 'save' : 'other', status: null });
         if (['contatos.buscar', 'contatos.exportar'].includes(currentTask)
           && request.method() === 'GET' && /^\/api\/(?:v2\/)?contacts\/?$/u.test(url.pathname)) {
           searchTraffic.requests++;
@@ -1039,6 +1044,10 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       }));
       page.on('response', (response) => {
         const url = new URL(response.url());
+        if (currentTask?.startsWith('robos.') && response.request().method() === 'PUT'
+          && url.origin === qaApi?.origin && /^\/api\/(?:v2\/)?bot\//iu.test(url.pathname))
+          botWriteProbe.push({ route: /\/save\/?$/iu.test(url.pathname) ? 'save' : 'other',
+            status: response.status() });
         if (['robos.montar_menu', 'robos.encaminhar', 'robos.salvar'].includes(currentTask)
           && response.request().method() === 'PUT' && url.origin === qaApi?.origin
           && new RegExp(`^/api/(?:v2/)?bot/${currentPrepared?.robotRef}/save/?$`, 'iu').test(url.pathname))
@@ -1529,7 +1538,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
               robotRef: identity.refs[0], robotId: checked.recordId } : {} };
     },
     diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, creationCapture, searchProbe, ownerProbe, apiError,
-      menuProbe, tagProbe: currentTask === 'contatos.marcar_tags' ? { createdTagIdCaptured: [...createdIds].some((id) =>
+      menuProbe, botWriteProbe, tagProbe: currentTask === 'contatos.marcar_tags' ? { createdTagIdCaptured: [...createdIds].some((id) =>
         Number.isSafeInteger(id) && !fixedIds.tag.has(id) && id !== currentPrepared?.identity?.ids?.[0]),
         tagWriteStatus, tagLinkStatus } : null }; },
     async close() { await browser?.close(); browser = null; context = null; page = null; },
