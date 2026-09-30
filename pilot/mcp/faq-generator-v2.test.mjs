@@ -172,3 +172,47 @@ test('numeração do modelo é apenas formato; pergunta não vira afirmação fa
   assert.match(result.mdx, /1\. Clique em Salvar\./u);
   assert.doesNotMatch(result.mdx, /1\. 1\./u);
 });
+
+test('título, descrição, headings, links e legendas entram no trace factual', async () => {
+  const claimPage = { title: 'Robôs garantem vendas em dobro',
+    description: 'Robôs garantem clientes novos', sections: [
+      { heading: 'Robôs vendem sem atendimento', taskId: task.id, units: [
+        { text: 'O botão Menu de opções aparece na tela.', kind: 'contexto', evidenceIds: ['J1'] },
+        { text: 'Veja [Robôs dobram suas vendas](/docs/robos).', kind: 'contexto', evidenceIds: ['J1'] },
+        { text: '![Robôs garantem resultado](/img/help/robos.png)', kind: 'contexto', evidenceIds: ['J1'] },
+      ] },
+    ] };
+  const unsupported = new Set([claimPage.title, claimPage.description,
+    claimPage.sections[0].heading, 'Robôs dobram suas vendas', 'Robôs garantem resultado']);
+  const result = await runFaqJudgment(claimPage, evidence, {
+    judgeFacts: async (claims) => claims.map(({ id, text }) => ({ id,
+      status: unsupported.has(text) ? 'a confirmar' : 'sustentada',
+      evidenceIds: ['J1'], reason: unsupported.has(text) ? 'sem prova' : '' })),
+    judgeEditorial: async () => passing,
+  });
+  for (const text of unsupported) assert.ok(result.trace.some((item) => item.claim === text), text);
+  assert.equal(result.status, 'precisa de revisão humana');
+  assert.equal(result.mdx, undefined);
+});
+
+test('passo sem vínculo não contorna uma jornada bloqueada', async () => {
+  const blocked = { id: 'robos.criar', modulo: 'robos', tarefa: 'Criar robô' };
+  const plan = planFaqPage('robos', [blocked], [{ task: blocked.id, status: 'bloqueada' }]);
+  const claimPage = { title: 'Robôs', sections: [
+    { heading: 'Criar robô', taskId: blocked.id, units: [
+      { text: 'O Menu de opções aparece na tela.', kind: 'contexto', evidenceIds: ['F1'] },
+    ] },
+    { heading: 'Passo a passo', taskId: null, units: [
+      { text: 'Clique em Criar robô.', kind: 'passo', evidenceIds: ['F1'] },
+    ] },
+  ] };
+  const result = await runFaqJudgment(claimPage,
+    [{ id: 'F1', type: 'front', text: 'Menu de opções; Criar robô.' }], {
+      judgeFacts: async (claims) => claims.map(({ id }) => ({ id, status: 'sustentada',
+        evidenceIds: ['F1'], reason: '' })),
+      judgeEditorial: async () => passing,
+    }, { plan });
+  assert.equal(result.status, 'precisa de revisão humana');
+  assert.ok(result.diagnostic.some((item) => /passo.*sem.*(?:tarefa|jornada|vínculo)/iu.test(item)));
+  assert.deepEqual(plan.reviewTasks, [blocked.id]);
+});
