@@ -87,13 +87,51 @@ test('cache da credencial configurada funciona sem homologação e outra credenc
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test('identidade configurada depende de host, e-mail e senha sem login', () => {
+test('cache confere conta autenticada no ar e sinaliza identidade não verificada fora', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-r16-account-'));
+  const browser = browserFor();
+  let account = 'a'; let online = true;
+  const originalOpen = browser.open.bind(browser);
+  browser.open = async () => { await originalOpen(); return { account: { userId: 'user-1', companyId: account } }; };
+  try {
+    const options = { module: 'contatos', tasks: [task], root, marker, frontSha: 'a'.repeat(40),
+      profile: 'qa', browser, model, accountIdentity: async () => ({ credentialHash: 'configured-a' }),
+      probeAccount: async () => online ? { userId: 'user-1', companyId: account } : null };
+    const first = (await runJourneys(options))[0];
+    assert.equal(first.status, 'concluída');
+    account = 'b';
+    const second = (await runJourneys(options))[0];
+    assert.equal(browser.opens, 2, 'troca de empresa reexecuta');
+    assert.notEqual(second.accountProof, first.accountProof);
+    online = false;
+    const cached = (await runJourneys(options))[0];
+    assert.equal(cached.identityVerified, false);
+    assert.equal(browser.opens, 2);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('ler jornada segrega ponteiro por identidade configurada', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-r16-pointer-'));
+  const browser = browserFor();
+  try {
+    const options = { module: 'contatos', tasks: [task], root, marker, frontSha: 'a'.repeat(40),
+      profile: 'qa', browser, model, accountIdentity: async () => ({ credentialHash: 'configured-a' }) };
+    await runJourneys(options);
+    assert.equal((await service.readJourney({ root, module: 'contatos', task: task.id,
+      accountHash: 'configured-a' })).task, task.id);
+    await assert.rejects(service.readJourney({ root, module: 'contatos', task: task.id,
+      accountHash: 'configured-b' }), /ENOENT|indisponível/u);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('identidade configurada depende de host, e-mail e perfil, sem derivar da senha', () => {
   const env = { GUIDE_QA_STAGING_URL: 'https://qa.example.test', GUIDE_QA_ALLOWED_HOSTS: 'qa.example.test',
     GUIDE_QA_AUTHORIZED_EMAIL: 'Qa@example.com', GUIDE_QA_AUTHORIZED_PASSWORD: 'fixture-pass' };
   const first = configuredJourneyIdentity(env).credentialHash;
   assert.match(first, /^[a-f0-9]{64}$/u);
   assert.equal(configuredJourneyIdentity({ ...env, GUIDE_QA_AUTHORIZED_EMAIL: 'qa@example.com' }).credentialHash, first);
-  assert.notEqual(configuredJourneyIdentity({ ...env, GUIDE_QA_AUTHORIZED_PASSWORD: 'new-pass' }).credentialHash, first);
+  assert.equal(configuredJourneyIdentity({ ...env, GUIDE_QA_AUTHORIZED_PASSWORD: 'new-pass' }).credentialHash, first);
+  assert.notEqual(configuredJourneyIdentity({ ...env, CAPTURE_PROFILE: 'outro' }).credentialHash, first);
   assert.notEqual(configuredJourneyIdentity({ ...env, GUIDE_QA_STAGING_URL: 'https://other.example.test',
     GUIDE_QA_ALLOWED_HOSTS: 'other.example.test' }).credentialHash, first);
 });

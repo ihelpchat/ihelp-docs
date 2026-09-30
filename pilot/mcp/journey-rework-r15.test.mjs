@@ -52,9 +52,13 @@ test('editar só exige título persistido; menu pertence à tarefa de montar flu
   assert.equal(result.confirmed, true);
 });
 
-test('host Railway com production no nome é recusado mesmo na allowlist de QA', () => {
+test('host Railway da homologação é aceito; domínios de produção são recusados mesmo na allowlist', () => {
   const host = 'olah-ihelp-production.up.railway.app';
   const result = qaRequestDecision(`https://${host}/api/v2/contacts`, { local: false },
     { GUIDE_QA_ALLOWED_HOSTS: host });
-  assert.equal(result.allowed, false);
+  assert.equal(result.allowed, true);
+  for (const production of ['ihelpchat.com', 'ihelpchat.com.br', 'app3.ihelpchat.com',
+    'images.ihelpchat.com', 'r2.ihelpchat.com', 'api.ihelp.com.br'])
+    assert.equal(qaRequestDecision(`https://${production}/`, { local: false },
+      { GUIDE_QA_ALLOWED_HOSTS: production }).allowed, false, production);
 });
