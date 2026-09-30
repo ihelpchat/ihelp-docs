@@ -45,16 +45,17 @@ test('POST /contacts aceita multipart contato do formulário; import aceita arra
     { apiOrigin: 'https://qa.example.test', taskId: 'contatos.importar', generated }), false);
 });
 
-test('IDs vêm de três GETs da conta autenticada e falham fechados', async () => {
+test('IDs vêm de quatro GETs da conta autenticada e falham fechados', async () => {
   assert.equal(typeof runtime.loadQaFixtureIds, 'function');
   const loadQaFixtureIds = runtime.loadQaFixtureIds;
   const paths = [];
   const get = async (path) => { paths.push(path); return { dados: [{ id: paths.length }] }; };
   const result = await loadQaFixtureIds(get);
-  assert.deepEqual(paths, ['/configurations/departments', '/configurations/channels', '/configurations/users']);
+  assert.deepEqual(paths, ['/configurations/departments', '/configurations/channels', '/configurations/users', '/tags']);
   assert.equal(result.fixedIds.department.has(1), true);
   assert.equal(result.fixedIds.channel.has(2), true);
   assert.equal(result.fixedIds.user.has(3), true);
+  assert.equal(result.fixedIds.tag.has(4), true);
   assert.deepEqual(result.fixtures.map((item) => item.source), paths.map((path) => `GET /api/v2${path}`));
   await assert.rejects(loadQaFixtureIds(async () => ({ dados: [{ id: 'anything' }] })), /IDs de QA inválidos/u);
 });
