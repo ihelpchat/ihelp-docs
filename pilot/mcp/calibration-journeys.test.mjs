@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const { loadCalibrationJourneys } = await import('./calibration-journeys.mjs').catch(() => ({}));
+const { loadCalibrationJourneys } = await import('../scripts/calibration-journeys.mjs').catch(() => ({}));
 
 const rpc = (record) => ({ jsonrpc: '2.0', id: 1, result: {
   content: [{ type: 'text', text: JSON.stringify(record) }], isError: false,

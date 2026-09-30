@@ -3,6 +3,7 @@ import { resolve, join } from 'node:path';
 import OpenAI from 'openai';
 import { judgeEditorial, aggregateCalibration, publicCalibrationReport, EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
 import { loadBusinessContext } from '../mcp/faq-editorial.mjs';
+import { loadCalibrationJourneys } from './calibration-journeys.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const rubricDir = join(root, 'architecture/faq-regua');
@@ -19,6 +20,7 @@ const moduleFiles = { Contatos: 'Contact', Robôs: 'Robot', Departamentos: 'Depa
 const routeLabels = { Contatos: 'Contatos', Robôs: 'Bot', Departamentos: 'Departmento', Canais: 'Canal' };
 const businessModules = { Departamentos: 'configuracoes-departamentos', Canais: 'configuracoes-canais' };
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const knownLabels = new Set(approved.labels.map(({ label }) => label));
 
 // Classificação do gabarito de validação, aplicada só após as decisões do juiz.
 // Não entra no prompt, nas evidências ou no ajuste.
@@ -40,7 +42,7 @@ async function evidenceFor(sample) {
   if (!paths.length && moduleName === 'Robôs') paths.push('content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx');
   const fontes = await Promise.all([...new Set(paths)].map(async (path) => ({ nome: path,
     conteudo: await readFile(join(root, path), 'utf8') })));
-  return { front: { routes, labels }, jornadas: [], fontes };
+  return { front: { routes, labels }, fontes };
 }
 
 async function run(model) {
@@ -51,19 +53,20 @@ async function run(model) {
     if (!note || note.grupo !== sample.grupo || !EDITORIAL_CRITERIA.every((id) => Number.isInteger(note.notas[id])))
       throw new Error('notas incompletas');
     const evidence = await evidenceFor(sample);
+    const journeyEvidence = await loadCalibrationJourneys(sample.modulo, process.env.JOURNEYS_DIR, { knownLabels });
+    evidence.jornadas = journeyEvidence.jornadas;
     const business = await loadBusinessContext(root, businessModules[sample.modulo] ?? sample.modulo, process.env.BUSINESS_CONTEXT_DIR);
     evidence.negocio = business.map(({ body }) => body);
-    const evidenceNames = { rotas: evidence.front.routes.map(({ label }) => label),
-      rotasCount: evidence.front.routes.length, labelsCount: evidence.front.labels.length,
-      fontes: evidence.fontes.map(({ nome }) => nome), negocio: business.map(({ path }) => path),
-      negocioCount: business.length };
+    const evidenceNames = { rotasCount: evidence.front.routes.length, labelsCount: evidence.front.labels.length,
+      fontesCount: evidence.fontes.length, negocioCount: business.length,
+      jornadasPorStatus: journeyEvidence.contagens, avisoJornadas: journeyEvidence.aviso };
     let judge;
     try {
       judge = await judgeEditorial({ pagina: sample.texto, modulo: sample.modulo, evidencias: evidence },
         async ({ instructions, input, schema }) => client.responses.create({ model, instructions, input,
         reasoning: { effort: model === 'gpt-6-luna' ? 'none' : 'medium' },
         text: { format: { type: 'json_schema', name: 'faq_editorial_verdict', strict: true, schema } },
-        max_output_tokens: model === 'gpt-6-astra' ? 4000 : 1800 }));
+        max_output_tokens: 4000 }));
     } catch (error) {
       error.sampleId = sample.id;
       throw error;
