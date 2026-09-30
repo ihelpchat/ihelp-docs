@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { planFaqPage, assembleFaqPage, runFaqJudgment } from './faq-generator-v2.mjs';
+import * as generator from './faq-generator-v2.mjs';
+const { planFaqPage, assembleFaqPage, runFaqJudgment } = generator;
 
 const task = { id: 'contatos.cadastrar', modulo: 'contatos', tarefa: 'cadastrar' };
 const evidence = [{ id: 'J1', type: 'jornada', task: task.id, status: 'concluída', text: 'Salvar mostra o contato na lista.' }];
@@ -118,4 +119,38 @@ test('referência a outro guia da própria página não vira menção a fonte in
     judgeEditorial: async () => passing,
   });
   assert.equal(source.status, 'precisa de revisão humana');
+});
+
+test('redator recebe só observações do produto e glossário, sem texto da verificação', async () => {
+  assert.equal(typeof generator.projectFaqEvidence, 'function');
+  assert.equal(typeof generator.faqWriterInput, 'function');
+  assert.equal(typeof generator.faqWriterInstructions, 'function');
+  const journey = { task: task.id, status: 'concluída', verification: {
+    confirmed: true, observed: 'Ficha reaberta; identidade e persistência confirmadas pelo marcador ref.' },
+  before: { generatedRows: '1' }, after: { generatedRows: '1' },
+  actions: [{ type: 'click', role: 'button', name: 'Salvar' }],
+  screens: [{ title: 'Contatos', controlsOffered: [{ role: 'button', name: 'Salvar' }],
+    messages: ['Contato criado com sucesso!'], state: { headings: 'Contatos', generatedRows: '1' } }] };
+  const plan = planFaqPage('contatos', [{ ...task, pontoDePartida: 'Ficha reaberta para conferir' }], [journey]);
+  const evidence = generator.projectFaqEvidence(plan, [journey], { screenFacts: [] }, []);
+  const prompt = generator.faqWriterInput(plan, [{ ...task, pontoDePartida: 'Ficha reaberta para conferir' }], evidence, []);
+  assert.match(prompt, /Contato criado com sucesso!/u);
+  assert.match(prompt, /"concluida":true/u);
+  assert.doesNotMatch(prompt, /Ficha reaberta|identidade|persistência|marcador|"ref"|generatedRows/u);
+  const instructions = generator.faqWriterInstructions(['regras de seções']);
+  assert.match(instructions, /gloss[aá]rio|vocabulario/iu);
+  assert.match(instructions, /ficha.*contato/isu);
+});
+
+test('afirmação sustentada só por mecânica da verificação não entra na página', async () => {
+  const onlyVerification = [{ id: 'V1', type: 'verificacao', task: task.id, completed: true }];
+  const claimPage = { title: 'Contatos', sections: [{ heading: 'Cadastrar contato', taskId: task.id, units: [
+    { text: 'A persistência foi confirmada ao reabrir a ficha.', kind: 'contexto', evidenceIds: ['V1'] },
+  ] }] };
+  const result = await runFaqJudgment(claimPage, onlyVerification, {
+    judgeFacts: async (claims) => claims.map(({ id }) => ({ id, status: 'sustentada', evidenceIds: ['V1'], reason: '' })),
+    judgeEditorial: async () => passing,
+  });
+  assert.equal(result.status, 'precisa de revisão humana');
+  assert.match(result.diagnostic.join(' '), /evidência|verificação/u);
 });
