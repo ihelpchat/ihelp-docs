@@ -79,7 +79,8 @@ const writeRules = {
 const forbiddenKeys = /(?:^|_)(?:status|published|active|enabled|send|schedule|typeSave|saveOrigin|webhook)(?:$|_)/iu;
 const fixedValues = new Set([1, 2]);
 const idKeys = new Set(['Id', 'contatoId', 'tagsId']);
-const fixedIdKeys = new Set(['departmentId', 'userId', 'DepartmentId', 'UserId', 'CanalId']);
+const fixedIdKinds = { departmentId: 'department', DepartmentId: 'department',
+  userId: 'user', UserId: 'user', CanalId: 'channel' };
 function validValue(key, value, generated, createdIds, fixedIds) {
   if (['nome', 'Nome', 'title', 'value'].includes(key)) return generated.has(value)
     && /^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)?(?: · [a-f0-9]{8})?$/iu.test(value);
@@ -90,7 +91,7 @@ function validValue(key, value, generated, createdIds, fixedIds) {
   if (key === 'idRef') return createdIds.has(value);
   if (key === 'fieldName') return value === 'nome';
   if (idKeys.has(key)) return createdIds.has(value);
-  if (fixedIdKeys.has(key)) return fixedIds.has(value);
+  if (Object.hasOwn(fixedIdKinds, key)) return fixedIds[fixedIdKinds[key]]?.has(value) ?? false;
   if (key === 'type' && value === 'Native') return true;
   if (key === 'tipoTelefone' || key === 'TipoTelefone' || key === 'type' || key === 'botTrigger')
     return fixedValues.has(value);
@@ -112,7 +113,7 @@ function validTree(value, rule, generated, createdIds, fixedIds, depth = 0, key 
     && validTree(item, rule, generated, createdIds, fixedIds, depth + 1, key));
   return validValue(key, value, generated, createdIds, fixedIds);
 }
-export function journeyRequestAllowed(request, { taskId, generated = new Set(), createdIds = new Set(), fixedIds = new Set() } = {}) {
+export function journeyRequestAllowed(request, { taskId, generated = new Set(), createdIds = new Set(), fixedIds = {} } = {}) {
   const method = request.method().toUpperCase();
   if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return true;
   let path; let query;
@@ -168,8 +169,9 @@ function makeBrowser({ baseUrl, env, vocabulary, marker }) {
   let lastDownload;
   let blockedWrite = false;
   const createdIds = new Set();
-  const fixedIds = new Set(String(env.CAPTURE_QA_ALLOWED_IDS ?? '').split(',').filter((value) => /^\d+$/u.test(value))
-    .map(Number));
+  const readIds = (name) => new Set(String(env[name] ?? '').split(',').filter((value) => /^\d+$/u.test(value)).map(Number));
+  const fixedIds = { department: readIds('CAPTURE_QA_DEPARTMENT_IDS'), user: readIds('CAPTURE_QA_USER_IDS'),
+    channel: readIds('CAPTURE_QA_CHANNEL_IDS') };
   const createdRefs = { contatos: new Set(), robos: new Set() };
   const target = assertAllowedTarget(baseUrl, env);
   if (target.local) throw new Error('homologação deve usar HTTPS');
