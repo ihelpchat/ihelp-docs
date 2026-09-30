@@ -141,6 +141,8 @@ test('redator recebe só observações do produto e glossário, sem texto da ver
   const instructions = generator.faqWriterInstructions(['regras de seções']);
   assert.match(instructions, /gloss[aá]rio|vocabulario/iu);
   assert.match(instructions, /ficha.*contato/isu);
+  assert.match(instructions, /cada tarefa concluída.*resultado/isu);
+  assert.match(instructions, /casos.*evidência/isu);
 });
 
 test('afirmação sustentada só por mecânica da verificação não entra na página', async () => {
@@ -154,4 +156,19 @@ test('afirmação sustentada só por mecânica da verificação não entra na p�
   });
   assert.equal(result.status, 'precisa de revisão humana');
   assert.match(result.diagnostic.join(' '), /evidência|verificação/u);
+});
+
+test('numeração do modelo é apenas formato; pergunta não vira afirmação factual', async () => {
+  const numbered = { title: 'Contatos', sections: [{ heading: 'Cadastrar', units: [
+    { text: '1. Clique em Salvar.', kind: 'passo', evidenceIds: ['J1'] },
+    { text: 'O contato aparece na lista?', kind: 'contexto', evidenceIds: ['J1'] },
+  ] }] };
+  const result = await runFaqJudgment(numbered, evidence, {
+    judgeFacts: async (claims) => claims.map(({ id }) => ({ id, status: 'sustentada', evidenceIds: ['J1'], reason: '' })),
+    judgeEditorial: async () => passing,
+  });
+  assert.equal(result.status, 'aprovado');
+  assert.deepEqual(result.trace.map(({ claim }) => claim), ['Clique em Salvar.']);
+  assert.match(result.mdx, /1\. Clique em Salvar\./u);
+  assert.doesNotMatch(result.mdx, /1\. 1\./u);
 });
