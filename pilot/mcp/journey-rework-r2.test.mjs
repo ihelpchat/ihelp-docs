@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, realpath, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { searchLocalProductContext } from './local-product-context.mjs';
-import { recordJourneys, journeyRequestAllowed, verifyUniqueRecord } from './journey-runtime.mjs';
-import { runJourneys } from './journey-service.mjs';
+import { recordJourneys, journeyRequestAllowed, inactiveRobotCreateRequest, verifyUniqueRecord } from './journey-runtime.mjs';
+import { runJourneys, journeyCoverage } from './journey-service.mjs';
 
 const request = (method, path, body) => ({ method: () => method,
   url: () => `https://qa.example.test/api/${path}`, postData: () => JSON.stringify(body) });
@@ -59,17 +59,31 @@ test('diagnóstico da configuração informa só o campo inválido', async () =>
     /^Error: model ausente$/u);
 });
 
+test('conta elegível e verificável por módulo permanece explícita', async () => {
+  const catalog = JSON.parse(await readFile(
+    new URL('../architecture/faq-regua/tarefas-ouro.json', import.meta.url), 'utf8'));
+  const count = (module) => journeyCoverage(catalog.tarefas.filter((item) => item.modulo === module)
+    .map((item) => ({ task: item.id, status: 'inconclusiva' }))).eligible;
+  assert.equal(count('contatos'), 7);
+  assert.equal(count('robos'), 6);
+});
+
 test('guardar robô aceita estado inativo e bloqueia ativação ou publicação', () => {
   const body = { title: 'Robô Exemplo 01', type: 1, departmentId: 2, botTrigger: 1,
     botChannels: [{ CanalId: 3 }], status: false };
   assert.equal(journeyRequestAllowed(request('POST', 'bot', body), robot), true);
+  const fromFront = request('POST', 'bot', { ...body, status: true });
+  const draft = inactiveRobotCreateRequest(fromFront, 'robos.criar');
+  assert.equal(JSON.parse(draft).status, false);
+  assert.equal(journeyRequestAllowed({ ...fromFront, postData: () => draft }, robot), true);
   for (const state of [{ status: true }, { status: 'published' }, { active: true }, { published: true }])
     assert.equal(journeyRequestAllowed(request('POST', 'bot', { ...body, ...state }), robot), false);
   assert.equal(journeyRequestAllowed(request('POST', 'bot/fake/publish', body), robot), false);
 });
 
 test('menu e encaminhamento só aceitam save inativo do robô criado', () => {
-  const policy = { ...robot, taskId: 'robos.montar_menu', createdIds: new Set(['owned-ref', 5]) };
+  const policy = { ...robot, taskId: 'robos.montar_menu', createdIds: new Set(['owned-ref', 5]),
+    generated: new Set(['Robô Exemplo 01', 'Tag Exemplo 01']) };
   const event = { idRef: 'event-ref', title: 'Menu de opções', type: 1, message: 'Tag Exemplo 01',
     botId: 5, botReactionRules: [{ idRef: 'option-ref', rule: 1, message: 'Tag Exemplo 01', botId: 5,
       botEventRedirectRef: 'forward-ref' }] };
@@ -84,12 +98,23 @@ test('menu e encaminhamento só aceitam save inativo do robô criado', () => {
 test('robô criado e menu só confirmam estado persistido na ficha reaberta', async () => {
   let url;
   const labels = new Set(['Robô Exemplo 01', 'Menu de opções', 'Tag Exemplo 01']);
+  const saved = { idRef: 'owned-ref', title: 'Robô Exemplo 01', status: false,
+    botEvents: [{ idRef: 'menu-ref', type: 1, botReactionRules: [
+      { message: 'Tag Exemplo 01', botEventRedirectRef: 'forward-ref' },
+      { message: 'Tag Exemplo 02', botEventRedirectRef: 'forward-ref' }] },
+    { idRef: 'forward-ref', type: 4, configuration: '{"DepartmentId":2}' }] };
   const page = { async goto(value) { url = value; }, async reload() {}, url: () => url,
+    waitForResponse: async () => ({ json: async () => ({ dados: saved }) }),
     getByText(value) { return { count: async () => Number(labels.has(value)) }; } };
   const base = { page, refs: ['owned-ref'], targetUrl: 'https://qa.example.test', name: 'Robô Exemplo 01',
     expectedValue: 'Robô Exemplo 01' };
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.criar', modulo: 'robos' } })).confirmed, true);
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.montar_menu', modulo: 'robos' } })).confirmed, true);
+  labels.add('Encaminhar atendimento');
+  assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.encaminhar', modulo: 'robos' } })).confirmed, true);
+  saved.botEvents[0].botReactionRules[1].botEventRedirectRef = 'missing-ref';
+  assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.encaminhar', modulo: 'robos' } })).confirmed, false);
+  saved.botEvents[0].botReactionRules[1].botEventRedirectRef = 'forward-ref';
   labels.delete('Menu de opções');
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.montar_menu', modulo: 'robos' } })).confirmed, false);
 });

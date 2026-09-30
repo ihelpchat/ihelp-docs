@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-2';
+export const JOURNEY_POLICY_VERSION = 'm571-3';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -23,11 +23,16 @@ export function fixtureValue(kind, n = 1, marker = '') {
   if (kind === 'editedName') return `Contato Exemplo ${suffix} Editado${tag}`;
   if (kind === 'robotName') return `Robô Exemplo ${suffix}${tag}`;
   if (kind === 'tagName') return `Tag Exemplo ${suffix}${tag}`;
+  if (kind === 'menuQuestion') return 'Qual opção deseja escolher?';
+  if (kind === 'menuOption') return `Opção Exemplo ${suffix}`;
+  if (kind === 'departmentName') return `Departamento Exemplo ${suffix}`;
+  if (kind === 'userName') return `Atendente Exemplo ${suffix}`;
   if (kind === 'email') return `contato${suffix}@example.com`;
   if (kind === 'phone') return `+1 202 555 01${suffix}`;
   throw new Error('tipo fictício inválido');
 }
-const generatedValues = () => new Set(['contactName', 'editedName', 'robotName', 'tagName', 'email', 'phone']
+const generatedValues = () => new Set(['contactName', 'editedName', 'robotName', 'tagName', 'menuQuestion',
+  'menuOption', 'departmentName', 'userName', 'email', 'phone']
   .flatMap((kind) => Array.from({ length: 99 }, (_, index) => fixtureValue(kind, index + 1))));
 const fixtureValues = generatedValues();
 class SanitizationError extends Error {}
@@ -126,7 +131,7 @@ function prerequisites(id, prepared) {
 }
 function actionEvidence(id, actions, fixtureFor = fixtureValue) {
   const fills = actions.filter((action) => action.type === 'fill').map((action) => action.value);
-  const clickedSave = actions.some((action) => action.type === 'click' && /^(?:salvar|criar|cadastrar)$/iu.test(action.name));
+  const clickedSave = actions.some((action) => action.type === 'click' && /^(?:salvar|criar(?: novo)? robô|criar|cadastrar)$/iu.test(action.name));
   if (id === 'contatos.cadastrar') return fills.includes(fixtureFor('contactName'))
     && fills.includes(fixtureFor('phone')) && clickedSave;
   if (id === 'contatos.editar') return fills.includes(fixtureFor('editedName')) && clickedSave;
@@ -138,9 +143,15 @@ function actionEvidence(id, actions, fixtureFor = fixtureValue) {
   if (id === 'contatos.importar') return actions.some((action) => action.type === 'upload_csv')
     && actions.some((action) => action.type === 'click' && /importar/iu.test(action.name));
   if (id === 'contatos.exportar') return actions.some((action) => action.type === 'click' && /exportar contatos/iu.test(action.name));
-  if (id === 'robos.montar_menu') return actions.some((action) => action.type === 'click' && /bloco|menu/iu.test(action.name)) && clickedSave;
-  if (id === 'robos.encaminhar') return actions.some((action) => action.type === 'click' && /encaminhar/iu.test(action.name)) && clickedSave;
+  if (id === 'robos.montar_menu') return actions.some((action) => action.type === 'click' && /bloco|menu|opções/iu.test(action.name))
+    && fills.includes(fixtureFor('menuQuestion')) && fills.includes(fixtureFor('menuOption', 1))
+    && fills.includes(fixtureFor('menuOption', 2)) && clickedSave;
+  if (id === 'robos.encaminhar') return actions.some((action) => action.type === 'click' && /encaminhar|transferir/iu.test(action.name))
+    && actions.some((action) => action.type === 'select' && [fixtureFor('departmentName'), fixtureFor('userName')].includes(action.value))
+    && clickedSave;
   if (id === 'robos.salvar') return clickedSave;
+  if (id === 'robos.buscar') return actions.some((action) => action.type === 'fill' && action.value === fixtureFor('robotName'))
+    || actions.some((action) => action.type === 'click' && action.name === fixtureFor('robotName'));
   if (id === 'robos.editar') return fills.includes(fixtureFor('robotName', 2)) && clickedSave;
   return actions.length > 0;
 }
@@ -179,12 +190,18 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
   frontSha, backSha = 'unavailable', profile, browser, model, sanitize = async (value) => value,
   allowedScreenLabels = new Set(),
   maxActionsPerTask = 30, maxActionsPerModule = 300, maxMs = 900_000, maxCostUsd = 5 }) {
-  if (!modules.has(module) || !Array.isArray(tasks) || tasks.some((item) => !taskId.test(item.id) || item.modulo !== module)
-    || !sha.test(frontSha) || !(sha.test(backSha) || backSha === 'unavailable') || !profile || !browser || !model
-    || marker && !/^[a-f0-9]{8}$/u.test(marker))
-    throw new Error('configuração de jornada inválida');
+  const invalid = [
+    ['module', !modules.has(module)],
+    ['tasks', !Array.isArray(tasks) || tasks.some((item) => !taskId.test(item.id) || item.modulo !== module)],
+    ['frontSha', !sha.test(frontSha)],
+    ['backSha', !(sha.test(backSha) || backSha === 'unavailable')],
+    ['profile', !profile], ['browser', !browser], ['model', !model],
+    ['marker', Boolean(marker && !/^[a-f0-9]{8}$/u.test(marker))],
+  ].find(([, failed]) => failed)?.[0];
+  if (invalid) throw new Error(`${invalid} ausente`);
   const fixtureFor = (kind, n = 1) => fixtureValue(kind, n, marker);
-  const generated = marker ? new Set([...fixtureValues, ...['contactName', 'editedName', 'robotName', 'tagName']
+  const generated = marker ? new Set([...fixtureValues, ...['contactName', 'editedName', 'robotName', 'tagName',
+    'menuQuestion', 'menuOption', 'departmentName', 'userName']
     .flatMap((kind) => Array.from({ length: 99 }, (_, index) => fixtureFor(kind, index + 1)))]) : fixtureValues;
   const results = [];
   const prepared = {};
@@ -203,7 +220,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       status: 'inconclusiva', reason: null, limits: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd },
       usage: { actions: 0, costUsd: 0, elapsedMs: 0 }, cacheKey: key, policyVersion: JOURNEY_POLICY_VERSION };
     const images = [];
-    if (task.acaoProibidaAoAgente?.startsWith('sim:') || task.id === 'robos.publicar_ativar' || task.id === 'contatos.agendar_mensagem') {
+    if (task.id === 'robos.publicar_ativar' || task.id === 'contatos.agendar_mensagem') {
       record.status = 'bloqueada'; record.reason = 'ação proibida pela política';
     } else if (!prerequisites(task.id, prepared)) {
       record.reason = 'sem dado de preparo';
