@@ -4,7 +4,9 @@ import * as runtime from './journey-runtime.mjs';
 import { fixtureValue } from './journey-service.mjs';
 
 const call = (method, path, body) => ({ method: () => method,
-  url: () => `https://qa.example.test/api/v2${path}`, postData: () => JSON.stringify(body) });
+  url: () => `https://qa.example.test/api/v2${path}`, postData: () => method === 'POST' && /^\/contacts\/?$/u.test(path)
+    ? `--fixture\r\nContent-Disposition: form-data; name="contato"\r\n\r\n${JSON.stringify(body)}\r\n--fixture--\r\n`
+    : JSON.stringify(body) });
 const generated = new Set([fixtureValue('contactName'), fixtureValue('phone'), fixtureValue('email'),
   fixtureValue('robotName')]);
 const { journeyRequestAllowed } = runtime;
@@ -13,7 +15,7 @@ test('cadastro real aceita telefone normalizado pelo formulário e nega nome alh
   const body = { nome: fixtureValue('contactName'), contatoTelefones: [
     { numero: fixtureValue('phone').replace(/\D/gu, ''), tipoTelefone: 1 }],
     contatoEmails: [{ email: fixtureValue('email') }] };
-  const context = { taskId: 'contatos.cadastrar', generated, createdIds: new Set() };
+  const context = { apiOrigin: 'https://qa.example.test', taskId: 'contatos.cadastrar', generated, createdIds: new Set() };
   assert.equal(journeyRequestAllowed(call('POST', '/contacts', body), context), true);
   assert.equal(journeyRequestAllowed(call('POST', '/contacts', { ...body, nome: 'Pessoa Real' }), context), false);
 });
@@ -21,7 +23,7 @@ test('cadastro real aceita telefone normalizado pelo formulário e nega nome alh
 test('diagnóstico sanitizado classifica rota, chave, valor e estado sem vazar payload', () => {
   assert.equal(typeof runtime.journeyWriteDecision, 'function');
   const journeyWriteDecision = runtime.journeyWriteDecision;
-  const context = { taskId: 'robos.criar', generated, createdIds: new Set(),
+  const context = { apiOrigin: 'https://qa.example.test', taskId: 'robos.criar', generated, createdIds: new Set(),
     fixedIds: { channel: new Set([3]) } };
   const body = { title: fixtureValue('robotName'), type: 1, botTrigger: 1,
     botChannels: [{ CanalId: 3 }], status: false };
@@ -37,7 +39,7 @@ test('diagnóstico sanitizado classifica rota, chave, valor e estado sem vazar p
 });
 
 test('cadastro e salvamento de robô seguem payload do formulário, sempre inativos', () => {
-  const context = { taskId: 'robos.criar', generated, createdIds: new Set(),
+  const context = { apiOrigin: 'https://qa.example.test', taskId: 'robos.criar', generated, createdIds: new Set(),
     fixedIds: { channel: new Set([3]) } };
   const body = { title: fixtureValue('robotName'), type: 1, botTrigger: 1,
     botChannels: [{ CanalId: 3 }], status: false };

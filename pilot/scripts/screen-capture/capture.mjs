@@ -408,9 +408,38 @@ export async function captureMaskedFrame(page, vocabulary = []) {
   const cdp = await page.context().newCDPSession(page);
   try {
     const result = await captureAttempt(page, cdp, null, vocabulary, null);
-    if (!result.bytes) throw new Error('sanitização da imagem falhou');
+    if (!result.bytes) {
+      const error = new Error(result.failure ?? 'sanitização da imagem falhou');
+      error.stage = result.failure?.includes('máscara') ? 'máscara' : 'screenshot';
+      error.captureReason = result.failure;
+      throw error;
+    }
     return result.bytes;
   } finally { await cdp.detach(); }
+}
+
+export async function waitForStableScreen(page) {
+  await page.waitForLoadState('domcontentloaded', { timeout: 10_000 });
+  const stable = await page.evaluate(async () => {
+    const deadline = performance.now() + 4_000;
+    let previous = null;
+    let frames = 0;
+    while (performance.now() < deadline) {
+      await new Promise((done) => requestAnimationFrame(done));
+      const active = document.getAnimations().some((animation) => animation.playState === 'running');
+      const boxes = [...document.querySelectorAll('[role="dialog"],dialog,[class*="modal" i]')]
+        .filter((element) => element.getClientRects().length).map((element) => {
+          const rect = element.getBoundingClientRect();
+          return [rect.x, rect.y, rect.width, rect.height].map((value) => Math.round(value * 100) / 100);
+        });
+      const position = JSON.stringify(boxes);
+      frames = !active && position === previous ? frames + 1 : 0;
+      if (frames >= 2) return true;
+      previous = position;
+    }
+    return false;
+  });
+  if (!stable) throw new Error('tela não estabilizou');
 }
 
 async function scrollControlIntoCapture(page, control) {

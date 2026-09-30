@@ -1,10 +1,10 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
-import { captureFailureLog } from './capture-diagnostics.mjs';
+import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-5';
+export const JOURNEY_POLICY_VERSION = 'm571-6';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -116,6 +116,11 @@ function sanitizeScreen(raw, allowedLabels) {
 }
 function safeJourney(record) {
   const copy = structuredClone(record);
+  const identity = copy.identity;
+  delete copy.identity;
+  if (identity && (!Array.isArray(identity.refs) || !Array.isArray(identity.ids)
+    || identity.refs.some((ref) => typeof ref !== 'string' || !/^[a-z0-9-]{1,80}$/iu.test(ref))
+    || identity.ids.some((id) => !Number.isSafeInteger(id) || id <= 0))) throw new Error('sanitização falhou');
   const check = (value) => {
     if (typeof value === 'string' && !sha.test(value) && !/^[a-f0-9]{64}$/u.test(value)
       && !fixtureValues.has(value) && !fictionalPhone.test(value)
@@ -125,6 +130,7 @@ function safeJourney(record) {
     else if (value && typeof value === 'object') Object.values(value).forEach(check);
   };
   check(copy);
+  if (identity) copy.identity = identity;
   return copy;
 }
 function orderTasks(tasks) {
@@ -196,7 +202,8 @@ export async function readJourney({ root = resolve(process.env.MCP_STATE_DIR ?? 
 export async function runJourneys({ module, tasks, root = resolve(process.env.MCP_STATE_DIR ?? '/data', 'journeys'), marker = '',
   frontSha, backSha = 'unavailable', profile, browser, model, sanitize = async (value) => value,
   allowedScreenLabels = new Set(),
-  maxActionsPerTask = 30, maxActionsPerModule = 300, maxMs = 900_000, maxCostUsd = 5 }) {
+  maxActionsPerTask = 30, maxActionsPerModule = 300, maxMs = 900_000, maxCostUsd = 5,
+  cacheConfig = {}, cacheBypass = false, markerChanged = () => {} }) {
   const invalid = [
     ['module', !modules.has(module)],
     ['tasks', !Array.isArray(tasks) || tasks.some((item) => !taskId.test(item.id) || item.modulo !== module)],
@@ -206,8 +213,9 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
     ['marker', Boolean(marker && !/^[a-f0-9]{8}$/u.test(marker))],
   ].find(([, failed]) => failed)?.[0];
   if (invalid) throw new Error(`${invalid} ausente`);
-  const fixtureFor = (kind, n = 1) => fixtureValue(kind, n, marker);
-  const generated = marker ? new Set(['contactName', 'editedName', 'robotName', 'tagName',
+  let currentMarker = marker;
+  const fixtureFor = (kind, n = 1) => fixtureValue(kind, n, currentMarker);
+  const generatedFor = () => currentMarker ? new Set(['contactName', 'editedName', 'robotName', 'tagName',
     'menuQuestion', 'menuOption', 'departmentName', 'userName', 'email', 'phone']
     .flatMap((kind) => Array.from({ length: 99 }, (_, index) => fixtureFor(kind, index + 1)))) : fixtureValues;
   const results = [];
@@ -217,12 +225,22 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
   const started = Date.now();
   try {
   for (const task of orderTasks(tasks)) {
-    const key = digest({ task: task.id, frontSha, backSha, profile, prepared, marker, policy: JOURNEY_POLICY_VERSION });
-    const cached = await loadCache(root, module, task.id, key);
-    if (cached) { results.push(cached); Object.assign(prepared, cached.created ?? {}); continue; }
+    const key = digest({ task, frontSha, backSha, profile, policy: JOURNEY_POLICY_VERSION,
+      config: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd, ...cacheConfig } });
+    const cached = cacheBypass ? null : await loadCache(root, module, task.id, key);
+    if (cached) {
+      results.push(cached); Object.assign(prepared, cached.created ?? {});
+      if (cached.created && Object.keys(cached.created).length) {
+        currentMarker = cached.marker;
+        markerChanged(currentMarker);
+        prepared.identity = cached.identity;
+      }
+      continue;
+    }
     const record = { task: task.id, module, objective: task.tarefa, prerequisites: task.preRequisitos,
       profile, versions: { frontSha, backSha, note: backSha === 'unavailable' ? 'SHA do back indisponível; recapturar quando disponível' : null },
-      fixtures: Object.values(prepared), marker, actions: [], screens: [], before: null, after: null,
+      fixtures: Object.values(prepared).filter((value) => typeof value === 'string'), marker: currentMarker,
+      actions: [], screens: [], before: null, after: null,
       expected: task.resultadoEsperadoObservavel, observed: null, verification: null, created: {},
       status: 'inconclusiva', reason: null, limits: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd },
       blocked: null, thirdPartyDenied: {},
@@ -243,7 +261,13 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           }
           let raw;
           try { raw = await browser.observe(); }
-          catch { throw new SanitizationError('observação ou máscara falhou'); }
+          catch (error) {
+            record.observeError = { stage: ['dom', 'máscara', 'screenshot', 'navegação'].includes(error?.stage)
+              ? error.stage : 'dom', category: captureFailureCategory(error) };
+            const safe = new SanitizationError(`observação: ${record.observeError.category}`);
+            safe.observeError = record.observeError;
+            throw safe;
+          }
           let sanitized;
           try { sanitized = sanitizeScreen(await sanitize(raw), allowedScreenLabels); }
           catch { throw new SanitizationError('sanitização falhou'); }
@@ -274,7 +298,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           if (action.type === 'upload_csv' && task.id !== 'contatos.importar') {
             record.status = 'bloqueada'; record.reason = 'upload fora da tarefa'; break;
           }
-          const policy = policyDecision(action, generated);
+          const policy = policyDecision(action, generatedFor());
           if (!policy.allowed) { record.status = 'bloqueada'; record.reason = policy.reason; break; }
           if (action.type === 'finish') {
             if (!actionEvidence(task.id, record.actions, fixtureFor)) { record.reason = 'ações necessárias não observadas'; break; }
@@ -285,8 +309,9 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             record.status = checked.confirmed ? 'concluída' : 'inconclusiva';
             record.reason = checked.confirmed ? null : 'resultado não conferido';
             if (checked.confirmed && checked.created) {
-              if (Object.values(checked.created).some((value) => !generated.has(value))) throw new SanitizationError('dado de preparo inválido');
+              if (Object.values(checked.created).some((value) => !generatedFor().has(value))) throw new SanitizationError('dado de preparo inválido');
               record.created = checked.created;
+              if (checked.identity) record.identity = checked.identity;
             }
             break;
           }
@@ -301,13 +326,16 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
         }
         if (!record.reason && record.status === 'inconclusiva') record.reason = 'limite de ações por tarefa';
       } catch (error) {
+        if (error?.code === 'STALE_JOURNEY_REFERENCE') throw error;
         record.status = /escrita bloqueada pela política/iu.test(String(error?.message ?? '')) ? 'bloqueada' : 'inconclusiva';
         record.reason = record.status === 'bloqueada' ? 'escrita bloqueada pela política' : journeyFailureCategory(error);
         if (record.status === 'bloqueada' && error.blocked) record.blocked = error.blocked;
         if (error instanceof SanitizationError) {
           record.screens = []; record.before = null; record.after = null; images.length = 0;
         }
-        console.error(journeyFailureLog(error));
+        console.error(record.observeError
+          ? `gravar_jornada: observe ${record.observeError.stage}: ${record.observeError.category}`
+          : journeyFailureLog(error));
       } finally {
         record.thirdPartyDenied = browser.diagnostics?.().thirdPartyDenied ?? {};
         await browser.close().catch(() => {});
@@ -319,6 +347,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
     safeJourney(record);
     await save(root, module, record, images);
     Object.assign(prepared, record.created);
+    if (record.identity) prepared.identity = record.identity;
     results.push(record);
   }
   } catch (error) {

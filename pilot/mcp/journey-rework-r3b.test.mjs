@@ -8,7 +8,9 @@ import { join } from 'node:path';
 const { journeyRequestAllowed } = runtime;
 
 const call = (method, path, body) => ({ method: () => method,
-  url: () => `https://qa.example.test/api/v2${path}`, postData: () => JSON.stringify(body) });
+  url: () => `https://qa.example.test/api/v2${path}`, postData: () => method === 'POST' && /^\/contacts\/?$/u.test(path)
+    ? `--fixture\r\nContent-Disposition: form-data; name="contato"\r\n\r\n${JSON.stringify(body)}\r\n--fixture--\r\n`
+    : JSON.stringify(body) });
 
 test('telefone fictício tem DDI britânico, 12 dígitos e varia com o marcador', () => {
   const a = fixtureValue('phone', 1, '00000001');
@@ -19,7 +21,7 @@ test('telefone fictício tem DDI britânico, 12 dígitos e varia com o marcador'
   const generated = new Set([fixtureValue('contactName'), a]);
   const body = { nome: fixtureValue('contactName'), contatoTelefones: [
     { numero: a.replace(/\D/gu, ''), tipoTelefone: 1 }] };
-  const context = { taskId: 'contatos.cadastrar', generated };
+  const context = { apiOrigin: 'https://qa.example.test', taskId: 'contatos.cadastrar', generated };
   assert.equal(journeyRequestAllowed(call('POST', '/contacts', body), context), true);
   assert.equal(journeyRequestAllowed(call('POST', '/contacts', { ...body,
     contatoTelefones: [{ numero: '442079460999', tipoTelefone: 1 }] }), context), false);
@@ -34,13 +36,13 @@ test('POST /contacts aceita multipart contato do formulário; import aceita arra
     postData: () => multipart };
   const generated = new Set([fixtureValue('contactName', 2), fixtureValue('phone', 2),
     fixtureValue('contactName', 3), fixtureValue('phone', 3), fixtureValue('email', 2), fixtureValue('email', 3)]);
-  assert.equal(journeyRequestAllowed(request, { taskId: 'contatos.cadastrar', generated }), true);
+  assert.equal(journeyRequestAllowed(request, { apiOrigin: 'https://qa.example.test', taskId: 'contatos.cadastrar', generated }), true);
   const rows = [2, 3].map((n) => ({ Nome: fixtureValue('contactName', n),
     Contato: fixtureValue('phone', n), Email: fixtureValue('email', n) }));
   assert.equal(journeyRequestAllowed(call('POST', '/contacts/import', rows),
-    { taskId: 'contatos.importar', generated }), true);
+    { apiOrigin: 'https://qa.example.test', taskId: 'contatos.importar', generated }), true);
   assert.equal(journeyRequestAllowed(call('POST', '/contacts/import', [{ ...rows[0], Nome: 'Pessoa Real' }]),
-    { taskId: 'contatos.importar', generated }), false);
+    { apiOrigin: 'https://qa.example.test', taskId: 'contatos.importar', generated }), false);
 });
 
 test('IDs vêm de três GETs da conta autenticada e falham fechados', async () => {
@@ -58,7 +60,7 @@ test('IDs vêm de três GETs da conta autenticada e falham fechados', async () =
 });
 
 test('robô inativo aceita ids lidos e somente padrões opcionais do formulário', () => {
-  const context = { taskId: 'robos.criar', generated: new Set([fixtureValue('robotName')]),
+  const context = { apiOrigin: 'https://qa.example.test', taskId: 'robos.criar', generated: new Set([fixtureValue('robotName')]),
     fixedIds: { department: new Set([2]), channel: new Set([3]) } };
   const body = { title: fixtureValue('robotName'), type: 1, status: false,
     departmentId: 2, botTrigger: 1, botChannels: [{ CanalId: 3 }],

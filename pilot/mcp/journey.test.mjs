@@ -89,8 +89,9 @@ test('valor livre recusado e sanitização falha antes de qualquer artefato', as
 
 test('request guard falha fechado para saídas, publicação e dados reais', () => {
   const request = (method, path, body = '') => ({ method: () => method,
-    url: () => `https://qa.example.com/${path}`, postData: () => body });
-  const policy = { taskId: 'contatos.cadastrar', generated: new Set([fixtureValue('contactName'), fixtureValue('phone')]), createdIds: new Set() };
+    url: () => `https://qa.example.com/${path}`, postData: () => method === 'POST' && /\/contacts$/u.test(path)
+      ? `--fixture\r\nContent-Disposition: form-data; name="contato"\r\n\r\n${body}\r\n--fixture--\r\n` : body });
+  const policy = { taskId: 'contatos.cadastrar', apiOrigin: 'https://qa.example.com', generated: new Set([fixtureValue('contactName'), fixtureValue('phone')]), createdIds: new Set() };
   assert.equal(journeyRequestAllowed(request('POST', 'api/contacts', JSON.stringify({ nome: fixtureValue('contactName'),
     contatoTelefones: [{ numero: fixtureValue('phone'), tipoTelefone: 1 }] })), policy), true);
   assert.equal(journeyRequestAllowed(request('POST', 'api/v2/contacts', JSON.stringify({ nome: fixtureValue('contactName'),
@@ -104,9 +105,9 @@ test('request guard falha fechado para saídas, publicação e dados reais', () 
   ]) assert.equal(journeyRequestAllowed(item, policy), false);
   assert.equal(journeyRequestAllowed(request('POST', 'api/contacts', '{"firstName":"Maria Silva"}'), policy), false);
   assert.equal(journeyRequestAllowed(request('POST', 'api/bot/fixture-id/save', '{"status":"published"}'),
-    { taskId: 'robos.salvar', generated: policy.generated, createdIds: new Set(['fixture-id']) }), false);
+    { taskId: 'robos.salvar', apiOrigin: 'https://qa.example.com', generated: policy.generated, createdIds: new Set(['fixture-id']) }), false);
   assert.equal(journeyRequestAllowed(request('POST', 'api/bot', '{"title":"Robô Exemplo 01","status":false}'),
-    { taskId: 'robos.criar', generated: new Set(['Robô Exemplo 01']), createdIds: new Set() }), false);
+    { taskId: 'robos.criar', apiOrigin: 'https://qa.example.com', generated: new Set(['Robô Exemplo 01']), createdIds: new Set() }), false);
   assert.equal(journeyRequestAllowed(request('POST', 'api/unknown', '{}')), false);
 });
 

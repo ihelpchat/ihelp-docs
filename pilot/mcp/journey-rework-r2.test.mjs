@@ -10,7 +10,7 @@ import { runJourneys, journeyCoverage } from './journey-service.mjs';
 
 const request = (method, path, body) => ({ method: () => method,
   url: () => `https://qa.example.test/api/${path}`, postData: () => JSON.stringify(body) });
-const robot = { taskId: 'robos.criar', generated: new Set(['Robô Exemplo 01']), createdIds: new Set(),
+const robot = { taskId: 'robos.criar', apiOrigin: 'https://qa.example.test', generated: new Set(['Robô Exemplo 01']), createdIds: new Set(),
   fixedIds: { department: new Set([2]), channel: new Set([3]), user: new Set([4]) } };
 
 test('SHA da jornada vem do ref real da busca local e CAPTURE_FRONT_SHA conserva fatos da tela', async () => {
