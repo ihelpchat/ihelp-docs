@@ -11,10 +11,13 @@ if (!notesFile || !process.env.OPENAI_API_KEY) throw new Error('ambiente de cali
 
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'));
 const samples = (await readJson(join(rubricDir, 'amostras-calibracao.json'))).amostras;
+const sources = (await readJson(join(rubricDir, 'amostras-calibracao-fontes.json'))).fontes;
 const privateNotes = (await readJson(notesFile)).amostras;
 const notesById = new Map(privateNotes.map((item) => [item.amostra, item]));
 const approved = (await readJson(join(root, 'product-map/approved.json'))).manifest;
 const moduleFiles = { Contatos: 'Contact', Robôs: 'Robot', Departamentos: 'Department', Canais: 'Channel' };
+const routeLabels = { Contatos: 'Contatos', Robôs: 'Bot', Departamentos: 'Departmento', Canais: 'Canal' };
+const businessModules = { Departamentos: 'configuracoes-departamentos', Canais: 'configuracoes-canais' };
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Classificação do gabarito de validação, aplicada só após as decisões do juiz.
@@ -24,12 +27,20 @@ const rates = {
   'gpt-6-luna': [0.10, 0.50], 'gpt-6-sol': [2, 10], 'gpt-6-astra': [10, 50],
 }; // USD por milhão, Standard; https://developers.openai.com/api/docs/pricing
 
-function evidenceFor(module) {
-  const filePart = moduleFiles[module];
-  const routes = approved.routes.filter((item) => item.label === module);
+async function evidenceFor(sample) {
+  const moduleName = sample.modulo;
+  const filePart = moduleFiles[moduleName];
+  const routes = approved.routes.filter((item) => item.label === routeLabels[moduleName]);
   const labels = approved.labels.filter((item) => filePart && item.file.includes(filePart))
     .map(({ label, file }) => ({ label, file }));
-  return { front: { routes, labels }, jornadas: [] };
+  if (!routes.length && !labels.length) throw new Error(`evidência do módulo ausente: ${moduleName}`);
+  const origin = sources[sample.id]?.origem ?? '';
+  const paths = [...origin.matchAll(/(?:pilot\/content\/docs\/docs\/[^\s,]+?\.mdx|baseline\/[^\s,]+?\.mdx)/gu)]
+    .map(([path]) => path.startsWith('baseline/') ? `architecture/faq-regua/${path}` : path.replace(/^pilot\//u, ''));
+  if (!paths.length && moduleName === 'Robôs') paths.push('content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx');
+  const fontes = await Promise.all([...new Set(paths)].map(async (path) => ({ nome: path,
+    conteudo: await readFile(join(root, path), 'utf8') })));
+  return { front: { routes, labels }, jornadas: [], fontes };
 }
 
 async function run(model) {
@@ -39,9 +50,13 @@ async function run(model) {
     const note = notesById.get(sample.id);
     if (!note || note.grupo !== sample.grupo || !EDITORIAL_CRITERIA.every((id) => Number.isInteger(note.notas[id])))
       throw new Error('notas incompletas');
-    const evidence = evidenceFor(sample.modulo);
-    const business = await loadBusinessContext(root, sample.modulo, process.env.BUSINESS_CONTEXT_DIR);
+    const evidence = await evidenceFor(sample);
+    const business = await loadBusinessContext(root, businessModules[sample.modulo] ?? sample.modulo, process.env.BUSINESS_CONTEXT_DIR);
     evidence.negocio = business.map(({ body }) => body);
+    const evidenceNames = { rotas: evidence.front.routes.map(({ label }) => label),
+      rotasCount: evidence.front.routes.length, labelsCount: evidence.front.labels.length,
+      fontes: evidence.fontes.map(({ nome }) => nome), negocio: business.map(({ path }) => path),
+      negocioCount: business.length };
     let judge;
     try {
       judge = await judgeEditorial({ pagina: sample.texto, modulo: sample.modulo, evidencias: evidence },
@@ -55,7 +70,7 @@ async function run(model) {
     }
     inputTokens += judge.usage.input_tokens;
     outputTokens += judge.usage.output_tokens;
-    rows.push({ id: sample.id, grupo: sample.grupo,
+    rows.push({ id: sample.id, grupo: sample.grupo, evidencias: evidenceNames,
       bruno: { notas: note.notas, defeitosGraves: heldOutSerious[sample.id] ?? [] }, juiz: judge });
   }
   const [inputRate, outputRate] = rates[model] ?? [Number(process.env.JUDGE_INPUT_USD_PER_MILLION),
@@ -67,11 +82,11 @@ async function run(model) {
 
 function display(report) {
   console.log(`Modelo: ${report.modelo}`);
-  console.log('| Amostra | Grupo | Bruno × juiz | Notas Bruno | Notas juiz | Defeitos graves juiz |');
-  console.log('| --- | --- | --- | --- | --- | --- |');
+  console.log('| Amostra | Grupo | Bruno × juiz | Notas Bruno | Notas juiz | Defeitos graves juiz | Evidências |');
+  console.log('| --- | --- | --- | --- | --- | --- | --- |');
   for (const row of report.amostras) {
     const compact = ({ notas }) => EDITORIAL_CRITERIA.map((id) => `${id}:${notas[id]}`).join(', ');
-    console.log(`| ${row.id} | ${row.grupo} | ${row.bruno.aceite ? 'aceite' : 'recusa'} × ${row.juiz.aceite ? 'aceite' : 'recusa'} | ${compact(row.bruno)} | ${compact(row.juiz)} | ${row.juiz.defeitosGraves.join(', ') || 'nenhum'} |`);
+    console.log(`| ${row.id} | ${row.grupo} | ${row.bruno.aceite ? 'aceite' : 'recusa'} × ${row.juiz.aceite ? 'aceite' : 'recusa'} | ${compact(row.bruno)} | ${compact(row.juiz)} | ${row.juiz.defeitosGraves.join(', ') || 'nenhum'} | ${JSON.stringify(row.evidencias)} |`);
   }
   console.log(JSON.stringify({ metricas: report.metricas, uso: report.uso }));
 }

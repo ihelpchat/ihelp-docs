@@ -8,7 +8,7 @@ const { judgeEditorial, parseEditorialVerdict, aggregateCalibration, publicCalib
 
 const ids = ['entende_modulo', 'utilidade_negocio', 'casos_concretos', 'tarefas_completas', 'clareza', 'coerencia'];
 const scores = Object.fromEntries(ids.map((id) => [id, 3]));
-const verdict = { notas: scores, defeitosGraves: [], comentario: 'Texto claro.' };
+const verdict = { notas: scores, defeitosGraves: [], naoVerificaveis: [], comentario: 'Texto claro.' };
 
 test('juiz editorial disponível', () => assert.equal(typeof judgeEditorial, 'function'));
 
@@ -17,7 +17,7 @@ test('parsing exige as seis notas inteiras, categorias conhecidas e campos exato
   assert.throws(() => parseEditorialVerdict(JSON.stringify({ ...verdict, notas: { ...scores, clareza: 4.5 } })));
   assert.throws(() => parseEditorialVerdict(JSON.stringify({ ...verdict, defeitosGraves: ['categoria_inventada'] })));
   assert.throws(() => parseEditorialVerdict(JSON.stringify({ ...verdict, extra: 'vaza' })));
-  assert.equal(parseEditorialVerdict(JSON.stringify({ ...verdict, defeitosGraves: ['produto_sem_evidencia'] })).aceite, false);
+  assert.equal(parseEditorialVerdict(JSON.stringify({ ...verdict, defeitosGraves: ['contradiz_evidencia'] })).aceite, false);
 });
 
 test('ausência de prova fica separada de contradição factual grave', () => {
@@ -59,9 +59,10 @@ test('relatório público descarta comentário falso de arquivo privado', async 
     await writeFile(notesPath, JSON.stringify({ amostras: [{ amostra: 'G01', notas: scores, comentario: secret }] }));
     const note = JSON.parse(await readFile(notesPath, 'utf8')).amostras[0];
     const rows = [{ id: 'G01', grupo: 'guardada', texto: secret,
-      bruno: note, juiz: { ...verdict, comentario: secret, aceite: true } }];
+      bruno: note, juiz: { ...verdict, comentario: secret, naoVerificaveis: [secret], aceite: true } }];
     const report = publicCalibrationReport(rows, { model: 'mock', inputTokens: 1, outputTokens: 1, costUsd: 0 });
     assert.doesNotMatch(JSON.stringify(report), /COMENTARIO_FALSO_PRIVADO_741/);
     assert.deepEqual(report.amostras[0].juiz.defeitosGraves, []);
+    assert.equal(report.amostras[0].juiz.naoVerificaveisCount, 1);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

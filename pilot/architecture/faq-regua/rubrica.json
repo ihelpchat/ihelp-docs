@@ -3,17 +3,16 @@
   "escala": "0 a 4; avaliar cada critério separadamente na página inteira",
   "aceite": {
     "minimoPorCriterio": 3,
-    "afirmacoesDeProdutoSemEvidencia": 0,
+    "afirmacoesContraditasPorEvidencia": 0,
     "tarefasPrometidasIncompletas": 0,
     "perdasNaMontagem": 0
   },
   "defeitosGraves": {
-    "produto_sem_evidencia": "Capacidade, estado ou resultado do produto sem apoio em fato verificável.",
+    "funcao_inexistente": "A evidência fornecida mostra que a função afirmada não existe.",
+    "contradiz_evidencia": "A evidência fornecida contradiz a afirmação de produto.",
     "dado_ou_ambiente_de_teste": "Texto para cliente inclui dados, contas, canais ou cuidados próprios de ensaio.",
     "incerteza_interna": "Dúvida, dependência ou revisão da equipe aparece como orientação ao cliente.",
-    "jargao_do_pipeline": "Vocabulário da preparação editorial aparece como instrução ao cliente.",
-    "tarefa_incompleta": "Procedimento prometido para antes do resultado observável.",
-    "perda_na_montagem": "Definição, benefício, condição ou próximo passo aprovado desaparece ou se contradiz na montagem."
+    "jargao_do_pipeline": "Vocabulário da preparação editorial aparece como instrução ao cliente."
   },
   "criterios": [
     {
