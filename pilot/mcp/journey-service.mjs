@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-6';
+export const JOURNEY_POLICY_VERSION = 'm571-7';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -74,7 +74,8 @@ export function policyDecision(action, generated = fixtureValues) {
   if (forbidden.test(name)) return deny('ação proibida');
   if (action.type === 'fill' && (action.role !== 'textbox' || !generated.has(action.value))) return deny('valor fora do gerador');
   if (action.type === 'select' && (action.role !== 'combobox' || !generated.has(action.value))) return deny('valor fora do gerador');
-  if (action.type === 'click' && !['button', 'link', 'menuitem', 'checkbox', 'tab'].includes(action.role)) return deny('clique inválido');
+  if (action.type === 'click' && !['button', 'link', 'menuitem', 'checkbox', 'tab', 'combobox', 'option'].includes(action.role)) return deny('clique inválido');
+  if (action.role === 'option' && !/^opção [1-9]\d{0,2}$/u.test(action.name)) return deny('opção inválida');
   return { allowed: true };
 }
 
@@ -107,6 +108,7 @@ function sanitizeScreen(raw, allowedLabels) {
   }));
   const fields = (raw.fields ?? []).slice(0, 20).map((item) => ({
     role: clean(item.role), name: clean(item.name), required: Boolean(item.required),
+    value: item.value == null ? null : clean(item.value),
   }));
   const messages = (raw.messages ?? []).slice(0, 10).map(clean);
   const state = {};
@@ -301,6 +303,14 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           const policy = policyDecision(action, generatedFor());
           if (!policy.allowed) { record.status = 'bloqueada'; record.reason = policy.reason; break; }
           if (action.type === 'finish') {
+            const missingRequired = ['contatos.cadastrar', 'robos.criar'].includes(task.id)
+              && screen.fields.find((field) => field.required && field.role === 'textbox' && !field.value
+              && !record.actions.some((previous) => previous.type === 'fill' && previous.role === field.role && previous.name === field.name));
+            if (missingRequired) {
+              record.status = 'falhou'; record.reason = /^campo \d+ do formulário/u.test(missingRequired.name)
+                ? 'valor do gerador ausente para campo obrigatório' : 'campo obrigatório não preenchido';
+              break;
+            }
             if (!actionEvidence(task.id, record.actions, fixtureFor)) { record.reason = 'ações necessárias não observadas'; break; }
             const checked = await browser.verify(task, prepared, record.actions);
             record.verification = { confirmed: Boolean(checked.confirmed), observed: safeString(checked.observed ?? '') };
@@ -318,6 +328,11 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           if (action.type !== 'upload_csv' && !sanitized.controls.some((control) => control.role === action.role && control.name === action.name && control.enabled)
             && !sanitized.fields.some((field) => field.role === action.role && field.name === action.name)) {
             record.reason = 'alvo ausente da tela'; break;
+          }
+          if (action.type === 'fill' && (screen.fields.some((field) => field.role === action.role && field.name === action.name && field.value === action.value)
+            || record.actions.some((previous) => previous.type === 'fill' && previous.role === action.role
+              && previous.name === action.name && previous.value === action.value))) {
+            record.status = 'falhou'; record.reason = 'preenchimento repetido'; break;
           }
           await browser.act(action);
           record.actions.push(action);
