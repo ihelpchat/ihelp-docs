@@ -60,6 +60,7 @@ try {
     'criar_guia',
     'docs_audit_content',
     'docs_delete_article',
+    'docs_generate_faq_v2',
     'docs_generate_package',
     'docs_get_article',
     'docs_inventory',
@@ -75,7 +76,7 @@ try {
     'lacunas',
     'ler_jornada',
   ]);
-  for (const name of ['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_update_article', 'docs_delete_article', 'docs_submit_article']) {
+  for (const name of ['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_generate_faq_v2', 'docs_submit_package', 'docs_update_article', 'docs_delete_article', 'docs_submit_article']) {
     assert.equal(tools.tools.find((tool) => tool.name === name).inputSchema.required?.includes('requestedBy') ?? false, false, `${name} exige requestedBy no corpo`);
   }
 
