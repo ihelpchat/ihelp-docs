@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { assertAllowedTarget, qaRequestDecision } from '../scripts/guide-proof.mjs';
 import { productionConfig, productionPreflight } from './journey-production.mjs';
 import { assertProductionAccountHosts, handleJourneyRoute, productionPreflightRequestAllowed,
-  recordJourneys } from './journey-runtime.mjs';
+  recordJourneys, configuredJourneyIdentity } from './journey-runtime.mjs';
 
 const env = { QA_TARGET: 'producao', QA_PROD_ENABLED: 'true', QA_PROD_URL: 'https://front.example.test',
   QA_PROD_ALLOWED_HOSTS: 'front.example.test,api.example.test', QA_PROD_EMAIL: 'qa@example.test',
   QA_PROD_PASSWORD: 'fictional-password' };
 const data = { company: { dados: { id: 42, nome: 'Empresa Fictícia' } },
-  contacts: { count: 2 }, channels: { dados: [{ idRef: 'channel-1' }] },
+  contacts: { count: 2 }, channels: { dados: [{ idRef: 'channel-1', connected: false }] },
   bots: [], automations: { dados: [] }, webhooks: { dados: [] }, connection: { dados: { connected: false } } };
 const read = async (path) => path === '/company' ? data.company : path.startsWith('/contacts') ? data.contacts
   : path === '/configurations/channels' ? data.channels : path.startsWith('/channel/connect-status/') ? data.connection
@@ -96,6 +96,44 @@ test('estado desconhecido recusa mesmo com aceite configurado', async () => {
   assert.equal((await productionPreflight({ env: cfg, identity: { companyId: '42' }, get })).mode, 'bloqueado');
   assert.equal((await productionPreflight({ env: { ...cfg, QA_PROD_ACCEPT_UNVERIFIABLE: 'integrations' },
     identity: { companyId: '42' }, get })).mode, 'bloqueado');
+});
+
+test('canais só ficam prontos quando listagem e status concordam em desconectado', async () => {
+  const cfg = { ...env, QA_PROD_COMPANY_ID: '42' };
+  const scenarios = [
+    ['listagem conectada, status desconectado', '/configurations/channels',
+      { dados: [{ idRef: 'channel-1', connected: true }] }, 'divergente'],
+    ['listagem desconectada, status conectado', '/channel/connect-status/channel-1',
+      { dados: { connected: true } }, 'divergente'],
+    ['campo da listagem ausente', '/configurations/channels',
+      { dados: [{ idRef: 'channel-1' }] }, 'não verificável'],
+    ['campo do status ausente', '/channel/connect-status/channel-1',
+      { dados: {} }, 'não verificável'],
+    ['status com formato inesperado', '/channel/connect-status/channel-1',
+      { dados: { connected: 'false' } }, 'não verificável'],
+    ['falha da listagem', '/configurations/channels', null, 'não verificável'],
+    ['falha do status', '/channel/connect-status/channel-1', null, 'não verificável'],
+  ];
+  for (const [name, path, payload, reason] of scenarios) {
+    const result = await productionPreflight({ env: cfg, identity: { companyId: '42' },
+      get: async (entry) => entry === path ? payload : read(entry) });
+    assert.equal(result.mode, 'bloqueado', name);
+    assert.match(result.reason, new RegExp(reason, 'u'), name);
+    assert.equal(result.counts.connectedChannels, 'não verificável', name);
+    assert.deepEqual(Object.keys(result).sort(), ['counts', 'mode', 'reason'], name);
+  }
+  const ready = await productionPreflight({ env: cfg, identity: { companyId: '42' }, get: read });
+  assert.equal(ready.mode, 'ready');
+  assert.equal(ready.counts.connectedChannels, 0);
+});
+
+test('hash da homologação preserva a chave dos ponteiros anteriores', () => {
+  const cfg = { GUIDE_QA_STAGING_URL: 'https://qa.example.test',
+    GUIDE_QA_ALLOWED_HOSTS: 'qa.example.test', GUIDE_QA_AUTHORIZED_EMAIL: 'Qa@example.com',
+    GUIDE_QA_AUTHORIZED_PASSWORD: 'fixture-pass' };
+  const previousHash = '4f1bb1082393125525afb2e1d0c844283a1e9c307ec82d3e3d170747f8cbe954';
+  assert.equal(configuredJourneyIdentity(cfg).credentialHash, previousHash);
+  assert.equal(configuredJourneyIdentity({ ...cfg, QA_TARGET: 'homolog' }).credentialHash, previousHash);
 });
 
 test('pré-voo só admite leituras exatas e nega GETs com efeito', () => {
