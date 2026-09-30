@@ -1,0 +1,37 @@
+{
+  "versao": "M5.75-B-1",
+  "contatos": [
+    { "afirmacao": "agenda da empresa, cadastro e consulta", "evidencia": ["codigo:/contact", "contexto:contatos"] },
+    { "afirmacao": "uso para busca, correção, tags, carteira e planilha", "evidencia": ["codigo:Buscar contato...", "codigo:Tag", "codigo:Definir proprietário", "codigo:Importar Contatos", "contexto:contatos"] },
+    { "afirmacao": "buscar por nome ou telefone e limpar filtros", "evidencia": ["codigo:Buscar contato...", "codigo:Limpar filtros", "contexto:contatos"] },
+    { "afirmacao": "abrir e editar um contato encontrado", "evidencia": ["codigo:Editar contato", "jornada:contatos.editar"] },
+    { "afirmacao": "adicionar contato com nome e telefone e salvar", "evidencia": ["codigo:Adicionar Contato", "codigo:Nome", "codigo:Telefone", "codigo:Salvar", "jornada:contatos.cadastrar"] },
+    { "afirmacao": "demais campos opcionais no cadastro individual", "evidencia": ["codigo:CreateContactModal", "jornada:contatos.cadastrar"] },
+    { "afirmacao": "contato criado aparece e pode ser reaberto", "evidencia": ["jornada:contatos.cadastrar"] },
+    { "afirmacao": "editar dado e conferir cadastro atualizado", "evidencia": ["codigo:Editar contato", "jornada:contatos.editar"] },
+    { "afirmacao": "selecionar ou criar tag e encontrá-la no contato", "evidencia": ["codigo:Tags", "codigo:Buscar ou criar tag...", "jornada:contatos.marcar_tags"] },
+    { "afirmacao": "filtrar lista por tag", "evidencia": ["codigo:Tag", "contexto:contatos"] },
+    { "afirmacao": "escolher proprietário por departamento ou usuário", "evidencia": ["codigo:Definir proprietário", "codigo:Selecione um departamento", "codigo:Somente departamento", "codigo:Salvar"] },
+    { "afirmacao": "proprietário organiza carteira, sem alterar conversas abertas", "evidencia": ["contexto:contatos", "codigo:OwnerField"] },
+    { "afirmacao": "importar CSV ou XLSX em quatro etapas", "evidencia": ["codigo:Importar Contatos", "codigo:Enviar arquivo", "codigo:Selecionar cabeçalho", "codigo:Mapear colunas", "codigo:Verificar dados"] },
+    { "afirmacao": "aguardar processamento, buscar cadastros e importação única", "evidencia": ["codigo:ImportProgressBar", "codigo:Importação em andamento...", "contexto:contatos"] },
+    { "afirmacao": "exportar contatos por menu e baixar arquivo", "evidencia": ["codigo:Mais opções", "codigo:Exportar Contatos", "codigo:ContactsList"] },
+    { "afirmacao": "filtro Tag antes de exportar restringe arquivo", "evidencia": ["codigo:Tag", "codigo:ContactsList", "contexto:contatos"] },
+    { "afirmacao": "agenda do celular requer planilha para importação", "evidencia": ["contexto:contatos"] }
+  ],
+  "robos": [
+    { "afirmacao": "robô atende por fluxo de blocos e não entende perguntas livres", "evidencia": ["codigo:/bot", "contexto:robos"] },
+    { "afirmacao": "menu organiza escolhas e encaminhamento por assunto", "evidencia": ["codigo:Menu de opções", "codigo:Encaminhar atendimento", "contexto:robos"] },
+    { "afirmacao": "atendimento depende de canal conectado e fluxo publicado", "evidencia": ["contexto:robos", "codigo:Configuração de Canal", "codigo:Publicar"] },
+    { "afirmacao": "criar robô com título e canal", "evidencia": ["codigo:Criar novo robô", "codigo:Título do Robô", "codigo:Canais", "codigo:Adicionar robô", "jornada:robos.criar"] },
+    { "afirmacao": "robô recém-criado vazio e inativo requer blocos", "evidencia": ["jornada:robos.criar", "codigo:Inativo", "contexto:robos"] },
+    { "afirmacao": "buscar robô pelo título e abrir editor", "evidencia": ["codigo:Buscar robô", "jornada:robos.buscar"] },
+    { "afirmacao": "montar menu com pergunta, opções e ligações", "evidencia": ["codigo:Adicionar bloco", "codigo:Menu de opções", "codigo:Bloco de pergunta", "codigo:Mensagem", "codigo:Adicione uma opção", "jornada:robos.montar_menu"] },
+    { "afirmacao": "ligar opção a mensagem ou ação e salvar", "evidencia": ["codigo:Mensagem simples", "codigo:Ação", "codigo:Salvar", "jornada:robos.montar_menu"] },
+    { "afirmacao": "encaminhar a departamento ou atendente", "evidencia": ["codigo:Encaminhar atendimento", "codigo:Selecione o departamento", "codigo:Selecione o atendente", "jornada:robos.encaminhar"] },
+    { "afirmacao": "editar título ou bloco e conferir edição", "evidencia": ["codigo:Editar", "codigo:Digite o título do robô", "jornada:robos.editar"] },
+    { "afirmacao": "Salvar guarda fluxo; Publicar é ação separada", "evidencia": ["codigo:Salvar", "codigo:Publicar", "jornada:robos.salvar", "contexto:robos"] },
+    { "afirmacao": "reabrir editor mostra blocos e estado inativo", "evidencia": ["jornada:robos.salvar"] },
+    { "afirmacao": "recado fora do horário fica em Departamentos", "evidencia": ["contexto:robos", "contexto:configuracoes-departamentos"] }
+  ]
+}

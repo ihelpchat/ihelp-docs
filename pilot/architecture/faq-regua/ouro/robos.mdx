@@ -1,0 +1,87 @@
+---
+title: Robôs: monte o primeiro atendimento
+description: Crie um robô, organize as opções e salve o fluxo de atendimento.
+---
+
+# Robôs
+
+## O que é
+
+Um robô recebe a primeira mensagem do cliente e segue um caminho de blocos montado pela empresa. Pode mostrar opções e encaminhar o atendimento para um departamento ou uma pessoa. Ele segue esse caminho; não responde livremente a qualquer pergunta.
+
+## Para que serve
+
+Quando uma clínica recebe mensagens de agendamento e cobrança no mesmo número, o menu pode mostrar essas escolhas e levar cada conversa à equipe certa. Uma loja também pode responder uma dúvida frequente antes de encaminhar o cliente. Para isso, o canal precisa estar conectado e o robô precisa ter um fluxo publicado. Um robô apenas criado ou salvo continua inativo.
+
+## Criar um robô
+
+Tenha acesso a **Robôs** e escolha o canal no qual ele deverá funcionar. Criar o robô é o começo: depois será preciso montar os blocos do fluxo.
+
+1. No menu, abra **Robôs** e clique em **Criar novo robô**.
+2. Em **Título do Robô**, escreva um nome que ajude sua equipe a reconhecê-lo.
+3. Em **Canais**, escolha o número desejado e conclua a criação em **Adicionar robô**.
+4. O iHelp abre o editor. Use **Voltar para lista** e procure o título para encontrar o robô criado.
+
+**O que acontece depois:** o robô existe, mas ainda está vazio e inativo. O próximo passo é montar o fluxo com blocos.
+
+## Encontrar um robô
+
+Tenha um robô já criado.
+
+1. Abra **Robôs** no menu.
+2. Digite parte do título em **Buscar robô**.
+3. Encontre o robô na lista e abra-o para ver o fluxo. Se não lembrar o título, percorra a lista.
+
+**O que acontece depois:** você pode editar o robô ou ver se ele está **Inativo** ou **Ativo**.
+
+## Montar um menu de opções
+
+Abra um robô criado. Pense em duas escolhas curtas que o cliente entenda, como “Agendamento” e “Financeiro”. Cada escolha precisa levar a um próximo bloco.
+
+1. No editor, partindo de **Iniciar Fluxo**, clique no **+** e abra **Adicionar bloco**.
+2. Escolha **Menu de opções**. Em **Bloco de pergunta**, escreva no campo **Mensagem** o que o cliente deverá escolher.
+3. Use **Adicione uma opção** para incluir cada resposta e conclua em **Adicionar bloco**.
+4. No fluxo, ligue cada opção ao próximo bloco pelo **+**. Pode ser uma **Mensagem simples** ou uma **Ação**.
+5. Clique em **Salvar**. Saia e reabra o robô para ver a pergunta, as opções e as ligações.
+
+**O que acontece depois:** o menu fica guardado no fluxo. Para que cada escolha chegue à equipe certa, acrescente uma ação de encaminhamento em seu caminho.
+
+## Encaminhar uma escolha para a equipe
+
+Tenha um robô com uma opção já criada e um departamento ou atendente disponível.
+
+1. No editor, clique no **+** do caminho que deseja completar.
+2. Em **Adicionar bloco**, escolha **Ação** e depois **Encaminhar atendimento**.
+3. Escolha **Selecione o departamento** para mandar a conversa à equipe ou **Selecione o atendente** para escolher uma pessoa.
+4. Conclua em **Adicionar bloco** e clique em **Salvar**.
+5. Reabra o fluxo e veja se aquela opção termina no destino escolhido. Repita para as outras opções.
+
+**O que acontece depois:** quando essa versão do fluxo for publicada, a escolha do cliente poderá seguir para o destino configurado. Salvar mantém o robô inativo ou preserva a versão já publicada.
+
+## Editar um robô
+
+Abra um robô que já existe. Por exemplo, altere o texto de uma escolha que deixou os clientes confusos.
+
+1. Em **Robôs**, encontre o robô pela lista ou por **Buscar robô** e escolha **Editar**.
+2. No editor, mude o título em **Digite o título do robô** ou abra o bloco que deseja mudar.
+3. Clique em **Salvar**. Use **Voltar para lista**, reabra o robô e veja a alteração.
+
+**O que acontece depois:** a mudança fica guardada no editor. Se o robô já atendia clientes, o fluxo que eles recebem só muda depois de uma nova publicação.
+
+## Salvar o fluxo
+
+Use **Salvar** para guardar o que montou sem colocá-lo em atendimento.
+
+1. No editor do robô, termine as mensagens e as ligações entre os blocos.
+2. Clique em **Salvar**.
+3. Saia do editor e abra o robô novamente. Veja se os blocos e destinos continuam no fluxo e observe o estado **Inativo** quando ele ainda não foi publicado.
+
+**O que acontece depois:** você pode voltar e continuar a edição. **Publicar** é uma ação separada que põe o fluxo em funcionamento; antes disso, revise as mensagens e os destinos.
+
+## Dúvidas comuns
+
+**Criei o robô e ele já responde?** Não. Monte o fluxo, salve e publique depois de revisar. O canal escolhido também precisa estar conectado.
+
+**Salvar muda o que o cliente recebe agora?** Não. Uma mudança salva em um robô que já está em uso precisa de nova publicação para chegar às próximas conversas.
+
+**O recado de fora do horário fica no robô?** Não. Ele é configurado em **Configurações**, na aba **Departamentos**.
