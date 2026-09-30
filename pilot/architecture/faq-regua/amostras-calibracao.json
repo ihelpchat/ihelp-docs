@@ -1,0 +1,65 @@
+{
+  "instrucao": "Bruno avalia às cegas os seis critérios e comenta o principal problema; não consultar o arquivo de fontes durante a nota.",
+  "amostras": [
+    {
+      "id": "A01",
+      "grupo": "ajuste",
+      "modulo": "Contatos",
+      "texto": "### Cadastrar um contato\nAbra Contatos e selecione Adicionar Contato. Preencha nome e telefone de teste, salve e procure o nome na lista. Reabra a ficha e confira os dados."
+    },
+    {
+      "id": "A02",
+      "grupo": "ajuste",
+      "modulo": "Contatos",
+      "texto": "### Editar\nUse a edição quando precisar atualizar um contato que já aparece na lista.\n1. No módulo Contatos, localize o contato e clique em Editar contato."
+    },
+    {
+      "id": "A03",
+      "grupo": "ajuste",
+      "modulo": "Robôs",
+      "texto": "### Como criar um novo robô\nNa lista Robôs, selecione Criar novo Robô. Dê um título, associe um canal de teste e salve como rascunho. Reabra o editor e confira o título antes de montar o fluxo."
+    },
+    {
+      "id": "A04",
+      "grupo": "ajuste",
+      "modulo": "Robôs",
+      "texto": "### Montar o menu\nCrie uma pergunta com as opções Vendas e Suporte. Conecte cada opção ao departamento correspondente, salve e reabra o fluxo para conferir os dois caminhos. A publicação depende de revisão humana."
+    },
+    {
+      "id": "A05",
+      "grupo": "ajuste",
+      "modulo": "Departamentos",
+      "texto": "### Mensagem fora do horário\nEm Configurações, abra Departamentos e escolha o departamento. Configure o horário e a mensagem fora do expediente; salve e reabra para conferir ambos. O envio da mensagem depende do estado do canal e deve ser confirmado pelo time."
+    },
+    {
+      "id": "A06",
+      "grupo": "ajuste",
+      "modulo": "Canais",
+      "texto": "### Conectar um canal\nDê um nome ao canal e clique em Conectar. Escaneie o QR com um aparelho de teste e confira o estado conectado na tela. Não use número real em uma jornada automática."
+    },
+    {
+      "id": "G01",
+      "grupo": "guardada",
+      "modulo": "Contatos",
+      "texto": "## O que é\nA Agenda de Contatos é uma funcionalidade que centraliza o gerenciamento dos clientes cadastrados no sistema. Nela, é possível buscar, adicionar, editar, organizar e segmentar contatos."
+    },
+    {
+      "id": "G02",
+      "grupo": "guardada",
+      "modulo": "Robôs",
+      "texto": "### Ativar um robô\n1. Abra Robôs e clique em Editar.\n2. Confira o canal associado.\n3. Clique em Publicar.\n4. Confira se o cabeçalho mostra Ativo."
+    },
+    {
+      "id": "G03",
+      "grupo": "guardada",
+      "modulo": "Contatos",
+      "texto": "## E agora?\nDepois de clicar em Exportar contatos, aparece Exportando... A página está concluída quando o botão volta ao normal."
+    },
+    {
+      "id": "G04",
+      "grupo": "guardada",
+      "modulo": "Robôs",
+      "texto": "## Para que serve\nO robô faz tudo sozinho: entende qualquer pedido do cliente, escolhe o melhor atendente e resolve a conversa sem intervenção da equipe."
+    }
+  ]
+}

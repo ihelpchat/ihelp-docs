@@ -1,0 +1,20 @@
+{
+  "gerador": "ex-faq2.sh com checkout 946286e (M5.73), modelo e contexto da configuração Railway staging em 2026-09-29",
+  "pedido": "req-faq-robo.json",
+  "pagina": "docs/sobre-o-sistema/robo-de-atendimento",
+  "status": "ready",
+  "tarefasPrometidas": 4,
+  "tarefasCompletasNaPagina": 1,
+  "criterioDeCompletude": "parte de um estado claro, conclui e indica verificação observável; estado transitório não conta",
+  "aConfirmarNoMdx": 0,
+  "pendenciasRegistradas": 10,
+  "perguntasRegistradas": 1,
+  "frasesExplicitamenteOmitidasNaMontagem": 0,
+  "observacoes": [
+    "Ativar chega ao estado visível Ativo, mas a publicação é proibida ao agente executor.",
+    "Montar fluxo não inclui criação das opções nem comprova cada ligação após salvar; Criar e Editar não conferem persistência.",
+    "Nenhuma perda textual explícita registrada em pending; o fluxo fica incompleto por falta de fatos/rótulos."
+  ],
+  "limite": "Métricas são leitura editorial desta execução; ready do gerador não equivale ao aceite da régua.",
+  "pendenciasAConfirmar": 0
+}

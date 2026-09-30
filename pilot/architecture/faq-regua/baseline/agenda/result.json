@@ -1,0 +1,20 @@
+{
+  "gerador": "ex-faq2.sh com checkout 946286e (M5.73), modelo e contexto da configuração Railway staging em 2026-09-29",
+  "pedido": "req-faq-agenda.json",
+  "pagina": "docs/sobre-o-sistema/agenda-de-contatos",
+  "status": "ready",
+  "tarefasPrometidas": 7,
+  "tarefasCompletasNaPagina": 0,
+  "criterioDeCompletude": "parte de um estado claro, conclui e indica verificação observável; estado transitório não conta",
+  "aConfirmarNoMdx": 0,
+  "pendenciasRegistradas": 28,
+  "perguntasRegistradas": 4,
+  "frasesExplicitamenteOmitidasNaMontagem": 6,
+  "observacoes": [
+    "Editar e Agendar param ao abrir a função; Buscar, Cadastrar, Responsável, Importar e Exportar não comprovam resultado persistente.",
+    "Casos de uso e Erros não chegaram ao MDX; pending registra rótulos recusados.",
+    "Ao menos seis frases foram marcadas como omitidas na montagem, inclusive a definição da importação."
+  ],
+  "limite": "Métricas são leitura editorial desta execução; ready do gerador não equivale ao aceite da régua.",
+  "pendenciasAConfirmar": 5
+}
