@@ -10,10 +10,11 @@ const env = { QA_TARGET: 'producao', QA_PROD_ENABLED: 'true', QA_PROD_URL: 'http
   QA_PROD_PASSWORD: 'fictional-password' };
 const data = { company: { dados: { id: 42, nome: 'Empresa Fictícia' } },
   contacts: { count: 2 }, channels: { dados: [{ idRef: 'channel-1' }] },
-  bots: [], webhooks: { dados: [] }, connection: { dados: { connected: false } } };
+  bots: [], automations: { dados: [] }, webhooks: { dados: [] }, connection: { dados: { connected: false } } };
 const read = async (path) => path === '/company' ? data.company : path.startsWith('/contacts') ? data.contacts
   : path === '/configurations/channels' ? data.channels : path.startsWith('/channel/connect-status/') ? data.connection
-  : path === '/bot' ? data.bots : path === '/webhook' ? data.webhooks : null;
+  : path === '/bot' ? data.bots : path === '/automation' ? data.automations
+    : path === '/webhook' ? data.webhooks : null;
 
 test('produção requer chave geral e somente hosts explícitos da conta', () => {
   assert.throws(() => productionConfig({ ...env, QA_PROD_ENABLED: 'false' }), /produção desabilitada/u);
@@ -68,12 +69,60 @@ test('id diferente e perigos no pré-voo recusam', async () => {
   assert.equal(missingName.mode, 'bloqueado');
 });
 
-test('estado desconhecido recusa salvo aceite explícito por item', async () => {
+test('token, GET /company e configuração devem apontar para a mesma empresa', async () => {
+  const cfg = { ...env, QA_PROD_COMPANY_ID: '42' };
+  await assert.rejects(productionPreflight({ env: cfg, identity: { companyId: '43' }, get: read }),
+    /empresa divergente/u);
+  await assert.rejects(productionPreflight({ env: cfg, identity: { companyId: '43' },
+    get: async (path) => path === '/company' ? { dados: { id: 43, nome: 'Empresa Fictícia' } } : read(path) }),
+  /empresa divergente/u);
+  assert.equal((await productionPreflight({ env: cfg, identity: { companyId: '42' }, get: read })).mode, 'ready');
+});
+
+test('robôs e automações são fontes independentes e qualquer falha recusa', async () => {
+  const cfg = { ...env, QA_PROD_COMPANY_ID: '42' };
+  const active = await productionPreflight({ env: cfg, identity: { companyId: '42' },
+    get: async (path) => path === '/automation' ? { dados: [{ isActive: true }] } : read(path) });
+  assert.equal(active.mode, 'bloqueado');
+  assert.equal(active.counts.activeAutomations, 1);
+  const unavailable = await productionPreflight({ env: cfg, identity: { companyId: '42' },
+    get: async (path) => path === '/automation' ? null : read(path) });
+  assert.equal(unavailable.mode, 'bloqueado');
+});
+
+test('estado desconhecido recusa mesmo com aceite configurado', async () => {
   const cfg = { ...env, QA_PROD_COMPANY_ID: '42' };
   const get = async (path) => path === '/webhook' ? null : read(path);
   assert.equal((await productionPreflight({ env: cfg, identity: { companyId: '42' }, get })).mode, 'bloqueado');
   assert.equal((await productionPreflight({ env: { ...cfg, QA_PROD_ACCEPT_UNVERIFIABLE: 'integrations' },
-    identity: { companyId: '42' }, get })).mode, 'ready');
+    identity: { companyId: '42' }, get })).mode, 'bloqueado');
+});
+
+test('pré-voo só admite leituras exatas e nega GETs com efeito', () => {
+  for (const path of ['/api/v2/company', '/api/v2/automation', '/api/v2/webhook',
+    '/api/v2/channel/connect-status/channel-1', '/api/v2/contacts?page=1&limit=1'])
+    assert.equal(productionPreflightRequestAllowed('GET', path), true, path);
+  for (const path of ['/api/v2/channel/reconnect-all', '/api/v2/channel/disconnect-all',
+    '/api/v2/contacts/sync-contacts', '/api/v2/contacts/validate-contacts-business',
+    '/api/v2/anything'])
+    assert.equal(productionPreflightRequestAllowed('GET', path), false, path);
+  assert.equal(productionPreflightRequestAllowed('HEAD', '/api/v2/company'), false);
+});
+
+test('runner bloqueia GETs com efeito antes e depois do pré-voo', async () => {
+  for (const productionReady of [false, true]) {
+    for (const path of ['/api/v2/channel/reconnect-all', '/api/v2/channel/disconnect-all']) {
+      let outcome;
+      await handleJourneyRoute({ request: () => ({ method: () => 'GET',
+        url: () => `https://api.example.test${path}` }), abort: async () => { outcome = 'abort'; },
+      fallback: async () => { outcome = 'fallback'; } }, {
+        apiOrigin: 'https://api.example.test', target: productionConfig(env).target, env,
+        thirdPartyDenied: {}, taskId: 'contatos.cadastrar', productionReady: () => productionReady,
+        onBlocked: () => {},
+      });
+      assert.equal(outcome, 'abort', `${productionReady}: ${path}`);
+    }
+  }
 });
 
 test('modo confirmação encerra antes do runner e da primeira escrita', async () => {
