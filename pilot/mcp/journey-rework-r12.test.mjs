@@ -85,6 +85,18 @@ test('tag existente da conta pode vincular somente contato criado', async () => 
   assert.equal(typeof runtime.newLinkedTag, 'function');
   assert.equal(runtime.newLinkedTag([{ tagsId: 41 }], new Set(), new Set([41])), 41);
   assert.equal(runtime.newLinkedTag([{ tagsId: 41 }], new Set([41]), new Set([41])), null);
+  const direct = await loadQaFixtureIds(async (path) => path === '/tags' ? [{ id: 41 }] : { dados: [{ id: 1 }] });
+  assert.ok(direct.fixedIds.tag.has(41));
+});
+
+test('item do menu preserva aria-label com capitalização do front', async () => {
+  const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<button aria-label="Exportar contatos">Exportar Contatos</button><button aria-label="Importar contatos">Importar Contatos</button>');
+    const observed = await observeJourneyDom(page, { vocabulary: ['Exportar Contatos', 'Importar Contatos'] });
+    assert.deepEqual(observed.controls.map((item) => item.name), ['Exportar contatos', 'Importar contatos']);
+  } finally { await browser.close(); }
 });
 
 test('exportação busca o marcador e exige somente linhas fictícias; limpar filtros é vedado', () => {
