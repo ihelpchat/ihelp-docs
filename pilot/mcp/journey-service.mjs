@@ -462,7 +462,8 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
         const proof = digest([live.userId, live.companyId]);
         if (cached.accountProof !== proof) cached = null;
         else cached.identityVerified = true;
-      } else cached.identityVerified = false;
+      } else if (cacheConfig.qaTarget === 'producao') cached = null;
+      else cached.identityVerified = false;
       if (cached) await writeFile(fileFor(root, module, task.id, key), JSON.stringify(cached, null, 2), { mode: 0o600 });
     }
     if (cached) {
@@ -475,7 +476,8 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       }
       continue;
     }
-    const record = { task: task.id, module, objective: task.tarefa, prerequisites: task.preRequisitos,
+    const record = { task: task.id, module, target: cacheConfig.qaTarget ?? 'homolog',
+      objective: task.tarefa, prerequisites: task.preRequisitos,
       profile, versions: { frontSha, backSha, note: backSha === 'unavailable' ? 'SHA do back indisponível; recapturar quando disponível' : null },
       fixtures: [prepared.contact, prepared.robot].filter((value) => typeof value === 'string'), marker: currentMarker,
       actions: [], screens: [], before: null, after: null,
