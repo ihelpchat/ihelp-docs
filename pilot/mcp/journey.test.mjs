@@ -10,10 +10,12 @@ const task = (id, extra = {}) => ({ id, modulo: 'contatos', tarefa: id.split('.'
   preRequisitos: 'perfil autorizado', resultadoEsperadoObservavel: 'Valor persistido',
   verificacaoM571: 'Reabrir e conferir', acaoProibidaAoAgente: 'não', ...extra });
 const tasks = [task('contatos.cadastrar'), task('contatos.editar'), task('contatos.definir_responsavel')];
-const screen = (controls = ['Adicionar Contato', 'Salvar', 'Editar', 'Contato Exemplo 01'], filled = new Set()) => ({
+const screen = (controls = ['Adicionar Contato', 'Salvar', 'Editar', 'Contato Exemplo 01'], filled = new Set(), marker = '') => ({
   title: 'Contatos', path: '/contatos', controls: controls.map((name) => ({ role: 'button', name, enabled: true })),
-  fields: [{ role: 'textbox', name: 'Nome', required: true, filled: filled.has('Nome') },
-    { role: 'textbox', name: 'Telefone', required: true, filled: filled.has('Telefone') },
+  fields: [{ role: 'textbox', name: 'Nome', required: true, filled: filled.has('Nome'),
+    value: filled.has('Nome') ? fixtureValue('contactName', 1, marker) : null },
+    { role: 'textbox', name: 'Telefone', required: true, filled: filled.has('Telefone'),
+      value: filled.has('Telefone') ? fixtureValue('phone', 1, marker) : null },
     { role: 'combobox', name: 'Responsável', required: false }],
   messages: [], state: { name: 'Contato Exemplo 01' }, screenshot: Buffer.from('masked-png'),
 });
@@ -208,7 +210,7 @@ test('marcador único pertence ao gerador e persiste na jornada sanitizada', asy
   try {
     const [record] = await runJourneys({ module: 'contatos', tasks: [task('contatos.cadastrar')], root, marker,
       frontSha: 'a'.repeat(40), profile: 'qa',
-      browser: { async open() {}, async observe() { return screen(['Adicionar Contato', 'Salvar', markedName], filled); },
+      browser: { async open() {}, async observe() { return screen(['Adicionar Contato', 'Salvar', markedName], filled, marker); },
         async act(action) { if (action.type === 'fill') filled.add(action.name); }, async close() {}, async verify() { return { confirmed: true, observed: 'Valor persistido',
           created: { contact: markedName } }; } },
       model: { async decide({ actions }) { return [
