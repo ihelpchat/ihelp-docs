@@ -99,6 +99,8 @@ test('menu e encaminhamento só aceitam save inativo do robô criado', () => {
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
     botEvents: [messageBlock] }), policy), true);
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
+    botEvents: [{ ...messageBlock, messages: [{ message: 'Tag Exemplo 01', type: 0, messageType: 0 }] }] }), policy), true);
+  assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
     botEvents: [{ ...messageBlock, messages: [{ message: 'Texto livre', type: 0 }] }] }), policy), false);
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/other-ref/save', body), policy), false);
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body, status: true }), policy), false);
@@ -126,9 +128,9 @@ test('robô criado e menu só confirmam estado persistido na ficha reaberta', as
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.montar_menu', modulo: 'robos' } })).confirmed, true);
   labels.add('Encaminhar atendimento');
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.encaminhar', modulo: 'robos' } })).confirmed, true);
-  saved.botEvents[0].botReactionRules[1].botEventRedirectRef = 'missing-ref';
+  saved.botEvents[1].configuration = '{"DepartmentId":999}';
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.encaminhar', modulo: 'robos' } })).confirmed, false);
-  saved.botEvents[0].botReactionRules[1].botEventRedirectRef = 'forward-ref';
+  saved.botEvents[1].configuration = '{"DepartmentId":2}';
   labels.delete('Menu de opções');
   saved.botEvents[0].botReactionRules = [];
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.montar_menu', modulo: 'robos' } })).confirmed, false);

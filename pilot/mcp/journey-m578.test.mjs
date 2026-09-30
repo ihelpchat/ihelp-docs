@@ -48,6 +48,13 @@ test('plano de encaminhar abre seleção e adiciona bloco antes de salvar', () =
     { type: 'click', role: 'button', name: 'Adicionar bloco (cabeçalho)', value: null });
 });
 
+test('encaminhar aceita adicionar bloco no ramo existente do menu', () => {
+  const screen = { controls: [{ role: 'button', name: 'Adicionar bloco (cabeçalho)', enabled: true }], fields: [] };
+  assert.deepEqual(plannedJourneyAction('robos.encaminhar', screen,
+    [{ type: 'click', name: 'Fluxo de Robô' }]),
+  { type: 'click', role: 'button', name: 'Adicionar bloco (cabeçalho)', value: null });
+});
+
 test('plano de salvar grava o fluxo que contém bloco criado na execução', () => {
   const actions = [{ type: 'click', name: 'Fluxo de Robô' }];
   const screen = { controls: [{ role: 'button', name: 'Salvar', enabled: true }], fields: [] };
