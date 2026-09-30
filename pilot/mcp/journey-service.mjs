@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-10';
+export const JOURNEY_POLICY_VERSION = 'm571-11';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -62,7 +62,7 @@ export function journeyCoverage(records) {
   return { completed, eligible: eligible.length, percent: eligible.length ? Math.round(completed * 100 / eligible.length) : 0 };
 }
 
-export function policyDecision(action, generated = fixtureValues) {
+export function policyDecision(action, generated = fixtureValues, taskId = '') {
   if (!action || typeof action !== 'object' || Array.isArray(action)) return deny('ação inválida');
   if (!['click', 'fill', 'select', 'finish', 'upload_csv'].includes(action.type)) return deny('tipo inválido');
   if (action.type === 'finish') return { allowed: true };
@@ -73,10 +73,21 @@ export function policyDecision(action, generated = fixtureValues) {
   const name = normalized(action.name);
   if (forbidden.test(name)) return deny('ação proibida');
   if (action.type === 'fill' && (action.role !== 'textbox' || !generated.has(action.value))) return deny('valor fora do gerador');
-  if (action.type === 'select' && (action.role !== 'combobox' || !generated.has(action.value))) return deny('valor fora do gerador');
+  if (action.type === 'select' && (action.role !== 'combobox' || !generated.has(action.value)
+    && !(taskId === 'contatos.importar' && ['Nome', 'Contato', 'Email'].includes(action.value)))) return deny('valor fora do gerador');
   if (action.type === 'click' && !['button', 'link', 'menuitem', 'checkbox', 'tab', 'combobox', 'option'].includes(action.role)) return deny('clique inválido');
   if (action.role === 'option' && !/^opção [1-9]\d{0,2}$/u.test(action.name)) return deny('opção inválida');
   return { allowed: true };
+}
+export function selectedRobotChannel(actions) {
+  let selected = null;
+  let opened = false;
+  for (const action of actions) {
+    if (action.type !== 'click') continue;
+    if (action.name === 'Canais') opened = true;
+    else if (opened && action.role === 'option') selected = selected === action.name ? null : action.name;
+  }
+  return selected;
 }
 
 function safeString(value) {
@@ -163,7 +174,7 @@ function actionEvidence(id, actions, fixtureFor = fixtureValue) {
   if (id === 'contatos.marcar_tags') return fills.includes(fixtureFor('tagName'))
     && actions.some((action) => action.type === 'click' && /criar|adicionar|salvar/iu.test(action.name));
   if (id === 'contatos.importar') return actions.some((action) => action.type === 'upload_csv')
-    && actions.some((action) => action.type === 'click' && /importar/iu.test(action.name));
+    && actions.some((action) => action.type === 'click' && /^importar$/iu.test(action.name));
   if (id === 'contatos.exportar') return actions.some((action) => action.type === 'click' && /exportar contatos/iu.test(action.name));
   if (id === 'robos.montar_menu') return actions.some((action) => action.type === 'click' && /bloco|menu|opções/iu.test(action.name))
     && fills.includes(fixtureFor('menuQuestion')) && fills.includes(fixtureFor('menuOption', 1))
@@ -272,7 +283,12 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             record.reason = 'ações necessárias não observadas'; return;
           }
           const checked = await browser.verify(task, prepared, record.actions);
-          record.verification = { confirmed: Boolean(checked.confirmed), observed: safeString(checked.observed ?? '') };
+          record.verification = { confirmed: Boolean(checked.confirmed), observed: safeString(checked.observed ?? ''),
+            ...(Number.isSafeInteger(checked.refsCount) ? { refsCount: checked.refsCount } : {}),
+            ...(typeof checked.createdRefInRefs === 'boolean' ? { createdRefInRefs: checked.createdRefInRefs } : {}),
+            ...(Number.isSafeInteger(checked.foundCount) ? { foundCount: checked.foundCount } : {}) };
+          if (checked.importCapture) record.importCapture = checked.importCapture;
+          if (checked.importResultMessage) record.importResultMessage = screenString(checked.importResultMessage, allowedScreenLabels);
           record.observed = record.verification.observed;
           record.after = screen.state;
           record.status = checked.confirmed ? 'concluída' : 'inconclusiva';
@@ -317,8 +333,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           const validation = screen.messages.find((message) => /^(?:Informe o telefone com DDD|Já existe um contato com este número de telefone|O telefone é obrigatório|Precisa ter pelo menos um canal)$/iu.test(message));
           const plan = task.id === 'contatos.cadastrar' ? { Nome: 'contactName', Telefone: 'phone' }
             : task.id === 'robos.criar' ? { 'Título do Robô': 'robotName' } : {};
-          const channelSelected = record.actions.some((previous, index) => previous.type === 'click' && previous.role === 'option'
-            && record.actions.slice(0, index).some((earlier) => earlier.type === 'click' && earlier.name === 'Canais'));
+          const channelSelected = selectedRobotChannel(record.actions);
           const missingPlanned = Object.entries(plan).find(([name, kind]) => {
             const field = screen.fields.find((item) => item.name === name);
             const expected = fixtureFor(kind);
@@ -349,10 +364,15 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           if (action.type === 'upload_csv' && task.id !== 'contatos.importar') {
             record.status = 'bloqueada'; record.reason = 'upload fora da tarefa'; break;
           }
-          const policy = policyDecision(action, generatedFor());
+          const policy = policyDecision(action, generatedFor(), task.id);
           if (!policy.allowed) { record.status = 'bloqueada'; record.reason = policy.reason; break; }
           if (action.type === 'click' && /^(?:Salvar|Adicionar robô)$/iu.test(action.name) && missingPlanned) {
             feedback = `${missingPlanned[0]} ainda sem o valor do gerador (${missingPlanned[1]})`;
+            continue;
+          }
+          if (task.id === 'robos.criar' && action.type === 'click' && action.role === 'option'
+            && channelSelected === action.name) {
+            feedback = 'Canais já tem uma ficha selecionada';
             continue;
           }
           if (action.type === 'finish') {

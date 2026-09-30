@@ -420,26 +420,31 @@ export async function captureMaskedFrame(page, vocabulary = []) {
 
 export async function waitForStableScreen(page) {
   await page.waitForLoadState('domcontentloaded', { timeout: 10_000 });
-  const stable = await page.evaluate(async () => {
+  const result = await page.evaluate(async () => {
     const deadline = performance.now() + 4_000;
     let previous = null;
     let frames = 0;
     while (performance.now() < deadline) {
       await new Promise((done) => requestAnimationFrame(done));
-      const active = document.getAnimations().some((animation) => animation.playState === 'running');
-      const boxes = [...document.querySelectorAll('[role="dialog"],dialog,[class*="modal" i]')]
+      const active = document.getAnimations().some((animation) => animation.playState === 'running'
+        && animation.effect?.getComputedTiming().iterations !== Infinity);
+      const boxes = [...document.querySelectorAll('main,[role="main"],[role="dialog"],dialog,[class*="modal" i]')]
         .filter((element) => element.getClientRects().length).map((element) => {
           const rect = element.getBoundingClientRect();
           return [rect.x, rect.y, rect.width, rect.height].map((value) => Math.round(value * 100) / 100);
         });
       const position = JSON.stringify(boxes);
       frames = !active && position === previous ? frames + 1 : 0;
-      if (frames >= 2) return true;
+      if (frames >= 2) return { stable: true };
       previous = position;
     }
-    return false;
+    const animations = document.getAnimations().filter((animation) => animation.playState === 'running');
+    if (animations.length && animations.every((animation) => animation.effect?.getComputedTiming().iterations === Infinity))
+      return { stable: true, limit: 'animações infinitas' };
+    return { stable: false, condition: animations.length ? 'animação finita' : 'layout' };
   });
-  if (!stable) throw new Error('tela não estabilizou');
+  if (!result.stable) throw new Error(`tela não estabilizou: ${result.condition}`);
+  return result;
 }
 
 async function scrollControlIntoCapture(page, control) {
