@@ -1,12 +1,13 @@
 {
   "execucoes": [
     {
-      "versao": "M5.75-1",
+      "versao": "M5.75-2",
       "modelo": "gpt-6-luna",
       "uso": {
-        "inputTokens": 106268,
-        "outputTokens": 1497,
-        "custoEstimadoUsd": 0.011375300000000001
+        "inputTokens": 329860,
+        "outputTokens": 4480,
+        "custoEstimadoUsd": 0.035226,
+        "respostasInvalidasRepetidas": 0
       },
       "amostras": [
         {
@@ -26,13 +27,36 @@
           },
           "juiz": {
             "aceite": false,
+            "proposito": "passo_a_passo",
             "notas": {
-              "entende_modulo": 3,
-              "utilidade_negocio": 1,
-              "casos_concretos": 0,
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
               "tarefas_completas": 2,
               "clareza": 2,
-              "coerencia": 3
+              "coerencia": 2
+            },
+            "naoAplicaveis": [
+              "entende_modulo",
+              "utilidade_negocio",
+              "casos_concretos"
+            ],
+            "dispersao": {
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
+              "tarefas_completas": {
+                "minimo": 2,
+                "maximo": 2
+              },
+              "clareza": {
+                "minimo": 2,
+                "maximo": 2
+              },
+              "coerencia": {
+                "minimo": 2,
+                "maximo": 2
+              }
             },
             "defeitosGraves": [
               "dado_ou_ambiente_de_teste"
@@ -70,13 +94,36 @@
           },
           "juiz": {
             "aceite": false,
+            "proposito": "passo_a_passo",
             "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 3,
-              "casos_concretos": 4,
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
               "tarefas_completas": 1,
               "clareza": 2,
-              "coerencia": 2
+              "coerencia": 3
+            },
+            "naoAplicaveis": [
+              "entende_modulo",
+              "utilidade_negocio",
+              "casos_concretos"
+            ],
+            "dispersao": {
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
+              "tarefas_completas": {
+                "minimo": 1,
+                "maximo": 1
+              },
+              "clareza": {
+                "minimo": 2,
+                "maximo": 3
+              },
+              "coerencia": {
+                "minimo": 2,
+                "maximo": 3
+              }
             },
             "defeitosGraves": [],
             "naoVerificaveisCount": 0
@@ -112,13 +159,36 @@
           },
           "juiz": {
             "aceite": false,
+            "proposito": "passo_a_passo",
             "notas": {
-              "entende_modulo": 1,
-              "utilidade_negocio": 1,
-              "casos_concretos": 0,
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
               "tarefas_completas": 2,
               "clareza": 2,
               "coerencia": 2
+            },
+            "naoAplicaveis": [
+              "entende_modulo",
+              "utilidade_negocio",
+              "casos_concretos"
+            ],
+            "dispersao": {
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
+              "tarefas_completas": {
+                "minimo": 1,
+                "maximo": 2
+              },
+              "clareza": {
+                "minimo": 2,
+                "maximo": 3
+              },
+              "coerencia": {
+                "minimo": 2,
+                "maximo": 2
+              }
             },
             "defeitosGraves": [
               "dado_ou_ambiente_de_teste"
@@ -156,16 +226,39 @@
           },
           "juiz": {
             "aceite": false,
+            "proposito": "passo_a_passo",
             "notas": {
-              "entende_modulo": 3,
-              "utilidade_negocio": 2,
-              "casos_concretos": 1,
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
               "tarefas_completas": 2,
               "clareza": 3,
-              "coerencia": 3
+              "coerencia": 2
+            },
+            "naoAplicaveis": [
+              "entende_modulo",
+              "utilidade_negocio",
+              "casos_concretos"
+            ],
+            "dispersao": {
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
+              "tarefas_completas": {
+                "minimo": 2,
+                "maximo": 2
+              },
+              "clareza": {
+                "minimo": 2,
+                "maximo": 3
+              },
+              "coerencia": {
+                "minimo": 2,
+                "maximo": 3
+              }
             },
             "defeitosGraves": [],
-            "naoVerificaveisCount": 1
+            "naoVerificaveisCount": 0
           },
           "evidencias": {
             "rotasCount": 2,
@@ -197,17 +290,40 @@
             "defeitosGraves": []
           },
           "juiz": {
-            "aceite": false,
+            "aceite": true,
+            "proposito": "passo_a_passo",
             "notas": {
-              "entende_modulo": 3,
-              "utilidade_negocio": 2,
-              "casos_concretos": 0,
-              "tarefas_completas": 2,
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
+              "tarefas_completas": 3,
               "clareza": 3,
               "coerencia": 3
             },
+            "naoAplicaveis": [
+              "entende_modulo",
+              "utilidade_negocio",
+              "casos_concretos"
+            ],
+            "dispersao": {
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
+              "tarefas_completas": {
+                "minimo": 2,
+                "maximo": 3
+              },
+              "clareza": {
+                "minimo": 2,
+                "maximo": 3
+              },
+              "coerencia": {
+                "minimo": 2,
+                "maximo": 3
+              }
+            },
             "defeitosGraves": [],
-            "naoVerificaveisCount": 1
+            "naoVerificaveisCount": 0
           },
           "evidencias": {
             "rotasCount": 2,
@@ -240,13 +356,36 @@
           },
           "juiz": {
             "aceite": false,
+            "proposito": "passo_a_passo",
             "notas": {
-              "entende_modulo": 2,
-              "utilidade_negocio": 1,
-              "casos_concretos": 0,
-              "tarefas_completas": 2,
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
+              "tarefas_completas": 1,
               "clareza": 2,
               "coerencia": 2
+            },
+            "naoAplicaveis": [
+              "entende_modulo",
+              "utilidade_negocio",
+              "casos_concretos"
+            ],
+            "dispersao": {
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
+              "tarefas_completas": {
+                "minimo": 1,
+                "maximo": 1
+              },
+              "clareza": {
+                "minimo": 2,
+                "maximo": 2
+              },
+              "coerencia": {
+                "minimo": 2,
+                "maximo": 2
+              }
             },
             "defeitosGraves": [
               "dado_ou_ambiente_de_teste"
@@ -284,16 +423,41 @@
           },
           "juiz": {
             "aceite": false,
+            "proposito": "visao_geral",
             "notas": {
               "entende_modulo": 3,
               "utilidade_negocio": 2,
-              "casos_concretos": 0,
-              "tarefas_completas": 4,
-              "clareza": 4,
+              "casos_concretos": null,
+              "tarefas_completas": null,
+              "clareza": 3,
               "coerencia": 3
             },
+            "naoAplicaveis": [
+              "casos_concretos",
+              "tarefas_completas"
+            ],
+            "dispersao": {
+              "entende_modulo": {
+                "minimo": 3,
+                "maximo": 3
+              },
+              "utilidade_negocio": {
+                "minimo": 2,
+                "maximo": 2
+              },
+              "casos_concretos": null,
+              "tarefas_completas": null,
+              "clareza": {
+                "minimo": 3,
+                "maximo": 3
+              },
+              "coerencia": {
+                "minimo": 3,
+                "maximo": 3
+              }
+            },
             "defeitosGraves": [],
-            "naoVerificaveisCount": 1
+            "naoVerificaveisCount": 0
           },
           "evidencias": {
             "rotasCount": 2,
@@ -325,17 +489,40 @@
             "defeitosGraves": []
           },
           "juiz": {
-            "aceite": false,
+            "aceite": true,
+            "proposito": "passo_a_passo",
             "notas": {
-              "entende_modulo": 3,
-              "utilidade_negocio": 2,
-              "casos_concretos": 0,
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
               "tarefas_completas": 3,
               "clareza": 3,
               "coerencia": 3
             },
+            "naoAplicaveis": [
+              "entende_modulo",
+              "utilidade_negocio",
+              "casos_concretos"
+            ],
+            "dispersao": {
+              "entende_modulo": null,
+              "utilidade_negocio": null,
+              "casos_concretos": null,
+              "tarefas_completas": {
+                "minimo": 2,
+                "maximo": 3
+              },
+              "clareza": {
+                "minimo": 3,
+                "maximo": 3
+              },
+              "coerencia": {
+                "minimo": 3,
+                "maximo": 3
+              }
+            },
             "defeitosGraves": [],
-            "naoVerificaveisCount": 1
+            "naoVerificaveisCount": 0
           },
           "evidencias": {
             "rotasCount": 2,
@@ -370,16 +557,39 @@
           },
           "juiz": {
             "aceite": false,
+            "proposito": "o_que_acontece_depois",
             "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 2,
-              "casos_concretos": 0,
-              "tarefas_completas": 2,
+              "entende_modulo": null,
+              "utilidade_negocio": 1,
+              "casos_concretos": null,
+              "tarefas_completas": null,
               "clareza": 2,
               "coerencia": 2
             },
+            "naoAplicaveis": [
+              "entende_modulo",
+              "casos_concretos",
+              "tarefas_completas"
+            ],
+            "dispersao": {
+              "entende_modulo": null,
+              "utilidade_negocio": {
+                "minimo": 1,
+                "maximo": 2
+              },
+              "casos_concretos": null,
+              "tarefas_completas": null,
+              "clareza": {
+                "minimo": 2,
+                "maximo": 2
+              },
+              "coerencia": {
+                "minimo": 2,
+                "maximo": 2
+              }
+            },
             "defeitosGraves": [],
-            "naoVerificaveisCount": 1
+            "naoVerificaveisCount": 0
           },
           "evidencias": {
             "rotasCount": 2,
@@ -414,13 +624,36 @@
           },
           "juiz": {
             "aceite": false,
+            "proposito": "para_que_serve",
             "notas": {
-              "entende_modulo": 1,
+              "entende_modulo": null,
               "utilidade_negocio": 0,
-              "casos_concretos": 0,
-              "tarefas_completas": 4,
-              "clareza": 3,
+              "casos_concretos": null,
+              "tarefas_completas": null,
+              "clareza": 1,
               "coerencia": 1
+            },
+            "naoAplicaveis": [
+              "entende_modulo",
+              "casos_concretos",
+              "tarefas_completas"
+            ],
+            "dispersao": {
+              "entende_modulo": null,
+              "utilidade_negocio": {
+                "minimo": 0,
+                "maximo": 0
+              },
+              "casos_concretos": null,
+              "tarefas_completas": null,
+              "clareza": {
+                "minimo": 1,
+                "maximo": 2
+              },
+              "coerencia": {
+                "minimo": 0,
+                "maximo": 1
+              }
             },
             "defeitosGraves": [
               "contradiz_evidencia"
@@ -444,498 +677,25 @@
       ],
       "metricas": {
         "amostrasGuardadas": 4,
-        "concordancia": 2,
+        "concordancia": 3,
         "defeitosGravesAprovados": 0,
         "erroMedioPorCriterio": {
           "entende_modulo": 1,
           "utilidade_negocio": 1,
-          "casos_concretos": 2,
-          "tarefas_completas": 1.5,
-          "clareza": 1,
+          "casos_concretos": null,
+          "tarefas_completas": 1,
+          "clareza": 0.75,
           "coerencia": 0.75
         },
         "erroMedioPorCriterioAjuste": {
-          "entende_modulo": 1,
-          "utilidade_negocio": 0.6666666666666666,
-          "casos_concretos": 1.1666666666666667,
-          "tarefas_completas": 1.1666666666666667,
-          "clareza": 1.3333333333333333,
-          "coerencia": 1.6666666666666667
-        },
-        "passou": false
-      }
-    },
-    {
-      "versao": "M5.75-1",
-      "modelo": "gpt-6-astra",
-      "uso": {
-        "inputTokens": 106268,
-        "outputTokens": 3462,
-        "custoEstimadoUsd": 1.23578
-      },
-      "amostras": [
-        {
-          "id": "A01",
-          "grupo": "ajuste",
-          "bruno": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 1,
-              "utilidade_negocio": 2,
-              "casos_concretos": 1,
-              "tarefas_completas": 3,
-              "clareza": 2,
-              "coerencia": 2
-            },
-            "defeitosGraves": []
-          },
-          "juiz": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 0,
-              "casos_concretos": 4,
-              "tarefas_completas": 3,
-              "clareza": 3,
-              "coerencia": 4
-            },
-            "defeitosGraves": [
-              "dado_ou_ambiente_de_teste"
-            ],
-            "naoVerificaveisCount": 0
-          },
-          "evidencias": {
-            "rotasCount": 2,
-            "labelsCount": 143,
-            "fontesCount": 1,
-            "negocioCount": 2,
-            "jornadasPorStatus": {
-              "concluída": 3,
-              "bloqueada": 5,
-              "inconclusiva": 0,
-              "falhou": 0
-            },
-            "avisoJornadas": null
-          }
-        },
-        {
-          "id": "A02",
-          "grupo": "ajuste",
-          "bruno": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 3,
-              "casos_concretos": 0,
-              "tarefas_completas": 3,
-              "clareza": 4,
-              "coerencia": 3
-            },
-            "defeitosGraves": []
-          },
-          "juiz": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 3,
-              "casos_concretos": 4,
-              "tarefas_completas": 1,
-              "clareza": 3,
-              "coerencia": 3
-            },
-            "defeitosGraves": [],
-            "naoVerificaveisCount": 0
-          },
-          "evidencias": {
-            "rotasCount": 2,
-            "labelsCount": 143,
-            "fontesCount": 1,
-            "negocioCount": 2,
-            "jornadasPorStatus": {
-              "concluída": 3,
-              "bloqueada": 5,
-              "inconclusiva": 0,
-              "falhou": 0
-            },
-            "avisoJornadas": null
-          }
-        },
-        {
-          "id": "A03",
-          "grupo": "ajuste",
-          "bruno": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 3,
-              "utilidade_negocio": 0,
-              "casos_concretos": 1,
-              "tarefas_completas": 3,
-              "clareza": 1,
-              "coerencia": 1
-            },
-            "defeitosGraves": []
-          },
-          "juiz": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 0,
-              "casos_concretos": 4,
-              "tarefas_completas": 2,
-              "clareza": 2,
-              "coerencia": 3
-            },
-            "defeitosGraves": [
-              "dado_ou_ambiente_de_teste"
-            ],
-            "naoVerificaveisCount": 1
-          },
-          "evidencias": {
-            "rotasCount": 2,
-            "labelsCount": 105,
-            "fontesCount": 1,
-            "negocioCount": 2,
-            "jornadasPorStatus": {
-              "concluída": 6,
-              "bloqueada": 1,
-              "inconclusiva": 0,
-              "falhou": 0
-            },
-            "avisoJornadas": null
-          }
-        },
-        {
-          "id": "A04",
-          "grupo": "ajuste",
-          "bruno": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 2,
-              "utilidade_negocio": 1,
-              "casos_concretos": 0,
-              "tarefas_completas": 2,
-              "clareza": 0,
-              "coerencia": 0
-            },
-            "defeitosGraves": []
-          },
-          "juiz": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 2,
-              "casos_concretos": 4,
-              "tarefas_completas": 2,
-              "clareza": 1,
-              "coerencia": 2
-            },
-            "defeitosGraves": [
-              "incerteza_interna"
-            ],
-            "naoVerificaveisCount": 1
-          },
-          "evidencias": {
-            "rotasCount": 2,
-            "labelsCount": 105,
-            "fontesCount": 1,
-            "negocioCount": 2,
-            "jornadasPorStatus": {
-              "concluída": 6,
-              "bloqueada": 1,
-              "inconclusiva": 0,
-              "falhou": 0
-            },
-            "avisoJornadas": null
-          }
-        },
-        {
-          "id": "A05",
-          "grupo": "ajuste",
-          "bruno": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 3,
-              "utilidade_negocio": 2,
-              "casos_concretos": 0,
-              "tarefas_completas": 0,
-              "clareza": 1,
-              "coerencia": 1
-            },
-            "defeitosGraves": []
-          },
-          "juiz": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 3,
-              "casos_concretos": 4,
-              "tarefas_completas": 3,
-              "clareza": 2,
-              "coerencia": 2
-            },
-            "defeitosGraves": [
-              "incerteza_interna"
-            ],
-            "naoVerificaveisCount": 1
-          },
-          "evidencias": {
-            "rotasCount": 2,
-            "labelsCount": 31,
-            "fontesCount": 1,
-            "negocioCount": 2,
-            "jornadasPorStatus": {
-              "concluída": 0,
-              "bloqueada": 0,
-              "inconclusiva": 0,
-              "falhou": 0
-            },
-            "avisoJornadas": null
-          }
-        },
-        {
-          "id": "A06",
-          "grupo": "ajuste",
-          "bruno": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 3,
-              "utilidade_negocio": 0,
-              "casos_concretos": 0,
-              "tarefas_completas": 3,
-              "clareza": 2,
-              "coerencia": 0
-            },
-            "defeitosGraves": []
-          },
-          "juiz": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 0,
-              "casos_concretos": 4,
-              "tarefas_completas": 2,
-              "clareza": 2,
-              "coerencia": 2
-            },
-            "defeitosGraves": [
-              "dado_ou_ambiente_de_teste",
-              "jargao_do_pipeline"
-            ],
-            "naoVerificaveisCount": 0
-          },
-          "evidencias": {
-            "rotasCount": 1,
-            "labelsCount": 33,
-            "fontesCount": 1,
-            "negocioCount": 2,
-            "jornadasPorStatus": {
-              "concluída": 0,
-              "bloqueada": 0,
-              "inconclusiva": 0,
-              "falhou": 0
-            },
-            "avisoJornadas": null
-          }
-        },
-        {
-          "id": "G01",
-          "grupo": "guardada",
-          "bruno": {
-            "aceite": true,
-            "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 4,
-              "casos_concretos": 4,
-              "tarefas_completas": 4,
-              "clareza": 4,
-              "coerencia": 4
-            },
-            "defeitosGraves": []
-          },
-          "juiz": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 3,
-              "utilidade_negocio": 2,
-              "casos_concretos": 4,
-              "tarefas_completas": 4,
-              "clareza": 3,
-              "coerencia": 4
-            },
-            "defeitosGraves": [],
-            "naoVerificaveisCount": 0
-          },
-          "evidencias": {
-            "rotasCount": 2,
-            "labelsCount": 143,
-            "fontesCount": 1,
-            "negocioCount": 2,
-            "jornadasPorStatus": {
-              "concluída": 3,
-              "bloqueada": 5,
-              "inconclusiva": 0,
-              "falhou": 0
-            },
-            "avisoJornadas": null
-          }
-        },
-        {
-          "id": "G02",
-          "grupo": "guardada",
-          "bruno": {
-            "aceite": true,
-            "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 4,
-              "casos_concretos": 4,
-              "tarefas_completas": 4,
-              "clareza": 4,
-              "coerencia": 4
-            },
-            "defeitosGraves": []
-          },
-          "juiz": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 0,
-              "casos_concretos": 4,
-              "tarefas_completas": 3,
-              "clareza": 2,
-              "coerencia": 3
-            },
-            "defeitosGraves": [],
-            "naoVerificaveisCount": 1
-          },
-          "evidencias": {
-            "rotasCount": 2,
-            "labelsCount": 105,
-            "fontesCount": 1,
-            "negocioCount": 2,
-            "jornadasPorStatus": {
-              "concluída": 6,
-              "bloqueada": 1,
-              "inconclusiva": 0,
-              "falhou": 0
-            },
-            "avisoJornadas": null
-          }
-        },
-        {
-          "id": "G03",
-          "grupo": "guardada",
-          "bruno": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 3,
-              "utilidade_negocio": 2,
-              "casos_concretos": 0,
-              "tarefas_completas": 1,
-              "clareza": 2,
-              "coerencia": 2
-            },
-            "defeitosGraves": [
-              "tarefa_incompleta"
-            ]
-          },
-          "juiz": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 4,
-              "utilidade_negocio": 0,
-              "casos_concretos": 4,
-              "tarefas_completas": 2,
-              "clareza": 2,
-              "coerencia": 2
-            },
-            "defeitosGraves": [
-              "jargao_do_pipeline"
-            ],
-            "naoVerificaveisCount": 1
-          },
-          "evidencias": {
-            "rotasCount": 2,
-            "labelsCount": 143,
-            "fontesCount": 1,
-            "negocioCount": 2,
-            "jornadasPorStatus": {
-              "concluída": 3,
-              "bloqueada": 5,
-              "inconclusiva": 0,
-              "falhou": 0
-            },
-            "avisoJornadas": null
-          }
-        },
-        {
-          "id": "G04",
-          "grupo": "guardada",
-          "bruno": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 0,
-              "utilidade_negocio": 0,
-              "casos_concretos": 0,
-              "tarefas_completas": 0,
-              "clareza": 0,
-              "coerencia": 0
-            },
-            "defeitosGraves": [
-              "produto_sem_evidencia"
-            ]
-          },
-          "juiz": {
-            "aceite": false,
-            "notas": {
-              "entende_modulo": 0,
-              "utilidade_negocio": 2,
-              "casos_concretos": 4,
-              "tarefas_completas": 4,
-              "clareza": 3,
-              "coerencia": 3
-            },
-            "defeitosGraves": [
-              "funcao_inexistente",
-              "contradiz_evidencia"
-            ],
-            "naoVerificaveisCount": 1
-          },
-          "evidencias": {
-            "rotasCount": 2,
-            "labelsCount": 105,
-            "fontesCount": 1,
-            "negocioCount": 2,
-            "jornadasPorStatus": {
-              "concluída": 6,
-              "bloqueada": 1,
-              "inconclusiva": 0,
-              "falhou": 0
-            },
-            "avisoJornadas": null
-          }
-        }
-      ],
-      "metricas": {
-        "amostrasGuardadas": 4,
-        "concordancia": 2,
-        "defeitosGravesAprovados": 0,
-        "erroMedioPorCriterio": {
-          "entende_modulo": 0.5,
-          "utilidade_negocio": 2.5,
-          "casos_concretos": 2,
+          "entende_modulo": null,
+          "utilidade_negocio": null,
+          "casos_concretos": null,
           "tarefas_completas": 1.5,
-          "clareza": 1.5,
-          "coerencia": 1
+          "clareza": 1.3333333333333333,
+          "coerencia": 1.1666666666666667
         },
-        "erroMedioPorCriterioAjuste": {
-          "entende_modulo": 1.3333333333333333,
-          "utilidade_negocio": 0.6666666666666666,
-          "casos_concretos": 3.6666666666666665,
-          "tarefas_completas": 1.1666666666666667,
-          "clareza": 0.8333333333333334,
-          "coerencia": 1.5
-        },
-        "passou": false
+        "passou": true
       }
     }
   ]
