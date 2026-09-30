@@ -724,6 +724,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
         }
         if (diagnostics.ownerProbe) record.ownerProbe = diagnostics.ownerProbe;
         if (diagnostics.menuProbe) record.menuProbe = diagnostics.menuProbe;
+        if (diagnostics.botWriteProbe?.length) record.botWriteProbe = diagnostics.botWriteProbe;
         if (diagnostics.tagProbe) record.tagProbe = diagnostics.tagProbe;
         if (['contatos.cadastrar', 'robos.criar'].includes(task.id)) record.creationCapture ??=
           diagnostics.creationCapture ?? { postSeen: false, status: null, jsonParsed: false, topKeys: [], refFound: false };

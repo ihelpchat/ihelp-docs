@@ -80,6 +80,7 @@ export function journeyTaskSummary(record) {
     ...(record.searchProbe ? { searchProbe: record.searchProbe } : {}),
     ...(record.ownerProbe ? { ownerProbe: record.ownerProbe } : {}),
     ...(record.menuProbe ? { menuProbe: record.menuProbe } : {}),
+    ...(record.botWriteProbe ? { botWriteProbe: record.botWriteProbe } : {}),
     ...(record.tagProbe ? { tagProbe: record.tagProbe } : {}),
     ...(record.actionError ? { actionError: record.actionError } : {}) };
 }

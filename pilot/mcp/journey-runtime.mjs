@@ -1007,8 +1007,10 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       page.on('request', (request) => {
         const url = new URL(request.url());
         if (currentTask?.startsWith('robos.') && request.method() === 'PUT'
-          && url.origin === qaApi?.origin && /^\/api\/(?:v2\/)?bot\//iu.test(url.pathname))
-          botWriteProbe.push({ route: /\/save\/?$/iu.test(url.pathname) ? 'save' : 'other', status: null });
+          && qaRequestDecision(url.href, target, env).allowed)
+          botWriteProbe.push({ route: /\/bot\/[^/]+\/save\/?$/iu.test(url.pathname) ? 'save'
+            : /\/bot\//iu.test(url.pathname) ? 'bot-other' : 'other', status: null,
+          originMatches: url.origin === qaApi?.origin });
         if (['contatos.buscar', 'contatos.exportar'].includes(currentTask)
           && request.method() === 'GET' && /^\/api\/(?:v2\/)?contacts\/?$/u.test(url.pathname)) {
           searchTraffic.requests++;
@@ -1045,9 +1047,10 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       page.on('response', (response) => {
         const url = new URL(response.url());
         if (currentTask?.startsWith('robos.') && response.request().method() === 'PUT'
-          && url.origin === qaApi?.origin && /^\/api\/(?:v2\/)?bot\//iu.test(url.pathname))
-          botWriteProbe.push({ route: /\/save\/?$/iu.test(url.pathname) ? 'save' : 'other',
-            status: response.status() });
+          && qaRequestDecision(url.href, target, env).allowed)
+          botWriteProbe.push({ route: /\/bot\/[^/]+\/save\/?$/iu.test(url.pathname) ? 'save'
+            : /\/bot\//iu.test(url.pathname) ? 'bot-other' : 'other', status: response.status(),
+          originMatches: url.origin === qaApi?.origin });
         if (['robos.montar_menu', 'robos.encaminhar', 'robos.salvar'].includes(currentTask)
           && response.request().method() === 'PUT' && url.origin === qaApi?.origin
           && new RegExp(`^/api/(?:v2/)?bot/${currentPrepared?.robotRef}/save/?$`, 'iu').test(url.pathname))
