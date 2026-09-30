@@ -5,15 +5,15 @@
     { "afirmacao": "buscar por nome ou telefone e limpar filtros", "evidencia": ["codigo:Buscar contato...", "codigo:Limpar filtros", "confirmado:responsável de produto"] },
     { "afirmacao": "filtros por tag e, para administrador, departamento e usuário", "evidencia": ["codigo:Tag", "codigo:Departamento", "codigo:Usuário", "codigo:ContactToolbar"] },
     { "afirmacao": "filtros restringem a lista exportada", "evidencia": ["codigo:ContactsList", "confirmado:responsável de produto"] },
-    { "afirmacao": "adicionar contato com nome e telefone e salvar", "evidencia": ["codigo:Adicionar Contato", "codigo:Nome", "codigo:Telefone", "codigo:Salvar", "jornada:contatos.cadastrar"] },
-    { "afirmacao": "editar dados do contato", "evidencia": ["codigo:Editar contato", "jornada:contatos.editar"] },
-    { "afirmacao": "selecionar ou criar tag no cadastro", "evidencia": ["codigo:Buscar ou criar tag...", "codigo:ContactInformations", "jornada:contatos.marcar_tags"] },
+    { "afirmacao": "adicionar contato com nome e telefone mostra confirmação", "evidencia": ["codigo:Adicionar Contato", "codigo:Nome", "codigo:Telefone", "codigo:Contato criado com sucesso!", "jornada:contatos.cadastrar"] },
+    { "afirmacao": "editar dados do contato mostra confirmação", "evidencia": ["codigo:Editar contato", "codigo:Campo atualizado com sucesso!", "jornada:contatos.editar"] },
+    { "afirmacao": "selecionar ou criar tag no cadastro mostra confirmação", "evidencia": ["codigo:Buscar ou criar tag...", "codigo:Tag adicionada com sucesso!", "codigo:Tag criada e adicionada com sucesso!", "jornada:contatos.marcar_tags"] },
     { "afirmacao": "adicionar tag no atendimento", "evidencia": ["codigo:Tags", "contexto:atendimento"] },
-    { "afirmacao": "definir usuário responsável encaminha conversas para Meus sem robô nem fila de novos", "evidencia": ["codigo:Definir proprietário", "codigo:Salvar", "confirmado:responsável de produto"] },
+    { "afirmacao": "definir usuário responsável mostra confirmação e encaminha conversas para Meus sem robô nem fila de novos", "evidencia": ["codigo:Definir proprietário", "codigo:Proprietário atualizado com sucesso!", "confirmado:responsável de produto"] },
     { "afirmacao": "opção Somente departamento existe, sem efeito de roteamento afirmado", "evidencia": ["codigo:Somente departamento", "confirmado:responsável de produto"] },
     { "afirmacao": "importação aceita CSV XLSX XLS, permite escolher cabeçalho e mapear colunas", "evidencia": ["codigo:ImportContactsModal", "codigo:Selecionar cabeçalho", "codigo:Mapear colunas", "confirmado:responsável de produto"] },
     { "afirmacao": "Nome é coluna obrigatória na importação", "evidencia": ["codigo:SYSTEM_COLUMNS"] },
-    { "afirmacao": "importação mostra progresso e impede outra simultânea", "evidencia": ["codigo:Importação em andamento...", "codigo:ImportProgressBar"] },
+    { "afirmacao": "importação mostra progresso e confirmação com quantidade importada", "evidencia": ["codigo:Importação em andamento...", "codigo:Importação concluída", "codigo:ImportProgressBar"] },
     { "afirmacao": "exportar lista pelo menu gera arquivo com os filtros ativos", "evidencia": ["codigo:Exportar Contatos", "codigo:ContactsList", "confirmado:responsável de produto"] },
     { "afirmacao": "agenda do celular não importa sozinha e vCard não é formato aceito", "evidencia": ["confirmado:responsável de produto", "codigo:ImportContactsModal"] }
   ],
@@ -29,6 +29,6 @@
     { "afirmacao": "editar título ou bloco e salvar", "evidencia": ["codigo:Editar", "codigo:Digite o título do robô", "jornada:robos.editar"] },
     { "afirmacao": "Salvar antes da primeira publicação guarda fluxo inativo", "evidencia": ["codigo:Salvar", "jornada:robos.salvar", "confirmado:responsável de produto"] },
     { "afirmacao": "Salvar em robô publicado altera a versão em uso sem nova publicação", "evidencia": ["codigo:Salvar", "confirmado:responsável de produto"] },
-    { "afirmacao": "recado fora do horário fica em Departamentos", "evidencia": ["contexto:robos", "contexto:configuracoes-departamentos"] }
+    { "afirmacao": "recado fora do horário é configurado em Configurações, na aba Departamentos, não no robô", "evidencia": ["contexto:robos", "contexto:configuracoes-departamentos", "codigo:DepartmentConfigExtras"] }
   ]
 }

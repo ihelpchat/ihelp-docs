@@ -11,7 +11,9 @@ Contatos é a agenda da empresa no iHelp. Cada cadastro reúne as informações 
 
 ## Para que serve
 
-Quando um cliente volta a chamar, a equipe pode consultar os atendimentos anteriores e as notas antes de responder. Se a empresa quiser trabalhar com um grupo específico, pode [marcar contatos com tags](#marcar-um-contato-com-uma-tag) e [filtrar a lista](#filtrar-contatos). Para manter uma carteira com a mesma pessoa da equipe, pode [definir um responsável](#definir-o-responsavel-por-um-contato). Uma lista já existente pode ser [importada de uma planilha](#importar-contatos-de-uma-planilha).
+Quando um cliente volta a chamar sobre um pedido, a equipe consulta os atendimentos anteriores e as notas no cadastro. Assim, quem assume a conversa entende o que já foi combinado antes de responder.
+
+Se a empresa vai convidar apenas clientes interessados em um serviço, pode [marcá-los com uma tag](#marcar-um-contato-com-uma-tag), [filtrar esse grupo](#filtrar-contatos) e [exportar a lista](#exportar-contatos) para preparar a ação. Quando uma pessoa da equipe acompanha sempre a mesma carteira, [definir um responsável](#definir-o-responsavel-por-um-contato) leva as próximas conversas desses contatos diretamente a ela. Uma lista já existente pode ser [importada de uma planilha](#importar-contatos-de-uma-planilha).
 
 ## Buscar um contato
 
@@ -25,7 +27,13 @@ Para encontrar um grupo, use também [os filtros da lista](#filtrar-contatos).
 
 ## Filtrar contatos
 
-Use os filtros quando precisar encontrar um grupo, como os contatos de uma tag. Em **Contatos**, selecione **Tag**. Quem tem perfil de administrador também pode selecionar **Departamento** e **Usuário**. Os filtros podem ser combinados com **Buscar contato...**. Para voltar à lista completa, limpe os filtros.
+Use os filtros quando precisar encontrar um grupo, como os contatos de uma tag.
+
+1. Abra **Contatos** no menu.
+2. Selecione uma opção em **Tag**. Quem tem perfil de administrador também pode selecionar **Departamento** e **Usuário**.
+3. Se precisar de um contato dentro desse grupo, digite o nome ou telefone em **Buscar contato...**. A lista mostra apenas os contatos que correspondem aos filtros escolhidos.
+
+Para voltar à lista completa, use **Limpar filtros** quando aparecer ou remova as seleções dos campos.
 
 O grupo mostrado pode ser [exportado](#exportar-contatos) para trabalhar em uma planilha.
 
@@ -37,7 +45,7 @@ Tenha o nome e o telefone com DDD de alguém que começou a conversar com a empr
 2. Preencha **Nome** e **Telefone**. Os demais campos são opcionais.
 3. Clique em **Salvar**.
 
-O contato passa a fazer parte da agenda. Você pode [marcar uma tag](#marcar-um-contato-com-uma-tag), [definir um responsável](#definir-o-responsavel-por-um-contato), adicionar notas e consultar os atendimentos no cadastro. Veja também [como usar tags no atendimento](/docs/sobre-o-sistema/atendimento#como-funcionam-as-tags).
+A mensagem **Contato criado com sucesso!** confirma o cadastro. Você pode [marcar uma tag](#marcar-um-contato-com-uma-tag), [definir um responsável](#definir-o-responsavel-por-um-contato), adicionar notas e consultar os atendimentos no cadastro. Veja também [como usar tags no atendimento](/docs/sobre-o-sistema/atendimento#como-funcionam-as-tags).
 
 ## Corrigir os dados de um contato
 
@@ -46,6 +54,8 @@ Use esta opção quando o nome ou o telefone mudar.
 1. Em **Contatos**, encontre o cadastro e escolha **Editar contato**. Você também pode abrir o contato e editar os dados ali.
 2. Mude o campo necessário e clique em **Salvar**.
 
+A mensagem **Campo atualizado com sucesso!** indica que o dado foi salvo.
+
 ## Marcar um contato com uma tag
 
 Uma tag identifica contatos por interesse ou situação. Tenha um contato cadastrado.
@@ -53,11 +63,15 @@ Uma tag identifica contatos por interesse ou situação. Tenha um contato cadast
 1. Abra o contato em **Contatos**.
 2. Em **Tags**, use **Buscar ou criar tag...** para escolher uma tag existente.
 
-A tag fica vinculada ao contato. Você também pode [aplicá-la diretamente no atendimento](/docs/sobre-o-sistema/atendimento#como-funcionam-as-tags) e [filtrar a lista](#filtrar-contatos) por ela. Se ainda não existir, [crie uma tag](#criar-uma-tag).
+A mensagem **Tag adicionada com sucesso!** confirma o vínculo. Você também pode [aplicá-la diretamente no atendimento](/docs/sobre-o-sistema/atendimento#como-funcionam-as-tags) e [filtrar a lista](#filtrar-contatos) por ela. Se ainda não existir, [crie uma tag](#criar-uma-tag).
 
 ## Criar uma tag
 
-No cadastro do contato, abra **Tags**, digite o nome em **Buscar ou criar tag...** e escolha a opção de criar. A nova tag fica disponível para identificar esse contato e outros da empresa.
+1. Abra o cadastro do contato em **Contatos** e escolha **Tags**.
+2. Digite o nome da nova tag em **Buscar ou criar tag...**.
+3. Selecione a opção de criar a tag com esse nome.
+
+A mensagem **Tag criada e adicionada com sucesso!** confirma o vínculo. A nova tag também fica disponível para outros contatos da empresa. Você pode [filtrar a lista por ela](#filtrar-contatos).
 
 ## Definir o responsável por um contato
 
@@ -68,7 +82,7 @@ Defina um responsável quando as próximas conversas desse contato devem ir dire
 3. Selecione o usuário responsável. Se a responsabilidade for apenas do departamento, existe a opção **Somente departamento**.
 4. Clique em **Salvar**.
 
-O efeito descrito acima vale quando há um usuário responsável definido. A opção **Somente departamento** não tem o mesmo efeito confirmado.
+A mensagem **Proprietário atualizado com sucesso!** confirma a escolha. O encaminhamento direto descrito acima vale quando há um usuário responsável definido. A opção **Somente departamento** não tem o mesmo efeito confirmado.
 
 ## Importar contatos de uma planilha
 
@@ -79,7 +93,7 @@ Use a importação quando a empresa já tiver uma lista. O arquivo pode ser CSV,
 3. Em **Selecionar cabeçalho**, escolha a linha que contém os nomes das colunas.
 4. Em **Mapear colunas**, associe pelo menos a coluna de nome ao campo **Nome**. Associe a coluna de telefone a **Telefone** se ela existir.
 5. Em **Verificar dados**, examine os registros sinalizados e confirme em **Importar**.
-6. Aguarde o processamento terminar. Se aparecer **Importação em andamento...**, espere antes de começar outra.
+6. Aguarde a mensagem **Importação concluída**, que mostra quantos contatos foram importados. Se aparecer **Importação em andamento...**, espere antes de começar outra.
 
 Depois, os contatos importados podem ser [buscados](#buscar-um-contato), [filtrados](#filtrar-contatos) e organizados como os demais.
 
@@ -89,7 +103,7 @@ Use a exportação quando precisar trabalhar com a lista numa planilha. O arquiv
 
 1. Em **Contatos**, use [os filtros](#filtrar-contatos) se quiser restringir a lista.
 2. Abra **Mais opções** e escolha **Exportar Contatos**.
-3. Aguarde o download do arquivo. Enquanto ele é preparado, aparece **Exportando...**.
+3. Aguarde o arquivo aparecer nos downloads do navegador. Enquanto ele é preparado, aparece **Exportando...**.
 
 Você pode usar a planilha para preparar uma [campanha](/docs/sobre-o-sistema/campanhas), filtrar os dados no Excel ou trabalhar apenas com o grupo exportado.
 
