@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { chromeExecutablePath } from '../scripts/visual/measure.mjs';
-import { journeyRequestAllowed, observeJourneyDom } from './journey-runtime.mjs';
+import { journeyRequestAllowed, observeJourneyDom, verifyUniqueRecord } from './journey-runtime.mjs';
+import { fixtureValue } from './journey-service.mjs';
 
 test('fichas opacas omitem placeholder, opção vazia e opção desabilitada', async () => {
   const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
@@ -23,4 +24,29 @@ test('PUT owner barra IDs ausentes e IDs fora da fixture antes da rede', () => {
   for (const body of [{ userId: 8 }, { departmentId: 7 }, { departmentId: null, userId: 8 },
     { departmentId: 70, userId: 8 }, { departmentId: 7, userId: 80 }])
     assert.equal(journeyRequestAllowed(request(body), context), false);
+});
+
+test('PUT multipart de responsável não aceita usuário vazio', () => {
+  const name = fixtureValue('contactName');
+  const body = { Nome: name, ContatoTelefones: [], ContatoEmails: [],
+    ContatoResponsaveis: [{ id: null, DepartmentId: 7, UserId: null }] };
+  const request = { method: () => 'PUT', url: () => 'https://qa.example.test/api/v2/contacts/ref-1',
+    postData: () => JSON.stringify(body) };
+  const context = { apiOrigin: 'https://qa.example.test', taskId: 'contatos.definir_responsavel',
+    generated: new Set([name]), createdIds: new Set(['ref-1']),
+    contactSnapshot: { nome: name, responsibleUsers: [] },
+    fixedIds: { department: new Set([7]), user: new Set([8]) } };
+  assert.equal(journeyRequestAllowed(request, context), false);
+});
+
+test('editar só exige título persistido; menu pertence à tarefa de montar fluxo', async () => {
+  let url = 'https://qa.example.test/bot/ref-1';
+  const page = { url: () => url, async goto(next) { url = next; }, async reload() {},
+    getByText: () => ({ async count() { return 1; } }), getByRole: () => ({ async count() { return 0; } }) };
+  const title = fixtureValue('robotName', 2);
+  const result = await verifyUniqueRecord({ page, task: { id: 'robos.editar', modulo: 'robos' },
+    refs: ['ref-1'], targetUrl: 'https://qa.example.test', name: fixtureValue('robotName'), expectedValue: title,
+    getPersisted: async () => ({ status: 200,
+      body: { id: 7, idRef: 'ref-1', title, status: false, botEvents: [] } }) });
+  assert.equal(result.confirmed, true);
 });
