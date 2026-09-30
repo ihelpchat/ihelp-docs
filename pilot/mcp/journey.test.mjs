@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runJourneys, readJourney, fixtureValue, policyDecision } from './journey-service.mjs';
+import { journeyRequestAllowed } from './journey-runtime.mjs';
 
 const task = (id, extra = {}) => ({ id, modulo: 'contatos', tarefa: id.split('.')[1],
   preRequisitos: 'perfil autorizado', resultadoEsperadoObservavel: 'Valor persistido',
@@ -11,7 +12,8 @@ const task = (id, extra = {}) => ({ id, modulo: 'contatos', tarefa: id.split('.'
 const tasks = [task('contatos.cadastrar'), task('contatos.editar'), task('contatos.definir_responsavel')];
 const screen = (controls = ['Adicionar Contato', 'Salvar', 'Editar', 'Contato Exemplo 01']) => ({
   title: 'Contatos', path: '/contatos', controls: controls.map((name) => ({ role: 'button', name, enabled: true })),
-  fields: [], messages: [], state: { name: 'Contato Exemplo 01' }, screenshot: Buffer.from('masked-png'),
+  fields: [{ role: 'textbox', name: 'Nome', required: true }, { role: 'textbox', name: 'Telefone', required: true }],
+  messages: [], state: { name: 'Contato Exemplo 01' }, screenshot: Buffer.from('masked-png'),
 });
 
 test('criar primeiro, editar com conferência, responsável e cache compatível sem browser', async () => {
@@ -21,7 +23,17 @@ test('criar primeiro, editar com conferência, responsável e cache compatível 
   const browser = { async open() { opens++; }, async observe() { return screen(); }, async act(action) { actions.push(action); },
     async verify() { return { confirmed: true, observed: 'Valor persistido', created: { contact: 'Contato Exemplo 01' } }; }, async close() {} };
   const model = { async decide({ task: current, actions: previous }) {
-    return previous.length ? { type: 'finish' } : { type: 'click', role: 'button', name: current.tarefa === 'cadastrar' ? 'Adicionar Contato' : 'Editar' };
+    const plans = {
+      cadastrar: [{ type: 'click', role: 'button', name: 'Adicionar Contato' },
+        { type: 'fill', role: 'textbox', name: 'Nome', value: fixtureValue('contactName') },
+        { type: 'fill', role: 'textbox', name: 'Telefone', value: fixtureValue('phone') },
+        { type: 'click', role: 'button', name: 'Salvar' }],
+      editar: [{ type: 'click', role: 'button', name: 'Editar' },
+        { type: 'fill', role: 'textbox', name: 'Nome', value: fixtureValue('editedName') },
+        { type: 'click', role: 'button', name: 'Salvar' }],
+      definir_responsavel: [{ type: 'click', role: 'button', name: 'Editar' }],
+    };
+    return plans[current.objective][previous.length] ?? { type: 'finish' };
   } };
   try {
     const options = { module: 'contatos', tasks, root, frontSha: 'a'.repeat(40), backSha: 'b'.repeat(40),
@@ -68,5 +80,32 @@ test('valor livre recusado e sanitização falha antes de qualquer artefato', as
       model: { async decide() { return { type: 'finish' }; } }, sanitize: async () => { throw Error('sensitive'); } }));
     assert.equal(acted, 0);
     await assert.rejects(readFile(join(root, 'contatos', 'contatos.cadastrar.json')));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('request guard falha fechado para saídas, publicação e dados reais', () => {
+  const request = (method, path, body = '') => ({ method: () => method,
+    url: () => `https://qa.example.com/${path}`, postData: () => body });
+  assert.equal(journeyRequestAllowed(request('POST', 'api/contacts', '{"Nome":"Contato Exemplo 01"}')), true);
+  assert.equal(journeyRequestAllowed(request('PUT', 'api/bot/fixture-id/save', '{}')), true);
+  for (const item of [
+    request('POST', 'api/messages/send', '{}'), request('POST', 'api/robots/publish', '{}'),
+    request('DELETE', 'api/contacts/1'), request('POST', 'api/contacts', '{"email":"maria@gmail.com"}'),
+    request('POST', 'api/contacts', '{"nome":"Maria Silva"}'),
+    request('POST', 'api/contacts', '{"numero":"5511998765432"}'),
+    request('POST', 'api/robots', '{"active":true}'), request('POST', 'api/webhook', '{}'),
+  ]) assert.equal(journeyRequestAllowed(item), false);
+});
+
+test('falha de sanitização no segundo passo não grava jornada parcial', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-'));
+  let observed = 0;
+  try {
+    await assert.rejects(runJourneys({ module: 'contatos', tasks: [task('contatos.cadastrar')], root,
+      frontSha: 'a'.repeat(40), profile: 'qa',
+      browser: { async open() {}, async observe() { observed++; return screen(); }, async act() {}, async close() {} },
+      model: { async decide() { return { type: 'click', role: 'button', name: 'Salvar' }; } },
+      sanitize: async (value) => { if (observed === 2) throw Error('sensitive'); return value; } }));
+    await assert.rejects(readFile(join(root, 'contatos', 'contatos.cadastrar.latest')));
   } finally { await rm(root, { recursive: true, force: true }); }
 });

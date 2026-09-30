@@ -226,6 +226,47 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     }
   });
 
+  registerTool('gravar_jornada', {
+    mutates: true,
+    description: 'Executa tarefas fictícias de Contatos ou Robôs na homologação e grava jornada privada sanitizada.',
+    inputSchema: z.strictObject({
+      module: z.enum(['contatos', 'robos']),
+      tasks: z.array(z.string().regex(/^(?:contatos|robos)\.[a-z_]+$/)).max(20).optional(),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ module, tasks, requestedBy }) => {
+    if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    const target = auditTarget(module, (tasks ?? []).join(','));
+    await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'attempt' });
+    try {
+      const { recordJourneys } = await import('./journey-runtime.mjs');
+      const records = await recordJourneys(module, tasks);
+      await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'success' });
+      return textResult({ tasks: records.map(({ task, status, reason }) => ({ task, status, reason })) });
+    } catch {
+      console.error('gravar_jornada: execução indisponível');
+      await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'failure' });
+      return textResult({ error: 'execução indisponível' }, true);
+    }
+  });
+
+  registerTool('ler_jornada', {
+    mutates: false,
+    description: 'Lê uma jornada privada sanitizada, incluindo ids dos prints mascarados.',
+    inputSchema: z.strictObject({
+      module: z.enum(['contatos', 'robos']),
+      task: z.string().regex(/^(?:contatos|robos)\.[a-z_]+$/),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ module, task, requestedBy }) => {
+    if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    await auditOperation(root, { actor: requestedBy, operation: 'ler_jornada', target: auditTarget(module, task), result: 'attempt' });
+    try {
+      const { readJourney } = await import('./journey-service.mjs');
+      return textResult(await readJourney({ module, task }));
+    } catch { return textResult({ error: 'Jornada indisponível' }, true); }
+  });
+
   registerTool('enviar_tela', {
     mutates: true,
     description: 'Recebe PNG/JPEG no volume privado como pendente de revisão.',
