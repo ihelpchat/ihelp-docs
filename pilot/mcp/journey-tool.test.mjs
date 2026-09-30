@@ -23,7 +23,7 @@ test('gravar_jornada devolve categoria segura em vez de engolir o erro', async (
       handler({ module: 'contatos', tasks: ['contatos.cadastrar'], requestedBy: 'user:journey-test' }));
     const body = JSON.parse(result.content[0].text);
     assert.equal(result.isError, true);
-    assert.equal(body.error, 'trava');
+    assert.equal(body.error, 'dado de preparo');
     assert.deepEqual(body.tasks, []);
     assert.notEqual(body.error, 'execução indisponível');
   } finally {
