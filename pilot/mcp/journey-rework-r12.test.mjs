@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { chromium } from 'playwright-core';
 import { chromeExecutablePath } from '../scripts/visual/measure.mjs';
-import { runJourneys, fixtureValue } from './journey-service.mjs';
+import { runJourneys, fixtureValue, policyDecision } from './journey-service.mjs';
 import * as runtime from './journey-runtime.mjs';
 const { journeyRequestAllowed, loadQaFixtureIds, observeJourneyDom, actJourneyAction, verifyUniqueRecord } = runtime;
 
@@ -79,6 +79,12 @@ test('tag existente da conta pode vincular somente contato criado', async () => 
   assert.equal(journeyRequestAllowed(request(9, 41), context), true);
   assert.equal(journeyRequestAllowed(request(8, 41), context), false);
   assert.equal(journeyRequestAllowed(request(9, 42), context), false);
+  const arrayRequest = (ids) => ({ ...request(9, 41), postData: () => JSON.stringify(ids.map((tagsId) => ({ contatoId: 9, tagsId }))) });
+  assert.equal(journeyRequestAllowed(arrayRequest([41]), context), true);
+  assert.equal(journeyRequestAllowed(arrayRequest([41, 42]), context), false);
+  assert.equal(typeof runtime.newLinkedTag, 'function');
+  assert.equal(runtime.newLinkedTag([{ tagsId: 41 }], new Set(), new Set([41])), 41);
+  assert.equal(runtime.newLinkedTag([{ tagsId: 41 }], new Set([41]), new Set([41])), null);
 });
 
 test('exportação busca o marcador e exige somente linhas fictícias; limpar filtros é vedado', () => {
@@ -88,9 +94,57 @@ test('exportação busca o marcador e exige somente linhas fictícias; limpar fi
   assert.deepEqual(exportActionForScreen({ fields: [{ role: 'textbox', name: 'Buscar contato...', value: null }],
     controls: [], state: {} }, name), { type: 'fill', role: 'textbox', name: 'Buscar contato...', value: name });
   assert.equal(exportActionForScreen({ fields: [{ role: 'textbox', name: 'Buscar contato...', value: name }],
-    controls: [{ role: 'button', name: 'Mais opções (cabeçalho)', enabled: true }],
+    controls: [{ role: 'checkbox', name: `Selecionar ${name}`, enabled: true, checked: false },
+      { role: 'button', name: 'Mais opções (cabeçalho)', enabled: true }],
+    state: { visibleRows: '1', generatedRows: '1' } }, name).name, `Selecionar ${name}`);
+  assert.equal(exportActionForScreen({ fields: [{ role: 'textbox', name: 'Buscar contato...', value: name }],
+    controls: [{ role: 'checkbox', name: `Selecionar ${name}`, enabled: true, checked: true },
+      { role: 'button', name: 'Mais opções (cabeçalho)', enabled: true }],
     state: { visibleRows: '1', generatedRows: '1' } }, name).name, 'Mais opções (cabeçalho)');
   assert.equal(exportActionForScreen({ fields: [{ role: 'textbox', name: 'Buscar contato...', value: name }],
     controls: [{ role: 'menuitem', name: 'Exportar Contatos', enabled: true }],
     state: { visibleRows: '2', generatedRows: '1' } }, name), null);
+  assert.equal(policyDecision({ type: 'click', role: 'button', name: 'Limpar filtros' }, new Set(), 'contatos.exportar').allowed, false);
+});
+
+test('importação anterior desabilitada aguarda com teto e registra o bloqueio', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-r12-import-'));
+  let waited = 0; let decided = 0;
+  try {
+    const [record] = await runJourneys({ module: 'contatos', tasks: [task('contatos.importar')], root,
+      frontSha: 'a'.repeat(40), profile: 'qa', browser: {
+        async open() {}, async close() {}, async waitImportReady(ms) { waited = ms; return false; },
+        async observe() { return { title: 'Contatos', path: '/contact', controls: [
+          { role: 'button', name: 'Importar Contatos', enabled: false }], fields: [], messages: [], state: {},
+        screenshot: Buffer.from('masked') }; } },
+      model: { async decide() { decided++; return { type: 'finish' }; } } });
+    assert.equal(record.importInProgress, true);
+    assert.equal(record.reason, 'importação anterior em andamento');
+    assert.equal(waited, 30_000);
+    assert.equal(decided, 0);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('cobertura registra somente tipo estrutural do elemento', async () => {
+  const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<button style="position:absolute;top:20px;left:20px">Mais</button><div class="toast secret-customer-name" role="alert" style="position:fixed;inset:0;background:#ddd">Dado privado</div>');
+    const cover = await runtime.coveringElement(page, { selector: 'button', index: 0 });
+    assert.deepEqual(cover, { tag: 'div', role: 'alert', fixedOverlay: true, backdrop: false,
+      toast: true, thirdPartyWidget: false });
+    assert.equal(JSON.stringify(cover).includes('Dado privado'), false);
+    assert.equal(JSON.stringify(cover).includes('secret-customer-name'), false);
+  } finally { await browser.close(); }
+});
+
+test('wrapper de browser repassa exportação determinística e espera de importação', async () => {
+  const browser = runtime.makeLazyJourneyBrowser(() => ({
+    async open() {}, async close() {}, async exportAction() { return 'export'; },
+    async waitImportReady() { return true; },
+  }));
+  await browser.open();
+  assert.equal(await browser.exportAction(), 'export');
+  assert.equal(await browser.waitImportReady(), true);
+  await browser.close();
 });

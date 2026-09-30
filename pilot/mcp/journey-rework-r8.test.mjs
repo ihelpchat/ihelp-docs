@@ -140,14 +140,15 @@ test('validação de campo sem valor do gerador volta ao modelo e permite corrig
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test('verificação arma waitForResponse antes de goto', async () => {
+test('verificação consulta GET persistido depois de reabrir a ficha', async () => {
   const calls = []; let currentUrl = 'https://front.qa.test/bot/owned-ref';
   const data = { id: 31, idRef: 'owned-ref', title: fixtureValue('robotName'), status: false };
   const page = { async goto(url) { calls.push('goto'); currentUrl = url; }, async reload() { calls.push('reload'); },
-    url: () => currentUrl, waitForResponse: async () => { calls.push('wait'); return { json: async () => ({ dados: data }) }; },
+    url: () => currentUrl,
     getByText: () => ({ count: async () => 1 }), getByRole: () => ({ count: async () => 1, inputValue: async () => data.title }) };
   const result = await verifyUniqueRecord({ page, task: task('robos.criar'), refs: ['owned-ref'],
-    targetUrl: 'https://front.qa.test', name: data.title, expectedValue: data.title });
+    targetUrl: 'https://front.qa.test', name: data.title, expectedValue: data.title,
+    getPersisted: async () => { calls.push('get'); return { status: 200, body: { dados: data } }; } });
   assert.equal(result.confirmed, true);
-  assert.deepEqual(calls.slice(0, 2), ['wait', 'goto']);
+  assert.deepEqual(calls, ['goto', 'reload', 'get']);
 });

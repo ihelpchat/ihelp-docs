@@ -72,12 +72,12 @@ test('robô exige ref, título e status persistidos e aceita título no campo ed
   let url = 'https://qa.example.test/bot/owned-ref';
   const saved = { id: 31, idRef: 'owned-ref', title: fixtureValue('robotName'), status: false };
   const page = { async goto(value) { url = value; }, async reload() {}, url: () => url,
-    waitForResponse: async () => ({ json: async () => ({ dados: { bot: saved } }) }),
     getByText: () => ({ count: async () => 0 }),
     getByRole: (role, options) => ({ count: async () => Number(role === 'textbox' && options.name === 'Digite o título do robô'),
       inputValue: async () => saved.title }) };
   const args = { page, task: { id: 'robos.criar', modulo: 'robos' }, refs: ['owned-ref'],
-    targetUrl: 'https://qa.example.test', name: saved.title, expectedValue: saved.title };
+    targetUrl: 'https://qa.example.test', name: saved.title, expectedValue: saved.title,
+    getPersisted: async () => ({ status: 200, body: { dados: { bot: saved } } }) };
   assert.equal((await verifyUniqueRecord(args)).confirmed, true);
   for (const [change, category] of [
     [{ idRef: 'wrong-ref' }, 'ref'], [{ title: 'Outro' }, 'título persistido'],
