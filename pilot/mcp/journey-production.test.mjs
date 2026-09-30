@@ -115,7 +115,14 @@ test('runner bloqueia GETs com efeito antes e depois do pré-voo', async () => {
       '/api/v2/channel/%72econnect-all', '/api/v2/contacts/sync-contacts',
       '/api/v2/contacts/export', '/api/v2/customers/import-backup',
       '/api/v2/configurations/users/users-connect-sync',
-      '/api/v2/vindiCharges/UpdateEmpresaStatus']) {
+      '/api/v2/vindiCharges/UpdateEmpresaStatus',
+      '/api/v2/filter/fix-filters-user/1/2',
+      '/api/v2/customers/auto-fill-contacts/1',
+      '/api/v2/customers/channel-reconection-check',
+      '/api/v2/company/subscription-reminder',
+      '/api/v2/company/migrate-v3/1',
+      '/api/v2/validator/email/user-1',
+      '/api/v2/syncclientspayment']) {
       let outcome;
       await handleJourneyRoute({ request: () => ({ method: () => 'GET',
         url: () => `https://api.example.test${path}` }), abort: async () => { outcome = 'abort'; },
