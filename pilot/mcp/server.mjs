@@ -38,6 +38,23 @@ const textResult = (value, isError = false) => ({
   isError,
 });
 
+export function journeyTaskSummary(record) {
+  const blocked = record.blocked && {
+    host: record.blocked.host, method: record.blocked.method, path: record.blocked.path,
+    keys: record.blocked.keys, reason: record.blocked.reason,
+  };
+  const validation = /^validação do formulário: (Informe o telefone com DDD|Já existe um contato com este número de telefone|O telefone é obrigatório|Precisa ter pelo menos um canal)$/u
+    .exec(record.reason ?? '')?.[1] ?? null;
+  const fixtures = (record.fixtures ?? []).filter((item) => item && typeof item === 'object'
+    && ['department', 'channel', 'user', 'company'].includes(item.kind)
+    && (/^GET \/api\/v2\/configurations\/(?:departments|channels|users)$/u.test(item.source)
+      || /^CAPTURE_QA_(?:DEPARTMENT|CHANNEL|USER|COMPANY)_IDS$/u.test(item.source)))
+    .map(({ source, kind, ids }) => ({ source, kind, count: Array.isArray(ids) ? ids.length : 0 }));
+  return { task: record.task, status: record.status, reason: record.reason,
+    blocked: blocked ?? null, validation, fixtures, actions: record.actions?.length ?? 0,
+    thirdPartyDenied: record.thirdPartyDenied ?? {} };
+}
+
 export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname) {
   const server = new McpServer(
     { name: 'ihelp-docs', version: '0.1.0' },
@@ -243,14 +260,13 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       const records = await recordJourneys(module, tasks);
       const { journeyCoverage } = await import('./journey-service.mjs');
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'success' });
-      return textResult({ tasks: records.map(({ task, status, reason }) => ({ task, status, reason })),
+      return textResult({ tasks: records.map(journeyTaskSummary),
         coverage: journeyCoverage(records) });
     } catch (error) {
       const { journeyFailureCategory, journeyFailureLog } = await import('./journey-service.mjs');
       console.error(journeyFailureLog(error));
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'failure' });
-      return textResult({ error: journeyFailureCategory(error), tasks: error?.results?.map(({ task, status, reason }) =>
-        ({ task, status, reason })) ?? [] }, true);
+      return textResult({ error: journeyFailureCategory(error), tasks: error?.results?.map(journeyTaskSummary) ?? [] }, true);
     }
   });
 

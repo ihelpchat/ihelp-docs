@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-4';
+export const JOURNEY_POLICY_VERSION = 'm571-5';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -225,7 +225,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       fixtures: Object.values(prepared), marker, actions: [], screens: [], before: null, after: null,
       expected: task.resultadoEsperadoObservavel, observed: null, verification: null, created: {},
       status: 'inconclusiva', reason: null, limits: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd },
-      blocked: null,
+      blocked: null, thirdPartyDenied: {},
       usage: { actions: 0, costUsd: 0, elapsedMs: 0 }, cacheKey: key, policyVersion: JOURNEY_POLICY_VERSION };
     const images = [];
     if (task.id === 'robos.publicar_ativar' || task.id === 'contatos.agendar_mensagem') {
@@ -308,7 +308,10 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           record.screens = []; record.before = null; record.after = null; images.length = 0;
         }
         console.error(journeyFailureLog(error));
-      } finally { await browser.close().catch(() => {}); }
+      } finally {
+        record.thirdPartyDenied = browser.diagnostics?.().thirdPartyDenied ?? {};
+        await browser.close().catch(() => {});
+      }
     }
     record.usage.costUsd = costUsd;
     record.usage.elapsedMs = Date.now() - started;

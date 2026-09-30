@@ -169,11 +169,15 @@ function validRobotSave(body, pathRef, generated, createdIds, fixedIds) {
     && Array.isArray(body.botEvents) && body.botEvents.length > 0 && body.botEvents.length <= 30
     && body.botEvents.every((event) => validRobotEvent(event, generated, createdIds, fixedIds));
 }
-export function journeyRequestAllowed(request, { taskId, generated = new Set(), createdIds = new Set(), fixedIds = {} } = {}) {
+export function journeyRequestAllowed(request, { taskId, apiOrigin, generated = new Set(), createdIds = new Set(), fixedIds = {} } = {}) {
   const method = request.method().toUpperCase();
   if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return true;
   let path; let query;
-  try { const url = new URL(request.url()); path = url.pathname; query = url.searchParams; } catch { return false; }
+  try {
+    const url = new URL(request.url());
+    if (apiOrigin && url.origin !== apiOrigin) return false;
+    path = url.pathname; query = url.searchParams;
+  } catch { return false; }
   path = path.replace(/^\/api(?:\/v2)?(?=\/)/u, '');
   const rule = writeRules[taskId]?.find((candidate) => candidate.method === method && candidate.path.test(path));
   if (!rule) return false;
@@ -197,14 +201,19 @@ const publicPath = (path) => `/${path.split('/').filter(Boolean).map((part) =>
 export function journeyWriteDecision(request, context = {}) {
   const method = request.method().toUpperCase();
   if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return { allowed: true };
-  let path = '/invalid';
-  try { path = new URL(request.url()).pathname.replace(/^\/api(?:\/v2)?(?=\/)/u, ''); } catch { /* deny */ }
+  let path = '/invalid'; let host = 'inválido';
+  try {
+    const url = new URL(request.url());
+    host = url.hostname;
+    path = url.origin === context.apiOrigin || !context.apiOrigin
+      ? url.pathname.replace(/^\/api(?:\/v2)?(?=\/)/u, '') : url.pathname;
+  } catch { /* deny */ }
   const body = parseWriteBody(request);
   const safeKey = (key) => /^[A-Za-z][A-Za-z0-9]{0,39}$/u.test(key)
     && !containsSensitiveData(key, { detectOpaque: true }) ? key : '[chave removida]';
   const keys = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body).map(safeKey).sort()
     : Array.isArray(body) ? [...new Set(body.flatMap((item) => item && typeof item === 'object' ? Object.keys(item).map(safeKey) : []))].sort() : [];
-  const blocked = { allowed: false, task: context.taskId ?? 'unknown', method, path: publicPath(path), keys };
+  const blocked = { allowed: false, task: context.taskId ?? 'unknown', host, method, path: publicPath(path), keys };
   const rule = writeRules[context.taskId]?.find((candidate) => candidate.method === method && candidate.path.test(path));
   if (!rule) return { ...blocked, reason: 'rota fora da lista' };
   if (journeyRequestAllowed(request, context)) return { allowed: true };
@@ -217,6 +226,25 @@ export function journeyWriteDecision(request, context = {}) {
   if (all.some(([key]) => forbiddenKeys.test(key)) || rule.keys && keys.some((key) =>
     !rule.keys.includes(key))) return { ...blocked, reason: 'chave desconhecida' };
   return { ...blocked, reason: 'valor fora do gerador' };
+}
+export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdPartyDenied, onBlocked, ...context }) {
+  const request = route.request();
+  let url;
+  try { url = new URL(request.url()); } catch { return route.fallback(); }
+  if (url.origin !== apiOrigin || !url.pathname.startsWith('/api/')) {
+    if (url.origin !== apiOrigin && !qaRequestDecision(url.href, target, env).allowed)
+      thirdPartyDenied[url.hostname] = (thirdPartyDenied[url.hostname] ?? 0) + 1;
+    return route.fallback();
+  }
+  const draft = inactiveRobotCreateRequest(request, context.taskId);
+  const candidate = draft ? { method: () => request.method(), url: () => request.url(), postData: () => draft } : request;
+  const decision = journeyWriteDecision(candidate, { ...context, apiOrigin });
+  if (!decision.allowed) {
+    onBlocked(decision);
+    console.error(`gravar_jornada: escrita bloqueada: ${JSON.stringify(decision)}`);
+    return route.abort();
+  }
+  return draft ? route.fallback({ postData: draft }) : route.fallback();
 }
 export function inactiveRobotCreateRequest(request, taskId) {
   if (taskId !== 'robos.criar' || request.method().toUpperCase() !== 'POST'
@@ -302,6 +330,7 @@ function makeBrowser({ baseUrl, env, vocabulary, marker }) {
   let currentPrepared;
   let lastDownload;
   let blockedWrite = null;
+  let thirdPartyDenied = {};
   const createdIds = new Set();
   const readIds = (name) => new Set(String(env[name] ?? '').split(',').filter((value) => /^\d+$/u.test(value)).map(Number));
   const fixedIds = { department: readIds('CAPTURE_QA_DEPARTMENT_IDS'), user: readIds('CAPTURE_QA_USER_IDS'),
@@ -321,6 +350,7 @@ function makeBrowser({ baseUrl, env, vocabulary, marker }) {
       currentTask = task.id;
       currentPrepared = prepared;
       blockedWrite = null;
+      thirdPartyDenied = {};
       lastDownload = null;
       browser = await launch();
       context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
@@ -335,18 +365,11 @@ function makeBrowser({ baseUrl, env, vocabulary, marker }) {
       });
       page.on('download', (download) => { lastDownload = download; });
       await loginToQa(page, target.url, credentialsFromEnv(env).authorized, { timeoutMs: 15000 });
-      await context.route('**/*', async (route) => {
-        const request = route.request();
-        const draft = inactiveRobotCreateRequest(request, currentTask);
-        const candidate = draft ? { method: () => request.method(), url: () => request.url(), postData: () => draft } : request;
-        const decision = journeyWriteDecision(candidate, { taskId: currentTask, generated: fixtures, createdIds, fixedIds });
-        if (!decision.allowed) {
-          blockedWrite = decision;
-          console.error(`gravar_jornada: escrita bloqueada: ${JSON.stringify(decision)}`);
-          return route.abort();
-        }
-        return draft ? route.fallback({ postData: draft }) : route.fallback();
-      });
+      await context.route('**/*', (route) => handleJourneyRoute(route, {
+        apiOrigin: qaApi?.origin, target, env, thirdPartyDenied,
+        taskId: currentTask, generated: fixtures, createdIds, fixedIds,
+        onBlocked: (decision) => { blockedWrite = decision; },
+      }));
       page.on('response', async (response) => {
         if (response.request().method() !== 'POST' || !/^\/(?:api\/(?:v2\/)?)?(?:contacts|bot|tags)\/?$/u.test(new URL(response.url()).pathname)
           || !response.ok()) return;
@@ -474,6 +497,7 @@ function makeBrowser({ baseUrl, env, vocabulary, marker }) {
           : checked.confirmed && task.id === 'contatos.editar' ? { contact: expectedValue }
             : checked.confirmed && task.id === 'robos.criar' ? { robot: name } : {} };
     },
+    diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied } }; },
     async close() { await browser?.close(); browser = null; context = null; page = null; },
   };
 }
@@ -544,6 +568,7 @@ export async function recordJourneys(module, selectedTasks, { env = process.env,
     async observe(...args) { return liveBrowser.observe(...args); },
     async act(...args) { return liveBrowser.act(...args); },
     async verify(...args) { return liveBrowser.verify(...args); },
+    diagnostics() { return liveBrowser?.diagnostics(); },
     async close(...args) { return liveBrowser.close(...args); },
   };
   let liveModel;
