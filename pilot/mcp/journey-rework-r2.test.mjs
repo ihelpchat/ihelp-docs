@@ -100,8 +100,10 @@ test('menu e encaminhamento só aceitam save inativo do robô criado', () => {
     botEvents: [messageBlock] }), policy), true);
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
     botEvents: [{ ...messageBlock, messages: [{ message: 'Tag Exemplo 01', type: 0, messageType: 0 }] }] }), policy), true);
+  assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
+    botEvents: [{ ...messageBlock, messages: [{ message: 'Tag Exemplo 01', messageType: 0 }] }] }), policy), true);
   assert.equal(journeyWriteDecision(request('PUT', 'bot/owned-ref/save', { ...body,
-    botEvents: [{ ...messageBlock, messages: [{ message: 'Tag Exemplo 01', messageType: 0 }] }] }), policy).keyPath,
+    botEvents: [{ ...messageBlock, messages: [{ message: 'Tag Exemplo 01' }] }] }), policy).keyPath,
   'botEvents[0].messages[0].type');
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
     botEvents: [{ ...messageBlock, messages: [{ message: 'Texto livre', type: 0 }] }] }), policy), false);
