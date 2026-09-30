@@ -1,6 +1,6 @@
 {
-  "versao": "M5.74-1",
-  "escala": "0 a 4; avaliar cada critério separadamente na página inteira",
+  "versao": "M5.75-2",
+  "escala": "0 a 4 nos criterios aplicaveis ao proposito; N/A fora do aceite",
   "aceite": {
     "minimoPorCriterio": 3,
     "afirmacoesContraditasPorEvidencia": 0,
@@ -16,64 +16,234 @@
   },
   "criterios": [
     {
-      "id": "entende_modulo", "nome": "Entende o módulo",
+      "id": "entende_modulo",
+      "nome": "Entende o módulo",
       "ancoras": [
-        {"nota": 0, "descricao": "Não identifica o módulo ou o confunde com outro.", "exemplo": "Chama Contatos de Campanhas."},
-        {"nota": 1, "descricao": "Só ensina onde clicar; não diz o que o módulo é.", "exemplo": "No menu, abra Contatos."},
-        {"nota": 2, "descricao": "Define o módulo de forma vaga ou limitada a um recurso.", "exemplo": "Contatos é a tela de tags."},
-        {"nota": 3, "descricao": "Define o módulo e suas funções principais sem confundir navegação com definição.", "exemplo": "Contatos reúne cadastros para buscar e organizar clientes."},
-        {"nota": 4, "descricao": "Além de definir, mostra limites e relação com o trabalho de atendimento sem inventar comportamento.", "exemplo": "Distingue cadastro, responsável e atendimento."}
+        {
+          "nota": 0,
+          "descricao": "Confunde o modulo com outro ou nao permite reconhece-lo quando o trecho pretende apresenta-lo.",
+          "exemplo": "Chama Contatos de Campanhas."
+        },
+        {
+          "nota": 1,
+          "descricao": "Só ensina onde clicar; não diz o que o módulo é.",
+          "exemplo": "No menu, abra Contatos."
+        },
+        {
+          "nota": 2,
+          "descricao": "Reconhece o modulo, mas o reduz a um controle ou caminho de navegacao.",
+          "exemplo": "Contatos é a tela de tags."
+        },
+        {
+          "nota": 3,
+          "descricao": "Define o módulo e suas funções principais sem confundir navegação com definição.",
+          "exemplo": "Contatos reúne cadastros para buscar e organizar clientes."
+        },
+        {
+          "nota": 4,
+          "descricao": "Explica o papel do modulo no trabalho, suas funcoes e limites pertinentes ao proposito do trecho, sem inventar capacidades.",
+          "exemplo": "Distingue cadastro, responsável e atendimento."
+        }
       ]
     },
     {
-      "id": "utilidade_negocio", "nome": "Utilidade de negócio",
+      "id": "utilidade_negocio",
+      "nome": "Utilidade de negócio",
       "ancoras": [
-        {"nota": 0, "descricao": "Não explica por que alguém usaria o módulo.", "exemplo": "Só lista botões."},
-        {"nota": 1, "descricao": "Fala de uma função secundária como se fosse a finalidade do módulo.", "exemplo": "Contatos serve para tags."},
-        {"nota": 2, "descricao": "Cita ganho genérico, sem decisão útil.", "exemplo": "Melhora a produtividade."},
-        {"nota": 3, "descricao": "Liga funções a problemas reais da equipe, com condição quando necessária.", "exemplo": "Atribuir responsável ajuda a organizar uma carteira."},
-        {"nota": 4, "descricao": "Ajuda o leitor a escolher quando usar cada recurso e o que ele permite em seguida.", "exemplo": "Após cadastrar, mostra opções pertinentes de organização."}
+        {
+          "nota": 0,
+          "descricao": "Nao mostra finalidade, condicao de uso nem consequencia quando esse e o proposito do trecho.",
+          "exemplo": "Só lista botões."
+        },
+        {
+          "nota": 1,
+          "descricao": "Fala de uma função secundária como se fosse a finalidade do módulo.",
+          "exemplo": "Contatos serve para tags."
+        },
+        {
+          "nota": 2,
+          "descricao": "Menciona beneficio generico ou condicao isolada, sem ajudar na decisao ou no proximo passo pertinente.",
+          "exemplo": "Melhora a produtividade."
+        },
+        {
+          "nota": 3,
+          "descricao": "Liga funções a problemas reais da equipe, com condição quando necessária.",
+          "exemplo": "Atribuir responsável ajuda a organizar uma carteira."
+        },
+        {
+          "nota": 4,
+          "descricao": "Mostra por que e quando usar o recurso e o que acontece depois, com decisao util para uma situacao real de negocio.",
+          "exemplo": "Após cadastrar, mostra opções pertinentes de organização."
+        }
       ]
     },
     {
-      "id": "casos_concretos", "nome": "Casos concretos",
+      "id": "casos_concretos",
+      "nome": "Casos concretos",
       "ancoras": [
-        {"nota": 0, "descricao": "Não há casos de uso.", "exemplo": "Seção vazia."},
-        {"nota": 1, "descricao": "Há slogans ou exemplos sem situação.", "exemplo": "Organize contatos para melhorar a gestão."},
-        {"nota": 2, "descricao": "Situações aparecem, mas são repetidas ou não mostram decisão e resultado.", "exemplo": "Uma loja usa Contatos para trabalhar melhor."},
-        {"nota": 3, "descricao": "Situações distintas mostram necessidade, recurso escolhido e benefício plausível.", "exemplo": "Ao trocar o vendedor, o gestor revisa a carteira."},
-        {"nota": 4, "descricao": "Casos variados cobrem decisões e condições relevantes sem prometer efeito não verificado.", "exemplo": "Distingue buscar um cliente de reorganizar sua carteira."}
+        {
+          "nota": 0,
+          "descricao": "Nao apresenta situacao de trabalho quando o trecho promete casos.",
+          "exemplo": "Seção vazia."
+        },
+        {
+          "nota": 1,
+          "descricao": "Há slogans ou exemplos sem situação.",
+          "exemplo": "Organize contatos para melhorar a gestão."
+        },
+        {
+          "nota": 2,
+          "descricao": "Ha situacao, mas falta a decisao, a acao ou o resultado plausivel.",
+          "exemplo": "Uma loja usa Contatos para trabalhar melhor."
+        },
+        {
+          "nota": 3,
+          "descricao": "Situações distintas mostram necessidade, recurso escolhido e benefício plausível.",
+          "exemplo": "Ao trocar o vendedor, o gestor revisa a carteira."
+        },
+        {
+          "nota": 4,
+          "descricao": "Casos reais e variados ligam necessidade, escolha do recurso e resultado, incluindo condicao ou caminho alternativo quando pertinente.",
+          "exemplo": "Distingue buscar um cliente de reorganizar sua carteira."
+        }
       ]
     },
     {
-      "id": "tarefas_completas", "nome": "Tarefas completas",
+      "id": "tarefas_completas",
+      "nome": "Tarefas completas",
       "ancoras": [
-        {"nota": 0, "descricao": "Não há procedimento para tarefa prometida.", "exemplo": "Promete editar, sem passos."},
-        {"nota": 1, "descricao": "Os passos apenas abrem a função.", "exemplo": "Clique em Editar contato."},
-        {"nota": 2, "descricao": "Há ação principal, mas falta conclusão ou verificação.", "exemplo": "Clique em Agendamento e pare."},
-        {"nota": 3, "descricao": "Cada tarefa prometida parte de estado conhecido, conclui e indica resultado observável; bloqueios são declarados.", "exemplo": "Salva e procura a alteração na ficha."},
-        {"nota": 4, "descricao": "Além disso, inclui condições, impedimentos relevantes e verificação persistente sem confundir spinner com sucesso.", "exemplo": "Reabre a ficha e confere o responsável."}
+        {
+          "nota": 0,
+          "descricao": "Promete uma tarefa sem instruir como realiza-la.",
+          "exemplo": "Promete editar, sem passos."
+        },
+        {
+          "nota": 1,
+          "descricao": "Os passos apenas abrem a função.",
+          "exemplo": "Clique em Editar contato."
+        },
+        {
+          "nota": 2,
+          "descricao": "Mostra acao principal, mas para antes do resultado ou da verificacao.",
+          "exemplo": "Clique em Agendamento e pare."
+        },
+        {
+          "nota": 3,
+          "descricao": "Cada tarefa prometida parte de estado conhecido, conclui e indica resultado observável; bloqueios são declarados.",
+          "exemplo": "Salva e procura a alteração na ficha."
+        },
+        {
+          "nota": 4,
+          "descricao": "Conduz do inicio ao resultado verificavel, explica impedimentos e caminho alternativo quando existe.",
+          "exemplo": "Reabre a ficha e confere o responsável."
+        }
       ]
     },
     {
-      "id": "clareza", "nome": "Clareza",
+      "id": "clareza",
+      "nome": "Clareza",
       "ancoras": [
-        {"nota": 0, "descricao": "Texto incompreensível ou instrução contraditória.", "exemplo": "Jargão sem explicação em todos os passos."},
-        {"nota": 1, "descricao": "Exige que o leitor adivinhe termos, botões ou sequência.", "exemplo": "Configure o fluxo conforme necessário."},
-        {"nota": 2, "descricao": "É legível, mas usa jargão ou passos longos demais para iniciante.", "exemplo": "Cita ramificação sem explicar."},
-        {"nota": 3, "descricao": "Usa palavras simples, controles precisos e uma ação por passo quando possível.", "exemplo": "Clique em Configurações, depois em Canais."},
-        {"nota": 4, "descricao": "A pessoa iniciante consegue se orientar, reconhecer o resultado e recuperar-se de uma dificuldade comum.", "exemplo": "Diz o que procurar se o contato não aparecer."}
+        {
+          "nota": 0,
+          "descricao": "Texto ininteligivel ou instrucao contraditoria.",
+          "exemplo": "Jargão sem explicação em todos os passos."
+        },
+        {
+          "nota": 1,
+          "descricao": "Exige que o leitor adivinhe termos, botões ou sequência.",
+          "exemplo": "Configure o fluxo conforme necessário."
+        },
+        {
+          "nota": 2,
+          "descricao": "Legivel, mas exige adivinhar jargao, controle ou sequencia.",
+          "exemplo": "Cita ramificação sem explicar."
+        },
+        {
+          "nota": 3,
+          "descricao": "Usa palavras simples, controles precisos e uma ação por passo quando possível.",
+          "exemplo": "Clique em Configurações, depois em Canais."
+        },
+        {
+          "nota": 4,
+          "descricao": "Pessoa iniciante entende a acao, reconhece o resultado e sabe como se recuperar de dificuldade comum.",
+          "exemplo": "Diz o que procurar se o contato não aparecer."
+        }
       ]
     },
     {
-      "id": "coerencia", "nome": "Coerência",
+      "id": "coerencia",
+      "nome": "Coerência",
       "ancoras": [
-        {"nota": 0, "descricao": "Seções se contradizem ou a montagem altera o sentido.", "exemplo": "Diz que Salvar publica o robô e depois que fica inativo."},
-        {"nota": 1, "descricao": "Definição ou benefício central desaparece da página.", "exemplo": "O subtítulo consome a definição; em O que é só resta a navegação."},
-        {"nota": 2, "descricao": "As seções combinam, mas repetem conteúdo ou desviam do objetivo.", "exemplo": "E agora? só descreve Salvando..."},
-        {"nota": 3, "descricao": "Definição, casos, passos e próximas ações formam uma sequência sem perdas.", "exemplo": "O caso de carteira leva à tarefa de atribuir responsável."},
-        {"nota": 4, "descricao": "A página mantém essa linha do começo ao fim, inclusive condições e links coerentes.", "exemplo": "Cada próxima ação aponta a recurso disponível e condicionado."}
+        {
+          "nota": 0,
+          "descricao": "O trecho se contradiz ou perde o sentido ao ser montado.",
+          "exemplo": "Diz que Salvar publica o robô e depois que fica inativo."
+        },
+        {
+          "nota": 1,
+          "descricao": "Definição ou benefício central desaparece da página.",
+          "exemplo": "O subtítulo consome a definição; em O que é só resta a navegação."
+        },
+        {
+          "nota": 2,
+          "descricao": "Ideias combinam, mas ha repeticao ou proximo passo sem efeito claro.",
+          "exemplo": "E agora? só descreve Salvando..."
+        },
+        {
+          "nota": 3,
+          "descricao": "Definição, casos, passos e próximas ações formam uma sequência sem perdas.",
+          "exemplo": "O caso de carteira leva à tarefa de atribuir responsável."
+        },
+        {
+          "nota": 4,
+          "descricao": "O trecho segue uma linha logica do proposito ate o efeito ou proximo passo, respeitando condicoes e alternativas.",
+          "exemplo": "Cada próxima ação aponta a recurso disponível e condicionado."
+        }
       ]
     }
-  ]
+  ],
+  "aplicabilidade": {
+    "versao": "M5.75-2",
+    "propositos": {
+      "pagina_inteira": [
+        "entende_modulo",
+        "utilidade_negocio",
+        "casos_concretos",
+        "tarefas_completas",
+        "clareza",
+        "coerencia"
+      ],
+      "visao_geral": [
+        "entende_modulo",
+        "utilidade_negocio",
+        "clareza",
+        "coerencia"
+      ],
+      "para_que_serve": [
+        "utilidade_negocio",
+        "clareza",
+        "coerencia"
+      ],
+      "passo_a_passo": [
+        "tarefas_completas",
+        "clareza",
+        "coerencia"
+      ],
+      "o_que_acontece_depois": [
+        "utilidade_negocio",
+        "clareza",
+        "coerencia"
+      ],
+      "casos": [
+        "utilidade_negocio",
+        "casos_concretos",
+        "clareza",
+        "coerencia"
+      ],
+      "duvidas": [
+        "clareza",
+        "coerencia"
+      ]
+    }
+  }
 }

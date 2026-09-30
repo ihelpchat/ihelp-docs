@@ -1,69 +1,83 @@
 # Régua editorial do FAQ
 
-Avalie a página inteira, de 0 a 4 em cada critério. O exemplo ilustra a âncora; não transforma uma afirmação de produto em fato.
+Versão: `M5.75-2`. Primeiro identifique o propósito predominante do trecho. Dê nota de 0 a 4 apenas aos critérios aplicáveis; os demais são `N/A` e ficam fora do aceite. Para página inteira, todos se aplicam.
 
-## Entende o módulo
+## Aplicabilidade
 
-| Nota | Âncora | Exemplo curto |
-| --- | --- | --- |
-| 0 | Não identifica o módulo ou o confunde com outro. | Chama Contatos de Campanhas. |
-| 1 | Só ensina onde clicar; não diz o que o módulo é. | No menu, abra Contatos. |
-| 2 | Define o módulo de forma vaga ou limitada a um recurso. | Contatos é a tela de tags. |
-| 3 | Define o módulo e suas funções principais sem confundir navegação com definição. | Contatos reúne cadastros para buscar e organizar clientes. |
-| 4 | Além de definir, mostra limites e relação com o trabalho de atendimento sem inventar comportamento. | Distingue cadastro, responsável e atendimento. |
+Tabela `M5.75-2`. Uma tarefa prometida no trecho deve chegar ao resultado, independentemente do propósito predominante.
 
-## Utilidade de negócio
+| Propósito | Critérios aplicáveis |
+| --- | --- |
+| `pagina_inteira` | entende_modulo, utilidade_negocio, casos_concretos, tarefas_completas, clareza, coerencia |
+| `visao_geral` | entende_modulo, utilidade_negocio, clareza, coerencia |
+| `para_que_serve` | utilidade_negocio, clareza, coerencia |
+| `passo_a_passo` | tarefas_completas, clareza, coerencia |
+| `o_que_acontece_depois` | utilidade_negocio, clareza, coerencia |
+| `casos` | utilidade_negocio, casos_concretos, clareza, coerencia |
+| `duvidas` | clareza, coerencia |
 
-| Nota | Âncora | Exemplo curto |
-| --- | --- | --- |
-| 0 | Não explica por que alguém usaria o módulo. | Só lista botões. |
-| 1 | Fala de uma função secundária como se fosse a finalidade do módulo. | Contatos serve para tags. |
-| 2 | Cita ganho genérico, sem decisão útil. | Melhora a produtividade. |
-| 3 | Liga funções a problemas reais da equipe, com condição quando necessária. | Atribuir responsável ajuda a organizar uma carteira. |
-| 4 | Ajuda o leitor a escolher quando usar cada recurso e o que ele permite em seguida. | Após cadastrar, mostra opções pertinentes de organização. |
+## Âncoras
 
-## Casos concretos
+### Entende o módulo (`entende_modulo`)
 
-| Nota | Âncora | Exemplo curto |
-| --- | --- | --- |
-| 0 | Não há casos de uso. | Seção vazia. |
-| 1 | Há slogans ou exemplos sem situação. | Organize contatos para melhorar a gestão. |
-| 2 | Situações aparecem, mas são repetidas ou não mostram decisão e resultado. | Uma loja usa Contatos para trabalhar melhor. |
-| 3 | Situações distintas mostram necessidade, recurso escolhido e benefício plausível. | Ao trocar o vendedor, o gestor revisa a carteira. |
-| 4 | Casos variados cobrem decisões e condições relevantes sem prometer efeito não verificado. | Distingue buscar um cliente de reorganizar sua carteira. |
+| Nota | Descrição |
+| --- | --- |
+| 0 | Confunde o modulo com outro ou nao permite reconhece-lo quando o trecho pretende apresenta-lo. |
+| 1 | Só ensina onde clicar; não diz o que o módulo é. |
+| 2 | Reconhece o modulo, mas o reduz a um controle ou caminho de navegacao. |
+| 3 | Define o módulo e suas funções principais sem confundir navegação com definição. |
+| 4 | Explica o papel do modulo no trabalho, suas funcoes e limites pertinentes ao proposito do trecho, sem inventar capacidades. |
 
-## Tarefas completas
+### Utilidade de negócio (`utilidade_negocio`)
 
-| Nota | Âncora | Exemplo curto |
-| --- | --- | --- |
-| 0 | Não há procedimento para tarefa prometida. | Promete editar, sem passos. |
-| 1 | Os passos apenas abrem a função. | Clique em Editar contato. |
-| 2 | Há ação principal, mas falta conclusão ou verificação. | Clique em Agendamento e pare. |
-| 3 | Cada tarefa prometida parte de estado conhecido, conclui e indica resultado observável; bloqueios são declarados. | Salva e procura a alteração na ficha. |
-| 4 | Além disso, inclui condições, impedimentos relevantes e verificação persistente sem confundir spinner com sucesso. | Reabre a ficha e confere o responsável. |
+| Nota | Descrição |
+| --- | --- |
+| 0 | Nao mostra finalidade, condicao de uso nem consequencia quando esse e o proposito do trecho. |
+| 1 | Fala de uma função secundária como se fosse a finalidade do módulo. |
+| 2 | Menciona beneficio generico ou condicao isolada, sem ajudar na decisao ou no proximo passo pertinente. |
+| 3 | Liga funções a problemas reais da equipe, com condição quando necessária. |
+| 4 | Mostra por que e quando usar o recurso e o que acontece depois, com decisao util para uma situacao real de negocio. |
 
-## Clareza
+### Casos concretos (`casos_concretos`)
 
-| Nota | Âncora | Exemplo curto |
-| --- | --- | --- |
-| 0 | Texto incompreensível ou instrução contraditória. | Jargão sem explicação em todos os passos. |
-| 1 | Exige que o leitor adivinhe termos, botões ou sequência. | Configure o fluxo conforme necessário. |
-| 2 | É legível, mas usa jargão ou passos longos demais para iniciante. | Cita ramificação sem explicar. |
-| 3 | Usa palavras simples, controles precisos e uma ação por passo quando possível. | Clique em Configurações, depois em Canais. |
-| 4 | A pessoa iniciante consegue se orientar, reconhecer o resultado e recuperar-se de uma dificuldade comum. | Diz o que procurar se o contato não aparecer. |
+| Nota | Descrição |
+| --- | --- |
+| 0 | Nao apresenta situacao de trabalho quando o trecho promete casos. |
+| 1 | Há slogans ou exemplos sem situação. |
+| 2 | Ha situacao, mas falta a decisao, a acao ou o resultado plausivel. |
+| 3 | Situações distintas mostram necessidade, recurso escolhido e benefício plausível. |
+| 4 | Casos reais e variados ligam necessidade, escolha do recurso e resultado, incluindo condicao ou caminho alternativo quando pertinente. |
 
-## Coerência
+### Tarefas completas (`tarefas_completas`)
 
-| Nota | Âncora | Exemplo curto |
-| --- | --- | --- |
-| 0 | Seções se contradizem ou a montagem altera o sentido. | Diz que Salvar publica o robô e depois que fica inativo. |
-| 1 | Definição ou benefício central desaparece da página. | O subtítulo consome a definição; em O que é só resta a navegação. |
-| 2 | As seções combinam, mas repetem conteúdo ou desviam do objetivo. | E agora? só descreve Salvando... |
-| 3 | Definição, casos, passos e próximas ações formam uma sequência sem perdas. | O caso de carteira leva à tarefa de atribuir responsável. |
-| 4 | A página mantém essa linha do começo ao fim, inclusive condições e links coerentes. | Cada próxima ação aponta a recurso disponível e condicionado. |
+| Nota | Descrição |
+| --- | --- |
+| 0 | Promete uma tarefa sem instruir como realiza-la. |
+| 1 | Os passos apenas abrem a função. |
+| 2 | Mostra acao principal, mas para antes do resultado ou da verificacao. |
+| 3 | Cada tarefa prometida parte de estado conhecido, conclui e indica resultado observável; bloqueios são declarados. |
+| 4 | Conduz do inicio ao resultado verificavel, explica impedimentos e caminho alternativo quando existe. |
+
+### Clareza (`clareza`)
+
+| Nota | Descrição |
+| --- | --- |
+| 0 | Texto ininteligivel ou instrucao contraditoria. |
+| 1 | Exige que o leitor adivinhe termos, botões ou sequência. |
+| 2 | Legivel, mas exige adivinhar jargao, controle ou sequencia. |
+| 3 | Usa palavras simples, controles precisos e uma ação por passo quando possível. |
+| 4 | Pessoa iniciante entende a acao, reconhece o resultado e sabe como se recuperar de dificuldade comum. |
+
+### Coerência (`coerencia`)
+
+| Nota | Descrição |
+| --- | --- |
+| 0 | O trecho se contradiz ou perde o sentido ao ser montado. |
+| 1 | Definição ou benefício central desaparece da página. |
+| 2 | Ideias combinam, mas ha repeticao ou proximo passo sem efeito claro. |
+| 3 | Definição, casos, passos e próximas ações formam uma sequência sem perdas. |
+| 4 | O trecho segue uma linha logica do proposito ate o efeito ou proximo passo, respeitando condicoes e alternativas. |
 
 ## Aceite
 
-Pelo menos **3 em cada critério**, zero afirmação de produto sem evidência, zero tarefa prometida incompleta e zero perda na montagem da última versão aprovada. O juiz editorial não valida a si mesmo: Bruno calibra as amostras sem ver a fonte. Notas baixas refletem o feedback dele de 29/09: “O que é” reduzido a navegação, “Para que serve” limitado a tags, tarefa que só abre a função e “E agora?” reduzido a “Salvando...”.
-
-Defeitos graves também incluem dados ou condições de ensaio apresentados ao cliente, pendências internas expostas como orientação e vocabulário do processo editorial no texto final. A decisão é semântica e considera as evidências fornecidas; exemplos de palavras isoladas não são regra de aceite.
+Nota mínima 3 em cada critério aplicável; nenhum defeito grave. Nas três leituras, cada nota é a mediana e um defeito grave conta quando aparece em pelo menos duas. N/A não equivale a nota alta.

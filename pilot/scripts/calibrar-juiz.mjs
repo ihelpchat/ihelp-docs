@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import OpenAI from 'openai';
-import { judgeEditorial, aggregateCalibration, publicCalibrationReport, EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
+import { judgeEditorial, consolidateEditorialReadings, publicCalibrationReport, EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
 import { loadBusinessContext } from '../mcp/faq-editorial.mjs';
 import { loadCalibrationJourneys } from './calibration-journeys.mjs';
 
@@ -62,11 +62,16 @@ async function run(model) {
       jornadasPorStatus: journeyEvidence.contagens, avisoJornadas: journeyEvidence.aviso };
     let judge;
     try {
-      judge = await judgeEditorial({ pagina: sample.texto, modulo: sample.modulo, evidencias: evidence },
+      const readings = [];
+      for (let i = 0; i < 3; i += 1) {
+        readings.push(await judgeEditorial({ pagina: sample.texto, modulo: sample.modulo, evidencias: evidence,
+          proposito: readings[0]?.proposito },
         async ({ instructions, input, schema }) => client.responses.create({ model, instructions, input,
-        reasoning: { effort: model === 'gpt-6-luna' ? 'none' : 'medium' },
-        text: { format: { type: 'json_schema', name: 'faq_editorial_verdict', strict: true, schema } },
-        max_output_tokens: 4000 }));
+          reasoning: { effort: 'none' },
+          text: { format: { type: 'json_schema', name: 'faq_editorial_verdict', strict: true, schema } },
+          max_output_tokens: 4000 })));
+      }
+      judge = consolidateEditorialReadings(readings);
     } catch (error) {
       error.sampleId = sample.id;
       throw error;
@@ -85,27 +90,21 @@ async function run(model) {
 
 function display(report) {
   console.log(`Modelo: ${report.modelo}`);
-  console.log('| Amostra | Grupo | Bruno × juiz | Notas Bruno | Notas juiz | Defeitos graves juiz | Evidências |');
-  console.log('| --- | --- | --- | --- | --- | --- | --- |');
+  console.log('| Amostra | Grupo | Bruno × juiz | Propósito | N/A | Notas juiz | Dispersão | Graves |');
+  console.log('| --- | --- | --- | --- | --- | --- | --- | --- |');
   for (const row of report.amostras) {
     const compact = ({ notas }) => EDITORIAL_CRITERIA.map((id) => `${id}:${notas[id]}`).join(', ');
-    console.log(`| ${row.id} | ${row.grupo} | ${row.bruno.aceite ? 'aceite' : 'recusa'} × ${row.juiz.aceite ? 'aceite' : 'recusa'} | ${compact(row.bruno)} | ${compact(row.juiz)} | ${row.juiz.defeitosGraves.join(', ') || 'nenhum'} | ${JSON.stringify(row.evidencias)} |`);
+    console.log(`| ${row.id} | ${row.grupo} | ${row.bruno.aceite ? 'aceite' : 'recusa'} × ${row.juiz.aceite ? 'aceite' : 'recusa'} | ${row.juiz.proposito} | ${row.juiz.naoAplicaveis.join(', ') || 'nenhum'} | ${compact(row.juiz)} | ${JSON.stringify(row.juiz.dispersao)} | ${row.juiz.defeitosGraves.join(', ') || 'nenhum'} |`);
   }
   console.log(JSON.stringify({ metricas: report.metricas, uso: report.uso }));
 }
 
-const selected = process.argv.find((arg) => arg.startsWith('--model='))?.slice('--model='.length)
-  ?? process.env.OPENAI_MODEL ?? 'gpt-6-luna';
+const selected = 'gpt-6-luna';
 const reports = [];
 try {
   const first = await run(selected);
   reports.push(first);
   display(first);
-  if (!first.metricas.passou && selected !== 'gpt-6-astra') {
-    const second = await run('gpt-6-astra');
-    reports.push(second);
-    display(second);
-  }
   const directory = join(rubricDir, 'calibracao');
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, 'resultado.json'), `${JSON.stringify({ execucoes: reports }, null, 2)}\n`);
