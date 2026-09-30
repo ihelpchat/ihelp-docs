@@ -54,6 +54,7 @@ export function journeyTaskSummary(record) {
     blocked: blocked ?? null, validation, fixtures, actions: record.actions?.length ?? 0,
     thirdPartyDenied: record.thirdPartyDenied ?? {}, ...(record.observeError ? { observeError: record.observeError } : {}),
     ...(record.creationCapture ? { creationCapture: record.creationCapture } : {}),
+    ...(record.createdRef ? { createdRef: record.createdRef } : {}),
     ...(record.saveOutcome ? { saveOutcome: record.saveOutcome } : {}),
     ...(record.saveMessages ? { saveMessages: record.saveMessages } : {}),
     ...(record.actionError ? { actionError: record.actionError } : {}) };

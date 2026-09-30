@@ -127,11 +127,14 @@ function safeJourney(record) {
   if (copy.created?.robotRef != null && (!identity || copy.created.robotRef !== identity.refs[0]
     || !Number.isSafeInteger(copy.created.robotId) || !identity.ids.includes(copy.created.robotId)))
     throw new Error('sanitização falhou');
+  if (copy.createdRef != null && (typeof copy.createdRef !== 'string' || !/^[a-z0-9-]{1,80}$/iu.test(copy.createdRef)))
+    throw new Error('sanitização falhou');
   const check = (value) => {
     if (typeof value === 'string' && !sha.test(value) && !/^[a-f0-9]{64}$/u.test(value)
       && !fixtureValues.has(value) && !fictionalPhone.test(value)
       && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
-      && value !== copy.created?.robotRef && containsSensitiveData(value, { detectOpaque: true })) throw new Error('sanitização falhou');
+      && value !== copy.created?.robotRef && value !== copy.createdRef
+      && containsSensitiveData(value, { detectOpaque: true })) throw new Error('sanitização falhou');
     if (Array.isArray(value)) value.forEach(check);
     else if (value && typeof value === 'object') Object.values(value).forEach(check);
   };
@@ -393,6 +396,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             const outcome = await browser.awaitCreation?.(20_000);
             if (outcome) {
               record.creationCapture = outcome.capture;
+              if (outcome.capture?.refFound && typeof outcome.ref === 'string') record.createdRef = outcome.ref;
               if (outcome.saveOutcome) record.saveOutcome = outcome.saveOutcome;
               if (outcome.messages) record.saveMessages = outcome.messages.map((message) => screenString(message, allowedScreenLabels));
               if (outcome.ref && outcome.capture?.refFound && outcome.capture?.status >= 200

@@ -411,12 +411,17 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
   throw new Error('ação inválida');
 }
 
-export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, expectedValue, expectedExtra }) {
+export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, expectedValue, expectedExtra,
+  screenTimeoutMs = 10_000 }) {
   if (refs.length !== 1 || !/^[a-z0-9-]{1,80}$/iu.test(refs[0]))
     return { confirmed: false, observed: 'ref' };
   if (task.id === 'robos.criar' && new URL(page.url()).pathname !== `/bot/${refs[0]}`)
     return { confirmed: false, observed: 'URL/ref inconsistente' };
   const route = task.modulo === 'contatos' ? `/contact/detail/${refs[0]}` : `/bot/${refs[0]}`;
+  const contactResponse = task.modulo === 'contatos' && page.waitForResponse
+    ? page.waitForResponse((response) => response.request().method() === 'GET' && response.ok()
+      && new URL(response.url()).pathname.match(new RegExp(`/contacts/details/${refs[0]}/?$`, 'iu')),
+    { timeout: 10_000 }).catch(() => null) : null;
   const robotResponse = task.modulo === 'robos' && page.waitForResponse
     ? page.waitForResponse((response) => response.request().method() === 'GET' && response.ok()
       && new URL(response.url()).pathname.match(new RegExp(`/bot/${refs[0]}/?$`, 'iu')), { timeout: 10_000 }).catch(() => null)
@@ -425,13 +430,41 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
   await page.reload({ waitUntil: 'domcontentloaded' });
   if (new URL(page.url()).pathname !== route) return { confirmed: false, observed: 'Ficha não reaberta' };
   const identity = task.id === 'contatos.editar' ? expectedValue : name;
+  if (task.modulo === 'contatos' && page.waitForResponse) {
+    let persisted;
+    try { const json = await contactResponse; persisted = (await json?.json())?.dados; }
+    catch { /* sem leitura persistida não há prova */ }
+    if (persisted?.idRef !== refs[0]) return { confirmed: false, observed: 'ref' };
+    if (persisted?.nome !== identity) return { confirmed: false, observed: 'nome persistido' };
+    if (expectedExtra && ['contatos.cadastrar', 'contatos.buscar'].includes(task.id)) {
+      const digits = (value) => String(value ?? '').replace(/\D/gu, '');
+      const phones = [persisted.telefone, ...(persisted.contatoTelefones ?? []).map((item) => item?.numero)];
+      if (!phones.some((value) => digits(value) === digits(expectedExtra)))
+        return { confirmed: false, observed: 'telefone persistido' };
+    }
+    try { await page.getByText(identity, { exact: true }).first().waitFor({ state: 'visible', timeout: screenTimeoutMs }); }
+    catch { return { confirmed: false, observed: 'nome na tela' }; }
+    if (expectedExtra && ['contatos.cadastrar', 'contatos.buscar'].includes(task.id)) {
+      const expectedDigits = expectedExtra.replace(/\D/gu, '');
+      const deadline = Date.now() + screenTimeoutMs;
+      let visible = false;
+      do {
+        const lines = (await page.locator('body').innerText()).split(/\n/u);
+        visible = lines.some((line) => line.replace(/\D/gu, '').includes(expectedDigits));
+        if (visible) break;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      } while (Date.now() < deadline);
+      if (!visible) return { confirmed: false, observed: 'telefone na tela' };
+    }
+  }
   const titleInScreen = async (value) => await page.getByText(value, { exact: true }).count() > 0
     || await page.getByRole('textbox', { name: 'Digite o título do robô' }).count() > 0
       && await page.getByRole('textbox', { name: 'Digite o título do robô' }).inputValue() === value;
   let confirmed = task.modulo === 'robos' ? await titleInScreen(expectedValue)
-    : await page.getByText(identity, { exact: true }).count() > 0
+    : contactResponse ? true : await page.getByText(identity, { exact: true }).count() > 0
       && await page.getByText(expectedValue, { exact: true }).count() > 0;
-  if (expectedExtra) confirmed = confirmed && await page.getByText(expectedExtra, { exact: true }).count() > 0;
+  if (expectedExtra && !(task.modulo === 'contatos' && ['contatos.cadastrar', 'contatos.buscar'].includes(task.id)))
+    confirmed = confirmed && await page.getByText(expectedExtra, { exact: true }).count() > 0;
   if (task.id === 'contatos.definir_responsavel') confirmed = confirmed
     && await page.getByText('Proprietário do Contato', { exact: true }).count() === 1;
   if (task.id === 'robos.montar_menu') confirmed = confirmed && await page.getByText('Menu de opções', { exact: true }).count() > 0;
@@ -769,6 +802,20 @@ function makeModel(env, markerFor) {
   } };
 }
 
+export function makeLazyJourneyBrowser(createBrowser) {
+  let liveBrowser;
+  return {
+    async open(...args) { liveBrowser ??= await createBrowser(); return liveBrowser.open(...args); },
+    async observe(...args) { return liveBrowser.observe(...args); },
+    async act(...args) { return liveBrowser.act(...args); },
+    async awaitCreation(...args) { return liveBrowser.awaitCreation(...args); },
+    async verify(...args) { return liveBrowser.verify(...args); },
+    diagnostics() { return liveBrowser?.diagnostics(); },
+    async close(...args) { return liveBrowser.close(...args); },
+    reset() { liveBrowser = null; },
+  };
+}
+
 export async function recordJourneys(module, selectedTasks, { env = process.env, browser, model, root } = {}) {
   let marker = randomBytes(4).toString('hex');
   const markerFor = () => marker;
@@ -792,20 +839,11 @@ export async function recordJourneys(module, selectedTasks, { env = process.env,
   const frontSha = env.CAPTURE_FRONT_SHA ?? facts.ref;
   const backSha = env.CAPTURE_BACK_SHA ?? 'unavailable';
   const profile = env.CAPTURE_PROFILE ?? 'qa-autorizado';
-  let liveBrowser;
-  const lazyBrowser = browser ?? {
-    async open(...args) {
-      if (!facts) await loadFacts();
-      liveBrowser ??= makeBrowser({ baseUrl: env.GUIDE_QA_STAGING_URL, env, markerFor,
-        vocabulary: journeyVocabulary(facts.screenFacts, facts.screenCode) });
-      return liveBrowser.open(...args);
-    },
-    async observe(...args) { return liveBrowser.observe(...args); },
-    async act(...args) { return liveBrowser.act(...args); },
-    async verify(...args) { return liveBrowser.verify(...args); },
-    diagnostics() { return liveBrowser?.diagnostics(); },
-    async close(...args) { return liveBrowser.close(...args); },
-  };
+  const lazyBrowser = browser ?? makeLazyJourneyBrowser(async () => {
+    if (!facts) await loadFacts();
+    return makeBrowser({ baseUrl: env.GUIDE_QA_STAGING_URL, env, markerFor,
+      vocabulary: journeyVocabulary(facts.screenFacts, facts.screenCode) });
+  });
   let liveModel;
   const lazyModel = model ?? { async decide(...args) { liveModel ??= makeModel(env, markerFor); return liveModel.decide(...args); } };
   const options = { module, tasks, frontSha, backSha, profile, root, marker, browser: lazyBrowser,
@@ -818,7 +856,7 @@ export async function recordJourneys(module, selectedTasks, { env = process.env,
   catch (error) {
     if (error?.code !== 'STALE_JOURNEY_REFERENCE') throw error;
     await lazyBrowser.close().catch(() => {});
-    liveBrowser = null;
+    lazyBrowser.reset?.();
     marker = randomBytes(4).toString('hex');
     return runJourneys({ ...options, marker, cacheBypass: true });
   }
