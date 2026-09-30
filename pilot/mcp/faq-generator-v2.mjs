@@ -44,13 +44,15 @@ export function planFaqPage(module, tasks, journeys) {
     reviewTasks: planned.filter((task) => task.status === 'sem jornada').map((task) => task.id) };
 }
 
+const proseOf = (unit) => unit.kind === 'passo'
+  ? unit.text.replace(/^\s*\d+[.)]\s+/u, '') : unit.text;
 const unitsOf = (page) => page.sections.flatMap((section) => section.units.map((unit) =>
-  ({ ...unit, taskId: section.taskId })));
+  ({ ...unit, text: proseOf(unit), taskId: section.taskId })));
 function renderPage(page) {
   return [`# ${page.title}`, ...page.sections.map((section) => {
     let number = 0;
     return `## ${section.heading}\n\n${section.units.map((unit) => unit.kind === 'passo'
-      ? `${++number}. ${unit.text}` : unit.kind === 'depois'
+      ? `${++number}. ${proseOf(unit)}` : unit.kind === 'depois'
         ? `**O que acontece depois:** ${unit.text}` : unit.text).join('\n\n')}`;
   })].join('\n\n');
 }
@@ -88,7 +90,8 @@ function preflight(page, evidence, plan) {
 export async function runFaqJudgment(page, evidence, providers, { plan } = {}) {
   let current = page, corrections = 0, usage = { inputTokens: 0, outputTokens: 0 };
   for (;;) {
-    const claims = unitsOf(current).flatMap((unit) => splitClaims(unit.text).map((text) =>
+    const claims = unitsOf(current).flatMap((unit) => splitClaims(unit.text).filter((text) =>
+      !text.endsWith('?')).map((text) =>
       ({ text, evidenceIds: unit.evidenceIds, kind: unit.kind, taskId: unit.taskId })))
       .map((unit, index) => ({ ...unit, id: `c${index + 1}` }));
     const [facts, editorial] = await Promise.all([
@@ -188,7 +191,7 @@ export function faqWriterInput(plan, tasks, evidence, screenshots) {
 export function faqWriterInstructions(rules) {
   return `Escreva a página INTEIRA em português para clientes iniciantes. Regras: ${rules.join('\n')}
   Glossário versionado do redator: ${JSON.stringify(FAQ_WRITER_GLOSSARY)}. Use os termos preferidos na prosa, preservando rótulos literais de controles do produto. Nunca transforme a mecânica da verificação em instrução ao cliente. A conclusão da tarefa é apenas um fato estruturado; detalhes de como a equipe a confirmou não são evidência de texto para a página.
-  Use somente evidenceIds existentes. O que acontece depois vem do estado visível depois da ação e de controles oferecidos pela jornada concluída, quando isso agrega ao leitor. Imagens mascaradas são referência visual; não publique sem aprovação. Se tarefa estiver sem jornada, escreva somente contexto sustentado pelos fatos do front, sem passo ou efeito. Inclua O que é, Para que serve, casos reais de WhatsApp/CRM e um guia por tarefa. Ordene as tarefas pela pauta. Em cada guia, dê contexto, passos e efeito no mesmo fluxo; não substitua uma ação por referência a outro guia. Evite repetir a mesma orientação em guias diferentes. Faça a página seguir uma sequência lógica do uso inicial ao estado observado após salvar. Cada frase deve ser uma unidade com evidência. Não mencione fonte, ensaio, staging nem pendência interna na página.`;
+  Use somente evidenceIds existentes. Para cada tarefa concluída, escreva o resultado do produto que a conclusão estruturada confirma em uma unidade kind depois com o ID da jornada; explique o efeito da ação para a pessoa, sem descrever como a equipe verificou. Apoie detalhes no estado visível, nas mensagens e nos controles oferecidos. Se esse estado não mostrar um detalhe, não o invente. O que acontece depois deve agregar ao leitor. Não numere o texto de unidades kind passo: a montagem numera os passos. Imagens mascaradas são referência visual; não publique sem aprovação. Se tarefa estiver sem jornada, escreva somente contexto sustentado pelos fatos do front, sem passo ou efeito. Inclua O que é, Para que serve, casos concretos sustentados por evidência e um guia por tarefa; não suponha uso de WhatsApp ou CRM sem evidência. Ordene as tarefas pela pauta. Em cada guia, dê contexto, passos e efeito no mesmo fluxo; não substitua uma ação por referência a outro guia. Evite repetir a mesma orientação em guias diferentes. Faça a página seguir uma sequência lógica do uso inicial ao resultado. Cada frase deve ser uma unidade com evidência. Não mencione fonte, ensaio, staging nem pendência interna na página.`;
 }
 
 export async function generateFaqV2(root, module, { client = new OpenAI(),
