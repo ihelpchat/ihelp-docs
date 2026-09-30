@@ -17,8 +17,11 @@ const object = (properties) => ({ type: 'object', additionalProperties: false,
   required: Object.keys(properties), properties });
 const unitSchema = object({ text: { type: 'string' }, kind: { type: 'string', enum: ['contexto', 'passo', 'depois'] },
   evidenceIds: { type: 'array', items: { type: 'string' } } });
-const pageSchema = object({ title: { type: 'string' }, sections: { type: 'array', items: object({
-  heading: { type: 'string' }, taskId: { type: ['string', 'null'] }, units: { type: 'array', items: unitSchema },
+const pageSchema = object({ title: { type: 'string' }, titleEvidenceIds: { type: 'array', items: { type: 'string' } },
+  description: { type: ['string', 'null'] }, descriptionEvidenceIds: { type: 'array', items: { type: 'string' } },
+  sections: { type: 'array', items: object({
+  heading: { type: 'string' }, headingEvidenceIds: { type: 'array', items: { type: 'string' } },
+  taskId: { type: ['string', 'null'] }, units: { type: 'array', items: unitSchema },
 }) } });
 const factSchema = object({ claims: { type: 'array', items: object({ id: { type: 'string' },
   status: { type: 'string', enum: ['sustentada', 'a confirmar', 'contradiz a fonte'] },
@@ -48,6 +51,26 @@ const proseOf = (unit) => unit.kind === 'passo'
   ? unit.text.replace(/^\s*\d+[.)]\s+/u, '') : unit.text;
 const unitsOf = (page) => page.sections.flatMap((section) => section.units.map((unit) =>
   ({ ...unit, text: proseOf(unit), taskId: section.taskId })));
+const referenceIds = (units) => [...new Set(units.flatMap((unit) => unit.evidenceIds ?? []))];
+const markdownLabels = /(!?)\[([^\]\n]+)\]\([^\s)]+\)/gu;
+function publishedFields(page) {
+  const fields = page.sections.flatMap((section, sectionIndex) => section.units.map((unit, unitIndex) => ({
+    text: proseOf(unit), kind: unit.kind, taskId: section.taskId, evidenceIds: unit.evidenceIds,
+    field: `sections[${sectionIndex}].units[${unitIndex}]`,
+  })));
+  const metadata = [
+    { text: page.title, evidenceIds: page.titleEvidenceIds ?? referenceIds(unitsOf(page)), field: 'title' },
+    ...(page.description ? [{ text: page.description,
+      evidenceIds: page.descriptionEvidenceIds ?? referenceIds(unitsOf(page)), field: 'description' }] : []),
+    ...page.sections.map((section, index) => ({ text: section.heading,
+      evidenceIds: section.headingEvidenceIds ?? referenceIds(section.units),
+      taskId: section.taskId, field: `sections[${index}].heading` })),
+  ];
+  return [...fields, ...metadata].flatMap((field) => [field, ...[...String(field.text ?? '').matchAll(markdownLabels)]
+    .map((match) => ({ ...field, text: match[2], field: `${field.field}.${match[1] ? 'imageAlt' : 'linkText'}` }))]);
+}
+const faqFrontmatter = (page) => `---\ntitle: ${JSON.stringify(page.title)}\n${page.description
+  ? `description: ${JSON.stringify(page.description)}\n` : ''}---\n\n`;
 function renderPage(page) {
   return [`# ${page.title}`, ...page.sections.map((section) => {
     let number = 0;
@@ -68,17 +91,21 @@ function preflight(page, evidence, plan) {
   if (!page?.sections?.length) problems.push('página vazia');
   if (plan) for (const task of plan.tasks) if (!page?.sections?.some((section) => section.taskId === task.id))
     problems.push(`tarefa ausente: ${task.id}`);
+  for (const field of publishedFields(page)) {
+    if (!field.text?.trim()) problems.push(`texto vazio: ${field.field}`);
+    if (!field.evidenceIds?.length) problems.push(`afirmação sem evidência: ${field.field}`);
+    for (const id of field.evidenceIds ?? []) if (!known.has(id)) problems.push(`evidência ausente: ${id}`);
+    if (field.evidenceIds?.length && field.evidenceIds.every((id) =>
+      known.get(id)?.type === 'verificacao')) problems.push(`afirmação apoiada só na verificação: ${field.field}`);
+  }
   for (const section of page?.sections ?? []) {
     const task = plan?.tasks.find((item) => item.id === section.taskId);
     if (section.taskId && plan && !task) problems.push(`tarefa fora da pauta: ${section.taskId}`);
     for (const unit of section.units ?? []) {
-      if (!unit.text?.trim()) problems.push('frase vazia');
-      if (!unit.evidenceIds?.length) problems.push(`afirmação sem evidência: ${unit.text}`);
-      for (const id of unit.evidenceIds ?? []) if (!known.has(id)) problems.push(`evidência ausente: ${id}`);
-      if (unit.evidenceIds?.length && unit.evidenceIds.every((id) =>
-        known.get(id)?.type === 'verificacao')) problems.push(`afirmação apoiada só na verificação: ${unit.text}`);
-      if (task?.status === 'sem jornada' && ['passo', 'depois'].includes(unit.kind))
-        problems.push(`tarefa sem jornada virou passo ou efeito: ${section.taskId}`);
+      if (['passo', 'depois'].includes(unit.kind) && (!section.taskId || (plan && task?.status !== 'concluída')
+        || !evidence.some((item) => item.type === 'jornada' && item.task === section.taskId
+          && item.status === 'concluída')))
+        problems.push(`passo ou efeito sem tarefa com jornada concluída: ${section.taskId ?? 'sem vínculo'}`);
       if (unit.kind === 'depois' && !unit.evidenceIds?.some((id) =>
         known.get(id)?.type === 'jornada' && known.get(id)?.task === section.taskId
           && known.get(id)?.status === 'concluída')) problems.push(`efeito sem jornada: ${section.taskId}`);
@@ -90,9 +117,10 @@ function preflight(page, evidence, plan) {
 export async function runFaqJudgment(page, evidence, providers, { plan } = {}) {
   let current = page, corrections = 0, usage = { inputTokens: 0, outputTokens: 0 };
   for (;;) {
-    const claims = unitsOf(current).flatMap((unit) => splitClaims(unit.text).filter((text) =>
-      !text.endsWith('?')).map((text) =>
-      ({ text, evidenceIds: unit.evidenceIds, kind: unit.kind, taskId: unit.taskId })))
+    const claims = publishedFields(current).flatMap((field) => splitClaims(field.text).filter((text) =>
+      field.field.includes('.units[') ? !text.endsWith('?') : true).map((text) =>
+      ({ text, evidenceIds: field.evidenceIds, kind: field.kind, taskId: field.taskId,
+        field: field.field })))
       .map((unit, index) => ({ ...unit, id: `c${index + 1}` }));
     const [facts, editorial] = await Promise.all([
       providers.judgeFacts(claims, current, evidence), providers.judgeEditorial(current, evidence),
@@ -113,7 +141,8 @@ export async function runFaqJudgment(page, evidence, providers, { plan } = {}) {
         item.id === id && item.type === 'jornada' && item.status === 'concluída'));
       if (claim.kind === 'depois' && (!afterAnchor || !afterProof))
         diagnostic.push(`${claim.id}: efeito sem evidência da jornada concluída`);
-      return { claim: claim.text, status: verdict?.status ?? 'sem julgamento',
+      return { claim: claim.text, field: claim.field, taskId: claim.taskId ?? null,
+        status: verdict?.status ?? 'sem julgamento',
         evidence: [...new Set([...(verdict?.evidenceIds ?? []), ...(afterAnchor ? [afterAnchor] : [])])].map((id) => ({ id,
           type: evidence.find((item) => item.id === id)?.type ?? 'desconhecida' })),
         reason: verdict?.reason ?? '' };
@@ -127,10 +156,11 @@ export async function runFaqJudgment(page, evidence, providers, { plan } = {}) {
     }
     for (const item of editorial?.naoVerificaveis ?? []) if (!trace.some((row) => row.claim.includes(item)
       && row.status === 'sustentada')) diagnostic.push(`não verificável: ${item}`);
-    const mdx = assembleFaqPage(current);
-    const losses = unitsOf(current).filter(({ text }) => !mdx.includes(text)).map(({ text }) => text);
+    const body = assembleFaqPage(current);
+    const mdx = `${faqFrontmatter(current)}${body}\n`;
+    const losses = publishedFields(current).filter(({ text }) => !mdx.includes(text)).map(({ text }) => text);
     diagnostic.push(...losses.map((text) => `perda na montagem: ${text}`));
-    try { validateFaqMdx(mdx); } catch (error) { diagnostic.push(`MDX: ${error.message}`); }
+    try { validateFaqMdx(body); } catch (error) { diagnostic.push(`MDX: ${error.message}`); }
     if (!diagnostic.length) return { approved: true, status: 'aprovado', mdx, page: current, trace,
       editorial, corrections, preserved: true, usage };
     if (corrections || !providers.rewrite) return { approved: false, status: 'precisa de revisão humana',
@@ -191,7 +221,7 @@ export function faqWriterInput(plan, tasks, evidence, screenshots) {
 export function faqWriterInstructions(rules) {
   return `Escreva a página INTEIRA em português para clientes iniciantes. Regras: ${rules.join('\n')}
   Glossário versionado do redator: ${JSON.stringify(FAQ_WRITER_GLOSSARY)}. Use os termos preferidos na prosa, preservando rótulos literais de controles do produto. Nunca transforme a mecânica da verificação em instrução ao cliente. A conclusão da tarefa é apenas um fato estruturado; detalhes de como a equipe a confirmou não são evidência de texto para a página.
-  Use somente evidenceIds existentes. Para cada tarefa concluída, escreva o resultado do produto que a conclusão estruturada confirma em uma unidade kind depois com o ID da jornada; explique o efeito da ação para a pessoa, sem descrever como a equipe verificou. Apoie detalhes no estado visível, nas mensagens e nos controles oferecidos. Se esse estado não mostrar um detalhe, não o invente. O que acontece depois deve agregar ao leitor. Não numere o texto de unidades kind passo: a montagem numera os passos. Imagens mascaradas são referência visual; não publique sem aprovação. Se tarefa estiver sem jornada, escreva somente contexto sustentado pelos fatos do front, sem passo ou efeito. Inclua O que é, Para que serve, casos concretos sustentados por evidência e um guia por tarefa; não suponha uso de WhatsApp ou CRM sem evidência. Ordene as tarefas pela pauta. Em cada guia, dê contexto, passos e efeito no mesmo fluxo; não substitua uma ação por referência a outro guia. Evite repetir a mesma orientação em guias diferentes. Faça a página seguir uma sequência lógica do uso inicial ao resultado. Cada frase deve ser uma unidade com evidência. Não mencione fonte, ensaio, staging nem pendência interna na página.`;
+  Use somente evidenceIds existentes. Dê evidência também para title, description (ou null) e cada heading; textos de links e legendas também serão julgados. Para cada tarefa concluída, escreva o resultado do produto que a conclusão estruturada confirma em uma unidade kind depois com o ID da jornada; explique o efeito da ação para a pessoa, sem descrever como a equipe verificou. Apoie detalhes no estado visível, nas mensagens e nos controles oferecidos. Se esse estado não mostrar um detalhe, não o invente. O que acontece depois deve agregar ao leitor. Não numere o texto de unidades kind passo: a montagem numera os passos. Imagens mascaradas são referência visual; não publique sem aprovação. Se tarefa estiver sem jornada, escreva somente contexto sustentado pelos fatos do front, sem passo ou efeito. Inclua O que é, Para que serve, casos concretos sustentados por evidência e um guia por tarefa; não suponha uso de WhatsApp ou CRM sem evidência. Ordene as tarefas pela pauta. Em cada guia, dê contexto, passos e efeito no mesmo fluxo; não substitua uma ação por referência a outro guia. Evite repetir a mesma orientação em guias diferentes. Faça a página seguir uma sequência lógica do uso inicial ao resultado. Cada frase deve ser uma unidade com evidência. Não mencione fonte, ensaio, staging nem pendência interna na página.`;
 }
 
 export async function generateFaqV2(root, module, { client = new OpenAI(),
@@ -274,7 +304,7 @@ export async function generateFaqV2(root, module, { client = new OpenAI(),
   const result = await runFaqJudgment(draft.value, evidence, providers, { plan });
   const [inputRate, outputRate] = rates[model] ?? [0, 0];
   const costUsd = Number(((costUsage.inputTokens * inputRate + costUsage.outputTokens * outputRate) / 1e6).toFixed(6));
-  const mdx = result.mdx ? `---\ntitle: ${JSON.stringify(result.page.title)}\n---\n\n${result.mdx}\n` : undefined;
+  const mdx = result.mdx;
   if (mdx && containsSensitiveData(mdx, { detectOpaque: true })) return { status: 'precisa de revisão humana',
     diagnostic: ['conteúdo sensível na página'], model, costUsd, corrections: result.corrections };
   return { status: result.status, module, ...(mdx ? { mdx } : {}), screenshots,

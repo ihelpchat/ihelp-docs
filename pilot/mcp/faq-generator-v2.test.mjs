@@ -25,7 +25,8 @@ test('toda afirmação exige evidência vinculada e sustentada pelo juiz factual
     judgeEditorial: async () => passing,
   });
   assert.equal(verdict.approved, true);
-  assert.equal(verdict.trace.length, 2);
+  assert.equal(verdict.trace.filter(({ field }) => field.includes('.units[')).length, 2);
+  assert.ok(verdict.trace.some(({ field }) => field === 'title'));
   const correctedCitation = await runFaqJudgment(page, [...evidence,
     { id: 'F2', type: 'front', text: 'Contatos reúne cadastros.' }], {
     judgeFacts: async (claims) => claims.map(({ id }) => ({ id, status: 'sustentada', evidenceIds: ['F2'], reason: '' })),
@@ -76,7 +77,7 @@ test('guia ausente ou passo de tarefa sem jornada impede a saída', async () => 
   assert.ok(absent.diagnostic.includes(`tarefa ausente: ${task.id}`));
   const invented = await runFaqJudgment(page, evidence, providers, { plan });
   assert.equal(invented.status, 'precisa de revisão humana');
-  assert.ok(invented.diagnostic.some((item) => item.includes('tarefa sem jornada virou passo')));
+  assert.ok(invented.diagnostic.some((item) => item.includes('passo ou efeito sem tarefa com jornada concluída')));
 });
 
 test('O que acontece depois exige decisão factual baseada na jornada concluída', async () => {
@@ -159,7 +160,7 @@ test('afirmação sustentada só por mecânica da verificação não entra na p�
 });
 
 test('numeração do modelo é apenas formato; pergunta não vira afirmação factual', async () => {
-  const numbered = { title: 'Contatos', sections: [{ heading: 'Cadastrar', units: [
+  const numbered = { title: 'Contatos', sections: [{ heading: 'Cadastrar', taskId: task.id, units: [
     { text: '1. Clique em Salvar.', kind: 'passo', evidenceIds: ['J1'] },
     { text: 'O contato aparece na lista?', kind: 'contexto', evidenceIds: ['J1'] },
   ] }] };
@@ -168,7 +169,8 @@ test('numeração do modelo é apenas formato; pergunta não vira afirmação fa
     judgeEditorial: async () => passing,
   });
   assert.equal(result.status, 'aprovado');
-  assert.deepEqual(result.trace.map(({ claim }) => claim), ['Clique em Salvar.']);
+  assert.deepEqual(result.trace.filter(({ field }) => field.includes('.units[')).map(({ claim }) => claim),
+    ['Clique em Salvar.']);
   assert.match(result.mdx, /1\. Clique em Salvar\./u);
   assert.doesNotMatch(result.mdx, /1\. 1\./u);
 });
@@ -189,10 +191,20 @@ test('título, descrição, headings, links e legendas entram no trace factual',
       status: unsupported.has(text) ? 'a confirmar' : 'sustentada',
       evidenceIds: ['J1'], reason: unsupported.has(text) ? 'sem prova' : '' })),
     judgeEditorial: async () => passing,
+    rewrite: async () => claimPage,
   });
   for (const text of unsupported) assert.ok(result.trace.some((item) => item.claim === text), text);
   assert.equal(result.status, 'precisa de revisão humana');
+  assert.equal(result.corrections, 1);
   assert.equal(result.mdx, undefined);
+  const supported = await runFaqJudgment(claimPage, evidence, {
+    judgeFacts: async (claims) => claims.map(({ id }) => ({ id, status: 'sustentada',
+      evidenceIds: ['J1'], reason: '' })),
+    judgeEditorial: async () => passing,
+  });
+  assert.equal(supported.status, 'aprovado');
+  assert.match(supported.mdx, /description: "Robôs garantem clientes novos"/u);
+  assert.ok(supported.trace.some(({ field, evidence }) => field === 'title' && evidence[0]?.id === 'J1'));
 });
 
 test('passo sem vínculo não contorna uma jornada bloqueada', async () => {
