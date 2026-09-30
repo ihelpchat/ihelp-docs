@@ -29,6 +29,19 @@ test('Adicionar bloco no editor aciona botão do sidebar, não o canvas', async 
   } finally { await browser.close(); }
 });
 
+test('encaminhamento usa o botão textual fora de custom-height-sidebar', async () => {
+  const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<div class="react-flow__node"><button class="absolute" onclick="window.canvas=true"><svg></svg></button></div><div><button onclick="window.sidebar=true">Adicionar bloco</button></div>');
+    const observed = await observeJourneyDom(page, { vocabulary: ['Adicionar bloco'] });
+    await actJourneyAction(page, { type: 'click', role: 'button', name: 'Adicionar bloco (cabeçalho)', value: null },
+      observed.targets, { vocabulary: ['Adicionar bloco'] });
+    assert.deepEqual(await page.evaluate(() => ({ canvas: Boolean(window.canvas), sidebar: Boolean(window.sidebar) })),
+      { canvas: false, sidebar: true });
+  } finally { await browser.close(); }
+});
+
 test('PUT owner barra IDs ausentes e IDs fora da fixture antes da rede', () => {
   const request = (body) => ({ method: () => 'PUT', url: () => 'https://qa.example.test/api/v2/contacts/ref-1/owner',
     postData: () => JSON.stringify(body) });
@@ -66,7 +79,7 @@ test('editar só exige título persistido; menu pertence à tarefa de montar flu
 });
 
 test('host Railway da homologação é aceito; domínios de produção são recusados mesmo na allowlist', () => {
-  const host = 'olah-ihelp-production.up.railway.app';
+  const host = 'qa-api-production.up.railway.app';
   const result = qaRequestDecision(`https://${host}/api/v2/contacts`, { local: false },
     { GUIDE_QA_ALLOWED_HOSTS: host });
   assert.equal(result.allowed, true);

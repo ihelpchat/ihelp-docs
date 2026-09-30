@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-16';
+export const JOURNEY_POLICY_VERSION = 'm578-3';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -76,13 +76,12 @@ export function policyDecision(action, generated = fixtureValues, taskId = '') {
   if (action.type === 'finish') return { allowed: true };
   if (action.type === 'upload_csv') return action.role == null && action.name == null && action.value == null
     ? { allowed: true } : deny('upload inválido');
-  if (action.type === 'press') return taskId === 'robos.montar_menu' && action.role === 'textbox'
-    && action.name === 'campo 2 do formulário (texto)' && action.value === 'Enter'
-    ? { allowed: true } : deny('ação proibida');
+  if (action.type === 'press') return deny('ação proibida');
   if (!['button', 'link', 'menuitem', 'textbox', 'combobox', 'option', 'checkbox', 'tab'].includes(action.role)
     || typeof action.name !== 'string' || !action.name.trim() || action.name.length > 100) return deny('alvo inválido');
   const name = normalized(action.name);
-  if (forbidden.test(name)) return deny('ação proibida');
+  if (forbidden.test(name) && !(action.type === 'click' && action.role === 'button'
+    && name === 'enviar mensagem' && taskId === 'robos.montar_menu')) return deny('ação proibida');
   if (action.type === 'fill' && (action.role !== 'textbox'
     && !(taskId === 'contatos.marcar_tags' && action.role === 'combobox') || !generated.has(action.value)))
     return deny('valor fora do gerador');
@@ -307,8 +306,8 @@ export function plannedJourneyAction(id, screen, actions, fixtureFor = fixtureVa
     if (!actions.some((action) => action.type === 'fill' && action.name === 'campo 2 do formulário (texto)'
       && action.value === fixtureFor('menuOption', 1)))
       return plannedFill(screen, /^campo 2 do formulário \(texto\)$/iu, fixtureFor('menuOption', 1));
-    if (!actions.some((action) => action.type === 'press' && action.name === 'campo 2 do formulário (texto)'))
-      return { type: 'press', role: 'textbox', name: 'campo 2 do formulário (texto)', value: 'Enter' };
+    if (!actions.some((action) => action.type === 'click' && action.name === 'Enviar mensagem'))
+      return plannedClick(screen, /^Enviar mensagem$/iu, 'button');
     if (addCount < 4) return plannedClickLast(screen, /^Adicionar bloco(?: \(cabeçalho(?: \d+)?\))?$/iu);
     if (addCount < 5) return plannedClick(screen, /^Adicionar bloco(?: \(cabeçalho(?: \d+)?\))?$/iu);
     if (messageCount < 2) return plannedClick(screen, /^Mensagem simples$/iu);
@@ -318,19 +317,20 @@ export function plannedJourneyAction(id, screen, actions, fixtureFor = fixtureVa
     if (!actions.some((action) => action.type === 'fill' && action.name === 'campo 2 do formulário (texto)'
       && action.value === fixtureFor('menuOption', 2)))
       return plannedFill(screen, /^campo 2 do formulário \(texto\)$/iu, fixtureFor('menuOption', 2));
-    if (actions.filter((action) => action.type === 'press' && action.name === 'campo 2 do formulário (texto)').length < 2)
-      return { type: 'press', role: 'textbox', name: 'campo 2 do formulário (texto)', value: 'Enter' };
+    if (actions.filter((action) => action.type === 'click' && action.name === 'Enviar mensagem').length < 2)
+      return plannedClick(screen, /^Enviar mensagem$/iu, 'button');
     if (addCount < 6) return plannedClickLast(screen, /^Adicionar bloco(?: \(cabeçalho(?: \d+)?\))?$/iu);
     return !done(/^Salvar$/iu) ? plannedClick(screen, /^Salvar$/iu) : finished();
   }
   if (id === 'robos.encaminhar') {
     if (!done(/^Fluxo de Robô$/iu)) return plannedClick(screen, /^Fluxo de Robô$/iu, 'link');
-    if (!done(/^Adicionar bloco$/iu)) return plannedClick(screen, /^Adicionar bloco$/iu);
+    if (!done(/^Adicionar bloco(?: \(|$)/iu))
+      return plannedClick(screen, /^Adicionar bloco(?: \(cabeçalho(?: \d+)?\))?$/iu);
     if (!done(/^Ação$/iu)) return plannedClick(screen, /^Ação$/iu);
     if (!done(/^Encaminhar atendimento$/iu)) return plannedClick(screen, /^Encaminhar atendimento$/iu);
     if (!done(/^opção [1-9]\d*$/iu)) return plannedClick(screen, /^opção 1$/iu, 'option');
-    if (actions.filter((action) => action.type === 'click' && /^Adicionar bloco$/iu.test(action.name)).length < 2)
-      return plannedClick(screen, /^Adicionar bloco$/iu);
+    if (actions.filter((action) => action.type === 'click' && /^Adicionar bloco(?: \(|$)/iu.test(action.name)).length < 2)
+      return plannedClick(screen, /^Adicionar bloco(?: \(cabeçalho(?: \d+)?\))?$/iu);
     return !done(/^Salvar$/iu) ? plannedClick(screen, /^Salvar$/iu) : finished();
   }
   if (id === 'robos.salvar') {
@@ -724,6 +724,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
         }
         if (diagnostics.ownerProbe) record.ownerProbe = diagnostics.ownerProbe;
         if (diagnostics.menuProbe) record.menuProbe = diagnostics.menuProbe;
+        if (diagnostics.botWriteProbe?.length) record.botWriteProbe = diagnostics.botWriteProbe;
         if (diagnostics.tagProbe) record.tagProbe = diagnostics.tagProbe;
         if (['contatos.cadastrar', 'robos.criar'].includes(task.id)) record.creationCapture ??=
           diagnostics.creationCapture ?? { postSeen: false, status: null, jsonParsed: false, topKeys: [], refFound: false };

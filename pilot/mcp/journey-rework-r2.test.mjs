@@ -99,6 +99,13 @@ test('menu e encaminhamento só aceitam save inativo do robô criado', () => {
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
     botEvents: [messageBlock] }), policy), true);
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
+    botEvents: [{ ...messageBlock, messages: [{ message: 'Tag Exemplo 01', type: 0, messageType: 0 }] }] }), policy), true);
+  assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
+    botEvents: [{ ...messageBlock, messages: [{ message: 'Tag Exemplo 01', messageType: 0 }] }] }), policy), true);
+  assert.equal(journeyWriteDecision(request('PUT', 'bot/owned-ref/save', { ...body,
+    botEvents: [{ ...messageBlock, messages: [{ message: 'Tag Exemplo 01' }] }] }), policy).keyPath,
+  'botEvents[0].messages[0].type');
+  assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body,
     botEvents: [{ ...messageBlock, messages: [{ message: 'Texto livre', type: 0 }] }] }), policy), false);
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/other-ref/save', body), policy), false);
   assert.equal(journeyRequestAllowed(request('PUT', 'bot/owned-ref/save', { ...body, status: true }), policy), false);
@@ -113,21 +120,23 @@ test('robô criado e menu só confirmam estado persistido na ficha reaberta', as
   let url = 'https://qa.example.test/bot/owned-ref';
   const labels = new Set(['Robô Exemplo 01', 'Menu de opções', 'Tag Exemplo 01']);
   const saved = { id: 31, idRef: 'owned-ref', title: 'Robô Exemplo 01', status: false,
-    botEvents: [{ idRef: 'menu-ref', type: 1, botReactionRules: [
+    botEvents: [{ idRef: 'menu-ref', type: 1, message: 'Qual opção deseja escolher?', botReactionRules: [
       { message: 'Tag Exemplo 01', botEventRedirectRef: 'forward-ref' },
       { message: 'Tag Exemplo 02', botEventRedirectRef: 'forward-ref' }] },
     { idRef: 'forward-ref', type: 4, configuration: '{"DepartmentId":2}' }] };
   const page = { async goto(value) { url = value; }, async reload() {}, url: () => url,
     getByText(value) { return { count: async () => Number(labels.has(value)) }; } };
   const base = { page, refs: ['owned-ref'], targetUrl: 'https://qa.example.test', name: 'Robô Exemplo 01',
-    expectedValue: 'Robô Exemplo 01', getPersisted: async () => ({ status: 200, body: { dados: saved } }) };
+    expectedValue: 'Robô Exemplo 01', fixtureIds: { department: new Set([2]) }, saveStatus: 200,
+    getPersisted: async () => ({ status: 200, body: { dados: saved } }) };
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.criar', modulo: 'robos' } })).confirmed, true);
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.montar_menu', modulo: 'robos' } })).confirmed, true);
   labels.add('Encaminhar atendimento');
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.encaminhar', modulo: 'robos' } })).confirmed, true);
-  saved.botEvents[0].botReactionRules[1].botEventRedirectRef = 'missing-ref';
+  saved.botEvents[1].configuration = '{"DepartmentId":999}';
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.encaminhar', modulo: 'robos' } })).confirmed, false);
-  saved.botEvents[0].botReactionRules[1].botEventRedirectRef = 'forward-ref';
+  saved.botEvents[1].configuration = '{"DepartmentId":2}';
   labels.delete('Menu de opções');
+  saved.botEvents[0].botReactionRules = [];
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.montar_menu', modulo: 'robos' } })).confirmed, false);
 });

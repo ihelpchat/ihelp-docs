@@ -106,3 +106,26 @@ test('placeholder de contador não libera texto desconhecido na aba', { timeout:
   assert.equal(result.steps[0].status, 'capturado', JSON.stringify(result.steps));
   assert.ok(result.entries[0].masked.includes('texto não confirmado'));
 });
+
+test('canvas com zoom mascara o bloco inteiro após estabilizar o transform', { timeout: 90000 }, async () => {
+  let covered = false;
+  const { result } = await fixture(`
+    <button>Salvar</button>
+    <div class="react-flow__viewport" style="transform:translate(120px,80px) scale(.7)">
+      <div class="react-flow__node" style="width:240px;height:120px;background:red">
+        <span>Texto fora do vocabulário</span>
+      </div>
+    </div>`, [step('Salvar')], { vocabulary: ['Salvar'],
+    fixtureAfterScreenshot: async (page) => {
+      covered = await page.evaluate(() => {
+        const node = document.querySelector('.react-flow__node').getBoundingClientRect();
+        return [...document.querySelectorAll('[data-screen-capture-mask]')].some((item) => {
+          const mask = item.getBoundingClientRect();
+          return mask.left <= node.left && mask.top <= node.top
+            && mask.right >= node.right && mask.bottom >= node.bottom;
+        });
+      });
+    } });
+  assert.equal(result.steps[0].status, 'capturado', JSON.stringify(result.steps));
+  assert.equal(covered, true);
+});
