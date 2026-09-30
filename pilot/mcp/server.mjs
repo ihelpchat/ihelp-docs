@@ -17,6 +17,20 @@ import { syncBusinessContext } from './business-context-sync.mjs';
 import { envCompatibility } from './env-compat.mjs';
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
+let journeyRunning = false;
+let journeyGate = Promise.resolve();
+async function withJourneyGate(operation) {
+  const previous = journeyGate;
+  let release;
+  journeyGate = new Promise((resolve) => { release = resolve; });
+  await previous;
+  try { return await operation(); } finally { release(); }
+}
+const probeCurrentJourneyAccount = async () => {
+  const { probeJourneyAccount } = await import('./journey-runtime.mjs');
+  return probeJourneyAccount(process.env);
+};
+const lockedJourneyProbe = () => withJourneyGate(probeCurrentJourneyAccount);
 const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto']);
 const requestedBySchema = z.string().optional().describe('Ator opcional; se informado, deve coincidir com o ator da credencial');
 const confirmationsSchema = z.array(z.string().max(300)).max(8).optional();
@@ -37,6 +51,38 @@ const textResult = (value, isError = false) => ({
     ? { securityWarnings: [], ...value } : value, null, 2) }],
   isError,
 });
+
+export function journeyTaskSummary(record) {
+  const blocked = record.blocked && {
+    host: record.blocked.host, method: record.blocked.method, path: record.blocked.path,
+    keys: record.blocked.keys, reason: record.blocked.reason,
+    ...(record.blocked.keyPath ? { keyPath: record.blocked.keyPath } : {}),
+  };
+  const validation = /^validação do formulário: (Informe o telefone com DDD|Já existe um contato com este número de telefone|O telefone é obrigatório|Precisa ter pelo menos um canal)$/u
+    .exec(record.reason ?? '')?.[1] ?? null;
+  const fixtures = (record.fixtures ?? []).filter((item) => item && typeof item === 'object'
+    && ['department', 'channel', 'user', 'company'].includes(item.kind)
+    && (/^GET \/api\/v2\/configurations\/(?:departments|channels|users)$/u.test(item.source)
+      || /^CAPTURE_QA_(?:DEPARTMENT|CHANNEL|USER|COMPANY)_IDS$/u.test(item.source)))
+    .map(({ source, kind, ids }) => ({ source, kind, count: Array.isArray(ids) ? ids.length : 0 }));
+  return { task: record.task, status: record.status, reason: record.reason,
+    blocked: blocked ?? null, validation, fixtures, actions: record.actions?.length ?? 0,
+    ...(typeof record.identityVerified === 'boolean' ? { identityVerified: record.identityVerified } : {}),
+    thirdPartyDenied: record.thirdPartyDenied ?? {}, ...(record.observeError ? { observeError: record.observeError } : {}),
+    ...(record.apiError ? { apiError: record.apiError } : {}),
+    ...(record.creationCapture ? { creationCapture: record.creationCapture } : {}),
+    ...(record.importCapture ? { importCapture: record.importCapture } : {}),
+    ...(record.importResultMessage ? { importResultMessage: record.importResultMessage } : {}),
+    ...(record.verification ? { verification: record.verification } : {}),
+    ...(record.createdRef ? { createdRef: record.createdRef } : {}),
+    ...(record.saveOutcome ? { saveOutcome: record.saveOutcome } : {}),
+    ...(record.saveMessages ? { saveMessages: record.saveMessages } : {}),
+    ...(record.searchProbe ? { searchProbe: record.searchProbe } : {}),
+    ...(record.ownerProbe ? { ownerProbe: record.ownerProbe } : {}),
+    ...(record.menuProbe ? { menuProbe: record.menuProbe } : {}),
+    ...(record.tagProbe ? { tagProbe: record.tagProbe } : {}),
+    ...(record.actionError ? { actionError: record.actionError } : {}) };
+}
 
 export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname) {
   const server = new McpServer(
@@ -223,6 +269,66 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       console.error(captureFailureLog(error));
       await auditOperation(root, { actor: requestedBy, operation: 'capturar_telas', target, result: 'failure' });
       return textResult({ error: captureFailureCategory(error) }, true);
+    }
+  });
+
+  registerTool('gravar_jornada', {
+    mutates: true,
+    description: 'Executa tarefas fictícias de Contatos ou Robôs na homologação e grava jornada privada sanitizada.',
+    inputSchema: z.strictObject({
+      module: z.enum(['contatos', 'robos']),
+      tasks: z.array(z.string().regex(/^(?:contatos|robos)\.[a-z_]+$/)).max(20).optional(),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ module, tasks, requestedBy }) => {
+    if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    if (journeyRunning) return textResult({ error: 'ocupado' }, true);
+    journeyRunning = true;
+    const started = Date.now();
+    const target = auditTarget(module, (tasks ?? []).join(','));
+    try {
+      await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'attempt' });
+      const { recordJourneys } = await import('./journey-runtime.mjs');
+      const records = await withJourneyGate(() => recordJourneys(module, tasks));
+      const { journeyCoverage } = await import('./journey-service.mjs');
+      await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'success' });
+      return textResult({ tasks: records.map(journeyTaskSummary),
+        coverage: journeyCoverage(records), elapsedMs: Date.now() - started });
+    } catch (error) {
+      const { journeyFailureCategory, journeyFailureLog } = await import('./journey-service.mjs');
+      console.error(journeyFailureLog(error));
+      await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'failure' });
+      return textResult({ error: journeyFailureCategory(error), tasks: error?.results?.map(journeyTaskSummary) ?? [],
+        elapsedMs: Date.now() - started }, true);
+    } finally {
+      const { clearJourneyProofCache } = await import('./journey-service.mjs');
+      clearJourneyProofCache(lockedJourneyProbe);
+      journeyRunning = false;
+    }
+  });
+
+  registerTool('ler_jornada', {
+    mutates: false,
+    description: 'Lê uma jornada privada sanitizada, incluindo ids dos prints mascarados.',
+    inputSchema: z.strictObject({
+      module: z.enum(['contatos', 'robos']),
+      task: z.string().regex(/^(?:contatos|robos)\.[a-z_]+$/),
+      requestedBy: requestedBySchema,
+    }),
+  }, async ({ module, task, requestedBy }) => {
+    if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    await auditOperation(root, { actor: requestedBy, operation: 'ler_jornada', target: auditTarget(module, task), result: 'attempt' });
+    try {
+      const { readJourney } = await import('./journey-service.mjs');
+      const { configuredJourneyIdentity } = await import('./journey-runtime.mjs');
+      return textResult(await readJourney({ module, task,
+        accountHash: configuredJourneyIdentity(process.env).credentialHash,
+        probeAccount: lockedJourneyProbe }));
+    } catch (error) {
+      const { journeyReadFailureCategory } = await import('./journey-service.mjs');
+      return textResult(error.message === 'jornada de outra conta'
+        ? { error: 'jornada de outra conta' }
+        : { error: 'Jornada indisponível', category: journeyReadFailureCategory(error) }, true);
     }
   });
 

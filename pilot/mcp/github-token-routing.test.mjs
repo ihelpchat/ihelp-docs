@@ -75,6 +75,10 @@ async function exercise(label, readToken) {
     const source = name === 'docs_delete_article' ? { ...request, path: 'docs/teste/remocao-isolada' }
       : name === 'capturar_telas'
         ? { ...request, path: 'docs/contatos', module: 'Contatos' }
+        : name === 'gravar_jornada'
+          ? { ...request, module: 'contatos', tasks: ['contatos.cadastrar'] }
+        : name === 'ler_jornada'
+          ? { ...request, module: 'contatos', task: 'contatos.cadastrar' }
         : name === 'baixar_telas'
           ? { ...request, page: 'contatos' }
         : name === 'enviar_tela'

@@ -69,6 +69,7 @@ try {
     atualizar_por_deploy: { before: {}, after: {} },
     atualizar_codigo_produto: {},
     capturar_telas: { path: 'docs/contatos', module: 'Contatos' },
+    gravar_jornada: { module: 'contatos', tasks: ['contatos.cadastrar'] },
     enviar_tela: { page: 'contatos', step: 'abrir', alt: 'Botão Abrir contato', base64: 'aGVsbG8=' },
     aprovar_tela: { page: 'contatos', step: 'abrir', adminToken: 'admin-token-de-teste-com-mais-de-24' },
   };

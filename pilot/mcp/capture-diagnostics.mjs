@@ -1,5 +1,8 @@
 export function captureFailureCategory(error) {
   const message = String(error?.message ?? '');
+  if (error?.captureReason === 'máscara não cobriu' || /máscara não cobriu/iu.test(message)) return 'máscara não cobriu';
+  if (error?.captureReason === 'alvo fora da tela' || /alvo fora da tela/iu.test(message)) return 'alvo fora da tela';
+  if (/tela não estabilizou/iu.test(message)) return 'tela não estabilizou';
   if (/20 passos|limite de passos/iu.test(message)) return 'limite de passos';
   if (/nenhum fato|rótulo|plano interno|rota confirmada/iu.test(message)) return 'nenhum passo com rótulo da tela';
   if (/fatos da tela|checkout|código do produto/iu.test(message)) return 'fatos da tela indisponíveis';

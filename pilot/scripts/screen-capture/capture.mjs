@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { launch } from '../visual/measure.mjs';
@@ -337,11 +337,15 @@ function masksForVisible(visible, vocabulary) {
     const sensitive = containsSensitiveData(item.text, { detectOpaque: true });
     const known = inVocabulary(item.text, vocabulary) || item.context && inVocabulary(item.context, vocabulary);
     if (!sensitive && !item.force && known) return [];
-    return [{ ...item.rect, reason: sensitive ? 'varredura sensível' : item.reason }];
+    const x = Math.floor(item.rect.x) - 3;
+    const y = Math.floor(item.rect.y) - 3;
+    return [{ x, y, width: Math.ceil(item.rect.x + item.rect.width) - x + 3,
+      height: Math.ceil(item.rect.y + item.rect.height) - y + 3,
+      reason: sensitive ? 'varredura sensível' : item.reason }];
   });
 }
 
-async function captureAttempt(page, cdp, rect, vocabulary, destination, afterScreenshot) {
+async function captureAttempt(page, cdp, rect, vocabulary, _destination, afterScreenshot) {
   let frozen = false;
   try {
     await cdp.send('Emulation.setScriptExecutionDisabled', { value: true });
@@ -370,22 +374,24 @@ async function captureAttempt(page, cdp, rect, vocabulary, destination, afterScr
         box.style.cssText = `position:absolute;left:${area.x}px;top:${area.y}px;width:${area.width}px;height:${area.height}px;background:#E2E8F0;border-radius:4px;`;
         layer.append(box);
       }
-      const frame = document.createElement('div');
-      frame.style.cssText = `position:absolute;left:${target.x - 5}px;top:${target.y - 5}px;width:${target.width + 10}px;height:${target.height + 10}px;border:4px solid #ec6400;border-radius:5px;box-sizing:border-box`;
-      const arrow = document.createElement('div');
-      arrow.textContent = '➜';
-      arrow.style.cssText = `position:absolute;left:${Math.max(0, target.x - 38)}px;top:${Math.max(0, target.y - 8)}px;color:#ec6400;font:bold 32px sans-serif;text-shadow:0 1px white`;
-      layer.append(frame, arrow); document.body.append(layer);
+      if (target) {
+        const frame = document.createElement('div');
+        frame.style.cssText = `position:absolute;left:${target.x - 5}px;top:${target.y - 5}px;width:${target.width + 10}px;height:${target.height + 10}px;border:4px solid #ec6400;border-radius:5px;box-sizing:border-box`;
+        const arrow = document.createElement('div');
+        arrow.textContent = '➜';
+        arrow.style.cssText = `position:absolute;left:${Math.max(0, target.x - 38)}px;top:${Math.max(0, target.y - 8)}px;color:#ec6400;font:bold 32px sans-serif;text-shadow:0 1px white`;
+        layer.append(frame, arrow);
+      }
+      document.body.append(layer);
     }, { masks: mask, rect });
     const renderedMasks = await page.evaluate(() => [...document.querySelectorAll('[data-screen-capture-mask]')]
       .map((box) => { const area = box.getBoundingClientRect();
         return { x: area.x, y: area.y, width: area.width, height: area.height }; }));
     if (!masksCoverSensitive(sensitive, renderedMasks)) return { failure: 'máscara não cobriu' };
-    await page.screenshot({ path: destination, animations: 'disabled' });
-    const bytes = await readFile(destination);
+    const bytes = await page.screenshot({ animations: 'disabled' });
     const width = bytes.readUInt32BE(16);
     const height = bytes.readUInt32BE(20);
-    if (rect.x < 5 || rect.y < 8 || rect.x + rect.width + 5 > width || rect.y + rect.height + 5 > height)
+    if (rect && (rect.x < 5 || rect.y < 8 || rect.x + rect.width + 5 > width || rect.y + rect.height + 5 > height))
       return { failure: 'alvo fora da tela' };
     if (afterScreenshot) await afterScreenshot(page);
     const after = await scanVisible(page);
@@ -394,13 +400,56 @@ async function captureAttempt(page, cdp, rect, vocabulary, destination, afterScr
       return { failure: 'máscara não cobriu' };
     return { mask, bytes };
   } finally {
-    await rm(destination, { force: true }).catch(() => {});
     await page.evaluate(() => {
       document.querySelector('[data-screen-capture-overlay]')?.remove();
       document.querySelector('[data-screen-capture-pause]')?.remove();
     }).catch(() => {});
     if (frozen) await cdp.send('Emulation.setScriptExecutionDisabled', { value: false });
   }
+}
+
+export async function captureMaskedFrame(page, vocabulary = []) {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const result = await captureAttempt(page, cdp, null, vocabulary, null);
+    if (!result.bytes) {
+      const error = new Error(result.failure ?? 'sanitização da imagem falhou');
+      error.stage = result.failure?.includes('máscara') ? 'máscara' : 'screenshot';
+      error.captureReason = result.failure;
+      throw error;
+    }
+    return result.bytes;
+  } finally { await cdp.detach(); }
+}
+
+export async function waitForStableScreen(page) {
+  await page.waitForLoadState('domcontentloaded', { timeout: 10_000 });
+  const result = await page.evaluate(async () => {
+    const deadline = performance.now() + 4_000;
+    let previous = null;
+    let frames = 0;
+    while (performance.now() < deadline) {
+      await new Promise((done) => requestAnimationFrame(done));
+      const active = document.getAnimations().some((animation) => animation.playState === 'running'
+        && animation.effect?.getComputedTiming().iterations !== Infinity);
+      const boxes = [...document.querySelectorAll('main,[role="main"],[role="dialog"],dialog,[class*="modal" i],.react-flow__viewport,.react-flow__node')]
+        .filter((element) => element.getClientRects().length).map((element) => {
+          const rect = element.getBoundingClientRect();
+          return [...[rect.x, rect.y, rect.width, rect.height].map((value) => Math.round(value * 100) / 100),
+            getComputedStyle(element).transform];
+        });
+      const position = JSON.stringify(boxes);
+      frames = !active && position === previous ? frames + 1 : 0;
+      if (frames >= 2) return { stable: true };
+      previous = position;
+    }
+    const animations = document.getAnimations().filter((animation) => animation.playState === 'running');
+    if (animations.length && animations.every((animation) => animation.effect?.getComputedTiming().iterations === Infinity))
+      return { stable: true, limit: 'animações infinitas' };
+    return { stable: false, condition: animations.length ? 'animação finita' : 'layout' };
+  });
+  if (!result.stable) throw new Error(`tela não estabilizou: ${result.condition}`);
+  return result;
 }
 
 async function scrollControlIntoCapture(page, control) {

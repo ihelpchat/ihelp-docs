@@ -338,6 +338,20 @@ async function scan(source, topic, module, deadline, { readFile: reader = safeRe
         code: [...new Map(screens.flatMap((item) => item.code).map((item) => [item.path, item])).values()],
         files: [...new Set(screens.flatMap((item) => item.files))], pending: [...screens.flatMap((item) => item.pending),
           ...(screens.every((item) => !item.facts.length) ? [`tela não identificada para ${module || topic}`] : [])] };
+      // The robot creation dialog is mounted globally, outside the route import tree.
+      // Read its UI components from the same pinned, authorized checkout.
+      if (normalize(module) === 'robos') for (const suffix of [
+        '/ModalAddNewBot/index.tsx', '/TagInput/index.tsx', '/SelectCommon/index.tsx',
+      ]) {
+        const path = paths.find((candidate) => candidate.endsWith(suffix) && canReadFrontFile(candidate));
+        if (!path || screen.files.includes(path)) continue;
+        const full = join(root, path);
+        if (await deadline.wait(hasSymlink(full, root))) throw new Error('Symlink do front não permitido');
+        const excerpt = await deadline.wait(fileRead(path, { encoding: 'utf8', signal: deadline.signal }));
+        if (excerpt.length > MAX_FILE_BYTES) throw new Error('Componente do formulário excede limite');
+        screen.code.push({ path, excerpt });
+        screen.files.push(path);
+      }
     }
     if ((await git(root, deadline, 'rev-parse', 'HEAD')).toString().trim() !== sha || (await git(root, deadline, 'status', '--porcelain', '--untracked-files=no')).length) return pending(source, 'Fonte alterada durante a leitura');
     let endpoints = [];
