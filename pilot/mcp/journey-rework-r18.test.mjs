@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { readJourney, saveJourney } from './journey-service.mjs';
+import { journeyReadFailureCategory, readJourney, saveJourney } from './journey-service.mjs';
 
 const hash = 'a'.repeat(64);
 const proof = (company) => createHash('sha256').update(JSON.stringify(['user-1', company])).digest('hex');
@@ -22,7 +22,9 @@ test('15 leituras da mesma conta fazem no máximo um login', async () => {
   let logins = 0;
   const probeAccount = async () => { logins++; return { userId: 'user-1', companyId: 'company-a' }; };
   try {
-    const results = await Promise.all(Array.from({ length: 15 }, () => readJourney({ ...options, probeAccount })));
+    const results = [];
+    for (let index = 0; index < 15; index++) results.push(await readJourney({ ...options, probeAccount }));
+    results.push(...await Promise.all(Array.from({ length: 15 }, () => readJourney({ ...options, probeAccount }))));
     assert.equal(logins, 1);
     assert.ok(results.every((item) => item.identityVerified === true));
   } finally { await rm(options.root, { recursive: true, force: true }); }
@@ -53,4 +55,10 @@ test('falha da prova serve a jornada sem vazar detalhe do login', async () => {
     assert.equal(result.identityReason, 'login');
     assert.equal(JSON.stringify(result).includes('email privado'), false);
   } finally { await rm(options.root, { recursive: true, force: true }); }
+});
+
+test('falha de leitura retorna categoria segura', () => {
+  assert.equal(journeyReadFailureCategory(Object.assign(new Error('segredo local'), { code: 'ENOENT' })), 'registro ausente');
+  assert.equal(journeyReadFailureCategory(new Error('sanitização falhou: dado privado')), 'sanitização');
+  assert.equal(journeyReadFailureCategory(new Error('credencial privada')), 'leitura falhou');
 });

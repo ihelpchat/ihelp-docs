@@ -18,6 +18,19 @@ import { envCompatibility } from './env-compat.mjs';
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
 let journeyRunning = false;
+let journeyGate = Promise.resolve();
+async function withJourneyGate(operation) {
+  const previous = journeyGate;
+  let release;
+  journeyGate = new Promise((resolve) => { release = resolve; });
+  await previous;
+  try { return await operation(); } finally { release(); }
+}
+const probeCurrentJourneyAccount = async () => {
+  const { probeJourneyAccount } = await import('./journey-runtime.mjs');
+  return probeJourneyAccount(process.env);
+};
+const lockedJourneyProbe = () => withJourneyGate(probeCurrentJourneyAccount);
 const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto']);
 const requestedBySchema = z.string().optional().describe('Ator opcional; se informado, deve coincidir com o ator da credencial');
 const confirmationsSchema = z.array(z.string().max(300)).max(8).optional();
@@ -276,7 +289,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     try {
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'attempt' });
       const { recordJourneys } = await import('./journey-runtime.mjs');
-      const records = await recordJourneys(module, tasks);
+      const records = await withJourneyGate(() => recordJourneys(module, tasks));
       const { journeyCoverage } = await import('./journey-service.mjs');
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'success' });
       return textResult({ tasks: records.map(journeyTaskSummary),
@@ -288,6 +301,8 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       return textResult({ error: journeyFailureCategory(error), tasks: error?.results?.map(journeyTaskSummary) ?? [],
         elapsedMs: Date.now() - started }, true);
     } finally {
+      const { clearJourneyProofCache } = await import('./journey-service.mjs');
+      clearJourneyProofCache(lockedJourneyProbe);
       journeyRunning = false;
     }
   });
@@ -305,12 +320,16 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     await auditOperation(root, { actor: requestedBy, operation: 'ler_jornada', target: auditTarget(module, task), result: 'attempt' });
     try {
       const { readJourney } = await import('./journey-service.mjs');
-      const { configuredJourneyIdentity, probeJourneyAccount } = await import('./journey-runtime.mjs');
+      const { configuredJourneyIdentity } = await import('./journey-runtime.mjs');
       return textResult(await readJourney({ module, task,
         accountHash: configuredJourneyIdentity(process.env).credentialHash,
-        probeAccount: () => probeJourneyAccount(process.env) }));
-    } catch (error) { return textResult({ error: error.message === 'jornada de outra conta'
-      ? 'jornada de outra conta' : 'Jornada indisponível' }, true); }
+        probeAccount: lockedJourneyProbe }));
+    } catch (error) {
+      const { journeyReadFailureCategory } = await import('./journey-service.mjs');
+      return textResult(error.message === 'jornada de outra conta'
+        ? { error: 'jornada de outra conta' }
+        : { error: 'Jornada indisponível', category: journeyReadFailureCategory(error) }, true);
+    }
   });
 
   registerTool('enviar_tela', {

@@ -48,7 +48,7 @@ class SanitizationError extends Error {}
 export function journeyFailureCategory(error) {
   const message = String(error?.message ?? '');
   if (/sanitiza|máscara|mascara|sensitive/iu.test(message)) return 'sanitização';
-  if (/login|credencia|sessão|senha|password/iu.test(message)) return 'login';
+  if (error?.code === 'QA_SESSION_ACTIVE' || /login|logado|credencia|sessão|senha|password/iu.test(message)) return 'login';
   if (/host|destino|URL|homologação deve/iu.test(message)) return 'host';
   if (/modelo|model|openai|api.key/iu.test(message)) return 'modelo';
   if (/timeout|tempo|timed out/iu.test(message)) return 'tempo';
@@ -377,17 +377,42 @@ export async function saveJourney(root, module, record, images) {
     `${record.task}.${digest(record.configuredIdentityHash)}.latest`), record.cacheKey, { mode: 0o600 });
 }
 
+const proofCache = new WeakMap();
+export function clearJourneyProofCache(probeAccount) { proofCache.delete(probeAccount); }
+async function cachedAccountProof(accountHash, probeAccount) {
+  let entries = proofCache.get(probeAccount);
+  if (!entries) { entries = new Map(); proofCache.set(probeAccount, entries); }
+  let entry = entries.get(accountHash);
+  if (!entry || entry.expiresAt <= Date.now()) {
+    entry = { expiresAt: Date.now() + 30_000, promise: Promise.resolve().then(probeAccount)
+      .then((live) => ({ live, reason: live ? null : 'homologação indisponível' }))
+      .catch((error) => ({ live: null, reason: journeyFailureCategory(error) })) };
+    entries.set(accountHash, entry);
+    entry.promise.then(({ live }) => { entry.expiresAt = Date.now() + (live ? 600_000 : 30_000); });
+  }
+  return entry.promise;
+}
+
+export function journeyReadFailureCategory(error) {
+  if (error?.code === 'ENOENT' || error?.message === 'registro ausente') return 'registro ausente';
+  if (/sanitização|cache inválido|cache incompatível|print do cache inválido/u.test(error?.message ?? '')) return 'sanitização';
+  return 'leitura falhou';
+}
+
 export async function readJourney({ root = resolve(process.env.MCP_STATE_DIR ?? '/data', 'journeys'), module, task, accountHash, probeAccount }) {
   if (!modules.has(module) || !taskId.test(task) || !task.startsWith(`${module}.`)) throw new Error('tarefa inválida');
   if (!accountHash || typeof accountHash !== 'string') throw new Error('identidade configurada indisponível');
   const key = await readFile(join(root, module, `${task}.${digest(accountHash)}.latest`), 'utf8');
   if (!/^[a-f0-9]{64}$/u.test(key)) throw new Error('cache inválido');
   const record = await loadCache(root, module, task, key);
+  if (!record) throw new Error('registro ausente');
   if (record?.configuredIdentityHash !== accountHash) throw new Error('identidade configurada divergente');
-  const live = probeAccount ? await probeAccount() : null;
-  if (!live) return { ...record, identityVerified: false };
+  if (!record.accountProof) return { ...record, identityVerified: false, accountless: true };
+  const { live, reason } = probeAccount ? await cachedAccountProof(accountHash, probeAccount)
+    : { live: null, reason: 'prova indisponível' };
+  if (!live) return { ...record, identityVerified: false, identityReason: reason };
   if (!/^[a-z0-9-]{1,80}$/iu.test(live.userId ?? '') || !/^[a-z0-9-]{1,80}$/iu.test(live.companyId ?? ''))
-    throw new Error('identidade autenticada indisponível');
+    return { ...record, identityVerified: false, identityReason: 'identidade inválida' };
   if (record.accountProof !== digest([live.userId, live.companyId])) throw new Error('jornada de outra conta');
   return { ...record, identityVerified: true };
 }
