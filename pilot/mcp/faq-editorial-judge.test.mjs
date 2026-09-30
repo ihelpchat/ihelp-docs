@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-const { judgeEditorial, parseEditorialVerdict, aggregateCalibration, publicCalibrationReport } =
+const { judgeEditorial, parseEditorialVerdict, aggregateCalibration, publicCalibrationReport, consolidateEditorialReadings } =
   await import('./faq-editorial-judge.mjs').catch(() => ({}));
 
 const ids = ['entende_modulo', 'utilidade_negocio', 'casos_concretos', 'tarefas_completas', 'clareza', 'coerencia'];
@@ -13,7 +13,7 @@ const verdict = { notas: scores, defeitosGraves: [], naoVerificaveis: [], coment
 test('juiz editorial disponível', () => assert.equal(typeof judgeEditorial, 'function'));
 
 test('parsing exige as seis notas inteiras, categorias conhecidas e campos exatos', () => {
-  assert.deepEqual(parseEditorialVerdict(JSON.stringify(verdict)), { ...verdict, aceite: true });
+  assert.deepEqual(parseEditorialVerdict(JSON.stringify(verdict)), { ...verdict, proposito: 'pagina_inteira', naoAplicaveis: [], aceite: true });
   assert.throws(() => parseEditorialVerdict(JSON.stringify({ ...verdict, notas: { ...scores, clareza: 4.5 } })));
   assert.throws(() => parseEditorialVerdict(JSON.stringify({ ...verdict, defeitosGraves: ['categoria_inventada'] })));
   assert.throws(() => parseEditorialVerdict(JSON.stringify({ ...verdict, extra: 'vaza' })));
@@ -65,4 +65,31 @@ test('relatório público descarta comentário falso de arquivo privado', async 
     assert.deepEqual(report.amostras[0].juiz.defeitosGraves, []);
     assert.equal(report.amostras[0].juiz.naoVerificaveisCount, 1);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('aplicabilidade dá N/A fora do propósito e exclui N/A do aceite', () => {
+  const notes = { ...scores, entende_modulo: null, casos_concretos: null, tarefas_completas: null };
+  const result = parseEditorialVerdict({ ...verdict, proposito: 'para_que_serve', notas: notes });
+  assert.equal(result.aceite, true);
+  assert.equal(result.notas.casos_concretos, null);
+  assert.deepEqual(result.naoAplicaveis, ['entende_modulo', 'casos_concretos', 'tarefas_completas']);
+  assert.throws(() => parseEditorialVerdict({ ...verdict, proposito: 'para_que_serve', notas: scores }));
+  assert.throws(() => parseEditorialVerdict({ ...verdict, proposito: 'pagina_inteira', notas: notes }, 'pagina'));
+});
+
+test('três leituras usam mediana por critério e grave só com maioria', () => {
+  const readings = [
+    { ...verdict, proposito: 'passo_a_passo', notas: { ...scores, entende_modulo: null, utilidade_negocio: null, casos_concretos: null, tarefas_completas: 2 }, defeitosGraves: ['contradiz_evidencia'] },
+    { ...verdict, proposito: 'passo_a_passo', notas: { ...scores, entende_modulo: null, utilidade_negocio: null, casos_concretos: null, tarefas_completas: 4 }, defeitosGraves: [] },
+    { ...verdict, proposito: 'passo_a_passo', notas: { ...scores, entende_modulo: null, utilidade_negocio: null, casos_concretos: null, tarefas_completas: 3 }, defeitosGraves: [] },
+  ].map((item) => parseEditorialVerdict(item));
+  const result = consolidateEditorialReadings(readings);
+  assert.equal(result.notas.tarefas_completas, 3);
+  assert.equal(result.aceite, true);
+  assert.deepEqual(result.defeitosGraves, []);
+  assert.deepEqual(result.dispersao.tarefas_completas, { minimo: 2, maximo: 4 });
+  const majority = consolidateEditorialReadings([{ ...readings[0], defeitosGraves: ['contradiz_evidencia'] },
+    { ...readings[1], defeitosGraves: ['contradiz_evidencia'] }, readings[2]]);
+  assert.equal(majority.aceite, false);
+  assert.deepEqual(majority.defeitosGraves, ['contradiz_evidencia']);
 });
