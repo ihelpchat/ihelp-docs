@@ -19,7 +19,7 @@ test('formulários do produto ficam observáveis sem expor dados da conta', asyn
       <div id="modal" style="display:none;transition:opacity .05s"><form>
         <h2>Adicionar novo contato</h2>
         <div><label>Nome</label><div><input placeholder="Nome do contato" required></div></div>
-        <div><label>Telefone</label><div class="phoneInputWrapper"><button type="button">+44</button><input class="PhoneInputInput" type="tel" required></div></div>
+        <div><label>Telefone*</label><div class="phoneInputWrapper"><button type="button">+44</button><input class="PhoneInputInput" type="tel"></div></div>
         <div><label>Email</label><input type="email"></div>
         <div><input type="text" value="segredo da conta"></div>
         <div><label>Tags</label><div role="combobox" tabindex="0">Selecione as tags</div></div>
@@ -27,7 +27,7 @@ test('formulários do produto ficam observáveis sem expor dados da conta', asyn
       </form></div>
       <div id="robot" style="display:none"><form>
         <div><label>Título do Robô</label><input placeholder="Digite o título do robô" required></div>
-        <div><label>Canais</label><div role="combobox" tabindex="0">Selecione uma opção</div></div>
+        <div><label>Canais</label><label>Adicione os canais permitidos:</label><div role="combobox" tabindex="0">Selecione uma opção</div></div>
         <div id="options" style="display:none"><input placeholder="Buscar..."><div data-value="17">Canal da conta privada</div><div data-value="23">Outro canal privado</div></div>
       </form></div>`);
     await page.locator('#open').evaluate((node) => {
@@ -39,7 +39,7 @@ test('formulários do produto ficam observáveis sem expor dados da conta', asyn
     assert.ok(contact.fields.some((field) => field.name === 'Nome' && field.required));
     assert.ok(contact.fields.some((field) => field.name === 'Telefone' && field.role === 'textbox' && field.required));
     assert.ok(contact.fields.some((field) => field.name === 'Tags' && field.role === 'combobox'));
-    assert.ok(contact.fields.some((field) => /^campo \d+ do formulário/u.test(field.name)));
+    assert.ok(contact.fields.some((field) => /^campo \d+ do formulário/u.test(field.name)), JSON.stringify(contact.fields));
     assert.doesNotMatch(JSON.stringify(contact.fields), /segredo da conta/u);
     await runtime.actJourneyAction(page, { type: 'fill', role: 'textbox', name: 'Telefone', value: '+44 20 7946 0000' }, contact.targets);
     assert.equal(await page.locator('input[type=tel]').inputValue(), '+44 20 7946 0000');
@@ -64,4 +64,13 @@ test('formulários do produto ficam observáveis sem expor dados da conta', asyn
 test('ficha opaca é aceita somente como opção clicável', () => {
   assert.equal(policyDecision({ type: 'click', role: 'option', name: 'opção 1', value: null }).allowed, true);
   assert.equal(policyDecision({ type: 'select', role: 'combobox', name: 'Canais', value: 'Canal da conta privada' }).allowed, false);
+});
+
+test('vocabulário dos prints inclui rótulos e validações extraídos do front', () => {
+  assert.deepEqual(runtime.journeyVocabulary([
+    { text: 'Telefone', message: 'Informe o telefone com DDD' },
+    { text: 'Canais' }, { text: 'Telefone' },
+  ], [{ path: 'Form.tsx', excerpt: `export const Form = () => <form><label>Nome</label><input placeholder="Nome do contato" /></form>;
+    function validate() { return 'O nome é obrigatório'; }` }]),
+  ['Telefone', 'Informe o telefone com DDD', 'Canais', 'Nome', 'Nome do contato', 'O nome é obrigatório']);
 });
