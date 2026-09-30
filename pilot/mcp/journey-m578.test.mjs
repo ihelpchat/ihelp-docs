@@ -11,10 +11,11 @@ const menu = { idRef: 'menu-ref', type: 1, message: fixtureValue('menuQuestion')
 const forward = { idRef: 'forward-ref', type: 4, configuration: JSON.stringify({ DepartmentId: 2 }) };
 const page = (labels = []) => ({ url: () => `https://qa.example.test/bot/${ref}`, async goto() {}, async reload() {},
   getByText: (value) => ({ count: async () => Number(value === title || labels.includes(value)) }) });
-const verify = (id, events, labels = []) => verifyUniqueRecord({ page: page(labels),
+const verify = (id, events, labels = [], extra = {}) => verifyUniqueRecord({ page: page(labels),
   task: { id, modulo: 'robos' }, refs: [ref], targetUrl: 'https://qa.example.test', name: title,
   expectedValue: title, fixtureIds: { department: new Set([2]), user: new Set([3]) },
-  getPersisted: async () => ({ status: 200, body: { dados: { id: 4, idRef: ref, title, status: false, botEvents: events } } }) });
+  getPersisted: async () => ({ status: 200, body: { dados: { id: 4, idRef: ref, title, status: false, botEvents: events } } }),
+  ...extra });
 
 test('menu exige pergunta, duas opções do gerador e destinos existentes', async () => {
   const events = [menu, { idRef: 'one-ref', type: 0 }, { idRef: 'two-ref', type: 0 }];
@@ -32,7 +33,10 @@ test('encaminhamento independente exige destino das fixtures', async () => {
 });
 
 test('salvar confirma os blocos criados nesta execução', async () => {
-  assert.equal((await verify('robos.salvar', [forward], ['Encaminhar atendimento'])).confirmed, true);
+  assert.equal((await verify('robos.salvar', [forward], ['Encaminhar atendimento'],
+    { requiredEventRefs: new Set(['forward-ref']) })).confirmed, true);
+  assert.equal((await verify('robos.salvar', [forward], ['Encaminhar atendimento'],
+    { requiredEventRefs: new Set(['outro-ref']) })).observed, 'salvar: blocos');
   assert.equal((await verify('robos.salvar', [], ['Encaminhar atendimento'])).observed, 'salvar: blocos');
 });
 
