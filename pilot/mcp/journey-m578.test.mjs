@@ -44,12 +44,9 @@ test('plano de encaminhar abre seleção e adiciona bloco antes de salvar', () =
     { type: 'click', role: 'button', name: 'Adicionar bloco (cabeçalho)', value: null });
 });
 
-test('plano de salvar cria uma mensagem no fluxo antes do PUT', () => {
-  const actions = ['Fluxo de Robô', 'Adicionar bloco', 'Mensagem simples']
-    .map((name) => ({ type: 'click', name }));
-  const screen = { controls: [{ role: 'textbox', name: 'Título da mensagem', enabled: true },
-    { role: 'button', name: 'Salvar', enabled: true }],
-  fields: [{ role: 'textbox', name: 'Título da mensagem', value: null }] };
+test('plano de salvar grava o fluxo que contém bloco criado na execução', () => {
+  const actions = [{ type: 'click', name: 'Fluxo de Robô' }];
+  const screen = { controls: [{ role: 'button', name: 'Salvar', enabled: true }], fields: [] };
   assert.deepEqual(plannedJourneyAction('robos.salvar', screen, actions),
-    { type: 'fill', role: 'textbox', name: 'Título da mensagem', value: fixtureValue('menuOption', 1) });
+    { type: 'click', role: 'button', name: 'Salvar', value: null });
 });

@@ -36,7 +36,7 @@ test('menu preenche a segunda opção sem sobrescrever a primeira', () => {
     { type: 'fill', role: 'textbox', name: 'Adicione uma opção (cabeçalho 2)', value: second });
 });
 
-test('menu confirma mensagem no controle de cabeçalho antes de abrir outro bloco', () => {
+test('menu envia mensagem pelo botão do Chat antes de adicionar o bloco', () => {
   const actions = [
     { type: 'click', name: 'Fluxo de Robô' },
     ...Array.from({ length: 3 }, () => ({ type: 'click', name: 'Adicionar bloco' })),
@@ -53,13 +53,14 @@ test('menu confirma mensagem no controle de cabeçalho antes de abrir outro bloc
   ];
   const screen = { controls: [{ role: 'button', name: 'Adicionar bloco (cabeçalho)', enabled: true },
     { role: 'button', name: 'Adicionar bloco (cabeçalho 2)', enabled: true }], fields: [] };
+  screen.controls.push({ role: 'button', name: 'Enviar mensagem', enabled: true });
   assert.deepEqual(service.plannedJourneyAction('robos.montar_menu', screen, actions),
-    { type: 'press', role: 'textbox', name: 'campo 2 do formulário (texto)', value: 'Enter' });
-  actions.push({ type: 'press', name: 'campo 2 do formulário (texto)' });
+    { type: 'click', role: 'button', name: 'Enviar mensagem', value: null });
+  actions.push({ type: 'click', name: 'Enviar mensagem' });
   assert.deepEqual(service.plannedJourneyAction('robos.montar_menu', screen, actions),
     { type: 'click', role: 'button', name: 'Adicionar bloco (cabeçalho 2)', value: null });
-  assert.equal(service.policyDecision({ type: 'press', role: 'textbox',
-    name: 'campo 2 do formulário (texto)', value: 'Enter' }, undefined, 'robos.montar_menu').allowed, true);
+  assert.equal(service.policyDecision({ type: 'click', role: 'button',
+    name: 'Enviar mensagem' }, undefined, 'robos.montar_menu').allowed, true);
   assert.equal(service.policyDecision({ type: 'press', role: 'textbox',
     name: 'campo 2 do formulário (texto)', value: 'Escape' }, undefined, 'robos.montar_menu').allowed, false);
 });
@@ -79,6 +80,16 @@ test('botão da opção usa o texto próprio apesar do rótulo anterior', async 
     await page.setContent('<label>Opções</label><button>Adicionar opção +</button>');
     const screen = await observeJourneyDom(page, { vocabulary: ['Opções', 'Adicionar opção +'] });
     assert.ok(screen.controls.some((item) => item.role === 'button' && item.name === 'Adicionar opção +'));
+  } finally { await browser.close(); }
+});
+
+test('botão sem texto ao lado da mensagem é alvo Enviar mensagem', async () => {
+  const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<div><textarea placeholder="Mensagem"></textarea><button><svg></svg></button></div>');
+    const screen = await observeJourneyDom(page, { vocabulary: ['Mensagem', 'Enviar mensagem'] });
+    assert.ok(screen.controls.some((item) => item.role === 'button' && item.name === 'Enviar mensagem'));
   } finally { await browser.close(); }
 });
 
