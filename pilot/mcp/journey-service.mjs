@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-7';
+export const JOURNEY_POLICY_VERSION = 'm571-8';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -108,6 +108,7 @@ function sanitizeScreen(raw, allowedLabels) {
   }));
   const fields = (raw.fields ?? []).slice(0, 20).map((item) => ({
     role: clean(item.role), name: clean(item.name), required: Boolean(item.required),
+    filled: Boolean(item.filled),
     value: item.value == null ? null : clean(item.value),
   }));
   const messages = (raw.messages ?? []).slice(0, 10).map(clean);
@@ -123,11 +124,14 @@ function safeJourney(record) {
   if (identity && (!Array.isArray(identity.refs) || !Array.isArray(identity.ids)
     || identity.refs.some((ref) => typeof ref !== 'string' || !/^[a-z0-9-]{1,80}$/iu.test(ref))
     || identity.ids.some((id) => !Number.isSafeInteger(id) || id <= 0))) throw new Error('sanitização falhou');
+  if (copy.created?.robotRef != null && (!identity || copy.created.robotRef !== identity.refs[0]
+    || !Number.isSafeInteger(copy.created.robotId) || !identity.ids.includes(copy.created.robotId)))
+    throw new Error('sanitização falhou');
   const check = (value) => {
     if (typeof value === 'string' && !sha.test(value) && !/^[a-f0-9]{64}$/u.test(value)
       && !fixtureValues.has(value) && !fictionalPhone.test(value)
       && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
-      && containsSensitiveData(value, { detectOpaque: true })) throw new Error('sanitização falhou');
+      && value !== copy.created?.robotRef && containsSensitiveData(value, { detectOpaque: true })) throw new Error('sanitização falhou');
     if (Array.isArray(value)) value.forEach(check);
     else if (value && typeof value === 'object') Object.values(value).forEach(check);
   };
@@ -241,7 +245,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
     }
     const record = { task: task.id, module, objective: task.tarefa, prerequisites: task.preRequisitos,
       profile, versions: { frontSha, backSha, note: backSha === 'unavailable' ? 'SHA do back indisponível; recapturar quando disponível' : null },
-      fixtures: Object.values(prepared).filter((value) => typeof value === 'string'), marker: currentMarker,
+      fixtures: [prepared.contact, prepared.robot].filter((value) => typeof value === 'string'), marker: currentMarker,
       actions: [], screens: [], before: null, after: null,
       expected: task.resultadoEsperadoObservavel, observed: null, verification: null, created: {},
       status: 'inconclusiva', reason: null, limits: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd },
@@ -257,9 +261,12 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       try {
         const openedFixtures = await browser.open(task, prepared); opened = true;
         if (Array.isArray(openedFixtures?.fixtures)) record.fixtures.push(...openedFixtures.fixtures);
+        let feedback = null;
         for (let index = 0; index < maxActionsPerTask; index++) {
           if (moduleActions >= maxActionsPerModule || Date.now() - started > maxMs || costUsd >= maxCostUsd) {
-            record.reason = 'limite da execução atingido'; break;
+            record.reason = 'limite da execução atingido';
+            if (feedback) record.status = 'falhou';
+            break;
           }
           let raw;
           try { raw = await browser.observe(); }
@@ -290,12 +297,17 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             break;
           }
           const decision = await model.decide({ task: { id: task.id, objective: task.tarefa, expected: record.expected,
-            verification: task.verificacaoM571 }, screen, actions: record.actions,
+            verification: task.verificacaoM571 }, screen, actions: record.actions, feedback,
           });
+          feedback = null;
           const charge = Number(decision.costUsd ?? 0);
           if (!Number.isFinite(charge) || charge < 0) { record.reason = 'custo inválido'; break; }
           costUsd += charge;
-          if (costUsd > maxCostUsd) { record.reason = 'limite de custo atingido'; break; }
+          if (costUsd > maxCostUsd) {
+            record.reason = 'limite de custo atingido';
+            if (feedback) record.status = 'falhou';
+            break;
+          }
           const action = { type: decision.type, role: decision.role, name: decision.name, value: decision.value };
           if (action.type === 'upload_csv' && task.id !== 'contatos.importar') {
             record.status = 'bloqueada'; record.reason = 'upload fora da tarefa'; break;
@@ -303,12 +315,15 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           const policy = policyDecision(action, generatedFor());
           if (!policy.allowed) { record.status = 'bloqueada'; record.reason = policy.reason; break; }
           if (action.type === 'finish') {
-            const missingRequired = ['contatos.cadastrar', 'robos.criar'].includes(task.id)
-              && screen.fields.find((field) => field.required && field.role === 'textbox' && !field.value
-              && !record.actions.some((previous) => previous.type === 'fill' && previous.role === field.role && previous.name === field.name));
+            const missingRequired = screen.fields.find((field) => field.required && !field.filled);
             if (missingRequired) {
-              record.status = 'falhou'; record.reason = /^campo \d+ do formulário/u.test(missingRequired.name)
-                ? 'valor do gerador ausente para campo obrigatório' : 'campo obrigatório não preenchido';
+              const generatorKind = task.id === 'contatos.cadastrar' ? { Nome: 'contactName', Telefone: 'phone' }
+                : task.id === 'robos.criar' ? { 'Título do Robô': 'robotName' } : {};
+              if (generatorKind[missingRequired.name]) {
+                feedback = `obrigatório vazio: ${missingRequired.name}; use o valor do gerador`;
+                continue;
+              }
+              record.status = 'falhou'; record.reason = 'valor do gerador ausente para campo obrigatório';
               break;
             }
             if (!actionEvidence(task.id, record.actions, fixtureFor)) { record.reason = 'ações necessárias não observadas'; break; }
@@ -319,7 +334,10 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             record.status = checked.confirmed ? 'concluída' : 'inconclusiva';
             record.reason = checked.confirmed ? null : 'resultado não conferido';
             if (checked.confirmed && checked.created) {
-              if (Object.values(checked.created).some((value) => !generatedFor().has(value))) throw new SanitizationError('dado de preparo inválido');
+              if (Object.entries(checked.created).some(([key, value]) =>
+                key === 'robotRef' ? value !== checked.identity?.refs?.[0]
+                  : key === 'robotId' ? !checked.identity?.ids?.includes(value) : !generatedFor().has(value)))
+                throw new SanitizationError('dado de preparo inválido');
               record.created = checked.created;
               if (checked.identity) record.identity = checked.identity;
             }
@@ -339,7 +357,10 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           moduleActions++;
           record.usage.actions++;
         }
-        if (!record.reason && record.status === 'inconclusiva') record.reason = 'limite de ações por tarefa';
+        if (!record.reason && record.status === 'inconclusiva') {
+          record.reason = 'limite de ações por tarefa';
+          if (feedback) record.status = 'falhou';
+        }
       } catch (error) {
         if (error?.code === 'STALE_JOURNEY_REFERENCE') throw error;
         record.status = /escrita bloqueada pela política/iu.test(String(error?.message ?? '')) ? 'bloqueada' : 'inconclusiva';

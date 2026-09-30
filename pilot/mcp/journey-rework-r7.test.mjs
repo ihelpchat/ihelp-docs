@@ -92,3 +92,31 @@ test('robô exige ref, título e status persistidos e aceita título no campo ed
   page.getByRole = () => ({ count: async () => 0 });
   assert.equal((await verifyUniqueRecord(args)).observed, 'título na tela');
 });
+
+test('robô concluído guarda ref e id e entrega ambos ao preparo das dependentes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-r7-robot-'));
+  const robot = fixtureValue('robotName');
+  const preparedSeen = [];
+  let taskId;
+  const browser = { async open(task, prepared) { taskId = task.id; preparedSeen.push(structuredClone(prepared)); },
+    async observe() { return { title: 'Robôs', path: '/bot', controls: [
+      { role: 'textbox', name: 'Título do Robô', enabled: true },
+      { role: 'button', name: 'Salvar', enabled: true },
+      { role: 'button', name: robot, enabled: true }], fields: [], messages: [], state: {}, screenshot: Buffer.from('masked') }; },
+    async act() {}, async close() {}, async verify() { return { confirmed: true, observed: 'Ficha conferida',
+      created: taskId === 'robos.criar' ? { robot, robotRef: 'owned-ref', robotId: 31 } : {},
+      identity: { refs: ['owned-ref'], ids: [31] } }; } };
+  const model = { async decide({ task, actions }) { const plan = task.id === 'robos.criar' ? [
+    { type: 'fill', role: 'textbox', name: 'Título do Robô', value: robot },
+    { type: 'click', role: 'button', name: 'Salvar' },
+  ] : [{ type: 'click', role: 'button', name: robot }];
+  return plan[actions.length] ?? { type: 'finish' }; } };
+  try {
+    const records = await runJourneys({ module: 'robos', tasks: ['robos.criar', 'robos.buscar'].map((id) =>
+      ({ id, modulo: 'robos', tarefa: id })), root, frontSha: 'a'.repeat(40), profile: 'qa', browser, model });
+    assert.deepEqual(records.map((record) => record.status), ['concluída', 'concluída']);
+    assert.deepEqual(records[0].created, { robot, robotRef: 'owned-ref', robotId: 31 });
+    assert.equal(preparedSeen[1].robotRef, 'owned-ref');
+    assert.equal(preparedSeen[1].robotId, 31);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

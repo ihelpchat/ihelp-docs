@@ -10,9 +10,10 @@ const task = (id, extra = {}) => ({ id, modulo: 'contatos', tarefa: id.split('.'
   preRequisitos: 'perfil autorizado', resultadoEsperadoObservavel: 'Valor persistido',
   verificacaoM571: 'Reabrir e conferir', acaoProibidaAoAgente: 'não', ...extra });
 const tasks = [task('contatos.cadastrar'), task('contatos.editar'), task('contatos.definir_responsavel')];
-const screen = (controls = ['Adicionar Contato', 'Salvar', 'Editar', 'Contato Exemplo 01']) => ({
+const screen = (controls = ['Adicionar Contato', 'Salvar', 'Editar', 'Contato Exemplo 01'], filled = new Set()) => ({
   title: 'Contatos', path: '/contatos', controls: controls.map((name) => ({ role: 'button', name, enabled: true })),
-  fields: [{ role: 'textbox', name: 'Nome', required: true }, { role: 'textbox', name: 'Telefone', required: true },
+  fields: [{ role: 'textbox', name: 'Nome', required: true, filled: filled.has('Nome') },
+    { role: 'textbox', name: 'Telefone', required: true, filled: filled.has('Telefone') },
     { role: 'combobox', name: 'Responsável', required: false }],
   messages: [], state: { name: 'Contato Exemplo 01' }, screenshot: Buffer.from('masked-png'),
 });
@@ -21,7 +22,11 @@ test('criar primeiro, editar com conferência, responsável e cache compatível 
   const root = await mkdtemp(join(tmpdir(), 'journey-'));
   const actions = [];
   let opens = 0;
-  const browser = { async open() { opens++; }, async observe() { return screen(); }, async act(action) { actions.push(action); },
+  const filled = new Set();
+  const browser = { async open() { opens++; filled.clear(); if (opens % 3 !== 1) filled.add('Telefone');
+    if (opens % 3 === 0) filled.add('Nome'); },
+    async observe() { return screen(undefined, filled); },
+    async act(action) { actions.push(action); if (action.type === 'fill') filled.add(action.name); },
     async verify() { return { confirmed: true, observed: 'Valor persistido', created: { contact: 'Contato Exemplo 01' } }; }, async close() {} };
   const model = { async decide({ task: current, actions: previous }) {
     const plans = {
@@ -150,11 +155,12 @@ test('homônimo na lista não confirma edição: só a ficha identificada e reab
 test('falha por tarefa preserva resultado anterior e devolve diagnóstico seguro', async () => {
   const root = await mkdtemp(join(tmpdir(), 'journey-errors-'));
   let opened = 0;
+  const filled = new Set();
   try {
     const result = await runJourneys({ module: 'contatos', tasks: [task('contatos.cadastrar'), task('contatos.editar')], root,
       frontSha: 'a'.repeat(40), profile: 'qa',
-      browser: { async open() { if (++opened === 2) throw Error('login failed: maria@example.com'); },
-        async observe() { return screen(); }, async act() {}, async close() {},
+      browser: { async open() { filled.clear(); if (++opened === 2) throw Error('login failed: maria@example.com'); },
+        async observe() { return screen(undefined, filled); }, async act(action) { if (action.type === 'fill') filled.add(action.name); }, async close() {},
         async verify() { return { confirmed: true, observed: 'Valor persistido', created: { contact: fixtureValue('contactName') } }; } },
       model: { async decide({ actions }) { return [
         { type: 'fill', role: 'textbox', name: 'Nome', value: fixtureValue('contactName') },
@@ -198,11 +204,12 @@ test('marcador único pertence ao gerador e persiste na jornada sanitizada', asy
   const root = await mkdtemp(join(tmpdir(), 'journey-marker-'));
   const marker = 'a1b2c3d4';
   const markedName = fixtureValue('contactName', 1, marker);
+  const filled = new Set();
   try {
     const [record] = await runJourneys({ module: 'contatos', tasks: [task('contatos.cadastrar')], root, marker,
       frontSha: 'a'.repeat(40), profile: 'qa',
-      browser: { async open() {}, async observe() { return screen(['Adicionar Contato', 'Salvar', markedName]); },
-        async act() {}, async close() {}, async verify() { return { confirmed: true, observed: 'Valor persistido',
+      browser: { async open() {}, async observe() { return screen(['Adicionar Contato', 'Salvar', markedName], filled); },
+        async act(action) { if (action.type === 'fill') filled.add(action.name); }, async close() {}, async verify() { return { confirmed: true, observed: 'Valor persistido',
           created: { contact: markedName } }; } },
       model: { async decide({ actions }) { return [
         { type: 'fill', role: 'textbox', name: 'Nome', value: markedName },
