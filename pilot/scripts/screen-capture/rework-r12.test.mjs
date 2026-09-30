@@ -5,8 +5,8 @@ import { launch } from '../visual/measure.mjs';
 import * as proof from '../guide-proof.mjs';
 import { captureFailureLog } from '../../mcp/screen-capture-service.mjs';
 
-const front = 'front-react-production-4a01.up.railway.app';
-const api = 'olah-ihelp-production.up.railway.app';
+const front = 'qa-front-production.up.railway.app';
+const api = 'qa-api-production.up.railway.app';
 const env = { GUIDE_QA_ALLOWED_HOSTS: `${front},${api}` };
 
 test('a política comum aceita as duas origens de QA e recusa hosts externos e produção', () => {
