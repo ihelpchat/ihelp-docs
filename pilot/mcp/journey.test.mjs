@@ -192,14 +192,12 @@ test('catálogo ouro tem 13 tarefas elegíveis para a conta de aceite', async ()
   assert.equal(journeyCoverage(all).eligible, 13);
 });
 
-test('importação só confirma os dois marcadores fictícios na lista', async () => {
-  let query = '';
-  const page = { async goto() {}, getByPlaceholder() { return { async fill(value) { query = value; } }; },
-    getByRole() { return { filter() { return { first() { return { async waitFor() {} }; },
-      async count() { return query.endsWith('02') ? 1 : 0; } }; } }; } };
-  const checked = await verifyImportedContacts({ page, targetUrl: 'https://qa.example.com',
-    names: ['Contato Exemplo 02', 'Contato Exemplo 03'] });
+test('importação só confirma os dois marcadores fictícios pela API', async () => {
+  const checked = await verifyImportedContacts({ names: ['Contato Exemplo 02', 'Contato Exemplo 03'],
+    timeoutMs: 1, pollMs: 1,
+    lookup: async (name) => name.endsWith('02') ? [{ nome: name }] : [] });
   assert.equal(checked.confirmed, false);
+  assert.equal(checked.foundCount, 1);
 });
 
 test('marcador único pertence ao gerador e persiste na jornada sanitizada', async () => {
