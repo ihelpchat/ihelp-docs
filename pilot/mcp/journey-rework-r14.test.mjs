@@ -184,6 +184,11 @@ test('ler registro de produção exige prova de conta autenticada antes de devol
       'prova de conta indisponível');
     assert.equal((await service.readJourney({ ...args,
       probeAccount: async () => ({ userId: 'user-1', companyId: '42' }) })).identityVerified, true);
+    let online = true;
+    const probe = async () => online ? { userId: 'user-1', companyId: '42' } : null;
+    assert.equal((await service.readJourney({ ...args, probeAccount: probe })).identityVerified, true);
+    online = false;
+    await assert.rejects(service.readJourney({ ...args, probeAccount: probe }), /prova de conta/u);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
