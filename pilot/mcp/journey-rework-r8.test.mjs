@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { chromeExecutablePath } from '../scripts/visual/measure.mjs';
 import { fixtureValue, runJourneys } from './journey-service.mjs';
+import { journeyTaskSummary } from './server.mjs';
 import * as runtime from './journey-runtime.mjs';
 const { handleJourneyRoute, observeJourneyDom, verifyUniqueRecord } = runtime;
 
@@ -28,7 +29,7 @@ test('escrita em outro host permitido bloqueia tarefa; terceiro continua no guar
   const front = await run('front.qa.test');
   assert.equal(front.outcome, 'abort');
   assert.equal(front.blocked?.host, 'front.qa.test');
-  assert.equal(front.blocked?.path, '/:id/:id/:id/:id/:id');
+  assert.equal(front.blocked?.path, '/:id/:id/bot/:id/publish');
   const third = await run('third.test');
   assert.equal(third.outcome, 'fallback');
   assert.equal(third.blocked, undefined);
@@ -52,9 +53,10 @@ test('prefixo padrão de telefone é vazio sem expor valor privado', async () =>
   const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
   try {
     const page = await browser.newPage();
-    await page.setContent('<form><div><label>Telefone*</label><div class="phoneInputWrapper"><input class="PhoneInputInput" type="tel" value="+55" required></div></div></form>');
-    const observed = await observeJourneyDom(page, { vocabulary: ['Telefone'] });
+    await page.setContent('<form><div><label>Telefone*</label><div class="phoneInputWrapper"><input class="PhoneInputInput" type="tel" value="+55" required></div></div><div><label>Observação</label><input value="padrão"></div></form>');
+    const observed = await observeJourneyDom(page, { vocabulary: ['Telefone', 'Observação'] });
     assert.equal(observed.fields.find((field) => field.name === 'Telefone')?.filled, false);
+    assert.equal(observed.fields.find((field) => field.name === 'Observação')?.filled, false);
     assert.doesNotMatch(JSON.stringify(observed.fields), /\+55/u);
   } finally { await browser.close(); }
 });
@@ -62,29 +64,30 @@ test('prefixo padrão de telefone é vazio sem expor valor privado', async () =>
 test('plano de campos impede Salvar até telefone gerado estar no formulário', async () => {
   const root = await mkdtemp(join(tmpdir(), 'journey-r8-plan-'));
   const name = fixtureValue('contactName'); const phone = fixtureValue('phone');
-  const values = { Nome: name, Telefone: '+55' }; const acted = []; const prompts = [];
+  const values = { Nome: '', Telefone: '+55' }; const acted = []; const prompts = [];
   const browser = { async open() {}, async close() {}, async act(action) { acted.push(action);
     if (action.type === 'fill') values[action.name] = action.value; },
   async observe() { return { title: 'Contatos', path: '/contact', controls: [
     { role: 'textbox', name: 'Nome', enabled: true }, { role: 'textbox', name: 'Telefone', enabled: true },
     { role: 'button', name: 'Salvar', enabled: true }], fields: [
-      { role: 'textbox', name: 'Nome', required: true, filled: true, value: name },
+      { role: 'textbox', name: 'Nome', required: true, filled: Boolean(values.Nome), value: values.Nome || null },
       { role: 'textbox', name: 'Telefone', required: true, filled: values.Telefone !== '+55', value: values.Telefone === phone ? phone : null }],
     messages: [], state: {}, screenshot: Buffer.from('masked') }; },
   async verify() { return { confirmed: true, observed: 'Ficha conferida', created: { contact: name },
     identity: { refs: ['owned-ref'], ids: [31] } }; } };
   const model = { async decide(input) { prompts.push(input);
+    if (input.feedback && /Nome/u.test(input.feedback)) return { type: 'fill', role: 'textbox', name: 'Nome', value: name };
     if (input.feedback && /Telefone/u.test(input.feedback)) return { type: 'fill', role: 'textbox', name: 'Telefone', value: phone };
     if (acted.some((action) => action.type === 'click')) return { type: 'finish' };
     return { type: 'click', role: 'button', name: 'Salvar' };
   } };
   try {
     const [record] = await runJourneys({ module: 'contatos', tasks: [task('contatos.cadastrar')], root,
-      frontSha, profile: 'qa', browser, model, maxActionsPerTask: 5 });
+      frontSha, profile: 'qa', browser, model, maxActionsPerTask: 7 });
     assert.equal(record.status, 'concluída');
     assert.equal(acted[0]?.type, 'fill');
-    assert.equal(acted[0]?.value, phone);
-    assert.match(prompts[1]?.feedback ?? '', /Telefone.*phone/u);
+    assert.equal(acted[1]?.value, phone);
+    assert.match(prompts.find((item) => /Telefone/u.test(item.feedback ?? ''))?.feedback ?? '', /Telefone.*phone/u);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -97,6 +100,8 @@ test('captura ref do POST no topo e exige consistência com URL', async () => {
   assert.equal(diagnostic.ref, 'owned-ref');
   assert.deepEqual(diagnostic.capture, { postSeen: true, status: 200, jsonParsed: true,
     topKeys: ['id', 'idRef', 'status', 'title'], refFound: true });
+  assert.deepEqual(journeyTaskSummary({ task: 'robos.criar', creationCapture: diagnostic.capture }).creationCapture,
+    diagnostic.capture);
   const page = { url: () => 'https://front.qa.test/bot/wrong-ref',
     goto: async () => {}, reload: async () => {},
     waitForResponse: async () => ({ json: async () => ({ dados: data }) }),
@@ -106,8 +111,37 @@ test('captura ref do POST no topo e exige consistência com URL', async () => {
   assert.equal(result.confirmed, false);
 });
 
+test('validação de campo sem valor do gerador volta ao modelo e permite corrigir', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-r8-validation-'));
+  const name = fixtureValue('contactName'); const phone = fixtureValue('phone');
+  const values = { Nome: null, Telefone: null }; const acted = []; const feedbacks = [];
+  const browser = { async open() {}, async close() {},
+    async observe() { return { title: 'Contatos', path: '/contact', controls: [
+      { role: 'textbox', name: 'Nome', enabled: true }, { role: 'textbox', name: 'Telefone', enabled: true },
+      { role: 'button', name: 'Salvar', enabled: true }], fields: [
+      { role: 'textbox', name: 'Nome', value: values.Nome },
+      { role: 'textbox', name: 'Telefone', value: values.Telefone }],
+      messages: values.Telefone ? [] : ['Informe o telefone com DDD'], state: {}, screenshot: Buffer.from('masked') }; },
+    async act(action) { acted.push(action); if (action.type === 'fill') values[action.name] = action.value; },
+    async verify() { return { confirmed: true, observed: 'Ficha conferida', created: { contact: name },
+      identity: { refs: ['owned-ref'], ids: [31] } }; } };
+  const model = { async decide({ feedback, actions }) { feedbacks.push(feedback);
+    if (!values.Nome) return { type: 'fill', role: 'textbox', name: 'Nome', value: name };
+    if (!values.Telefone) return { type: 'fill', role: 'textbox', name: 'Telefone', value: phone };
+    if (!actions.some((action) => action.type === 'click')) return { type: 'click', role: 'button', name: 'Salvar' };
+    return { type: 'finish' };
+  } };
+  try {
+    const [record] = await runJourneys({ module: 'contatos', tasks: [task('contatos.cadastrar')], root,
+      frontSha, profile: 'qa', browser, model });
+    assert.equal(record.status, 'concluída');
+    assert.match(feedbacks[1], /Telefone.*phone/u);
+    assert.deepEqual(acted.map((action) => action.type), ['fill', 'fill', 'click']);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('verificação arma waitForResponse antes de goto', async () => {
-  const calls = []; let currentUrl = '';
+  const calls = []; let currentUrl = 'https://front.qa.test/bot/owned-ref';
   const data = { id: 31, idRef: 'owned-ref', title: fixtureValue('robotName'), status: false };
   const page = { async goto(url) { calls.push('goto'); currentUrl = url; }, async reload() { calls.push('reload'); },
     url: () => currentUrl, waitForResponse: async () => { calls.push('wait'); return { json: async () => ({ dados: data }) }; },

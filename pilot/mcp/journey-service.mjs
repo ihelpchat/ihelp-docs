@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-8';
+export const JOURNEY_POLICY_VERSION = 'm571-9';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -175,10 +175,13 @@ function actionEvidence(id, actions, fixtureFor = fixtureValue) {
   return actions.length > 0;
 }
 const fileFor = (root, module, id, key) => join(root, module, `${id}.${key}.json`);
-async function loadCache(root, module, id, key) {
+async function loadCache(root, module, id, key, cacheOnly = false) {
   try {
     const data = JSON.parse(await readFile(fileFor(root, module, id, key), 'utf8'));
     if (data.cacheKey !== key || data.task !== id) throw new Error('cache incompatível');
+    if (cacheOnly && !(data.status === 'concluída' && data.verification?.confirmed === true
+      || data.status === 'bloqueada' && /política|proibida|upload fora da tarefa|tipo inválido|ação inválida|alvo inválido|valor fora do gerador|clique inválido|opção inválida/u.test(data.reason ?? '')))
+      return null;
     for (const { screenshotId } of data.screens ?? []) {
       if (!/^[a-f0-9]{64}$/u.test(screenshotId)
         || createHash('sha256').update(await readFile(join(root, module, `${screenshotId}.png`))).digest('hex') !== screenshotId)
@@ -233,7 +236,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
   for (const task of orderTasks(tasks)) {
     const key = digest({ task, frontSha, backSha, profile, policy: JOURNEY_POLICY_VERSION,
       config: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd, ...cacheConfig } });
-    const cached = cacheBypass ? null : await loadCache(root, module, task.id, key);
+    const cached = cacheBypass ? null : await loadCache(root, module, task.id, key, true);
     if (cached) {
       results.push(cached); Object.assign(prepared, cached.created ?? {});
       if (cached.created && Object.keys(cached.created).length) {
@@ -290,12 +293,24 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           record.screens.push(screen);
           images.push([screenshotId, sanitized.screenshot]);
           const validation = screen.messages.find((message) => /^(?:Informe o telefone com DDD|Já existe um contato com este número de telefone|O telefone é obrigatório|Precisa ter pelo menos um canal)$/iu.test(message));
-          if (validation) {
+          const plan = task.id === 'contatos.cadastrar' ? { Nome: 'contactName', Telefone: 'phone' }
+            : task.id === 'robos.criar' ? { 'Título do Robô': 'robotName' } : {};
+          const channelSelected = record.actions.some((previous, index) => previous.type === 'click' && previous.role === 'option'
+            && record.actions.slice(0, index).some((earlier) => earlier.type === 'click' && earlier.name === 'Canais'));
+          const missingPlanned = Object.entries(plan).find(([name, kind]) => {
+            const field = screen.fields.find((item) => item.name === name);
+            const expected = fixtureFor(kind);
+            if (!field) return true;
+            return kind === 'phone' ? !field.value || field.value.replace(/\D/gu, '') !== expected.replace(/\D/gu, '')
+              : field.value !== expected;
+          }) ?? (task.id === 'robos.criar' && !channelSelected ? ['Canais', 'ficha'] : null);
+          if (validation && !(missingPlanned && /telefone|canal/iu.test(validation))) {
             record.status = 'falhou';
             record.reason = `validação do formulário: ${validation}`;
             record.observed = validation;
             break;
           }
+          if (validation && missingPlanned) feedback = `${missingPlanned[0]} ainda sem o valor do gerador (${missingPlanned[1]})`;
           const decision = await model.decide({ task: { id: task.id, objective: task.tarefa, expected: record.expected,
             verification: task.verificacaoM571 }, screen, actions: record.actions, feedback,
           });
@@ -314,7 +329,12 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           }
           const policy = policyDecision(action, generatedFor());
           if (!policy.allowed) { record.status = 'bloqueada'; record.reason = policy.reason; break; }
+          if (action.type === 'click' && /^(?:Salvar|Adicionar robô)$/iu.test(action.name) && missingPlanned) {
+            feedback = `${missingPlanned[0]} ainda sem o valor do gerador (${missingPlanned[1]})`;
+            continue;
+          }
           if (action.type === 'finish') {
+            if (missingPlanned) { feedback = `${missingPlanned[0]} ainda sem o valor do gerador (${missingPlanned[1]})`; continue; }
             const missingRequired = screen.fields.find((field) => field.required && !field.filled);
             if (missingRequired) {
               const generatorKind = task.id === 'contatos.cadastrar' ? { Nome: 'contactName', Telefone: 'phone' }
@@ -373,7 +393,9 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           ? `gravar_jornada: observe ${record.observeError.stage}: ${record.observeError.category}`
           : journeyFailureLog(error));
       } finally {
-        record.thirdPartyDenied = browser.diagnostics?.().thirdPartyDenied ?? {};
+        const diagnostics = browser.diagnostics?.() ?? {};
+        record.thirdPartyDenied = diagnostics.thirdPartyDenied ?? {};
+        if (diagnostics.creationCapture) record.creationCapture = diagnostics.creationCapture;
         await browser.close().catch(() => {});
       }
     }

@@ -96,7 +96,7 @@ test('menu e encaminhamento só aceitam save inativo do robô criado', () => {
 });
 
 test('robô criado e menu só confirmam estado persistido na ficha reaberta', async () => {
-  let url;
+  let url = 'https://qa.example.test/bot/owned-ref';
   const labels = new Set(['Robô Exemplo 01', 'Menu de opções', 'Tag Exemplo 01']);
   const saved = { id: 31, idRef: 'owned-ref', title: 'Robô Exemplo 01', status: false,
     botEvents: [{ idRef: 'menu-ref', type: 1, botReactionRules: [

@@ -20,7 +20,7 @@ test('observação distingue vazio de preenchido sem revelar valor e ignora paí
     const observed = await observeJourneyDom(page, { vocabulary: ['Nome', 'Telefone', 'Observação'] });
     assert.equal(observed.fields.find((field) => field.name === 'Nome')?.filled, false);
     assert.equal(observed.fields.find((field) => field.name === 'Telefone')?.filled, false);
-    assert.equal(observed.fields.find((field) => field.name === 'Observação')?.filled, true);
+    assert.equal(observed.fields.find((field) => field.name === 'Observação')?.filled, false);
     assert.equal(observed.fields.some((field) => field.role === 'combobox'), false);
     assert.doesNotMatch(JSON.stringify(observed.fields), /dado privado da conta|Reino Unido|GB/u);
   } finally { await browser.close(); }
@@ -39,8 +39,8 @@ test('finish prematuro devolve obrigatório vazio ao modelo e cria preparo para 
     async observe() { return { title: 'Contatos', path: '/contact', controls: [
       { role: 'textbox', name: 'Nome', enabled: true }, { role: 'textbox', name: 'Telefone', enabled: true },
       { role: 'button', name: 'Salvar', enabled: true }], fields: [
-      { role: 'textbox', name: 'Nome', required: current === 'contatos.cadastrar', filled: filled.has('Nome') },
-      { role: 'textbox', name: 'Telefone', required: current === 'contatos.cadastrar', filled: filled.has('Telefone') }],
+      { role: 'textbox', name: 'Nome', required: current === 'contatos.cadastrar', filled: filled.has('Nome'), value: filled.has('Nome') ? name : null },
+      { role: 'textbox', name: 'Telefone', required: current === 'contatos.cadastrar', filled: filled.has('Telefone'), value: filled.has('Telefone') ? phone : null }],
     messages: [], state: {}, screenshot: Buffer.from('masked') }; },
     async act(action) { if (action.type === 'fill') filled.add(action.name); },
     async verify() { return { confirmed: true, observed: 'Ficha conferida', created: { contact: name },
@@ -64,12 +64,12 @@ test('finish prematuro devolve obrigatório vazio ao modelo e cria preparo para 
     assert.equal(records[1].status, 'concluída');
     assert.equal(seen[1].prepared.contact, name);
     assert.deepEqual(seen[1].prepared.identity, { refs: ['created-ref'], ids: [7] });
-    assert.match(JSON.stringify(prompts[1]), /obrigatório vazio: Nome; use o valor do gerador/u);
+    assert.match(JSON.stringify(prompts[1]), /Nome ainda sem o valor do gerador/u);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('robô exige ref, título e status persistidos e aceita título no campo editável', async () => {
-  let url;
+  let url = 'https://qa.example.test/bot/owned-ref';
   const saved = { id: 31, idRef: 'owned-ref', title: fixtureValue('robotName'), status: false };
   const page = { async goto(value) { url = value; }, async reload() {}, url: () => url,
     waitForResponse: async () => ({ json: async () => ({ dados: { bot: saved } }) }),
@@ -98,16 +98,26 @@ test('robô concluído guarda ref e id e entrega ambos ao preparo das dependente
   const robot = fixtureValue('robotName');
   const preparedSeen = [];
   let taskId;
+  let robotFilled = false;
+  let channelSelected = false;
   const browser = { async open(task, prepared) { taskId = task.id; preparedSeen.push(structuredClone(prepared)); },
     async observe() { return { title: 'Robôs', path: '/bot', controls: [
       { role: 'textbox', name: 'Título do Robô', enabled: true },
+      { role: 'button', name: 'Canais', enabled: true },
       { role: 'button', name: 'Salvar', enabled: true },
-      { role: 'button', name: robot, enabled: true }], fields: [], messages: [], state: {}, screenshot: Buffer.from('masked') }; },
-    async act() {}, async close() {}, async verify() { return { confirmed: true, observed: 'Ficha conferida',
+      { role: 'option', name: 'opção 1', enabled: true },
+      { role: 'button', name: robot, enabled: true }], fields: [{ role: 'textbox', name: 'Título do Robô', value: robotFilled ? robot : null }],
+      messages: taskId === 'robos.criar' && !channelSelected ? ['Precisa ter pelo menos um canal'] : [],
+      state: {}, screenshot: Buffer.from('masked') }; },
+    async act(action) { if (action.type === 'fill') robotFilled = true;
+      if (action.type === 'click' && action.role === 'option') channelSelected = true; },
+    async close() {}, async verify() { return { confirmed: true, observed: 'Ficha conferida',
       created: taskId === 'robos.criar' ? { robot, robotRef: 'owned-ref', robotId: 31 } : {},
       identity: { refs: ['owned-ref'], ids: [31] } }; } };
   const model = { async decide({ task, actions }) { const plan = task.id === 'robos.criar' ? [
     { type: 'fill', role: 'textbox', name: 'Título do Robô', value: robot },
+    { type: 'click', role: 'button', name: 'Canais' },
+    { type: 'click', role: 'option', name: 'opção 1' },
     { type: 'click', role: 'button', name: 'Salvar' },
   ] : [{ type: 'click', role: 'button', name: robot }];
   return plan[actions.length] ?? { type: 'finish' }; } };

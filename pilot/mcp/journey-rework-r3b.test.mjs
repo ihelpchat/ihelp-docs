@@ -74,7 +74,9 @@ test('robô inativo aceita ids lidos e somente padrões opcionais do formulário
 
 test('erro de validação visível encerra a tarefa como falhou', async () => {
   const root = await mkdtemp(join(tmpdir(), 'journey-validation-'));
-  const screen = { title: 'Contatos', path: '/contact', controls: [], fields: [],
+  const screen = { title: 'Contatos', path: '/contact', controls: [], fields: [
+    { role: 'textbox', name: 'Nome', value: fixtureValue('contactName') },
+    { role: 'textbox', name: 'Telefone', value: fixtureValue('phone') }],
     messages: ['Informe o telefone com DDD'], state: {}, screenshot: Buffer.from('masked') };
   try {
     const [record] = await runJourneys({ module: 'contatos', tasks: [{ id: 'contatos.cadastrar', modulo: 'contatos', tarefa: 'Criar',

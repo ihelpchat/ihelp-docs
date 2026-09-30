@@ -52,7 +52,8 @@ export function journeyTaskSummary(record) {
     .map(({ source, kind, ids }) => ({ source, kind, count: Array.isArray(ids) ? ids.length : 0 }));
   return { task: record.task, status: record.status, reason: record.reason,
     blocked: blocked ?? null, validation, fixtures, actions: record.actions?.length ?? 0,
-    thirdPartyDenied: record.thirdPartyDenied ?? {}, ...(record.observeError ? { observeError: record.observeError } : {}) };
+    thirdPartyDenied: record.thirdPartyDenied ?? {}, ...(record.observeError ? { observeError: record.observeError } : {}),
+    ...(record.creationCapture ? { creationCapture: record.creationCapture } : {}) };
 }
 
 export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', import.meta.url).pathname) {

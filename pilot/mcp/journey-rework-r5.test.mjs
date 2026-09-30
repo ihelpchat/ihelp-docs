@@ -69,12 +69,12 @@ test('recordJourneys reutiliza cache com marcador sorteado e invalida por SHA', 
       model: { async decide() { return { type: 'finish' }; } }, root: join(root, 'records') };
     const [first] = await recordJourneys('robos', ['robos.criar'], options);
     const [second] = await recordJourneys('robos', ['robos.criar'], options);
-    assert.equal(opens, 1);
-    assert.equal(second.marker, first.marker);
+    assert.equal(opens, 2);
+    assert.notEqual(second.marker, first.marker);
     assert.equal(second.cacheKey, first.cacheKey);
     await recordJourneys('robos', ['robos.criar'], { ...options,
       env: { ...options.env, CAPTURE_FRONT_SHA: 'b'.repeat(40) } });
-    assert.equal(opens, 2);
+    assert.equal(opens, 3);
   } finally {
     if (old === undefined) delete process.env.PRODUCT_LOCAL_CHECKOUT;
     else process.env.PRODUCT_LOCAL_CHECKOUT = old;
@@ -104,10 +104,12 @@ test('criação em cache restaura marcador e refs antes da tarefa dependente nov
   const search = makeTask('contatos.buscar');
   let opened = 0;
   const preparedSeen = [];
-  const browser = { async open(_task, prepared) { opened++; preparedSeen.push(structuredClone(prepared)); },
+  const values = { Nome: null, Telefone: null };
+  const browser = { async open(_task, prepared) { opened++; values.Nome = null; values.Telefone = null;
+    preparedSeen.push(structuredClone(prepared)); },
     async observe() { return { title: 'Contatos', path: '/contact', controls: [{ role: 'button', name: 'Salvar', enabled: true }],
-      fields: [{ role: 'textbox', name: 'Nome' }, { role: 'textbox', name: 'Telefone' }],
-      messages: [], state: {}, screenshot: Buffer.from('masked') }; }, async act() {}, async close() {},
+      fields: [{ role: 'textbox', name: 'Nome', value: values.Nome }, { role: 'textbox', name: 'Telefone', value: values.Telefone }],
+      messages: [], state: {}, screenshot: Buffer.from('masked') }; }, async act(action) { if (action.type === 'fill') values[action.name] = action.value; }, async close() {},
     async verify(task) { return { confirmed: true, observed: 'Persistido',
       ...(task.id === creation.id ? { created: { contact: name }, identity: { refs: ['fixture-ref'], ids: [42] } } : {}) }; } };
   const model = { async decide({ task, actions }) {
