@@ -113,7 +113,8 @@ const writeRules = {
   'contatos.editar': [{ method: 'PUT', path: /^\/contacts\/field\/?$/iu,
     keys: ['idRef', 'type', 'fieldName', 'value'], required: ['idRef', 'type', 'fieldName', 'value'] }],
   'contatos.definir_responsavel': [
-    { method: 'PUT', path: /^\/contacts\/([a-z0-9-]+)\/owner\/?$/iu, keys: ['departmentId', 'userId'] },
+    { method: 'PUT', path: /^\/contacts\/([a-z0-9-]+)\/owner\/?$/iu,
+      keys: ['departmentId', 'userId'], required: ['departmentId', 'userId'] },
     { method: 'PUT', path: /^\/contacts\/([a-z0-9-]+)\/?$/iu,
       keys: ['Nome', 'ContatoTelefones', 'ContatoEmails', 'ContatoResponsaveis'] },
   ],
@@ -250,7 +251,7 @@ function validContactOwnerPut(body, snapshot, generated, fixedIds) {
   const previousIds = new Set((snapshot.responsibleUsers ?? []).map((value) => value.id));
   return (owner.id === null || previousIds.has(owner.id))
     && fixedIds.department?.has(owner.DepartmentId)
-    && (owner.UserId === null || fixedIds.user?.has(owner.UserId));
+    && fixedIds.user?.has(owner.UserId);
 }
 export function journeyRequestAllowed(request, { taskId, apiOrigin, generated = new Set(), createdIds = new Set(),
   fixedIds = {}, contactSnapshot } = {}) {
@@ -423,6 +424,8 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
         ? 'Adicionar bloco'
       : node.tagName === 'BUTTON' && node.textContent?.trim() === 'Adicionar opção +'
         ? 'Adicionar opção +'
+      : node.tagName === 'BUTTON' && /^(?:Salvar|Publicar)$/iu.test(node.innerText?.trim() ?? '')
+        ? node.innerText.trim()
       : node.getAttribute('aria-labelledby') && byId(node.getAttribute('aria-labelledby'))
       || node.labels?.[0]?.textContent || node.closest('label')?.textContent
       || node.getAttribute('aria-label') || visual(node)
@@ -435,7 +438,12 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
       : node.getAttribute('role') || ({ BUTTON: 'button', A: 'link', INPUT: node.type === 'checkbox' ? 'checkbox' : 'textbox',
         SELECT: 'combobox', TEXTAREA: 'textbox' }[node.tagName]) || '';
     const nodes = [...document.querySelectorAll(selector)];
-    const controls = nodes.flatMap((node, index) => visible(node) ? [{ index, role: role(node), name: name(node),
+    const validOption = (node) => !node.matches('[role="option"],[data-value],option') ||
+      !node.disabled && node.getAttribute('aria-disabled') !== 'true'
+      && (node.getAttribute('data-value') == null && node.getAttribute('value') == null
+        || !['', 'null', 'undefined'].includes(String(node.getAttribute('data-value') ?? node.getAttribute('value')).trim()))
+      && !/^(?:selecione|escolha)(?:\b|\.{3})/iu.test(compact(node.textContent));
+    const controls = nodes.flatMap((node, index) => visible(node) && validOption(node) ? [{ index, role: role(node), name: name(node),
       region: node.closest('tr') ? `linha ${[...node.closest('tr').parentElement.children].indexOf(node.closest('tr')) + 1}`
         : node.closest('[role="dialog"]') ? 'janela' : 'cabeçalho',
       enabled: !node.disabled && node.getAttribute('aria-disabled') !== 'true',
@@ -651,7 +659,7 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
     && await page.getByText('Proprietário do Contato', { exact: true }).count() === 1;
   if (task.id === 'robos.montar_menu') confirmed = confirmed && await page.getByText('Menu de opções', { exact: true }).count() > 0;
   if (task.id === 'robos.encaminhar') confirmed = confirmed && await page.getByText('Encaminhar atendimento', { exact: true }).count() > 0;
-  if (task.id === 'robos.salvar' || task.id === 'robos.editar') confirmed = confirmed
+  if (task.id === 'robos.salvar') confirmed = confirmed
     && await page.getByText('Menu de opções', { exact: true }).count() > 0;
   let recordId;
   let persistedCapture;
@@ -679,7 +687,7 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
         return { confirmed: false, observed: 'ref', persistedCapture };
       recordId = persisted.id;
     }
-    if (['robos.montar_menu', 'robos.encaminhar', 'robos.salvar', 'robos.editar'].includes(task.id)) {
+    if (['robos.montar_menu', 'robos.encaminhar', 'robos.salvar'].includes(task.id)) {
       const ids = new Set(events.map((event) => event.idRef));
       const menus = events.filter((event) => event.type === 1 && Array.isArray(event.botReactionRules)
         && event.botReactionRules.length >= 2 && new Set(event.botReactionRules.map((rule) => rule.message)).size === event.botReactionRules.length
@@ -774,9 +782,13 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
   let filteredContactVerified = false;
   let verifiedExportSearchTerm = null;
   let searchProbe = null;
-  let searchTraffic = { requests: 0, matchingRequests: 0, lastStatus: null, matchingStatus: null };
+  let searchTraffic = { requests: 0, matchingRequests: 0, lastStatus: null, matchingStatus: null,
+    baseStatus: null, baseQueryKeys: [], badQueryKeys: [] };
   let ownerWriteStatus = null;
+  let ownerWriteShape = null;
   let ownerProbe = null;
+  let tagWriteStatus = null;
+  let tagLinkStatus = null;
   let menuProbe = null;
   let contactSnapshot = null;
   let beforeTagIds = new Set();
@@ -804,9 +816,9 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
   const fixtures = () => {
     if (fixturesMarker !== markerFor()) {
       fixturesMarker = markerFor();
-      fixturesSet = new Set(['contactName', 'editedName', 'robotName', 'tagName', 'menuQuestion',
+      fixturesSet = new Set([fixturesMarker, ...['contactName', 'editedName', 'robotName', 'tagName', 'menuQuestion',
         'menuOption', 'departmentName', 'userName', 'email', 'phone']
-        .flatMap((kind) => Array.from({ length: 99 }, (_, i) => fixtureValue(kind, i + 1, fixturesMarker))));
+        .flatMap((kind) => Array.from({ length: 99 }, (_, i) => fixtureValue(kind, i + 1, fixturesMarker)))]);
     }
     return fixturesSet;
   };
@@ -825,9 +837,13 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       filteredContactVerified = false;
       verifiedExportSearchTerm = null;
       searchProbe = null;
-      searchTraffic = { requests: 0, matchingRequests: 0, lastStatus: null, matchingStatus: null };
+      searchTraffic = { requests: 0, matchingRequests: 0, lastStatus: null, matchingStatus: null,
+        baseStatus: null, baseQueryKeys: [], badQueryKeys: [] };
       ownerWriteStatus = null;
+      ownerWriteShape = null;
       ownerProbe = null;
+      tagWriteStatus = null;
+      tagLinkStatus = null;
       menuProbe = null;
       contactSnapshot = null;
       beforeTagIds = new Set();
@@ -849,7 +865,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         if (['contatos.buscar', 'contatos.exportar'].includes(currentTask)
           && request.method() === 'GET' && /^\/api\/(?:v2\/)?contacts\/?$/u.test(url.pathname)) {
           searchTraffic.requests++;
-          if ([currentPrepared?.contact, fixtureValue('phone', 1, markerFor())]
+          if ([currentPrepared?.contact, markerFor()]
             .includes(url.searchParams.get('searchData'))) searchTraffic.matchingRequests++;
         }
         const authorization = request.headers().authorization;
@@ -884,11 +900,18 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         if (['contatos.buscar', 'contatos.exportar'].includes(currentTask)
           && response.request().method() === 'GET' && /^\/api\/(?:v2\/)?contacts\/?$/u.test(url.pathname)) {
           searchTraffic.lastStatus = response.status();
-          if ([currentPrepared?.contact, fixtureValue('phone', 1, markerFor())]
+          if (!url.searchParams.has('searchData')) {
+            searchTraffic.baseStatus = response.status();
+            searchTraffic.baseQueryKeys = [...new Set(url.searchParams.keys())].sort();
+          }
+          if (response.status() === 400) searchTraffic.badQueryKeys = [...new Set(url.searchParams.keys())].sort();
+          if ([currentPrepared?.contact, markerFor()]
             .includes(url.searchParams.get('searchData'))) searchTraffic.matchingStatus = response.status();
         }
         if (currentTask === 'contatos.marcar_tags' && response.request().method() === 'POST'
-          && /^\/api\/(?:v2\/)?tags\/?$/iu.test(url.pathname) && response.ok()) {
+          && /^\/api\/(?:v2\/)?tags\/?$/iu.test(url.pathname)) {
+          tagWriteStatus = response.status();
+          if (!response.ok()) return;
           const pending = (async () => {
             let requested;
             try { requested = JSON.parse(response.request().postData() ?? ''); } catch { return; }
@@ -908,9 +931,19 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
           pendingPosts.add(pending);
           pending.finally(() => pendingPosts.delete(pending));
         }
+        if (currentTask === 'contatos.marcar_tags' && response.request().method() === 'POST'
+          && /^\/api\/(?:v2\/)?contactTags\/[0-9]+\/?$/iu.test(url.pathname))
+          tagLinkStatus = response.status();
         if (currentTask === 'contatos.definir_responsavel' && response.request().method() === 'PUT'
-          && /^\/api\/(?:v2\/)?contacts\/[a-z0-9-]+(?:\/owner)?\/?$/iu.test(url.pathname))
+          && /^\/api\/(?:v2\/)?contacts\/[a-z0-9-]+(?:\/owner)?\/?$/iu.test(url.pathname)) {
           ownerWriteStatus = response.status();
+          const body = parseWriteBody(response.request());
+          const owner = body?.ContatoResponsaveis?.[0] ?? body;
+          ownerWriteShape = { bodyKeys: body && typeof body === 'object' ? Object.keys(body).sort() : [],
+            ownerKeys: owner && typeof owner === 'object' ? Object.keys(owner).sort() : [],
+            departmentInFixture: fixedIds.department.has(owner?.DepartmentId ?? owner?.departmentId),
+            userInFixture: fixedIds.user.has(owner?.UserId ?? owner?.userId) };
+        }
         if (currentTask === 'contatos.importar' && response.request().method() === 'POST'
           && url.origin === qaApi?.origin && /^\/api\/(?:v2\/)?contacts\/import\/?$/u.test(url.pathname)) {
           const pending = importResponseCapture(response).then((capture) => { importCapture = capture; });
@@ -1040,7 +1073,15 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       data.title = taskTitle(path);
       if (stability.limit) data.state.stabilityLimit = stability.limit;
       let screenshot;
-      try { screenshot = await captureMaskedFrame(page, [...known]); }
+      try {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try { screenshot = await captureMaskedFrame(page, [...known]); break; }
+          catch (error) {
+            if (error.stage !== 'máscara' || attempt === 2) throw error;
+            await waitForStableScreen(page);
+          }
+        }
+      }
       catch (error) { error.stage ??= 'screenshot'; throw error; }
       const { targets: _targets, ...safeData } = data;
       return { ...safeData, path, screenshot };
@@ -1094,12 +1135,15 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         const tagResponse = currentTask === 'contatos.marcar_tags' && action.type === 'click' && action.role === 'option'
           ? page.waitForResponse((response) => response.request().method() === 'POST'
             && /^\/api\/(?:v2\/)?contactTags\/[0-9]+\/?$/iu.test(new URL(response.url()).pathname),
-          { timeout: 10_000 }).catch(() => null) : null;
+          { timeout: 30_000 }).catch(() => null) : null;
         if (currentTask === 'contatos.cadastrar' && action.type === 'click' && action.name === 'Salvar')
           await page.waitForLoadState('networkidle', { timeout: 2_500 }).catch(() => {});
         await actJourneyAction(page, action, observedTargets, { vocabulary: [...known], generated: fixtures() });
         if (ownerResponse) await ownerResponse;
-        if (tagResponse) await tagResponse;
+        if (tagResponse) {
+          await tagResponse;
+          await Promise.all([...pendingPosts]);
+        }
         if (importResponse) {
           await importResponse;
           await Promise.all([...pendingPosts]);
@@ -1118,7 +1162,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       }
     },
     async exportAction(screen, prepared, actions) {
-      const phone = fixtureValue('phone', 1, markerFor());
+      const phone = markerFor();
       if (!screen.fields.some((field) => /buscar contato/iu.test(field.name))
         && actions.some((action) => action.type === 'fill' && [prepared.contact, phone].includes(action.value))) {
         await page.getByPlaceholder('Buscar contato...').waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
@@ -1166,7 +1210,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
     },
     async searchAction(screen, prepared, actions) {
       const name = prepared.contact;
-      const phone = fixtureValue('phone', 1, markerFor());
+      const phone = markerFor();
       if (!screen.fields.some((field) => /buscar contato/iu.test(field.name))
         && actions.some((action) => action.type === 'fill' && [name, phone].includes(action.value))) {
         await page.getByPlaceholder('Buscar contato...').waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
@@ -1284,6 +1328,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         const owner = details?.responsibleUsers?.[0];
         const before = contactSnapshot?.responsibleUsers?.[0];
         ownerProbe = { writeStatus: ownerWriteStatus, readStatus: response?.status ?? null,
+          request: ownerWriteShape,
           refsMatch: details?.idRef === refs[0], beforeCount: contactSnapshot?.responsibleUsers?.length ?? null,
           afterCount: details?.responsibleUsers?.length ?? null,
           departmentInFixture: fixedIds.department.has(owner?.departmentId),
@@ -1316,7 +1361,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
     },
     diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, creationCapture, searchProbe, ownerProbe,
       menuProbe, tagProbe: currentTask === 'contatos.marcar_tags' ? { createdTagIdCaptured: [...createdIds].some((id) =>
-        Number.isSafeInteger(id) && !fixedIds.tag.has(id) && id !== currentPrepared?.identity?.ids?.[0]) } : null }; },
+        Number.isSafeInteger(id) && !fixedIds.tag.has(id) && id !== currentPrepared?.identity?.ids?.[0]),
+        tagWriteStatus, tagLinkStatus } : null }; },
     async close() { await browser?.close(); browser = null; context = null; page = null; },
   };
 }

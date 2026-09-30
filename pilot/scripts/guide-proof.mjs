@@ -81,7 +81,7 @@ export function assertAllowedTarget(value, env = process.env) {
 
 const productionHost = (host) => host === 'ihelpchat.com' || host === 'ihelpchat.com.br'
   || host.endsWith('.ihelpchat.com') || host.endsWith('.ihelpchat.com.br')
-  || host === 'api.ihelp.com.br';
+  || host === 'api.ihelp.com.br' || /(?:^|[.-])production(?:[.-]|$)/iu.test(host);
 
 export function qaRequestDecision(value, target, env = process.env, { fixtureAllowedOrigins = [] } = {}) {
   let url;

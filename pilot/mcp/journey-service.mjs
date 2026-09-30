@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-14';
+export const JOURNEY_POLICY_VERSION = 'm571-15';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -231,9 +231,15 @@ export function plannedJourneyAction(id, screen, actions, fixtureFor = fixtureVa
   if (id === 'contatos.definir_responsavel') {
     if (!done(/^Informações$/iu)) return plannedClick(screen, /^Informações$/iu, 'tab');
     if (!done(/^Editar Proprietário do Contato$/iu)) return plannedClick(screen, /^Editar Proprietário do Contato$/iu, 'button');
-    if (!done(/^opção [1-9]\d*$/iu)) return plannedClick(screen, /^opção 1$/iu, 'option');
-    if (!screen.controls.some((item) => item.role === 'button' && item.name === 'Salvar')
-      && !done(/^opção 2$/iu)) return plannedClick(screen, /^opção 2$/iu, 'option');
+    const selected = actions.filter((action) => action.type === 'click' && action.role === 'option').length;
+    const opened = actions.filter((action) => action.type === 'click' && action.role === 'combobox').length;
+    if (selected === 0 && opened === 0) return plannedClick(screen, /^campo \d+ do formulário \(seleção\)$/iu, 'combobox');
+    if (selected === 0 || selected === 1 && opened >= 2) return plannedClick(screen, /^opção 1$/iu, 'option');
+    if (selected === 1) {
+      const comboboxes = screen.controls.filter((item) => item.role === 'combobox' && item.enabled);
+      const target = comboboxes.at(-1);
+      return target ? { type: 'click', role: 'combobox', name: target.name, value: null } : null;
+    }
     return !done(/^Salvar(?: \(|$)/iu) ? plannedClick(screen, /^Salvar(?: \(|$)/iu, 'button') : finished();
   }
   if (id === 'contatos.marcar_tags') {
@@ -264,8 +270,10 @@ export function plannedJourneyAction(id, screen, actions, fixtureFor = fixtureVa
     return !done(/^Adicionar robô$/iu) ? plannedClick(screen, /^Adicionar robô$/iu) : finished();
   }
   if (id === 'robos.montar_menu') {
+    const addCount = actions.filter((action) => action.type === 'click' && /^Adicionar bloco(?: \(|$)/iu.test(action.name)).length;
+    const messageCount = actions.filter((action) => action.type === 'click' && action.name === 'Mensagem simples').length;
     if (!done(/^Fluxo de Robô$/iu)) return plannedClick(screen, /^Fluxo de Robô$/iu, 'link');
-    if (!done(/^Adicionar bloco$/iu)) return plannedClick(screen, /^Adicionar bloco$/iu);
+    if (addCount === 0) return plannedClick(screen, /^Adicionar bloco$/iu);
     if (!done(/^Menu de opções$/iu)) return plannedClick(screen, /^Menu de opções$/iu);
     if (!filled(fixtureFor('menuQuestion'))) return plannedFill(screen, /^Mensagem de onboarding$/iu, fixtureFor('menuQuestion'));
     if (!actions.some((action) => action.type === 'fill' && action.name === 'Mensagem'))
@@ -281,8 +289,26 @@ export function plannedJourneyAction(id, screen, actions, fixtureFor = fixtureVa
         && item.value !== fixtureFor('menuOption', 1));
       return field ? { type: 'fill', role: 'textbox', name: field.name, value: fixtureFor('menuOption', 2) } : null;
     }
-    if (actions.filter((action) => action.type === 'click' && /^Adicionar bloco$/iu.test(action.name)).length < 2)
+    if (addCount < 2)
       return plannedClick(screen, /^Adicionar bloco$/iu);
+    if (addCount < 3) return plannedClick(screen, /^Adicionar bloco(?: \(cabeçalho(?: \d+)?\))?$/iu);
+    if (messageCount < 1) return plannedClick(screen, /^Mensagem simples$/iu);
+    if (!filled(fixtureFor('menuOption', 1)) || !actions.some((action) => action.type === 'fill'
+      && action.name === 'Título da mensagem' && action.value === fixtureFor('menuOption', 1)))
+      return plannedFill(screen, /^Título da mensagem$/iu, fixtureFor('menuOption', 1));
+    if (!actions.some((action) => action.type === 'fill' && action.name === 'campo 2 do formulário (texto)'
+      && action.value === fixtureFor('menuOption', 1)))
+      return plannedFill(screen, /^campo 2 do formulário \(texto\)$/iu, fixtureFor('menuOption', 1));
+    if (addCount < 4) return plannedClick(screen, /^Adicionar bloco$/iu);
+    if (addCount < 5) return plannedClick(screen, /^Adicionar bloco(?: \(cabeçalho(?: \d+)?\))?$/iu);
+    if (messageCount < 2) return plannedClick(screen, /^Mensagem simples$/iu);
+    if (!actions.some((action) => action.type === 'fill' && action.name === 'Título da mensagem'
+      && action.value === fixtureFor('menuOption', 2)))
+      return plannedFill(screen, /^Título da mensagem$/iu, fixtureFor('menuOption', 2));
+    if (!actions.some((action) => action.type === 'fill' && action.name === 'campo 2 do formulário (texto)'
+      && action.value === fixtureFor('menuOption', 2)))
+      return plannedFill(screen, /^campo 2 do formulário \(texto\)$/iu, fixtureFor('menuOption', 2));
+    if (addCount < 6) return plannedClick(screen, /^Adicionar bloco$/iu);
     return !done(/^Salvar$/iu) ? plannedClick(screen, /^Salvar$/iu) : finished();
   }
   if (id === 'robos.encaminhar') {
@@ -367,9 +393,9 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
   const accountHash = account ? account.credentialHash ?? digest([account.userId, account.companyId]) : null;
   let currentMarker = marker;
   const fixtureFor = (kind, n = 1) => fixtureValue(kind, n, currentMarker);
-  const generatedFor = () => currentMarker ? new Set(['contactName', 'editedName', 'robotName', 'tagName',
+  const generatedFor = () => currentMarker ? new Set([currentMarker, ...['contactName', 'editedName', 'robotName', 'tagName',
     'menuQuestion', 'menuOption', 'departmentName', 'userName', 'email', 'phone']
-    .flatMap((kind) => Array.from({ length: 99 }, (_, index) => fixtureFor(kind, index + 1)))) : fixtureValues;
+    .flatMap((kind) => Array.from({ length: 99 }, (_, index) => fixtureFor(kind, index + 1)))]) : fixtureValues;
   const results = [];
   const prepared = {};
   let moduleActions = 0;
@@ -621,6 +647,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           ? 'bloqueada' : 'inconclusiva';
         record.reason = error?.code === 'QA_SESSION_ACTIVE' ? 'ambiente: sessão ativa'
           : record.status === 'bloqueada' ? 'escrita bloqueada pela política' : journeyFailureCategory(error);
+        if (task.id === 'contatos.exportar') record.failureDetail = journeyFailureLog(error);
         if (record.status === 'bloqueada' && error.blocked) record.blocked = error.blocked;
         if (error instanceof SanitizationError) {
           record.screens = []; record.before = null; record.after = null; images.length = 0;
