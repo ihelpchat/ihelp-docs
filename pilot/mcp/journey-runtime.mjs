@@ -1809,11 +1809,11 @@ export function configuredJourneyIdentity(env) {
   if (!email || !password) throw new Error('credencial de homologação ausente');
   if (env.QA_TARGET === 'producao' && !env.QA_PROD_COMPANY_ID)
     throw new Error('empresa de produção não confirmada');
-  return { credentialHash: createHash('sha256').update(JSON.stringify([
-    env.QA_TARGET ?? 'homolog', target.url, email.trim().toLowerCase(),
-    env.QA_TARGET === 'producao' ? env.QA_PROD_COMPANY_ID ?? '' : '',
-    env.CAPTURE_PROFILE ?? 'qa-autorizado',
-  ])).digest('hex') };
+  const identity = env.QA_TARGET === 'producao'
+    ? ['producao', target.url, email.trim().toLowerCase(), env.QA_PROD_COMPANY_ID,
+      env.CAPTURE_PROFILE ?? 'qa-autorizado']
+    : [target.url, email.trim().toLowerCase(), env.CAPTURE_PROFILE ?? 'qa-autorizado'];
+  return { credentialHash: createHash('sha256').update(JSON.stringify(identity)).digest('hex') };
 }
 
 export async function probeJourneyAccount(env) {

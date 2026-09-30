@@ -54,12 +54,20 @@ export async function productionPreflight({ env = process.env, identity, get }) 
   ]);
   const channels = rows(channelBody);
   let connectedChannels = unavailable;
+  let channelReason = 'estado dos canais não verificável';
   if (channels && channels.length <= 5000 && channels.every((channel) =>
-    typeof channel?.idRef === 'string' && identifier.test(channel.idRef))) {
+    typeof channel?.idRef === 'string' && identifier.test(channel.idRef)
+      && typeof channel.connected === 'boolean')) {
     const states = await Promise.all(channels.map((channel) =>
       resultOf(get, `/channel/connect-status/${channel.idRef}`)));
-    if (states.every((state) => typeof state?.dados?.connected === 'boolean'))
-      connectedChannels = states.filter((state) => state.dados.connected).length;
+    if (states.every((state) => typeof state?.dados?.connected === 'boolean')) {
+      if (states.some((state, index) => state.dados.connected !== channels[index].connected))
+        channelReason = 'estado dos canais divergente';
+      else {
+        connectedChannels = channels.filter((channel) => channel.connected).length;
+        channelReason = connectedChannels > 0 ? 'canais conectados' : null;
+      }
+    }
   }
   const activeBots = active(bots, 'status');
   const activeRules = active(automations, 'isActive');
@@ -71,6 +79,6 @@ export async function productionPreflight({ env = process.env, identity, get }) 
     automations: counts.activeAutomations, integrations: counts.activeIntegrations };
   const unsafe = companyName === unavailable || Object.entries(checks).some(([item, value]) =>
     typeof value === 'number' && item !== 'contacts' && value > 0 || value === unavailable);
-  return unsafe ? { mode: 'bloqueado', counts }
+  return unsafe ? { mode: 'bloqueado', reason: channelReason ?? 'pré-voo não comprovado', counts }
     : { mode: 'ready', companyId, companyName, counts };
 }
