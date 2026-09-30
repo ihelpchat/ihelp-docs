@@ -127,7 +127,7 @@ test('robô criado e menu só confirmam estado persistido na ficha reaberta', as
   const page = { async goto(value) { url = value; }, async reload() {}, url: () => url,
     getByText(value) { return { count: async () => Number(labels.has(value)) }; } };
   const base = { page, refs: ['owned-ref'], targetUrl: 'https://qa.example.test', name: 'Robô Exemplo 01',
-    expectedValue: 'Robô Exemplo 01', fixtureIds: { department: new Set([2]) },
+    expectedValue: 'Robô Exemplo 01', fixtureIds: { department: new Set([2]) }, saveStatus: 200,
     getPersisted: async () => ({ status: 200, body: { dados: saved } }) };
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.criar', modulo: 'robos' } })).confirmed, true);
   assert.equal((await verifyUniqueRecord({ ...base, task: { id: 'robos.montar_menu', modulo: 'robos' } })).confirmed, true);

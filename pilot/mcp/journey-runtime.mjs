@@ -692,7 +692,8 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
 }
 
 export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, expectedValue, expectedExtra,
-  screenTimeoutMs = 10_000, getPersisted, fixtureIds = {}, beforeEventRefs = new Set(), requiredEventRefs = null }) {
+  screenTimeoutMs = 10_000, getPersisted, fixtureIds = {}, beforeEventRefs = new Set(), requiredEventRefs = null,
+  saveStatus = null, beforeLastChange = null, taskStartedAt = null }) {
   if (refs.length !== 1 || !/^[a-z0-9-]{1,80}$/iu.test(refs[0]))
     return { confirmed: false, observed: 'ref' };
   if (task.id === 'robos.criar' && new URL(page.url()).pathname !== `/bot/${refs[0]}`)
@@ -784,6 +785,9 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
     const generated = new Set(['menuQuestion', 'menuOption', 'tagName'].flatMap((kind) =>
       Array.from({ length: 99 }, (_, index) => fixtureValue(kind, index + 1))));
     const fresh = events.filter((event) => !beforeEventRefs.has(event.idRef));
+    if (['robos.montar_menu', 'robos.encaminhar', 'robos.salvar'].includes(task.id)
+      && !(saveStatus >= 200 && saveStatus < 300))
+      return { confirmed: false, observed: 'salvar: PUT', persistedCapture };
     if (task.id === 'robos.montar_menu') {
       const ids = new Set(events.map((event) => event.idRef));
       const menus = fresh.filter((event) => event.type === 1);
@@ -814,6 +818,13 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
       || !events.some((event) => event.type === 0
         && event.messages?.some((message) => generated.has(message.message)) || fixtureTransfer(event))))
       return { confirmed: false, observed: 'salvar: blocos', persistedCapture };
+    if (task.id === 'robos.salvar') {
+      const changed = Date.parse(persisted.dateLastChange);
+      if (!Number.isFinite(changed) || !Number.isFinite(Date.parse(beforeLastChange))
+        || !Number.isFinite(taskStartedAt) || changed <= Date.parse(beforeLastChange)
+        || changed < taskStartedAt)
+        return { confirmed: false, observed: 'salvar: alteração persistida', persistedCapture };
+    }
     if (['robos.montar_menu', 'robos.encaminhar'].includes(task.id))
       return { confirmed, observed: confirmed ? 'Ficha única reaberta com valor esperado' : 'Ficha reaberta sem valor esperado',
         persistedCapture, newEventRefs: fresh.map((event) => event.idRef) };
@@ -911,6 +922,9 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
   let tagWriteStatus = null;
   let tagLinkStatus = null;
   let beforeBotEventRefs = new Set();
+  let beforeBotLastChange = null;
+  let taskStartedAt = null;
+  let botSaveStatus = null;
   const sessionFlowEventRefs = new Set();
   let menuProbe = null;
   let contactSnapshot = null;
@@ -947,6 +961,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
   };
   return {
     async open(task, prepared) {
+      taskStartedAt = Date.now();
       currentTask = task.id;
       currentPrepared = prepared;
       blockedWrite = null;
@@ -971,6 +986,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       menuProbe = null;
       contactSnapshot = null;
       beforeBotEventRefs = new Set();
+      beforeBotLastChange = null;
+      botSaveStatus = null;
       beforeTagIds = new Set();
       creationResults.length = 0;
       thirdPartyDenied = {};
@@ -1022,6 +1039,10 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       }));
       page.on('response', (response) => {
         const url = new URL(response.url());
+        if (['robos.montar_menu', 'robos.encaminhar', 'robos.salvar'].includes(currentTask)
+          && response.request().method() === 'PUT' && url.origin === qaApi?.origin
+          && new RegExp(`^/api/(?:v2/)?bot/${currentPrepared?.robotRef}/save/?$`, 'iu').test(url.pathname))
+          botSaveStatus = response.status();
         if (response.status() >= 400 && url.origin === qaApi?.origin
           && ['contatos.buscar', 'contatos.exportar', 'contatos.definir_responsavel', 'contatos.importar'].includes(currentTask)) {
           const method = response.request().method();
@@ -1181,6 +1202,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         if (response.status !== 200 || bot?.idRef !== prepared.robotRef || !Array.isArray(bot.botEvents))
           throw new Error('robô de preparo indisponível');
         beforeBotEventRefs = new Set(bot.botEvents.map((event) => event.idRef));
+        beforeBotLastChange = bot.dateLastChange;
         if (Number.isSafeInteger(bot.empresaId) && bot.empresaId > 0) fixedIds.company.add(bot.empresaId);
       }
       let environmentBlocked = null;
@@ -1464,6 +1486,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       const checked = await verifyUniqueRecord({ page, task, refs,
         targetUrl: target.url, name, expectedValue, expectedExtra,
         fixtureIds: fixedIds, beforeEventRefs: beforeBotEventRefs,
+        saveStatus: botSaveStatus, beforeLastChange: beforeBotLastChange, taskStartedAt,
         requiredEventRefs: task.id === 'robos.salvar' ? sessionFlowEventRefs : null,
         getPersisted: task.modulo === 'robos' ? authenticatedGet : undefined });
       if (checked.confirmed && Array.isArray(checked.newEventRefs))
