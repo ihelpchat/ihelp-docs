@@ -131,7 +131,8 @@ test('importação anterior desabilitada aguarda com teto e registra o bloqueio'
         screenshot: Buffer.from('masked') }; } },
       model: { async decide() { decided++; return { type: 'finish' }; } } });
     assert.equal(record.importInProgress, true);
-    assert.equal(record.reason, 'importação anterior em andamento');
+    assert.equal(record.status, 'bloqueada');
+    assert.equal(record.reason, 'ambiente: importação anterior em andamento');
     assert.equal(waited, 30_000);
     assert.equal(decided, 0);
   } finally { await rm(root, { recursive: true, force: true }); }

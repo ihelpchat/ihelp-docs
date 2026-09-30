@@ -35,12 +35,43 @@ test('busca aguarda GET filtrado e conclui só com uma linha e ref correspondent
     request: () => ({ method: () => 'GET' }), json: async () => ({ dados: [{ nome: name, idRef: 'ref-1' }] }) }) };
   assert.equal(typeof runtime.verifyFilteredContactSearch, 'function');
   assert.deepEqual(await runtime.verifyFilteredContactSearch(page, name, 'ref-1'), { confirmed: true, observed: 'Contato fictício localizado de forma única' });
+  const wrong = { ...page, waitForResponse: async () => ({ ok: () => true, json: async () =>
+    ({ dados: [{ nome: name, idRef: 'outra-conta' }] }) }) };
+  assert.equal((await runtime.verifyFilteredContactSearch(wrong, name, 'ref-1')).confirmed, false);
+});
+
+test('robô salvo inativo aceita URL e aba do editor quando cabeçalho ainda não mostra título', async () => {
+  const name = fixtureValue('robotName');
+  let url = 'https://qa.test/bot/ref-1';
+  const page = { url: () => url, async goto(next) { url = next; }, async reload() {},
+    getByText: (value) => ({ first: () => ({ async waitFor() { if (value !== 'Fluxo de Robô') throw new Error('título ausente'); },
+      async isVisible() { return value === 'Fluxo de Robô'; } }), async count() { return 0; } }),
+    getByRole: () => ({ async count() { return 0; } }) };
+  const checked = await runtime.verifyUniqueRecord({ page, task: { id: 'robos.criar', modulo: 'robos' },
+    refs: ['ref-1'], targetUrl: 'https://qa.test', name, expectedValue: name, screenTimeoutMs: 10,
+    getPersisted: async () => ({ status: 200, body: { dados: { bot: { id: 7, idRef: 'ref-1', title: name, status: false } } } }) });
+  assert.equal(checked.confirmed, true);
 });
 
 test('cobertura separa importação bloqueada pelo ambiente', () => {
   assert.deepEqual(journeyCoverage([{ task: 'contatos.importar', status: 'bloqueada', reason: 'ambiente: importação anterior em andamento' },
     { task: 'contatos.cadastrar', status: 'concluída' }]), { completed: 1, eligible: 1, percent: 100,
     environmentBlocked: [{ task: 'contatos.importar', reason: 'ambiente: importação anterior em andamento' }] });
+});
+
+test('GET de importação pendente bloqueia antes de chamar o agente e guarda a data', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-r13-import-'));
+  let observations = 0;
+  try {
+    const [record] = await runJourneys({ module: 'contatos', root, frontSha: 'a'.repeat(40), profile: 'qa',
+      tasks: [{ id: 'contatos.importar', modulo: 'contatos', tarefa: 'Importar', resultadoEsperadoObservavel: 'Importado' }],
+      browser: { async open() { return { environmentBlocked: { date: '2026-09-29' } }; }, async close() {},
+        async observe() { observations++; throw new Error('não deve observar'); } },
+      model: { async decide() { throw new Error('não deve decidir'); } } });
+    assert.equal(record.status, 'bloqueada');
+    assert.equal(record.reason, 'ambiente: importação anterior em andamento (2026-09-29)');
+    assert.equal(observations, 0);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('conta B reexecuta criação antes de usar cache da conta A', async () => {

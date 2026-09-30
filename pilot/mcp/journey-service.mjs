@@ -4,11 +4,15 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-12';
+export const JOURNEY_POLICY_VERSION = 'm571-13';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
 const forbidden = /\b(?:enviar|disparar|campanha|publicar|ativar|conectar|desconectar|excluir|deletar|remover|pagar|pagamento|cobrança|convidar|convite|senha|permiss(?:ã|a)o|integra(?:ç|c)(?:ã|a)o|webhook|agendar|agendamento)\b/iu;
+const taskPlans = {
+  'contatos.editar': 'Na ficha, abra a aba Informações; clique no campo editável Nome ou no lápis Editar; preencha editedName; confirme em Salvar ou Enter. Mais não edita.',
+  'contatos.definir_responsavel': 'Na ficha, abra Informações; no campo Responsável clique no lápis Editar; escolha departamento e usuário nas fichas de opção opaca; clique no ícone Salvar. Mais não edita.',
+};
 const normalized = (value) => String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 const deny = (reason) => ({ allowed: false, reason });
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -57,9 +61,13 @@ export function journeyFailureLog(error, env = process.env) {
   return `gravar_jornada: ${category}: ${containsSensitiveData(detail, { detectOpaque: true }) ? '[detalhe removido]' : detail}`;
 }
 export function journeyCoverage(records) {
-  const eligible = records.filter((record) => !['contatos.agendar_mensagem', 'robos.publicar_ativar'].includes(record.task));
+  const environmentBlocked = records.filter((record) => record.status === 'bloqueada' && record.reason?.startsWith('ambiente: '))
+    .map((record) => ({ task: record.task, reason: record.reason }));
+  const eligible = records.filter((record) => !['contatos.agendar_mensagem', 'robos.publicar_ativar'].includes(record.task)
+    && !environmentBlocked.some((blocked) => blocked.task === record.task));
   const completed = eligible.filter((record) => record.status === 'concluída').length;
-  return { completed, eligible: eligible.length, percent: eligible.length ? Math.round(completed * 100 / eligible.length) : 0 };
+  return { completed, eligible: eligible.length, percent: eligible.length ? Math.round(completed * 100 / eligible.length) : 0,
+    ...(environmentBlocked.length ? { environmentBlocked } : {}) };
 }
 
 export function policyDecision(action, generated = fixtureValues, taskId = '') {
@@ -229,7 +237,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
   frontSha, backSha = 'unavailable', profile, browser, model, sanitize = async (value) => value,
   allowedScreenLabels = new Set(),
   maxActionsPerTask = 30, maxActionsPerModule = 300, maxMs = 900_000, maxCostUsd = 5,
-  cacheConfig = {}, cacheBypass = false, markerChanged = () => {} }) {
+  cacheConfig = {}, cacheBypass = false, markerChanged = () => {}, accountIdentity }) {
   const invalid = [
     ['module', !modules.has(module)],
     ['tasks', !Array.isArray(tasks) || tasks.some((item) => !taskId.test(item.id) || item.modulo !== module)],
@@ -239,6 +247,10 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
     ['marker', Boolean(marker && !/^[a-f0-9]{8}$/u.test(marker))],
   ].find(([, failed]) => failed)?.[0];
   if (invalid) throw new Error(`${invalid} ausente`);
+  const account = accountIdentity ? await accountIdentity() : null;
+  if (accountIdentity && (!account || typeof account.userId !== 'string' || !account.userId
+    || typeof account.companyId !== 'string' || !account.companyId)) throw new Error('identidade autenticada indisponível');
+  const accountHash = account ? digest([account.userId, account.companyId]) : null;
   let currentMarker = marker;
   const fixtureFor = (kind, n = 1) => fixtureValue(kind, n, currentMarker);
   const generatedFor = () => currentMarker ? new Set(['contactName', 'editedName', 'robotName', 'tagName',
@@ -254,7 +266,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
     const dependency = ['contatos.cadastrar', 'robos.criar'].includes(task.id) ? null
       : { marker: currentMarker, contact: prepared.contact, robot: prepared.robot,
         robotRef: prepared.robotRef, robotId: prepared.robotId, identity: prepared.identity };
-    const key = digest({ task, frontSha, backSha, profile, policy: JOURNEY_POLICY_VERSION, dependency,
+    const key = digest({ task, frontSha, backSha, profile, accountHash, policy: JOURNEY_POLICY_VERSION, dependency,
       config: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd, ...cacheConfig } });
     const cached = cacheBypass ? null : await loadCache(root, module, task.id, key, true);
     if (cached) {
@@ -284,6 +296,11 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       try {
         const openedFixtures = await browser.open(task, prepared); opened = true;
         if (Array.isArray(openedFixtures?.fixtures)) record.fixtures.push(...openedFixtures.fixtures);
+        if (openedFixtures?.environmentBlocked) {
+          record.status = 'bloqueada';
+          record.reason = `ambiente: importação anterior em andamento${openedFixtures.environmentBlocked.date
+            ? ` (${openedFixtures.environmentBlocked.date})` : ''}`;
+        }
         const complete = async (screen) => {
           if (!actionEvidence(task.id, record.actions, fixtureFor)) {
             record.reason = 'ações necessárias não observadas'; return;
@@ -310,7 +327,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           }
         };
         let feedback = null;
-        for (let index = 0; index < maxActionsPerTask; index++) {
+        for (let index = 0; index < maxActionsPerTask && record.status !== 'bloqueada'; index++) {
           if (moduleActions >= maxActionsPerModule || Date.now() - started > maxMs || costUsd >= maxCostUsd) {
             record.reason = 'limite da execução atingido';
             if (feedback) record.status = 'falhou';
@@ -341,7 +358,10 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           if (task.id === 'contatos.importar' && screen.controls.some((control) => /importar contatos/iu.test(control.name) && !control.enabled)) {
             record.importInProgress = true;
             if (!await browser.waitImportReady?.(30_000)) {
-              record.reason = 'importação anterior em andamento'; break;
+              record.status = 'bloqueada';
+              const pending = await browser.pendingImport?.();
+              record.reason = `ambiente: importação anterior em andamento${pending?.date ? ` (${pending.date})` : ''}`;
+              break;
             }
             continue;
           }
@@ -364,8 +384,10 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           if (validation && missingPlanned) feedback = `${missingPlanned[0]} ainda sem o valor do gerador (${missingPlanned[1]})`;
           const decision = task.id === 'contatos.exportar' && browser.exportAction
             ? await browser.exportAction(screen, prepared, record.actions)
+            : task.id === 'contatos.buscar' && browser.searchAction
+              ? await browser.searchAction(screen, prepared, record.actions)
             : await model.decide({ task: { id: task.id, objective: task.tarefa, expected: record.expected,
-            verification: task.verificacaoM571 }, screen, actions: record.actions, feedback,
+            verification: task.verificacaoM571, plan: taskPlans[task.id] ?? null }, screen, actions: record.actions, feedback,
           });
           if (!decision) { record.reason = 'seleção fictícia não comprovada'; break; }
           feedback = null;
@@ -408,7 +430,8 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             await complete(sanitized);
             break;
           }
-          if (action.type !== 'upload_csv' && !sanitized.controls.some((control) => control.role === action.role && control.name === action.name && control.enabled)
+          if (action.type !== 'upload_csv' && !['contatos.exportar', 'contatos.buscar'].includes(task.id)
+            && !sanitized.controls.some((control) => control.role === action.role && control.name === action.name && control.enabled)
             && !sanitized.fields.some((field) => field.role === action.role && field.name === action.name)) {
             record.reason = 'alvo ausente da tela'; break;
           }
