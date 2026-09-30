@@ -431,13 +431,19 @@ export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdP
     thirdPartyDenied[url.hostname] = (thirdPartyDenied[url.hostname] ?? 0) + 1;
     return route.fallback();
   }
-  if (['GET', 'HEAD', 'OPTIONS'].includes(request.method().toUpperCase())) return route.fallback();
+  const method = request.method().toUpperCase();
+  const path = url.pathname + url.search;
   if (target.mode === 'producao' && !context.productionReady?.()) {
-    if (productionPreflightRequestAllowed(request.method(), url.pathname + url.search))
-      return route.fallback();
+    if (productionPreflightRequestAllowed(method, path)) return route.fallback();
     onBlocked({ allowed: false, reason: 'pré-voo ausente', task: context.taskId });
     return route.abort();
   }
+  if (target.mode === 'producao' && ['GET', 'HEAD'].includes(method)
+    && productionEffectfulGetDenied(url.pathname)) {
+    onBlocked({ allowed: false, reason: 'GET com efeito negado', task: context.taskId });
+    return route.abort();
+  }
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return route.fallback();
   if (!apiOrigin || url.origin !== apiOrigin || !url.pathname.startsWith('/api/')) {
     onBlocked(journeyWriteDecision(request, { ...context, apiOrigin }));
     return route.abort();
@@ -1663,9 +1669,33 @@ export function makeLazyJourneyBrowser(createBrowser) {
   };
 }
 
+const productionPreflightReads = new Set(['/api/v2/company', '/api/v2/configurations/users',
+  '/api/v2/configurations/channels', '/api/v2/bot', '/api/v2/automation', '/api/v2/webhook',
+  '/api/v2/contacts?page=1&limit=1']);
+const productionPreflightStatic = new Set(['/', '/login', '/contact', '/index.html',
+  '/favicon.ico', '/manifest.json']);
+const productionLoginPath = '/api/v2/configurations/users/login?force=false';
+const effectfulGetSegment = /(?:^|[-/])(?:reconnect|reconection|disconnect|sync|send|reset|delete|publish|activate|export|update|execute|process|import-backup|validate-contacts-business|auto-fill|fix-filters|subscription-reminder|migrate)/iu;
+
+export function productionEffectfulGetDenied(path) {
+  // Encoded paths can decode to a mutating route after the browser guard.
+  if (path.includes('%')) return true;
+  if (!/^\/api\/(?:v\d+\/)?/iu.test(path)) return false;
+  const route = path.replace(/^\/api\/(?:v\d+\/)?/iu, '/');
+  return effectfulGetSegment.test(route) || /crmsync/iu.test(route)
+    || /^\/validator(?:\/|$)/iu.test(route);
+}
+
 export function productionPreflightRequestAllowed(method, path) {
-  return ['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())
-    || method.toUpperCase() === 'POST' && path === '/api/v2/configurations/users/login?force=false';
+  const normalized = method.toUpperCase();
+  if (normalized === 'POST') return path === productionLoginPath;
+  if (normalized === 'GET' && !path.startsWith('/api/'))
+    return productionPreflightStatic.has(path)
+      || /^\/(?:assets|static|_next\/static)\/[a-z0-9._/-]+$/iu.test(path);
+  const safeRead = productionPreflightReads.has(path)
+    || /^\/api\/v2\/channel\/connect-status\/[a-z0-9-]{1,80}$/iu.test(path);
+  return safeRead && !productionEffectfulGetDenied(path)
+    && (normalized === 'GET' || normalized === 'OPTIONS');
 }
 
 export async function browserProductionPreflight(env = process.env) {

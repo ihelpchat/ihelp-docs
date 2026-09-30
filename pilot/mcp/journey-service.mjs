@@ -395,6 +395,7 @@ async function cachedAccountProof(accountHash, probeAccount) {
 
 export function journeyReadFailureCategory(error) {
   if (error?.code === 'ENOENT' || error?.message === 'registro ausente') return 'registro ausente';
+  if (error?.message === 'prova de conta indisponível') return 'prova de conta indisponível';
   if (/sanitização|cache inválido|cache incompatível|print do cache inválido/u.test(error?.message ?? '')) return 'sanitização';
   return 'leitura falhou';
 }
@@ -407,12 +408,24 @@ export async function readJourney({ root = resolve(process.env.MCP_STATE_DIR ?? 
   const record = await loadCache(root, module, task, key);
   if (!record) throw new Error('registro ausente');
   if (record?.configuredIdentityHash !== accountHash) throw new Error('identidade configurada divergente');
+  if (record.target === 'producao' && !record.accountProof) throw new Error('prova de conta indisponível');
   if (!record.accountProof) return { ...record, identityVerified: false, accountless: true };
-  const { live, reason } = probeAccount ? await cachedAccountProof(accountHash, probeAccount)
-    : { live: null, reason: 'prova indisponível' };
-  if (!live) return { ...record, identityVerified: false, identityReason: reason };
-  if (!/^[a-z0-9-]{1,80}$/iu.test(live.userId ?? '') || !/^[a-z0-9-]{1,80}$/iu.test(live.companyId ?? ''))
+  let proof = { live: null, reason: 'prova indisponível' };
+  if (probeAccount) {
+    if (record.target === 'producao') {
+      try { proof = { live: await probeAccount(), reason: 'prova indisponível' }; }
+      catch { /* A leitura de produção recusa sem expor o erro de login. */ }
+    } else proof = await cachedAccountProof(accountHash, probeAccount);
+  }
+  const { live, reason } = proof;
+  if (!live) {
+    if (record.target === 'producao') throw new Error('prova de conta indisponível');
+    return { ...record, identityVerified: false, identityReason: reason };
+  }
+  if (!/^[a-z0-9-]{1,80}$/iu.test(live.userId ?? '') || !/^[a-z0-9-]{1,80}$/iu.test(live.companyId ?? '')) {
+    if (record.target === 'producao') throw new Error('prova de conta indisponível');
     return { ...record, identityVerified: false, identityReason: 'identidade inválida' };
+  }
   if (record.accountProof !== digest([live.userId, live.companyId])) throw new Error('jornada de outra conta');
   return { ...record, identityVerified: true };
 }
