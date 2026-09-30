@@ -86,8 +86,13 @@ export function consolidateEditorialReadings(readings) {
   const dispersao = Object.fromEntries(EDITORIAL_CRITERIA.map((id) => [id, notas[id] === null ? null
     : { minimo: Math.min(...readings.map((item) => item.notas[id])), maximo: Math.max(...readings.map((item) => item.notas[id])) }]));
   const defeitosGraves = SERIOUS_DEFECTS.filter((id) => readings.filter((item) => item.defeitosGraves.includes(id)).length >= 2);
+  const factualCounts = new Map();
+  for (const reading of readings) for (const item of new Set(reading.naoVerificaveis))
+    factualCounts.set(item, (factualCounts.get(item) ?? 0) + 1);
+  const naoVerificaveis = [...factualCounts].filter(([, count]) => count >= 2).map(([item]) => item);
+  const naoVerificaveisIsolados = [...factualCounts].filter(([, count]) => count === 1).map(([item]) => item);
   return { proposito, notas, dispersao, defeitosGraves, naoAplicaveis: readings[0].naoAplicaveis,
-    naoVerificaveis: [], aceite: defeitosGraves.length === 0 && accepted({ notas, defeitosGraves }),
+    naoVerificaveis, naoVerificaveisIsolados, aceite: defeitosGraves.length === 0 && accepted({ notas, defeitosGraves }),
     usage: { input_tokens: readings.reduce((sum, item) => sum + (item.usage?.input_tokens ?? 0), 0),
       output_tokens: readings.reduce((sum, item) => sum + (item.usage?.output_tokens ?? 0), 0) } };
 }
@@ -115,7 +120,8 @@ export function publicCalibrationReport(rows, run) {
       juiz: { aceite: row.juiz.aceite, proposito: row.juiz.proposito ?? null,
         notas: Object.fromEntries(EDITORIAL_CRITERIA.map((id) => [id, row.juiz.notas[id]])),
         naoAplicaveis: row.juiz.naoAplicaveis ?? [], dispersao: row.juiz.dispersao ?? null,
-        defeitosGraves: [...row.juiz.defeitosGraves], naoVerificaveisCount: row.juiz.naoVerificaveis?.length ?? 0 },
+        defeitosGraves: [...row.juiz.defeitosGraves], naoVerificaveisCount: row.juiz.naoVerificaveis?.length ?? 0,
+        naoVerificaveisIsoladosCount: row.juiz.naoVerificaveisIsolados?.length ?? 0 },
       evidencias: row.evidencias ?? null })),
     metricas: aggregateCalibration(rows) };
 }

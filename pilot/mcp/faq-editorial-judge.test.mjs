@@ -107,6 +107,13 @@ test('pendência factual consensual segue para o juiz de fatos sem vazar no rela
   assert.deepEqual(result.naoVerificaveisIsolados, [isolated]);
   assert.deepEqual(result.notas, scores);
   assert.equal(result.aceite, true);
+  const twoReadings = consolidateEditorialReadings([
+    readings[0], readings[1], parseEditorialVerdict(verdict),
+  ]);
+  assert.deepEqual(twoReadings.naoVerificaveis, [factual]);
+  assert.deepEqual(twoReadings.naoVerificaveisIsolados, [isolated]);
+  assert.deepEqual(twoReadings.notas, scores);
+  assert.equal(twoReadings.aceite, true);
   const report = publicCalibrationReport([{ id: 'G01', grupo: 'guardada',
     bruno: { notas: scores, defeitosGraves: [] }, juiz: result }],
   { model: 'mock', inputTokens: 0, outputTokens: 0, costUsd: 0 });
