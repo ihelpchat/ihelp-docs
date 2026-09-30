@@ -20,6 +20,14 @@ test('parsing exige as seis notas inteiras, categorias conhecidas e campos exato
   assert.equal(parseEditorialVerdict(JSON.stringify({ ...verdict, defeitosGraves: ['produto_sem_evidencia'] })).aceite, false);
 });
 
+test('ausência de prova fica separada de contradição factual grave', () => {
+  const unknown = parseEditorialVerdict({ ...verdict, naoVerificaveis: ['O resultado da operação não foi comprovado.'] });
+  assert.equal(unknown.aceite, true);
+  assert.deepEqual(unknown.naoVerificaveis, ['O resultado da operação não foi comprovado.']);
+  assert.equal(parseEditorialVerdict({ ...verdict, naoVerificaveis: [], defeitosGraves: ['contradiz_evidencia'] }).aceite, false);
+  assert.equal(parseEditorialVerdict({ ...verdict, naoVerificaveis: [], defeitosGraves: ['funcao_inexistente'] }).aceite, false);
+});
+
 test('modelo mockado recebe página, módulo e evidências sem notas guardadas', async () => {
   let request;
   const judged = await judgeEditorial({ pagina: 'Um trecho', modulo: 'Robôs', evidencias: { front: [], negocio: [], jornadas: [] } },
