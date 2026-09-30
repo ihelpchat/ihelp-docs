@@ -50,6 +50,15 @@ test('carrega geral e módulo da pasta privada com normalização única', async
   }
 });
 
+test('aceita cabeçalho público formatado em Markdown', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'faq-business-markdown-'));
+  try {
+    await writeFile(join(directory, 'contatos.md'), '# Contatos\n\n> 🟢 **PÚBLICO** — contexto\n\nUso do módulo.');
+    assert.deepEqual((await loadBusinessContext(root, 'Contatos', directory)).map(({ path }) => path),
+      ['business-context/contatos.md']);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test('descarta arquivo interno e sem cabeçalho; mutação geral só sem módulo falha acima', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'faq-business-m566-'));
   const old = process.env.BUSINESS_CONTEXT_DIR;

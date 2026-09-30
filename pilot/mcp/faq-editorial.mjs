@@ -279,7 +279,7 @@ export async function loadBusinessContext(pilotRoot, module, directory = process
     const absolute = join(directory, name);
     if (!(await lstat(absolute)).isFile()) continue;
     const body = await readFile(absolute, 'utf8');
-    if (!/^🟢\s*PÚBLICO\b/mu.test(body)) {
+    if (!/^(?:>\s*)?🟢\s*(?:\*\*)?PÚBLICO\b/mu.test(body)) {
       log(`Contexto ignorado: ${name} (sem cabeçalho público)`);
       continue;
     }
