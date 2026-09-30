@@ -241,12 +241,16 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     try {
       const { recordJourneys } = await import('./journey-runtime.mjs');
       const records = await recordJourneys(module, tasks);
+      const { journeyCoverage } = await import('./journey-service.mjs');
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'success' });
-      return textResult({ tasks: records.map(({ task, status, reason }) => ({ task, status, reason })) });
-    } catch {
-      console.error('gravar_jornada: execução indisponível');
+      return textResult({ tasks: records.map(({ task, status, reason }) => ({ task, status, reason })),
+        coverage: journeyCoverage(records) });
+    } catch (error) {
+      const { journeyFailureCategory, journeyFailureLog } = await import('./journey-service.mjs');
+      console.error(journeyFailureLog(error));
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'failure' });
-      return textResult({ error: 'execução indisponível' }, true);
+      return textResult({ error: journeyFailureCategory(error), tasks: error?.results?.map(({ task, status, reason }) =>
+        ({ task, status, reason })) ?? [] }, true);
     }
   });
 
