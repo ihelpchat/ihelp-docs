@@ -305,10 +305,12 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     await auditOperation(root, { actor: requestedBy, operation: 'ler_jornada', target: auditTarget(module, task), result: 'attempt' });
     try {
       const { readJourney } = await import('./journey-service.mjs');
-      const { configuredJourneyIdentity } = await import('./journey-runtime.mjs');
+      const { configuredJourneyIdentity, probeJourneyAccount } = await import('./journey-runtime.mjs');
       return textResult(await readJourney({ module, task,
-        accountHash: configuredJourneyIdentity(process.env).credentialHash }));
-    } catch { return textResult({ error: 'Jornada indisponível' }, true); }
+        accountHash: configuredJourneyIdentity(process.env).credentialHash,
+        probeAccount: () => probeJourneyAccount(process.env) }));
+    } catch (error) { return textResult({ error: error.message === 'jornada de outra conta'
+      ? 'jornada de outra conta' : 'Jornada indisponível' }, true); }
   });
 
   registerTool('enviar_tela', {

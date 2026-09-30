@@ -377,14 +377,19 @@ export async function saveJourney(root, module, record, images) {
     `${record.task}.${digest(record.configuredIdentityHash)}.latest`), record.cacheKey, { mode: 0o600 });
 }
 
-export async function readJourney({ root = resolve(process.env.MCP_STATE_DIR ?? '/data', 'journeys'), module, task, accountHash }) {
+export async function readJourney({ root = resolve(process.env.MCP_STATE_DIR ?? '/data', 'journeys'), module, task, accountHash, probeAccount }) {
   if (!modules.has(module) || !taskId.test(task) || !task.startsWith(`${module}.`)) throw new Error('tarefa inválida');
   if (!accountHash || typeof accountHash !== 'string') throw new Error('identidade configurada indisponível');
   const key = await readFile(join(root, module, `${task}.${digest(accountHash)}.latest`), 'utf8');
   if (!/^[a-f0-9]{64}$/u.test(key)) throw new Error('cache inválido');
   const record = await loadCache(root, module, task, key);
   if (record?.configuredIdentityHash !== accountHash) throw new Error('identidade configurada divergente');
-  return record;
+  const live = probeAccount ? await probeAccount() : null;
+  if (!live) return { ...record, identityVerified: false };
+  if (!/^[a-z0-9-]{1,80}$/iu.test(live.userId ?? '') || !/^[a-z0-9-]{1,80}$/iu.test(live.companyId ?? ''))
+    throw new Error('identidade autenticada indisponível');
+  if (record.accountProof !== digest([live.userId, live.companyId])) throw new Error('jornada de outra conta');
+  return { ...record, identityVerified: true };
 }
 
 export async function runJourneys({ module, tasks, root = resolve(process.env.MCP_STATE_DIR ?? '/data', 'journeys'), marker = '',

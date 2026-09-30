@@ -1557,7 +1557,7 @@ export function configuredJourneyIdentity(env) {
   ])).digest('hex') };
 }
 
-async function probeJourneyAccount(env) {
+export async function probeJourneyAccount(env) {
   const target = assertAllowedTarget(env.GUIDE_QA_STAGING_URL, env);
   let response;
   try { response = await fetch(target.url, { signal: AbortSignal.timeout(5000) }); }
