@@ -95,6 +95,29 @@ test('request guard falha fechado para saídas, publicação e dados reais', () 
     request('POST', 'api/contacts', '{"numero":"5511998765432"}'),
     request('POST', 'api/robots', '{"active":true}'), request('POST', 'api/webhook', '{}'),
   ]) assert.equal(journeyRequestAllowed(item), false);
+  assert.equal(journeyRequestAllowed(request('POST', 'api/contacts', '{"firstName":"Maria Silva"}')), false);
+  assert.equal(journeyRequestAllowed(request('POST', 'api/bot/fixture-id/save', '{"status":"published"}')), false);
+  assert.equal(journeyRequestAllowed(request('POST', 'api/unknown', '{}')), false);
+});
+
+test('texto sensível da tela nunca chega ao modelo nem ao artefato', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-private-'));
+  const secret = 'Maria Silva maria.silva@gmail.com +55 11 99999-1111';
+  let modelInput = '';
+  const browser = { async open() {}, async observe() { return { ...screen(),
+    controls: [{ role: 'button', name: secret, enabled: true }],
+    fields: [{ role: 'textbox', name: secret, required: false }],
+    messages: [secret], state: { name: secret },
+  }; }, async close() {} };
+  try {
+    const [record] = await runJourneys({ module: 'contatos', tasks: [task('contatos.cadastrar')], root,
+      frontSha: 'a'.repeat(40), profile: 'qa', browser,
+      model: { async decide(input) { modelInput = JSON.stringify(input); return { type: 'finish' }; } },
+      sanitize: async (value) => value });
+    assert.equal(modelInput.includes(secret), false);
+    assert.equal(JSON.stringify(record).includes(secret), false);
+    assert.equal((await readFile(join(root, 'contatos', `contatos.cadastrar.${record.cacheKey}.json`), 'utf8')).includes(secret), false);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('falha de sanitização no segundo passo não grava jornada parcial', async () => {
