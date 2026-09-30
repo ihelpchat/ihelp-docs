@@ -178,6 +178,10 @@ test('ler registro de produção exige prova de conta autenticada antes de devol
     const args = { root, module: 'contatos', task: task.id, accountHash };
     await assert.rejects(service.readJourney(args), /prova de conta/u);
     await assert.rejects(service.readJourney({ ...args, probeAccount: async () => null }), /prova de conta/u);
+    await assert.rejects(service.readJourney({ ...args,
+      probeAccount: async () => ({ userId: '', companyId: '42' }) }), /prova de conta/u);
+    assert.equal(service.journeyReadFailureCategory(new Error('prova de conta indisponível')),
+      'prova de conta indisponível');
     assert.equal((await service.readJourney({ ...args,
       probeAccount: async () => ({ userId: 'user-1', companyId: '42' }) })).identityVerified, true);
   } finally { await rm(root, { recursive: true, force: true }); }

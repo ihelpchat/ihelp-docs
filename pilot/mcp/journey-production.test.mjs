@@ -111,7 +111,11 @@ test('pré-voo só admite leituras exatas e nega GETs com efeito', () => {
 
 test('runner bloqueia GETs com efeito antes e depois do pré-voo', async () => {
   for (const productionReady of [false, true]) {
-    for (const path of ['/api/v2/channel/reconnect-all', '/api/v2/channel/disconnect-all']) {
+    for (const path of ['/api/v2/channel/reconnect-all', '/api/v2/channel/disconnect-all',
+      '/api/v2/channel/%72econnect-all', '/api/v2/contacts/sync-contacts',
+      '/api/v2/contacts/export', '/api/v2/customers/import-backup',
+      '/api/v2/configurations/users/users-connect-sync',
+      '/api/v2/vindiCharges/UpdateEmpresaStatus']) {
       let outcome;
       await handleJourneyRoute({ request: () => ({ method: () => 'GET',
         url: () => `https://api.example.test${path}` }), abort: async () => { outcome = 'abort'; },
