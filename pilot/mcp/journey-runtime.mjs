@@ -208,8 +208,9 @@ function validRobotEvent(event, generated, createdIds, fixedIds) {
     && (event.messages == null && event.groupBlockId == null || /^[a-f0-9]{24}$/u.test(event.groupBlockId ?? '')
     && Array.isArray(event.messages) && event.messages.length > 0 && event.messages.length <= 5
     && event.messages.every((item) => item && typeof item === 'object' && !Array.isArray(item)
-      && Object.keys(item).every((key) => ['message', 'type', 'delay'].includes(key))
-      && generated.has(item.message) && item.type === 0
+      && Object.keys(item).every((key) => ['message', 'type', 'messageType', 'delay'].includes(key))
+      && generated.has(item.message) && (item.type === 0 || item.type == null && item.messageType === 0)
+      && (item.messageType == null || item.messageType === 0)
       && (item.delay == null || Number.isInteger(item.delay) && item.delay >= 0 && item.delay <= 60)));
   if (event.type === 1) return event.configuration == null && Array.isArray(event.botReactionRules) && event.botReactionRules.length > 0
     && event.botReactionRules.length <= 10 && event.botReactionRules.every((rule, index) => rule
@@ -277,9 +278,9 @@ function invalidRobotPath(body, pathRef, generated, createdIds, fixedIds) {
         const messagePath = `${prefix}.messages[${messageIndex}]`;
         if (!message || typeof message !== 'object') return messagePath;
         for (const [messageKey, messageValue] of Object.entries(message))
-          if (!['message', 'type', 'delay'].includes(messageKey)
+          if (!['message', 'type', 'messageType', 'delay'].includes(messageKey)
             || messageKey === 'message' && !generated.has(messageValue)
-            || messageKey === 'type' && messageValue !== 0)
+            || ['type', 'messageType'].includes(messageKey) && messageValue !== 0)
             return `${messagePath}.${safePathKey(messageKey)}`;
       }
       if (key === 'type' && ![0, 1, 3, 4].includes(value)) return `${prefix}.${key}`;
@@ -300,6 +301,17 @@ function invalidRobotPath(body, pathRef, generated, createdIds, fixedIds) {
         }
       }
     }
+    if (event.type === 0 && Array.isArray(event.messages)) {
+      if (!/^[a-f0-9]{24}$/u.test(event.groupBlockId ?? '')) return `${prefix}.groupBlockId`;
+      for (const [messageIndex, message] of event.messages.entries()) {
+        if (message?.type !== 0 && !(message?.type == null && message?.messageType === 0))
+          return `${prefix}.messages[${messageIndex}].type`;
+        if (message?.messageType != null && message.messageType !== 0)
+          return `${prefix}.messages[${messageIndex}].messageType`;
+      }
+    }
+    if (event.type === 1 && (!Array.isArray(event.botReactionRules) || !event.botReactionRules.length))
+      return `${prefix}.botReactionRules`;
     if (!validRobotEvent(event, generated, createdIds, fixedIds)) return prefix;
   }
   return 'botEvents';
@@ -448,7 +460,7 @@ const journeyPlanLabels = ['Informações', 'Editar', 'Editar Nome', 'Editar Pro
   'Selecione um departamento', 'Selecione um usuário (opcional)', 'Adicionar bloco', 'Menu de opções',
   'Ação', 'Encaminhar atendimento', 'Salvar alterações', 'Título do Robô', 'Editar título do Robô',
   'Criar novo robô', 'Buscar robô', 'Adicionar opção +', 'Bloco de pergunta',
-  'Mensagem de onboarding', 'Mensagem', 'Adicione uma opção', 'Voltar para lista',
+  'Mensagem de onboarding', 'Mensagem', 'Enviar mensagem', 'Adicione uma opção', 'Voltar para lista',
   'Fluxo de Robô', 'Contatos', 'Configurações'];
 export function journeyVocabulary(facts, screenCode = []) {
   const words = facts.flatMap((fact) => [fact.text, fact.message]);
@@ -493,6 +505,9 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
       : node.tagName === 'A' && ['Fluxo de Robô', 'Contatos', 'Configurações'].includes(node.innerText?.trim())
         ? node.innerText.trim()
       : node.tagName === 'INPUT' && node.getAttribute('placeholder') === 'Buscar robô' ? 'Buscar robô'
+      : node.tagName === 'BUTTON' && !node.textContent?.trim()
+        && node.parentElement?.querySelector('textarea') && node.querySelector('svg')
+        ? 'Enviar mensagem'
       : node.tagName === 'BUTTON' && !node.textContent?.trim()
         && node.closest('.react-flow__node') && node.classList.contains('absolute') && node.querySelector('svg')
         ? 'Adicionar bloco'
@@ -625,7 +640,8 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
   const matches = fresh.controls.filter((control) => control.role === action.role && control.name === action.name);
   if (matches.length !== 1 || !matches[0].enabled || !fresh.targets[journeyTargetKey(action.role, action.name)]) throw changed();
   const selected = fresh.targets[journeyTargetKey(action.role, action.name)];
-  const exactBlock = action.type === 'click' && action.role === 'button' && action.name === 'Adicionar bloco'
+  const exactBlock = action.type === 'click' && action.role === 'button'
+    && /^Adicionar bloco(?: \(cabeçalho(?: \d+)?\))?$/u.test(action.name)
     ? page.locator('button').filter({ hasText: /^Adicionar bloco$/u }) : null;
   const sidebarBlock = action.type === 'click' && action.role === 'button'
     && /^Adicionar bloco \(cabeçalho(?: \d+)?\)$/u.test(action.name)
@@ -676,7 +692,7 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
 }
 
 export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, expectedValue, expectedExtra,
-  screenTimeoutMs = 10_000, getPersisted }) {
+  screenTimeoutMs = 10_000, getPersisted, fixtureIds = {}, beforeEventRefs = new Set(), requiredEventRefs = null }) {
   if (refs.length !== 1 || !/^[a-z0-9-]{1,80}$/iu.test(refs[0]))
     return { confirmed: false, observed: 'ref' };
   if (task.id === 'robos.criar' && new URL(page.url()).pathname !== `/bot/${refs[0]}`)
@@ -739,10 +755,6 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
     confirmed = confirmed && await page.getByText(expectedExtra, { exact: true }).count() > 0;
   if (task.id === 'contatos.definir_responsavel') confirmed = confirmed
     && await page.getByText('Proprietário do Contato', { exact: true }).count() === 1;
-  if (task.id === 'robos.montar_menu') confirmed = confirmed && await page.getByText('Menu de opções', { exact: true }).count() > 0;
-  if (task.id === 'robos.encaminhar') confirmed = confirmed && await page.getByText('Encaminhar atendimento', { exact: true }).count() > 0;
-  if (task.id === 'robos.salvar') confirmed = confirmed
-    && await page.getByText('Menu de opções', { exact: true }).count() > 0;
   let recordId;
   let persistedCapture;
   if (task.modulo === 'robos') {
@@ -769,16 +781,42 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
         return { confirmed: false, observed: 'ref', persistedCapture };
       recordId = persisted.id;
     }
-    if (['robos.montar_menu', 'robos.encaminhar', 'robos.salvar'].includes(task.id)) {
+    const generated = new Set(['menuQuestion', 'menuOption', 'tagName'].flatMap((kind) =>
+      Array.from({ length: 99 }, (_, index) => fixtureValue(kind, index + 1))));
+    const fresh = events.filter((event) => !beforeEventRefs.has(event.idRef));
+    if (task.id === 'robos.montar_menu') {
       const ids = new Set(events.map((event) => event.idRef));
-      const menus = events.filter((event) => event.type === 1 && Array.isArray(event.botReactionRules)
-        && event.botReactionRules.length >= 2 && new Set(event.botReactionRules.map((rule) => rule.message)).size === event.botReactionRules.length
-        && event.botReactionRules.every((rule) => ids.has(rule.botEventRedirectRef)));
-      confirmed = confirmed && menus.length > 0;
-      if (task.id === 'robos.encaminhar') confirmed = confirmed && menus.some((menu) =>
-        menu.botReactionRules.some((rule) => events.some((event) => event.idRef === rule.botEventRedirectRef
-          && event.type === 4 && /^\s*\{\s*"(?:DepartmentId|Users)"/u.test(event.configuration ?? ''))));
+      const menus = fresh.filter((event) => event.type === 1);
+      const withMessage = menus.filter((event) => generated.has(event.message));
+      if (!withMessage.length)
+        return { confirmed: false, observed: 'menu: mensagem', persistedCapture };
+      const withOptions = withMessage.filter((event) => Array.isArray(event.botReactionRules) && event.botReactionRules.length >= 2
+        && new Set(event.botReactionRules.map((rule) => rule.message)).size === event.botReactionRules.length
+        && event.botReactionRules.every((rule) => generated.has(rule.message)));
+      if (!withOptions.length)
+        return { confirmed: false, observed: 'menu: opções', persistedCapture };
+      if (!withOptions.some((event) => event.botReactionRules.every((rule) => ids.has(rule.botEventRedirectRef))))
+        return { confirmed: false, observed: 'menu: destino', persistedCapture };
     }
+    const fixtureTransfer = (event) => {
+      if (event.type !== 4) return false;
+      try {
+        const config = JSON.parse(event.configuration);
+        return fixtureIds.department?.has(config.DepartmentId)
+          || Array.isArray(config.Users) && config.Users.length > 0
+            && config.Users.every((user) => fixtureIds.user?.has(user.id));
+      } catch { return false; }
+    };
+    if (task.id === 'robos.encaminhar' && !fresh.some(fixtureTransfer))
+      return { confirmed: false, observed: 'encaminhamento: destino', persistedCapture };
+    if (task.id === 'robos.salvar' && (requiredEventRefs && (!requiredEventRefs.size
+      || [...requiredEventRefs].some((ref) => !events.some((event) => event.idRef === ref)))
+      || !events.some((event) => event.type === 0
+        && event.messages?.some((message) => generated.has(message.message)) || fixtureTransfer(event))))
+      return { confirmed: false, observed: 'salvar: blocos', persistedCapture };
+    if (['robos.montar_menu', 'robos.encaminhar'].includes(task.id))
+      return { confirmed, observed: confirmed ? 'Ficha única reaberta com valor esperado' : 'Ficha reaberta sem valor esperado',
+        persistedCapture, newEventRefs: fresh.map((event) => event.idRef) };
   }
   return { confirmed, observed: confirmed ? 'Ficha única reaberta com valor esperado' : 'Ficha reaberta sem valor esperado',
     recordId, ...(persistedCapture ? { persistedCapture } : {}) };
@@ -872,6 +910,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
   let ownerProbe = null;
   let tagWriteStatus = null;
   let tagLinkStatus = null;
+  let beforeBotEventRefs = new Set();
+  const sessionFlowEventRefs = new Set();
   let menuProbe = null;
   let contactSnapshot = null;
   let beforeTagIds = new Set();
@@ -930,6 +970,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       tagLinkStatus = null;
       menuProbe = null;
       contactSnapshot = null;
+      beforeBotEventRefs = new Set();
       beforeTagIds = new Set();
       creationResults.length = 0;
       thirdPartyDenied = {};
@@ -1134,6 +1175,14 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       });
       for (const kind of ['department', 'channel', 'user', 'tag'])
         for (const id of loaded.fixedIds[kind]) fixedIds[kind].add(id);
+      if (task.modulo === 'robos' && ['robos.montar_menu', 'robos.encaminhar', 'robos.salvar'].includes(task.id)) {
+        const response = await authenticatedGet(`/bot/${prepared.robotRef}`);
+        const bot = response.body?.dados?.bot ?? response.body?.dados ?? response.body;
+        if (response.status !== 200 || bot?.idRef !== prepared.robotRef || !Array.isArray(bot.botEvents))
+          throw new Error('robô de preparo indisponível');
+        beforeBotEventRefs = new Set(bot.botEvents.map((event) => event.idRef));
+        if (Number.isSafeInteger(bot.empresaId) && bot.empresaId > 0) fixedIds.company.add(bot.empresaId);
+      }
       let environmentBlocked = null;
       if (task.id === 'contatos.importar') {
         const status = await authenticatedGet('/contacts/import');
@@ -1414,7 +1463,11 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         await page.waitForURL(new RegExp(`/bot/${refs[0]}/?$`, 'u'), { timeout: 5_000 }).catch(() => {});
       const checked = await verifyUniqueRecord({ page, task, refs,
         targetUrl: target.url, name, expectedValue, expectedExtra,
+        fixtureIds: fixedIds, beforeEventRefs: beforeBotEventRefs,
+        requiredEventRefs: task.id === 'robos.salvar' ? sessionFlowEventRefs : null,
         getPersisted: task.modulo === 'robos' ? authenticatedGet : undefined });
+      if (checked.confirmed && Array.isArray(checked.newEventRefs))
+        for (const ref of checked.newEventRefs) sessionFlowEventRefs.add(ref);
       if (task.id === 'contatos.definir_responsavel' && checked.confirmed) {
         const response = await authenticatedGet(`/contacts/details/${refs[0]}`);
         const details = response?.body?.dados ?? response?.body;
