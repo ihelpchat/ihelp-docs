@@ -312,7 +312,7 @@ export async function loadQaFixtureIds(get) {
   for (const [kind, path] of [['department', '/configurations/departments'],
     ['channel', '/configurations/channels'], ['user', '/configurations/users'], ['tag', '/tags']]) {
     const payload = await get(path);
-    const rows = payload?.dados;
+    const rows = Array.isArray(payload) && kind === 'tag' ? payload : payload?.dados;
     if (!Array.isArray(rows) || rows.length > 5000 || rows.some((row) =>
       !Number.isSafeInteger(row?.id) || row.id <= 0)) throw new Error('IDs de QA inválidos');
     fixedIds[kind] = new Set(rows.map((row) => row.id));
@@ -391,6 +391,7 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
       headings: [...document.querySelectorAll('h1,h2,h3')].filter(visible).map((node) => compact(node.textContent)).join(' | ').slice(0, 180) };
   }, journeyControlSelector);
   const known = new Set([...vocabulary, 'Buscar contato...', 'Mais opções', 'Exportar Contatos', 'Importar Contatos']);
+  const knownFolded = new Set([...known].map((value) => value.toLocaleLowerCase('pt-BR')));
   const targets = {};
   const controls = [];
   const fields = [];
@@ -415,7 +416,8 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
     }
     const generatedSelection = node.role === 'checkbox' && [...generated].some((value) =>
       /^Contato Exemplo/u.test(value) && node.name === `Selecionar ${value}`);
-    if (!generatedSelection && !known.has(node.name) && !generated.has(node.name) && !known.has(name) && !generated.has(name)) {
+    if (!generatedSelection && !knownFolded.has(node.name.toLocaleLowerCase('pt-BR'))
+      && !generated.has(node.name) && !knownFolded.has(name.toLocaleLowerCase('pt-BR')) && !generated.has(name)) {
       if (node.field) name = `campo ${fieldNumber} do formulário (${node.role === 'combobox' ? 'seleção'
         : ({ tel: 'telefone', email: 'e-mail', date: 'data' }[node.type] ?? 'texto')})`;
       else if (node.role !== 'option') continue;
