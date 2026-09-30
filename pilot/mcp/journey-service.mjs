@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-3';
+export const JOURNEY_POLICY_VERSION = 'm571-4';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -13,7 +13,7 @@ const normalized = (value) => String(value ?? '').normalize('NFD').replace(/\p{D
 const deny = (reason) => ({ allowed: false, reason });
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
-// 20255501NN is in the NANP 555-0100..0199 fictional range. Never dial it.
+// Ofcom drama range 020 7946 0000..0999. Never dial it.
 export function fixtureValue(kind, n = 1, marker = '') {
   if (!Number.isInteger(n) || n < 1 || n > 99) throw new Error('índice fictício inválido');
   if (marker && !/^[a-f0-9]{8}$/u.test(marker)) throw new Error('marcador fictício inválido');
@@ -28,13 +28,17 @@ export function fixtureValue(kind, n = 1, marker = '') {
   if (kind === 'departmentName') return `Departamento Exemplo ${suffix}`;
   if (kind === 'userName') return `Atendente Exemplo ${suffix}`;
   if (kind === 'email') return `contato${suffix}@example.com`;
-  if (kind === 'phone') return `+1 202 555 01${suffix}`;
+  if (kind === 'phone') {
+    const offset = marker ? Number.parseInt(marker, 16) % 1000 : 0;
+    return `+44 20 7946 0${String((offset + n - 1) % 1000).padStart(3, '0')}`;
+  }
   throw new Error('tipo fictício inválido');
 }
 const generatedValues = () => new Set(['contactName', 'editedName', 'robotName', 'tagName', 'menuQuestion',
   'menuOption', 'departmentName', 'userName', 'email', 'phone']
   .flatMap((kind) => Array.from({ length: 99 }, (_, index) => fixtureValue(kind, index + 1))));
 const fixtureValues = generatedValues();
+const fictionalPhone = /^\+44 20 7946 0\d{3}$/u;
 class SanitizationError extends Error {}
 
 export function journeyFailureCategory(error) {
@@ -76,7 +80,8 @@ export function policyDecision(action, generated = fixtureValues) {
 
 function safeString(value) {
   if (typeof value !== 'string' || value.length > 180 || /[\r\n<>]/u.test(value)
-    || !fixtureValues.has(value) && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
+    || !fixtureValues.has(value) && !fictionalPhone.test(value)
+      && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
       && containsSensitiveData(value, { detectOpaque: true })) throw new Error('sanitização falhou');
   return value;
 }
@@ -85,7 +90,8 @@ const commonLabels = new Set(['Adicionar Contato', 'Importar Contatos', 'Exporta
 const personLike = /\b[\p{Lu}][\p{Ll}]{2,}\s+[\p{Lu}][\p{Ll}]{2,}\b/u;
 function screenString(value, allowedLabels) {
   if (typeof value !== 'string' || value.length > 180 || /[\r\n<>]/u.test(value)) throw new Error('sanitização falhou');
-  return !fixtureValues.has(value) && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
+  return !fixtureValues.has(value) && !fictionalPhone.test(value)
+    && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
     && (containsSensitiveData(value, { detectOpaque: true })
       || personLike.test(value) && !allowedLabels.has(value) && !commonLabels.has(value))
     ? '[conteúdo oculto]' : value;
@@ -112,7 +118,8 @@ function safeJourney(record) {
   const copy = structuredClone(record);
   const check = (value) => {
     if (typeof value === 'string' && !sha.test(value) && !/^[a-f0-9]{64}$/u.test(value)
-      && !fixtureValues.has(value) && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
+      && !fixtureValues.has(value) && !fictionalPhone.test(value)
+      && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
       && containsSensitiveData(value, { detectOpaque: true })) throw new Error('sanitização falhou');
     if (Array.isArray(value)) value.forEach(check);
     else if (value && typeof value === 'object') Object.values(value).forEach(check);
@@ -200,9 +207,9 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
   ].find(([, failed]) => failed)?.[0];
   if (invalid) throw new Error(`${invalid} ausente`);
   const fixtureFor = (kind, n = 1) => fixtureValue(kind, n, marker);
-  const generated = marker ? new Set([...fixtureValues, ...['contactName', 'editedName', 'robotName', 'tagName',
-    'menuQuestion', 'menuOption', 'departmentName', 'userName']
-    .flatMap((kind) => Array.from({ length: 99 }, (_, index) => fixtureFor(kind, index + 1)))]) : fixtureValues;
+  const generated = marker ? new Set(['contactName', 'editedName', 'robotName', 'tagName',
+    'menuQuestion', 'menuOption', 'departmentName', 'userName', 'email', 'phone']
+    .flatMap((kind) => Array.from({ length: 99 }, (_, index) => fixtureFor(kind, index + 1)))) : fixtureValues;
   const results = [];
   const prepared = {};
   let moduleActions = 0;
@@ -218,6 +225,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       fixtures: Object.values(prepared), marker, actions: [], screens: [], before: null, after: null,
       expected: task.resultadoEsperadoObservavel, observed: null, verification: null, created: {},
       status: 'inconclusiva', reason: null, limits: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd },
+      blocked: null,
       usage: { actions: 0, costUsd: 0, elapsedMs: 0 }, cacheKey: key, policyVersion: JOURNEY_POLICY_VERSION };
     const images = [];
     if (task.id === 'robos.publicar_ativar' || task.id === 'contatos.agendar_mensagem') {
@@ -227,7 +235,8 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
     } else {
       let opened = false;
       try {
-        await browser.open(task, prepared); opened = true;
+        const openedFixtures = await browser.open(task, prepared); opened = true;
+        if (Array.isArray(openedFixtures?.fixtures)) record.fixtures.push(...openedFixtures.fixtures);
         for (let index = 0; index < maxActionsPerTask; index++) {
           if (moduleActions >= maxActionsPerModule || Date.now() - started > maxMs || costUsd >= maxCostUsd) {
             record.reason = 'limite da execução atingido'; break;
@@ -247,6 +256,13 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             !record.screens.at(-1).controls.some((old) => old.role === control.role && old.name === control.name));
           record.screens.push(screen);
           images.push([screenshotId, sanitized.screenshot]);
+          const validation = screen.messages.find((message) => /^(?:Informe o telefone com DDD|Já existe um contato com este número de telefone|O telefone é obrigatório|Precisa ter pelo menos um canal)$/iu.test(message));
+          if (validation) {
+            record.status = 'falhou';
+            record.reason = `validação do formulário: ${validation}`;
+            record.observed = validation;
+            break;
+          }
           const decision = await model.decide({ task: { id: task.id, objective: task.tarefa, expected: record.expected,
             verification: task.verificacaoM571 }, screen, actions: record.actions,
           });
@@ -268,14 +284,6 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             record.after = sanitized.state;
             record.status = checked.confirmed ? 'concluída' : 'inconclusiva';
             record.reason = checked.confirmed ? null : 'resultado não conferido';
-            if (!checked.confirmed && task.modulo === 'contatos') {
-              const validation = screen.messages.find((message) => /telefone|número|numero/iu.test(message)
-                && /inválid|invalid|formato|aceit|recus/iu.test(message));
-              if (validation) {
-                record.reason = 'formato de telefone recusado';
-                record.observed = validation;
-              }
-            }
             if (checked.confirmed && checked.created) {
               if (Object.values(checked.created).some((value) => !generated.has(value))) throw new SanitizationError('dado de preparo inválido');
               record.created = checked.created;
@@ -295,6 +303,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       } catch (error) {
         record.status = /escrita bloqueada pela política/iu.test(String(error?.message ?? '')) ? 'bloqueada' : 'inconclusiva';
         record.reason = record.status === 'bloqueada' ? 'escrita bloqueada pela política' : journeyFailureCategory(error);
+        if (record.status === 'bloqueada' && error.blocked) record.blocked = error.blocked;
         if (error instanceof SanitizationError) {
           record.screens = []; record.before = null; record.after = null; images.length = 0;
         }
