@@ -47,6 +47,7 @@ async function evidenceFor(sample) {
 
 async function run(model) {
   let inputTokens = 0, outputTokens = 0;
+  let invalidResponseRetries = 0;
   const rows = [];
   for (const sample of samples) {
     const note = notesById.get(sample.id);
@@ -64,12 +65,20 @@ async function run(model) {
     try {
       const readings = [];
       for (let i = 0; i < 3; i += 1) {
-        readings.push(await judgeEditorial({ pagina: sample.texto, modulo: sample.modulo, evidencias: evidence,
-          proposito: readings[0]?.proposito },
-        async ({ instructions, input, schema }) => client.responses.create({ model, instructions, input,
-          reasoning: { effort: 'none' },
-          text: { format: { type: 'json_schema', name: 'faq_editorial_verdict', strict: true, schema } },
-          max_output_tokens: 4000 })));
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            readings.push(await judgeEditorial({ pagina: sample.texto, modulo: sample.modulo, evidencias: evidence,
+              proposito: readings[0]?.proposito },
+            async ({ instructions, input, schema }) => client.responses.create({ model, instructions, input,
+              reasoning: { effort: 'none' },
+              text: { format: { type: 'json_schema', name: 'faq_editorial_verdict', strict: true, schema } },
+              max_output_tokens: 4000 })));
+            break;
+          } catch (error) {
+            if (attempt || !(error instanceof SyntaxError || error.message === 'veredito editorial inválido')) throw error;
+            invalidResponseRetries += 1;
+          }
+        }
       }
       judge = consolidateEditorialReadings(readings);
     } catch (error) {
@@ -85,7 +94,7 @@ async function run(model) {
     Number(process.env.JUDGE_OUTPUT_USD_PER_MILLION)];
   const costUsd = Number.isFinite(inputRate) && Number.isFinite(outputRate)
     ? (inputTokens * inputRate + outputTokens * outputRate) / 1_000_000 : null;
-  return publicCalibrationReport(rows, { model, inputTokens, outputTokens, costUsd });
+  return publicCalibrationReport(rows, { model, inputTokens, outputTokens, costUsd, invalidResponseRetries });
 }
 
 function display(report) {

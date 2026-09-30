@@ -107,7 +107,8 @@ export function aggregateCalibration(rows) {
 
 export function publicCalibrationReport(rows, run) {
   return { versao: rubric.versao, modelo: run.model,
-    uso: { inputTokens: run.inputTokens, outputTokens: run.outputTokens, custoEstimadoUsd: run.costUsd },
+    uso: { inputTokens: run.inputTokens, outputTokens: run.outputTokens, custoEstimadoUsd: run.costUsd,
+      respostasInvalidasRepetidas: run.invalidResponseRetries ?? 0 },
     amostras: rows.map((row) => ({ id: row.id, grupo: row.grupo,
       bruno: { aceite: accepted(row.bruno), notas: Object.fromEntries(EDITORIAL_CRITERIA.map((id) => [id, row.bruno.notas[id]])),
         defeitosGraves: [...(row.bruno.defeitosGraves ?? [])] },
