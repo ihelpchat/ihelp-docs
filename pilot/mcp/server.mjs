@@ -17,6 +17,7 @@ import { syncBusinessContext } from './business-context-sync.mjs';
 import { envCompatibility } from './env-compat.mjs';
 
 const auditTarget = (module, topic) => `sha256:${createHash('sha256').update(`${module}:${topic}`).digest('hex')}`;
+let journeyRunning = false;
 const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto']);
 const requestedBySchema = z.string().optional().describe('Ator opcional; se informado, deve coincidir com o ator da credencial');
 const confirmationsSchema = z.array(z.string().max(300)).max(8).optional();
@@ -60,6 +61,10 @@ export function journeyTaskSummary(record) {
     ...(record.createdRef ? { createdRef: record.createdRef } : {}),
     ...(record.saveOutcome ? { saveOutcome: record.saveOutcome } : {}),
     ...(record.saveMessages ? { saveMessages: record.saveMessages } : {}),
+    ...(record.searchProbe ? { searchProbe: record.searchProbe } : {}),
+    ...(record.ownerProbe ? { ownerProbe: record.ownerProbe } : {}),
+    ...(record.menuProbe ? { menuProbe: record.menuProbe } : {}),
+    ...(record.tagProbe ? { tagProbe: record.tagProbe } : {}),
     ...(record.actionError ? { actionError: record.actionError } : {}) };
 }
 
@@ -261,20 +266,26 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     }),
   }, async ({ module, tasks, requestedBy }) => {
     if (!requestIdentity.getStore()) return textResult({ error: 'unauthorized' }, true);
+    if (journeyRunning) return textResult({ error: 'ocupado' }, true);
+    journeyRunning = true;
+    const started = Date.now();
     const target = auditTarget(module, (tasks ?? []).join(','));
-    await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'attempt' });
     try {
+      await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'attempt' });
       const { recordJourneys } = await import('./journey-runtime.mjs');
       const records = await recordJourneys(module, tasks);
       const { journeyCoverage } = await import('./journey-service.mjs');
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'success' });
       return textResult({ tasks: records.map(journeyTaskSummary),
-        coverage: journeyCoverage(records) });
+        coverage: journeyCoverage(records), elapsedMs: Date.now() - started });
     } catch (error) {
       const { journeyFailureCategory, journeyFailureLog } = await import('./journey-service.mjs');
       console.error(journeyFailureLog(error));
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'failure' });
-      return textResult({ error: journeyFailureCategory(error), tasks: error?.results?.map(journeyTaskSummary) ?? [] }, true);
+      return textResult({ error: journeyFailureCategory(error), tasks: error?.results?.map(journeyTaskSummary) ?? [],
+        elapsedMs: Date.now() - started }, true);
+    } finally {
+      journeyRunning = false;
     }
   });
 

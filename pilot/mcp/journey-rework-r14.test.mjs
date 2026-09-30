@@ -3,9 +3,56 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { chromium } from 'playwright-core';
+import { chromeExecutablePath } from '../scripts/visual/measure.mjs';
 import * as service from './journey-service.mjs';
+import { journeyRequestAllowed, configuredJourneyIdentity, observeJourneyDom } from './journey-runtime.mjs';
 
 const { runJourneys, fixtureValue } = service;
+
+test('plano de criação escolhe controles por papel e nome sem chamar modelo', () => {
+  const screen = { controls: [{ role: 'button', name: 'Criar novo robô', enabled: true },
+    { role: 'textbox', name: 'Título do Robô', enabled: true }],
+  fields: [{ role: 'textbox', name: 'Título do Robô', value: null }] };
+  assert.deepEqual(service.plannedJourneyAction('robos.criar', screen, []),
+    { type: 'click', role: 'button', name: 'Criar novo robô', value: null });
+  assert.deepEqual(service.plannedJourneyAction('robos.criar', screen,
+    [{ type: 'click', role: 'button', name: 'Criar novo robô' }]),
+  { type: 'fill', role: 'textbox', name: 'Título do Robô', value: fixtureValue('robotName') });
+});
+
+test('menu preenche a segunda opção sem sobrescrever a primeira', () => {
+  const first = fixtureValue('menuOption', 1);
+  const second = fixtureValue('menuOption', 2);
+  const actions = [{ type: 'click', name: 'Fluxo de Robô' }, { type: 'click', name: 'Adicionar bloco' },
+    { type: 'click', name: 'Menu de opções' }, { type: 'fill', name: 'Mensagem de onboarding', value: fixtureValue('menuQuestion') },
+    { type: 'fill', name: 'Mensagem', value: fixtureValue('menuQuestion') },
+    { type: 'click', name: 'Adicionar opção +' }, { type: 'fill', name: 'Adicione uma opção', value: first },
+    { type: 'click', name: 'Adicionar opção +' }];
+  const screen = { controls: [], fields: [
+    { role: 'textbox', name: 'Adicione uma opção (cabeçalho)', value: first },
+    { role: 'textbox', name: 'Adicione uma opção (cabeçalho 2)', value: null }] };
+  assert.deepEqual(service.plannedJourneyAction('robos.montar_menu', screen, actions),
+    { type: 'fill', role: 'textbox', name: 'Adicione uma opção (cabeçalho 2)', value: second });
+});
+
+test('edição do título encerra pelo blur sem salvar o fluxo', () => {
+  const actions = [{ type: 'click', name: 'Fluxo de Robô' }, { type: 'click', name: 'Editar título do Robô' },
+    { type: 'fill', name: 'Digite o título do robô', value: fixtureValue('robotName', 2) }];
+  const screen = { controls: [{ role: 'button', name: 'Voltar para lista', enabled: true }], fields: [] };
+  assert.deepEqual(service.plannedJourneyAction('robos.editar', screen, actions),
+    { type: 'click', role: 'button', name: 'Voltar para lista', value: null });
+});
+
+test('botão da opção usa o texto próprio apesar do rótulo anterior', async () => {
+  const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<label>Opções</label><button>Adicionar opção +</button>');
+    const screen = await observeJourneyDom(page, { vocabulary: ['Opções', 'Adicionar opção +'] });
+    assert.ok(screen.controls.some((item) => item.role === 'button' && item.name === 'Adicionar opção +'));
+  } finally { await browser.close(); }
+});
 
 const task = { id: 'contatos.cadastrar', modulo: 'contatos', tarefa: 'Criar contato' };
 const marker = 'a1b2c3d4';
@@ -40,6 +87,36 @@ test('cache da credencial configurada funciona sem homologação e outra credenc
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('identidade configurada depende de host, e-mail e senha sem login', () => {
+  const env = { GUIDE_QA_STAGING_URL: 'https://qa.example.test', GUIDE_QA_ALLOWED_HOSTS: 'qa.example.test',
+    GUIDE_QA_AUTHORIZED_EMAIL: 'Qa@example.com', GUIDE_QA_AUTHORIZED_PASSWORD: 'fixture-pass' };
+  const first = configuredJourneyIdentity(env).credentialHash;
+  assert.match(first, /^[a-f0-9]{64}$/u);
+  assert.equal(configuredJourneyIdentity({ ...env, GUIDE_QA_AUTHORIZED_EMAIL: 'qa@example.com' }).credentialHash, first);
+  assert.notEqual(configuredJourneyIdentity({ ...env, GUIDE_QA_AUTHORIZED_PASSWORD: 'new-pass' }).credentialHash, first);
+  assert.notEqual(configuredJourneyIdentity({ ...env, GUIDE_QA_STAGING_URL: 'https://other.example.test',
+    GUIDE_QA_ALLOWED_HOSTS: 'other.example.test' }).credentialHash, first);
+});
+
+test('PUT multipart de responsável aceita apenas contato original e IDs de fixtures', () => {
+  const name = fixtureValue('contactName'); const phone = fixtureValue('phone');
+  const snapshot = { idRef: 'ref-1', nome: name, telefoneId: 2, telefone: phone,
+    emailId: 3, email: fixtureValue('email'), responsibleUsers: [] };
+  const body = { Nome: name, ContatoTelefones: [{ Id: 2, Numero: phone, TipoTelefone: 1 }],
+    ContatoEmails: [{ Id: 3, Email: snapshot.email }],
+    ContatoResponsaveis: [{ id: null, DepartmentId: 7, UserId: 8 }] };
+  const request = (value) => ({ method: () => 'PUT', url: () => 'https://qa.example.test/api/v2/contacts/ref-1',
+    postData: () => `--fixture\r\nContent-Disposition: form-data; name="contato"\r\n\r\n${JSON.stringify(value)}\r\n--fixture--\r\n` });
+  const context = { apiOrigin: 'https://qa.example.test', taskId: 'contatos.definir_responsavel',
+    generated: new Set([name, phone, snapshot.email]), createdIds: new Set(['ref-1']), contactSnapshot: snapshot,
+    fixedIds: { department: new Set([7]), user: new Set([8]) } };
+  assert.equal(journeyRequestAllowed(request(body), context), true);
+  assert.equal(journeyRequestAllowed(request({ ...body, Nome: 'Pessoa Real' }), context), false);
+  assert.equal(journeyRequestAllowed(request({ ...body, ContatoTelefones: [] }), context), false);
+  assert.equal(journeyRequestAllowed(request({ ...body,
+    ContatoResponsaveis: [{ id: null, DepartmentId: 70, UserId: 8 }] }), context), false);
+});
+
 test('sanitização rejeita createdRef antes de gravar qualquer arquivo', async () => {
   const root = await mkdtemp(join(tmpdir(), 'journey-r14-sanitize-'));
   try {
@@ -47,5 +124,19 @@ test('sanitização rejeita createdRef antes de gravar qualquer arquivo', async 
     await assert.rejects(service.saveJourney(root, 'contatos', { task: task.id, cacheKey: 'a'.repeat(64),
       createdRef: 'alguem@example.com' }, [['a'.repeat(64), Buffer.from('masked')]]), /sanitização falhou/);
     assert.deepEqual(await readdir(join(root, 'contatos')).catch((error) => error.code === 'ENOENT' ? [] : Promise.reject(error)), []);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('sessão ativa bloqueia a tarefa sem clicar em desconectar', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-r14-session-'));
+  let actions = 0;
+  try {
+    const [record] = await runJourneys({ module: 'contatos', tasks: [task], root, marker,
+      frontSha: 'a'.repeat(40), profile: 'qa', model,
+      browser: { async open() { const error = new Error('sessão ativa'); error.code = 'QA_SESSION_ACTIVE'; throw error; },
+        async act() { actions++; }, async close() {} } });
+    assert.equal(record.status, 'bloqueada');
+    assert.equal(record.reason, 'ambiente: sessão ativa');
+    assert.equal(actions, 0);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

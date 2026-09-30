@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import ts from 'typescript';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -79,12 +79,12 @@ export function verifyExportRows(sheet, strings, allowedNames) {
   }
   return found.size === allowedNames.size;
 }
-export function exportActionForScreen(screen, name, actions = []) {
+export function exportActionForScreen(screen, name, actions = [], searchTerm = name) {
   if (actions.some((action) => action.type === 'click' && /exportar contatos/iu.test(action.name)))
     return { type: 'finish', role: null, name: null, value: null };
   const search = screen.fields?.find((field) => field.role === 'textbox' && /buscar contato/iu.test(field.name));
   if (!search) return null;
-  if (search.value !== name) return { type: 'fill', role: 'textbox', name: search.name, value: name };
+  if (search.value !== searchTerm) return { type: 'fill', role: 'textbox', name: search.name, value: searchTerm };
   if (screen.state?.visibleRows !== '1' || screen.state?.generatedRows !== '1') return null;
   const selected = screen.controls?.find((control) => control.role === 'checkbox' && control.name === `Selecionar ${name}`);
   if (!selected?.enabled) return null;
@@ -112,7 +112,11 @@ const writeRules = {
     keys: ['nome', 'contatoTelefones', 'contatoEmails'], nested: ['numero', 'tipoTelefone', 'email'], required: ['nome', 'contatoTelefones'] }],
   'contatos.editar': [{ method: 'PUT', path: /^\/contacts\/field\/?$/iu,
     keys: ['idRef', 'type', 'fieldName', 'value'], required: ['idRef', 'type', 'fieldName', 'value'] }],
-  'contatos.definir_responsavel': [{ method: 'PUT', path: /^\/contacts\/([a-z0-9-]+)\/owner\/?$/iu, keys: ['departmentId', 'userId'] }],
+  'contatos.definir_responsavel': [
+    { method: 'PUT', path: /^\/contacts\/([a-z0-9-]+)\/owner\/?$/iu, keys: ['departmentId', 'userId'] },
+    { method: 'PUT', path: /^\/contacts\/([a-z0-9-]+)\/?$/iu,
+      keys: ['Nome', 'ContatoTelefones', 'ContatoEmails', 'ContatoResponsaveis'] },
+  ],
   'contatos.marcar_tags': [
     { method: 'POST', path: /^\/tags\/?$/iu, keys: ['nome'] },
     { method: 'POST', path: /^\/contactTags\/([0-9]+)\/?$/iu, keys: ['contatoId', 'tagsId'] },
@@ -228,7 +232,28 @@ function validRobotSave(body, pathRef, generated, createdIds, fixedIds) {
     && Array.isArray(body.botEvents) && body.botEvents.length > 0 && body.botEvents.length <= 30
     && body.botEvents.every((event) => validRobotEvent(event, generated, createdIds, fixedIds));
 }
-export function journeyRequestAllowed(request, { taskId, apiOrigin, generated = new Set(), createdIds = new Set(), fixedIds = {} } = {}) {
+function validContactOwnerPut(body, snapshot, generated, fixedIds) {
+  if (!snapshot || !body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const expectedKeys = ['Nome', 'ContatoTelefones', 'ContatoEmails', 'ContatoResponsaveis'];
+  if (Object.keys(body).sort().join('|') !== expectedKeys.sort().join('|')
+    || body.Nome !== snapshot.nome || !generated.has(body.Nome)) return false;
+  const expectedPhones = snapshot.telefoneId ? [{ Id: snapshot.telefoneId, Numero: snapshot.telefone, TipoTelefone: 1 }] : [];
+  const expectedEmails = snapshot.emailId ? [{ Id: snapshot.emailId, Email: snapshot.email }] : [];
+  if (expectedPhones.length && !generated.has(snapshot.telefone)
+    && ![...generated].some((item) => String(item).replace(/\D/gu, '') === String(snapshot.telefone).replace(/\D/gu, ''))
+    || expectedEmails.length && !generated.has(snapshot.email)) return false;
+  if (JSON.stringify(body.ContatoTelefones) !== JSON.stringify(expectedPhones)
+    || JSON.stringify(body.ContatoEmails) !== JSON.stringify(expectedEmails)) return false;
+  if (!Array.isArray(body.ContatoResponsaveis) || body.ContatoResponsaveis.length !== 1) return false;
+  const [owner] = body.ContatoResponsaveis;
+  if (!owner || Object.keys(owner).sort().join('|') !== ['DepartmentId', 'UserId', 'id'].sort().join('|')) return false;
+  const previousIds = new Set((snapshot.responsibleUsers ?? []).map((value) => value.id));
+  return (owner.id === null || previousIds.has(owner.id))
+    && fixedIds.department?.has(owner.DepartmentId)
+    && (owner.UserId === null || fixedIds.user?.has(owner.UserId));
+}
+export function journeyRequestAllowed(request, { taskId, apiOrigin, generated = new Set(), createdIds = new Set(),
+  fixedIds = {}, contactSnapshot } = {}) {
   const method = request.method().toUpperCase();
   if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return true;
   let path; let query;
@@ -248,6 +273,8 @@ export function journeyRequestAllowed(request, { taskId, apiOrigin, generated = 
   } else if (query.size) return false;
   if (taskId === 'contatos.cadastrar' && !request.postData()?.startsWith('--')) return false;
   const body = parseWriteBody(request);
+  if (taskId === 'contatos.definir_responsavel' && /^\/contacts\/[a-z0-9-]+\/?$/iu.test(path))
+    return validContactOwnerPut(body, contactSnapshot, generated, fixedIds);
   if (taskId?.startsWith('robos.') && path.endsWith('/save'))
     return validRobotSave(body, match[1], generated, createdIds, fixedIds);
   if (taskId === 'robos.criar' && body?.status !== false) return false;
@@ -339,8 +366,15 @@ export function newLinkedTag(rows, before, allowed) {
   return ids.find((id) => allowed.has(id) && !before.has(id)) ?? null;
 }
 
-const journeyControlSelector = 'button,a,input,select,textarea,[role="menuitem"],[role="tab"],[role="combobox"],[role="option"],[data-value]';
+const journeyControlSelector = 'button,a,input,select,textarea,[role="menuitem"],[role="tab"],[role="combobox"],[role="option"],[data-value],div.rounded-xl.cursor-pointer,svg.cursor-pointer';
 const journeyTargetKey = (role, name) => JSON.stringify([role, name]);
+const journeyPlanLabels = ['Informações', 'Editar', 'Editar Nome', 'Editar Proprietário do Contato', 'Salvar',
+  'Adicionar tag', 'Buscar ou criar tag...', 'Criar tag', 'Proprietário do Contato',
+  'Selecione um departamento', 'Selecione um usuário (opcional)', 'Adicionar bloco', 'Menu de opções',
+  'Ação', 'Encaminhar atendimento', 'Salvar alterações', 'Título do Robô', 'Editar título do Robô',
+  'Criar novo robô', 'Buscar robô', 'Adicionar opção +', 'Bloco de pergunta',
+  'Mensagem de onboarding', 'Mensagem', 'Adicione uma opção', 'Voltar para lista',
+  'Fluxo de Robô', 'Contatos', 'Configurações'];
 export function journeyVocabulary(facts, screenCode = []) {
   const words = facts.flatMap((fact) => [fact.text, fact.message]);
   for (const { path, excerpt } of screenCode) {
@@ -378,12 +412,26 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
       return null;
     };
     const visual = (node) => compact(visualLabel(node)?.textContent);
-    const name = (node) => compact(node.getAttribute('aria-labelledby') && byId(node.getAttribute('aria-labelledby'))
+    const name = (node) => compact(node.matches('svg.cursor-pointer')
+      && /Robô Exemplo \d{2}/u.test(node.parentElement?.textContent ?? '')
+      ? 'Editar título do Robô' : node.matches('div.rounded-xl.cursor-pointer') ? node.innerText.split('\n')[0]
+      : node.tagName === 'A' && ['Fluxo de Robô', 'Contatos', 'Configurações'].includes(node.innerText?.trim())
+        ? node.innerText.trim()
+      : node.tagName === 'INPUT' && node.getAttribute('placeholder') === 'Buscar robô' ? 'Buscar robô'
+      : node.tagName === 'BUTTON' && !node.textContent?.trim()
+        && node.closest('.react-flow__node') && node.classList.contains('absolute') && node.querySelector('svg')
+        ? 'Adicionar bloco'
+      : node.tagName === 'BUTTON' && node.textContent?.trim() === 'Adicionar opção +'
+        ? 'Adicionar opção +'
+      : node.getAttribute('aria-labelledby') && byId(node.getAttribute('aria-labelledby'))
       || node.labels?.[0]?.textContent || node.closest('label')?.textContent
       || node.getAttribute('aria-label') || visual(node)
+      || (node.closest('[data-tooltip-content="Editar"]') && node.closest('dd')?.previousElementSibling?.textContent?.trim() === 'Proprietário do Contato'
+        ? 'Editar Proprietário do Contato' : '')
       || node.closest('[data-tooltip-content]')?.getAttribute('data-tooltip-content')
       || node.getAttribute('placeholder') || node.innerText);
-    const role = (node) => node.matches('[role="option"],[data-value]') ? 'option'
+    const role = (node) => node.matches('div.rounded-xl.cursor-pointer,svg.cursor-pointer') ? 'button'
+      : node.matches('[role="option"],[data-value]') ? 'option'
       : node.getAttribute('role') || ({ BUTTON: 'button', A: 'link', INPUT: node.type === 'checkbox' ? 'checkbox' : 'textbox',
         SELECT: 'combobox', TEXTAREA: 'textbox' }[node.tagName]) || '';
     const nodes = [...document.querySelectorAll(selector)];
@@ -495,7 +543,10 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
   const matches = fresh.controls.filter((control) => control.role === action.role && control.name === action.name);
   if (matches.length !== 1 || !matches[0].enabled || !fresh.targets[journeyTargetKey(action.role, action.name)]) throw changed();
   const selected = fresh.targets[journeyTargetKey(action.role, action.name)];
-  const locator = page.locator(selected.selector).nth(selected.index);
+  const exactBlock = action.type === 'click' && action.role === 'button' && action.name === 'Adicionar bloco'
+    ? page.locator('button').filter({ hasText: /^Adicionar bloco$/u }) : null;
+  const locator = exactBlock && await exactBlock.count() === 1 ? exactBlock
+    : page.locator(selected.selector).nth(selected.index);
   try {
     if (action.type === 'click') {
       await locator.scrollIntoViewIfNeeded({ timeout: 4_000 });
@@ -516,7 +567,21 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
     }
     if (action.type === 'fill') return await locator.fill(action.value, { timeout: 8_000 });
     if (action.type === 'select') return await locator.selectOption({ label: action.value }, { timeout: 8_000 });
-  } catch (error) { error.actionCategory = journeyActionCategory(error); throw error; }
+  } catch (error) {
+    error.actionCategory = journeyActionCategory(error);
+    if (action.name === 'Adicionar bloco' && error.actionCategory === 'desabilitado')
+      error.controlProbe = await page.evaluate(({ selector, index }) => {
+        const node = document.querySelectorAll(selector)[index];
+        return { present: Boolean(node), nativeDisabled: Boolean(node?.disabled),
+          inheritedDisabled: Boolean(node?.matches(':disabled')),
+          ariaDisabled: node?.getAttribute('aria-disabled') === 'true',
+          ariaDisabledAncestor: Boolean(node?.closest('[aria-disabled="true"]')),
+          inertAncestor: Boolean(node?.closest('[inert]')),
+          visible: Boolean(node?.getClientRects().length),
+          exactButtons: [...document.querySelectorAll('button')].filter((item) => item.textContent?.trim() === 'Adicionar bloco').length };
+      }, selected).catch(() => null);
+    throw error;
+  }
   throw new Error('ação inválida');
 }
 
@@ -604,6 +669,10 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
     if (persisted?.idRef !== refs[0]) return { confirmed: false, observed: 'ref', persistedCapture };
     if (persisted?.title !== expectedValue) return { confirmed: false, observed: 'título persistido', persistedCapture };
     if (persisted?.status !== false) return { confirmed: false, observed: 'status persistido', persistedCapture };
+    if (!confirmed && task.id === 'robos.editar') {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      confirmed = await titleInScreen(expectedValue);
+    }
     if (!confirmed) return { confirmed: false, observed: 'título na tela', persistedCapture };
     if (task.id === 'robos.criar') {
       if (!Number.isSafeInteger(persisted.id) || persisted.id <= 0)
@@ -703,6 +772,13 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
   let importResultMessage = null;
   let filteredContactsResponse = null;
   let filteredContactVerified = false;
+  let verifiedExportSearchTerm = null;
+  let searchProbe = null;
+  let searchTraffic = { requests: 0, matchingRequests: 0, lastStatus: null, matchingStatus: null };
+  let ownerWriteStatus = null;
+  let ownerProbe = null;
+  let menuProbe = null;
+  let contactSnapshot = null;
   let beforeTagIds = new Set();
   const creationResults = [];
   const creationWaiters = new Set();
@@ -747,6 +823,13 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       importResultMessage = null;
       filteredContactsResponse = null;
       filteredContactVerified = false;
+      verifiedExportSearchTerm = null;
+      searchProbe = null;
+      searchTraffic = { requests: 0, matchingRequests: 0, lastStatus: null, matchingStatus: null };
+      ownerWriteStatus = null;
+      ownerProbe = null;
+      menuProbe = null;
+      contactSnapshot = null;
       beforeTagIds = new Set();
       creationResults.length = 0;
       thirdPartyDenied = {};
@@ -763,6 +846,12 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       qaApi = null;
       page.on('request', (request) => {
         const url = new URL(request.url());
+        if (['contatos.buscar', 'contatos.exportar'].includes(currentTask)
+          && request.method() === 'GET' && /^\/api\/(?:v2\/)?contacts\/?$/u.test(url.pathname)) {
+          searchTraffic.requests++;
+          if ([currentPrepared?.contact, fixtureValue('phone', 1, markerFor())]
+            .includes(url.searchParams.get('searchData'))) searchTraffic.matchingRequests++;
+        }
         const authorization = request.headers().authorization;
         if (url.pathname.startsWith('/api/v2/') && /^Bearer (?!undefined$|null$)\S+$/iu.test(authorization ?? '')
           && qaRequestDecision(url.href, target, env).allowed) qaApi = { origin: url.origin, authorization };
@@ -772,14 +861,56 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
           creationPostStarted = true;
       });
       page.on('download', (download) => { lastDownload = download; });
-      await loginToQa(page, target.url, credentialsFromEnv(env).authorized, { timeoutMs: 15000 });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          await loginToQa(page, target.url, credentialsFromEnv(env).authorized, { timeoutMs: 15000 });
+          break;
+        } catch (error) {
+          if (![...(error.diagnostic?.messages ?? []), ...(error.diagnostic?.controls ?? [])]
+            .some((value) => /usuário já se encontra logado|desconectar e entrar/iu.test(value))) throw error;
+          if (attempt === 0) { await new Promise((resolve) => setTimeout(resolve, 5000)); continue; }
+          const active = new Error('sessão ativa na conta de teste');
+          active.code = 'QA_SESSION_ACTIVE';
+          throw active;
+        }
+      }
       await context.route('**/*', (route) => handleJourneyRoute(route, {
         apiOrigin: qaApi?.origin, target, env, thirdPartyDenied,
-        taskId: currentTask, generated: fixtures(), createdIds, fixedIds,
+        taskId: currentTask, generated: fixtures(), createdIds, fixedIds, contactSnapshot,
         onBlocked: (decision) => { blockedWrite = decision; },
       }));
       page.on('response', (response) => {
         const url = new URL(response.url());
+        if (['contatos.buscar', 'contatos.exportar'].includes(currentTask)
+          && response.request().method() === 'GET' && /^\/api\/(?:v2\/)?contacts\/?$/u.test(url.pathname)) {
+          searchTraffic.lastStatus = response.status();
+          if ([currentPrepared?.contact, fixtureValue('phone', 1, markerFor())]
+            .includes(url.searchParams.get('searchData'))) searchTraffic.matchingStatus = response.status();
+        }
+        if (currentTask === 'contatos.marcar_tags' && response.request().method() === 'POST'
+          && /^\/api\/(?:v2\/)?tags\/?$/iu.test(url.pathname) && response.ok()) {
+          const pending = (async () => {
+            let requested;
+            try { requested = JSON.parse(response.request().postData() ?? ''); } catch { return; }
+            if (!fixtures().has(requested?.nome) || !/^Tag Exemplo /u.test(requested.nome)) return;
+            const payload = await response.json().catch(() => null);
+            const tag = payload?.dados ?? payload;
+            let id = tag?.nome === requested.nome || tag?.tagName === requested.nome ? tag.id : null;
+            if (!Number.isSafeInteger(id) || id <= 0) {
+              const listed = await authenticatedGet('/tags').catch(() => null);
+              const rows = Array.isArray(listed?.body) ? listed.body : listed?.body?.dados;
+              const exact = Array.isArray(rows) ? rows.filter((item) => item?.nome === requested.nome
+                || item?.tagName === requested.nome) : [];
+              id = exact.length === 1 ? exact[0].id : null;
+            }
+            if (Number.isSafeInteger(id) && id > 0) createdIds.add(id);
+          })().catch(() => {});
+          pendingPosts.add(pending);
+          pending.finally(() => pendingPosts.delete(pending));
+        }
+        if (currentTask === 'contatos.definir_responsavel' && response.request().method() === 'PUT'
+          && /^\/api\/(?:v2\/)?contacts\/[a-z0-9-]+(?:\/owner)?\/?$/iu.test(url.pathname))
+          ownerWriteStatus = response.status();
         if (currentTask === 'contatos.importar' && response.request().method() === 'POST'
           && url.origin === qaApi?.origin && /^\/api\/(?:v2\/)?contacts\/import\/?$/u.test(url.pathname)) {
           const pending = importResponseCapture(response).then((capture) => { importCapture = capture; });
@@ -815,6 +946,11 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       const route = journeyStartRoute(task, prepared);
       await page.goto(new URL(route, target.url).href, { waitUntil: 'domcontentloaded' });
       if (!qaApi) throw new Error('API autenticada da homologação indisponível');
+      let account;
+      try {
+        const claims = JSON.parse(Buffer.from(qaApi.authorization.slice(7).split('.')[1], 'base64url').toString('utf8'));
+        account = { userId: String(claims.userId ?? ''), companyId: String(claims.businessId ?? '') };
+      } catch { throw new Error('identidade autenticada indisponível'); }
       if (prepared.identity) {
         const { refs, ids } = prepared.identity;
         if (!Array.isArray(refs) || refs.length !== 1 || !Array.isArray(ids)) throw new Error('identidade de cache inválida');
@@ -839,6 +975,14 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         createdRefs[task.modulo].add(ref);
         for (const id of ids) createdIds.add(id);
         createdIds.add(ref);
+      }
+      if (task.id === 'contatos.definir_responsavel') {
+        const ref = prepared.identity?.refs?.[0];
+        const response = ref ? await authenticatedGet(`/contacts/details/${ref}`) : null;
+        const details = response?.body?.dados ?? response?.body;
+        if (response?.status !== 200 || details?.idRef !== ref || !Number.isSafeInteger(details.id))
+          throw new Error('contato de preparo indisponível');
+        contactSnapshot = details;
       }
       for (const [kind, name] of [['department', 'CAPTURE_QA_DEPARTMENT_IDS'],
         ['channel', 'CAPTURE_QA_CHANNEL_IDS'], ['user', 'CAPTURE_QA_USER_IDS']])
@@ -870,7 +1014,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         if (response.status !== 200 || !Array.isArray(response.body)) throw new Error('tags de preparo inválidas');
         beforeTagIds = new Set(response.body.map((row) => row?.tagsId).filter(Number.isSafeInteger));
       }
-      return { environmentBlocked, fixtures: [...loaded.fixtures, ...[
+      return { account, environmentBlocked, fixtures: [...loaded.fixtures, ...[
         ['department', 'CAPTURE_QA_DEPARTMENT_IDS'], ['channel', 'CAPTURE_QA_CHANNEL_IDS'],
         ['user', 'CAPTURE_QA_USER_IDS']].filter(([, name]) => readIds(name).size).map(([kind, name]) =>
         ({ source: name, kind, ids: [...readIds(name)] }))] };
@@ -885,6 +1029,13 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       let data;
       try { data = await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures() }); }
       catch (error) { error.stage = 'dom'; throw error; }
+      if (currentTask === 'robos.montar_menu' && data.controls.some((item) => item.name === 'Menu de opções')) {
+        menuProbe = await page.evaluate(() => {
+          const buttons = [...document.querySelectorAll('button')].filter((item) => item.textContent?.trim() === 'Adicionar opção +');
+          return { count: buttons.length, visible: buttons.some((item) => item.getClientRects().length > 0),
+            enabled: buttons.some((item) => !item.disabled) };
+        });
+      }
       observedTargets = data.targets;
       data.title = taskTitle(path);
       if (stability.limit) data.state.stabilityLimit = stability.limit;
@@ -913,7 +1064,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         }, currentPrepared.contact, { timeout: 15_000 }).catch(() => {});
         const rows = await page.locator('tbody tr').all();
         const selected = page.getByRole('checkbox', { name: `Selecionar ${currentPrepared.contact}`, exact: true });
-        if (await page.getByPlaceholder('Buscar contato...').inputValue() !== currentPrepared.contact
+        if (!verifiedExportSearchTerm || await page.getByPlaceholder('Buscar contato...').inputValue() !== verifiedExportSearchTerm
           || rows.length !== 1 || !await rows[0].locator('td').allTextContents().then((cells) => cells.some((cell) => cell.trim() === currentPrepared.contact))
           || await selected.count() !== 1 || !await selected.isChecked()
           || await page.locator('tbody input[type="checkbox"]:checked').count() !== 1)
@@ -923,6 +1074,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         const beforeUrl = page.url();
         if (['contatos.buscar', 'contatos.exportar'].includes(currentTask) && action.type === 'fill'
           && /buscar contato/iu.test(action.name ?? '')) {
+          verifiedExportSearchTerm = null;
           filteredContactsResponse = page.waitForResponse((response) => response.request().method() === 'GET'
             && /^\/api\/(?:v2\/)?contacts\/?$/u.test(new URL(response.url()).pathname)
             && new URL(response.url()).searchParams.get('searchData') === action.value,
@@ -934,9 +1086,20 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
             && new URL(response.url()).origin === qaApi?.origin
             && /^\/api\/(?:v2\/)?contacts\/import\/?$/u.test(new URL(response.url()).pathname),
           { timeout: 10_000 }).catch(() => null) : null;
+        const ownerResponse = currentTask === 'contatos.definir_responsavel' && action.type === 'click'
+          && /^Salvar$/iu.test(action.name)
+          ? page.waitForResponse((response) => response.request().method() === 'PUT'
+            && /^\/api\/(?:v2\/)?contacts\/[a-z0-9-]+(?:\/owner)?\/?$/iu.test(new URL(response.url()).pathname),
+          { timeout: 10_000 }).catch(() => null) : null;
+        const tagResponse = currentTask === 'contatos.marcar_tags' && action.type === 'click' && action.role === 'option'
+          ? page.waitForResponse((response) => response.request().method() === 'POST'
+            && /^\/api\/(?:v2\/)?contactTags\/[0-9]+\/?$/iu.test(new URL(response.url()).pathname),
+          { timeout: 10_000 }).catch(() => null) : null;
         if (currentTask === 'contatos.cadastrar' && action.type === 'click' && action.name === 'Salvar')
           await page.waitForLoadState('networkidle', { timeout: 2_500 }).catch(() => {});
         await actJourneyAction(page, action, observedTargets, { vocabulary: [...known], generated: fixtures() });
+        if (ownerResponse) await ownerResponse;
+        if (tagResponse) await tagResponse;
         if (importResponse) {
           await importResponse;
           await Promise.all([...pendingPosts]);
@@ -955,29 +1118,82 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       }
     },
     async exportAction(screen, prepared, actions) {
-      if (screen.fields.some((field) => /buscar contato/iu.test(field.name) && field.value === prepared.contact)) {
-        await filteredContactsResponse;
+      const phone = fixtureValue('phone', 1, markerFor());
+      if (!screen.fields.some((field) => /buscar contato/iu.test(field.name))
+        && actions.some((action) => action.type === 'fill' && [prepared.contact, phone].includes(action.value))) {
+        await page.getByPlaceholder('Buscar contato...').waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+        if (searchTraffic.matchingStatus === 400 && !actions.some((action) => action.type === 'fill' && action.value === phone)
+          && !await page.getByPlaceholder('Buscar contato...').isVisible().catch(() => false)) {
+          await page.reload({ waitUntil: 'domcontentloaded' });
+          await page.getByPlaceholder('Buscar contato...').waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+        }
+        screen = await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures() });
+        observedTargets = screen.targets;
+      }
+      const searchValue = screen.fields.find((field) => /buscar contato/iu.test(field.name))?.value;
+      if (searchTraffic.matchingStatus === 400 && searchValue != null
+        && actions.some((action) => action.type === 'fill' && action.value === prepared.contact)
+        && !actions.some((action) => action.type === 'fill' && action.value === phone))
+        return { type: 'fill', role: 'textbox', name: 'Buscar contato...', value: phone };
+      if ([prepared.contact, phone].includes(searchValue)) {
+        const response = await filteredContactsResponse;
+        const payload = await response?.json().catch(() => null);
+        searchProbe = { ...searchTraffic, responseStatus: response?.status() ?? null,
+          rows: Array.isArray(payload?.dados) ? payload.dados.length : null,
+          matchingRef: Array.isArray(payload?.dados) && payload.dados.some((row) =>
+            row?.idRef === prepared.identity?.refs?.[0] && row?.nome === prepared.contact) };
+        if ((response?.status() === 400 || searchTraffic.matchingStatus === 400) && searchValue === prepared.contact
+          && !actions.some((action) => action.type === 'fill' && action.value === phone))
+          return { type: 'fill', role: 'textbox', name: 'Buscar contato...', value: phone };
+        if (!(await verifyFilteredContactSearch(page, prepared.contact, prepared.identity?.refs?.[0], response)).confirmed)
+          return null;
         await page.waitForFunction((name) => {
           const rows = [...document.querySelectorAll('tbody tr')].filter((row) => row.getClientRects().length);
           return rows.length === 1 && [...rows[0].querySelectorAll('td')].some((cell) => cell.textContent.trim() === name);
         }, prepared.contact, { timeout: 15_000 }).catch(() => {});
         screen = await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures() });
         observedTargets = screen.targets;
+        verifiedExportSearchTerm = screen.state.visibleRows === '1' && screen.state.generatedRows === '1'
+          ? searchValue : null;
       }
-      let next = exportActionForScreen(screen, prepared.contact, actions);
-      if (!next && screen.fields.some((field) => /buscar contato/iu.test(field.name) && field.value === prepared.contact)) {
+      const term = actions.some((action) => action.type === 'fill' && action.value === phone) ? phone : prepared.contact;
+      let next = exportActionForScreen(screen, prepared.contact, actions, term);
+      if (!next && screen.fields.some((field) => /buscar contato/iu.test(field.name) && field.value === term)) {
         const fresh = await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures() });
-        next = exportActionForScreen(fresh, prepared.contact, actions);
+        next = exportActionForScreen(fresh, prepared.contact, actions, term);
       }
       return next;
     },
     async searchAction(screen, prepared, actions) {
       const name = prepared.contact;
+      const phone = fixtureValue('phone', 1, markerFor());
+      if (!screen.fields.some((field) => /buscar contato/iu.test(field.name))
+        && actions.some((action) => action.type === 'fill' && [name, phone].includes(action.value))) {
+        await page.getByPlaceholder('Buscar contato...').waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+        if (searchTraffic.matchingStatus === 400 && !actions.some((action) => action.type === 'fill' && action.value === phone)
+          && !await page.getByPlaceholder('Buscar contato...').isVisible().catch(() => false)) {
+          await page.reload({ waitUntil: 'domcontentloaded' });
+          await page.getByPlaceholder('Buscar contato...').waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+        }
+        screen = await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures() });
+        observedTargets = screen.targets;
+      }
       const search = screen.fields.find((field) => /buscar contato/iu.test(field.name));
       if (!search) return null;
-      if (search.value !== name) return { type: 'fill', role: 'textbox', name: search.name, value: name };
+      const term = actions.some((action) => action.type === 'fill' && action.value === phone)
+        || searchTraffic.matchingStatus === 400 && actions.some((action) => action.type === 'fill' && action.value === name)
+        ? phone : name;
+      if (search.value !== term) return { type: 'fill', role: 'textbox', name: search.name, value: term };
       const response = await filteredContactsResponse;
       const ref = prepared.identity?.refs?.[0];
+      const payload = await response?.json().catch(() => null);
+      searchProbe = { ...searchTraffic, responseStatus: response?.status() ?? null,
+        rows: Array.isArray(payload?.dados) ? payload.dados.length : null,
+        matchingRef: Array.isArray(payload?.dados) && payload.dados.some((row) =>
+          row?.idRef === ref && row?.nome === name) };
+      if ((response?.status() === 400 || searchTraffic.matchingStatus === 400) && term === name
+        && !actions.some((action) => action.type === 'fill' && action.value === phone))
+        return { type: 'fill', role: 'textbox', name: search.name, value: phone };
       const checked = await verifyFilteredContactSearch(page, name, ref, response);
       if (!checked.confirmed) return null;
       await page.waitForFunction((value) => {
@@ -1049,8 +1265,11 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         ? fixtureValue('phone', 1, markerFor())
         : task.id === 'contatos.definir_responsavel' ? actions.findLast((action) => action.type === 'select')?.value : null;
       if (task.id === 'robos.buscar') {
-        await page.goto(new URL('/bot', target.url).href, { waitUntil: 'domcontentloaded' });
-        if (await page.getByText(name, { exact: true }).count() !== 1)
+        if (await page.getByPlaceholder('Buscar robô').inputValue().catch(() => null) !== name)
+          return { confirmed: false, observed: 'Filtro fictício não aplicado' };
+        const found = page.getByText(name, { exact: true });
+        await found.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+        if (await found.count() !== 1)
           return { confirmed: false, observed: 'Robô fictício não localizado de forma única' };
       }
       const refs = creationRefsForTask(task.id, [...createdRefs[task.modulo]], taskCreatedRef);
@@ -1059,6 +1278,23 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
       const checked = await verifyUniqueRecord({ page, task, refs,
         targetUrl: target.url, name, expectedValue, expectedExtra,
         getPersisted: task.modulo === 'robos' ? authenticatedGet : undefined });
+      if (task.id === 'contatos.definir_responsavel' && checked.confirmed) {
+        const response = await authenticatedGet(`/contacts/details/${refs[0]}`);
+        const details = response?.body?.dados ?? response?.body;
+        const owner = details?.responsibleUsers?.[0];
+        const before = contactSnapshot?.responsibleUsers?.[0];
+        ownerProbe = { writeStatus: ownerWriteStatus, readStatus: response?.status ?? null,
+          refsMatch: details?.idRef === refs[0], beforeCount: contactSnapshot?.responsibleUsers?.length ?? null,
+          afterCount: details?.responsibleUsers?.length ?? null,
+          departmentInFixture: fixedIds.department.has(owner?.departmentId),
+          userInFixture: owner?.userId == null || fixedIds.user.has(owner.userId),
+          changed: owner?.departmentId !== before?.departmentId || owner?.userId !== before?.userId };
+        checked.confirmed = response?.status === 200 && details?.idRef === refs[0]
+          && ownerWriteStatus >= 200 && ownerWriteStatus < 300
+          && fixedIds.department.has(owner?.departmentId)
+          && (owner?.userId == null || fixedIds.user.has(owner.userId));
+        if (!checked.confirmed) checked.observed = 'responsável fictício não persistido';
+      }
       if (task.id === 'contatos.marcar_tags' && checked.confirmed) {
         const contactId = prepared.identity?.ids?.[0];
         const response = await authenticatedGet(`/contactTags/getContactsTagByContactId/${contactId}`);
@@ -1078,7 +1314,9 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
             : checked.confirmed && task.id === 'robos.criar' ? { robot: name,
               robotRef: identity.refs[0], robotId: checked.recordId } : {} };
     },
-    diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, creationCapture }; },
+    diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, creationCapture, searchProbe, ownerProbe,
+      menuProbe, tagProbe: currentTask === 'contatos.marcar_tags' ? { createdTagIdCaptured: [...createdIds].some((id) =>
+        Number.isSafeInteger(id) && !fixedIds.tag.has(id) && id !== currentPrepared?.identity?.ids?.[0]) } : null }; },
     async close() { await browser?.close(); browser = null; context = null; page = null; },
   };
 }
@@ -1170,6 +1408,16 @@ export async function authenticatedJourneyIdentity(env) {
   } finally { await browser.close(); }
 }
 
+export function configuredJourneyIdentity(env) {
+  const target = assertAllowedTarget(env.GUIDE_QA_STAGING_URL, env);
+  if (target.local) throw new Error('homologação deve usar HTTPS');
+  const { email, password } = credentialsFromEnv(env).authorized;
+  if (!email || !password) throw new Error('credencial de homologação ausente');
+  return { credentialHash: createHash('sha256').update(JSON.stringify([
+    target.url, email.trim().toLowerCase(), password,
+  ])).digest('hex') };
+}
+
 export async function recordJourneys(module, selectedTasks, { env = process.env, browser, model, root } = {}) {
   let marker = randomBytes(4).toString('hex');
   const markerFor = () => marker;
@@ -1187,7 +1435,8 @@ export async function recordJourneys(module, selectedTasks, { env = process.env,
       module === 'contatos' ? 'Contatos' : 'Robôs', { repositoryIds: ['frontend'] });
     facts = found.code.find((item) => item.role === 'frontend' && item.available);
     if (!facts?.screenFacts?.length) throw new Error('fatos da tela indisponíveis');
-    for (const value of journeyVocabulary(facts.screenFacts, facts.screenCode)) allowedScreenLabels.add(value);
+    for (const value of [...journeyVocabulary(facts.screenFacts, facts.screenCode), ...journeyPlanLabels])
+      allowedScreenLabels.add(value);
   };
   await loadFacts();
   const frontSha = env.CAPTURE_FRONT_SHA ?? facts.ref;
@@ -1196,14 +1445,17 @@ export async function recordJourneys(module, selectedTasks, { env = process.env,
   const lazyBrowser = browser ?? makeLazyJourneyBrowser(async () => {
     if (!facts) await loadFacts();
     return makeBrowser({ baseUrl: env.GUIDE_QA_STAGING_URL, env, markerFor,
-      vocabulary: journeyVocabulary(facts.screenFacts, facts.screenCode) });
+      vocabulary: [...journeyVocabulary(facts.screenFacts, facts.screenCode), ...journeyPlanLabels] });
   });
   let liveModel;
   const lazyModel = model ?? { async decide(...args) { liveModel ??= makeModel(env, markerFor); return liveModel.decide(...args); } };
+  const engineSha = createHash('sha256').update(await readFile(new URL(import.meta.url)))
+    .update(await readFile(new URL('./journey-service.mjs', import.meta.url))).digest('hex');
   const options = { module, tasks, frontSha, backSha, profile, root, marker, browser: lazyBrowser,
+    deterministicPlans: !browser && !model,
     model: lazyModel, allowedScreenLabels, markerChanged: (value) => { marker = value; },
-    accountIdentity: browser ? undefined : () => authenticatedJourneyIdentity(env),
-    cacheConfig: { qaUrl: env.GUIDE_QA_STAGING_URL ?? '', model: env.CAPTURE_AGENT_MODEL ?? '',
+    accountIdentity: browser ? undefined : () => configuredJourneyIdentity(env),
+    cacheConfig: { engineSha, qaUrl: env.GUIDE_QA_STAGING_URL ?? '', model: env.CAPTURE_AGENT_MODEL ?? '',
       allowedHosts: env.GUIDE_QA_ALLOWED_HOSTS ?? '',
       fixtureIds: ['CAPTURE_QA_DEPARTMENT_IDS', 'CAPTURE_QA_CHANNEL_IDS',
         'CAPTURE_QA_USER_IDS', 'CAPTURE_QA_COMPANY_IDS'].map((key) => env[key] ?? '') } };

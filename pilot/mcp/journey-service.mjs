@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm571-13';
+export const JOURNEY_POLICY_VERSION = 'm571-14';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos']);
@@ -80,7 +80,9 @@ export function policyDecision(action, generated = fixtureValues, taskId = '') {
     || typeof action.name !== 'string' || !action.name.trim() || action.name.length > 100) return deny('alvo inválido');
   const name = normalized(action.name);
   if (forbidden.test(name)) return deny('ação proibida');
-  if (action.type === 'fill' && (action.role !== 'textbox' || !generated.has(action.value))) return deny('valor fora do gerador');
+  if (action.type === 'fill' && (action.role !== 'textbox'
+    && !(taskId === 'contatos.marcar_tags' && action.role === 'combobox') || !generated.has(action.value)))
+    return deny('valor fora do gerador');
   if (action.type === 'select' && (action.role !== 'combobox' || !generated.has(action.value)
     && !(taskId === 'contatos.importar' && ['Nome', 'Contato', 'Email'].includes(action.value)))) return deny('valor fora do gerador');
   if (action.type === 'click' && !['button', 'link', 'menuitem', 'checkbox', 'tab', 'combobox', 'option'].includes(action.role)) return deny('clique inválido');
@@ -150,6 +152,7 @@ function safeJourney(record) {
     throw new Error('sanitização falhou');
   if (copy.createdRef != null && (typeof copy.createdRef !== 'string' || !/^[a-z0-9-]{1,80}$/iu.test(copy.createdRef)))
     throw new Error('sanitização falhou');
+  if (copy.accountProof != null && !/^[a-f0-9]{64}$/u.test(copy.accountProof)) throw new Error('sanitização falhou');
   const check = (value) => {
     if (typeof value === 'string' && !sha.test(value) && !/^[a-f0-9]{64}$/u.test(value)
       && !fixtureValues.has(value) && !fictionalPhone.test(value)
@@ -180,7 +183,8 @@ function actionEvidence(id, actions, fixtureFor = fixtureValue) {
   if (id === 'contatos.editar') return fills.includes(fixtureFor('editedName')) && clickedSave;
   if (id === 'robos.criar') return fills.includes(fixtureFor('robotName')) && clickedSave;
   if (id === 'contatos.buscar') return fills.includes(fixtureFor('contactName'));
-  if (id === 'contatos.definir_responsavel') return actions.some((action) => action.type === 'select') && clickedSave;
+  if (id === 'contatos.definir_responsavel') return actions.some((action) => action.type === 'select'
+    || action.type === 'click' && action.role === 'option') && clickedSave;
   if (id === 'contatos.marcar_tags') return actions.some((action) => action.type === 'click' && action.role === 'option')
     || fills.includes(fixtureFor('tagName'))
       && actions.some((action) => action.type === 'click' && /criar|adicionar|salvar/iu.test(action.name));
@@ -191,13 +195,119 @@ function actionEvidence(id, actions, fixtureFor = fixtureValue) {
     && fills.includes(fixtureFor('menuQuestion')) && fills.includes(fixtureFor('menuOption', 1))
     && fills.includes(fixtureFor('menuOption', 2)) && clickedSave;
   if (id === 'robos.encaminhar') return actions.some((action) => action.type === 'click' && /encaminhar|transferir/iu.test(action.name))
-    && actions.some((action) => action.type === 'select' && [fixtureFor('departmentName'), fixtureFor('userName')].includes(action.value))
+    && actions.some((action) => action.type === 'select' && [fixtureFor('departmentName'), fixtureFor('userName')].includes(action.value)
+      || action.type === 'click' && action.role === 'option')
     && clickedSave;
   if (id === 'robos.salvar') return clickedSave;
   if (id === 'robos.buscar') return actions.some((action) => action.type === 'fill' && action.value === fixtureFor('robotName'))
     || actions.some((action) => action.type === 'click' && action.name === fixtureFor('robotName'));
-  if (id === 'robos.editar') return fills.includes(fixtureFor('robotName', 2)) && clickedSave;
+  if (id === 'robos.editar') return fills.includes(fixtureFor('robotName', 2))
+    && actions.some((action) => action.type === 'click' && action.name === 'Voltar para lista');
   return actions.length > 0;
+}
+const plannedClick = (screen, pattern, role = null) => {
+  const target = screen.controls.find((item) => item.enabled && (!role || item.role === role) && pattern.test(item.name));
+  return target ? { type: 'click', role: target.role, name: target.name, value: null } : null;
+};
+const plannedFill = (screen, pattern, value, roles = ['textbox']) => {
+  const field = screen.fields.find((item) => roles.includes(item.role) && pattern.test(item.name));
+  return field && field.value !== value ? { type: 'fill', role: field.role, name: field.name, value } : null;
+};
+const finished = () => ({ type: 'finish', role: null, name: null, value: null });
+export function plannedJourneyAction(id, screen, actions, fixtureFor = fixtureValue) {
+  const done = (pattern) => actions.some((action) => action.type === 'click' && pattern.test(action.name));
+  const filled = (value) => actions.some((action) => action.type === 'fill' && action.value === value);
+  if (id === 'contatos.cadastrar') {
+    if (!done(/^Adicionar Contato$/iu)) return plannedClick(screen, /^Adicionar Contato$/iu);
+    if (!filled(fixtureFor('contactName'))) return plannedFill(screen, /^Nome$/iu, fixtureFor('contactName'));
+    if (!filled(fixtureFor('phone'))) return plannedFill(screen, /^Telefone$/iu, fixtureFor('phone'));
+    return !done(/^Salvar$/iu) ? plannedClick(screen, /^Salvar$/iu) : finished();
+  }
+  if (id === 'contatos.editar') {
+    if (!done(/^Editar Nome$/iu)) return plannedClick(screen, /^Editar Nome$/iu);
+    if (!filled(fixtureFor('editedName'))) return plannedFill(screen, /^Nome$/iu, fixtureFor('editedName'));
+    return !done(/^Salvar(?: \(|$)/iu) ? plannedClick(screen, /^Salvar(?: \(|$)/iu) : finished();
+  }
+  if (id === 'contatos.definir_responsavel') {
+    if (!done(/^Informações$/iu)) return plannedClick(screen, /^Informações$/iu, 'tab');
+    if (!done(/^Editar Proprietário do Contato$/iu)) return plannedClick(screen, /^Editar Proprietário do Contato$/iu, 'button');
+    if (!done(/^opção [1-9]\d*$/iu)) return plannedClick(screen, /^opção 1$/iu, 'option');
+    if (!screen.controls.some((item) => item.role === 'button' && item.name === 'Salvar')
+      && !done(/^opção 2$/iu)) return plannedClick(screen, /^opção 2$/iu, 'option');
+    return !done(/^Salvar(?: \(|$)/iu) ? plannedClick(screen, /^Salvar(?: \(|$)/iu, 'button') : finished();
+  }
+  if (id === 'contatos.marcar_tags') {
+    if (!done(/^Tags$/iu)) return plannedClick(screen, /^Tags$/iu, 'tab');
+    if (!filled(fixtureFor('tagName'))) return plannedFill(screen,
+      /^(?:Adicionar tag|Buscar ou criar tag|campo \d+ do formulário \((?:texto|seleção)\))/iu,
+      fixtureFor('tagName'), ['textbox', 'combobox']);
+    if (!done(/^opção [1-9]\d*$/iu)) {
+      const options = screen.controls.filter((item) => item.role === 'option' && item.enabled);
+      const target = options.at(-1);
+      return target ? { type: 'click', role: 'option', name: target.name, value: null } : null;
+    }
+    return finished();
+  }
+  if (id === 'contatos.importar') {
+    if (!done(/^Mais opções$/iu)) return plannedClick(screen, /^Mais opções$/iu, 'button');
+    if (!done(/^Importar Contatos$/iu)) return plannedClick(screen, /^Importar Contatos$/iu);
+    if (!actions.some((action) => action.type === 'upload_csv')) return { type: 'upload_csv', role: null, name: null, value: null };
+    return null;
+  }
+  if (id === 'robos.criar') {
+    if (!done(/^Criar novo robô$/iu)) return plannedClick(screen, /^Criar novo robô$/iu);
+    if (!filled(fixtureFor('robotName'))) return plannedFill(screen, /^Título do Robô$/iu, fixtureFor('robotName'));
+    if (!done(/^Canais$/iu)) return plannedClick(screen, /^Canais$/iu, 'button');
+    if (!done(/^Canais$/iu) || !actions.some((action) => action.type === 'click' && action.role === 'combobox'
+      && action.name === 'Canais')) return plannedClick(screen, /^Canais$/iu, 'combobox');
+    if (!done(/^opção [1-9]\d*$/iu)) return plannedClick(screen, /^opção 1$/iu, 'option');
+    return !done(/^Adicionar robô$/iu) ? plannedClick(screen, /^Adicionar robô$/iu) : finished();
+  }
+  if (id === 'robos.montar_menu') {
+    if (!done(/^Fluxo de Robô$/iu)) return plannedClick(screen, /^Fluxo de Robô$/iu, 'link');
+    if (!done(/^Adicionar bloco$/iu)) return plannedClick(screen, /^Adicionar bloco$/iu);
+    if (!done(/^Menu de opções$/iu)) return plannedClick(screen, /^Menu de opções$/iu);
+    if (!filled(fixtureFor('menuQuestion'))) return plannedFill(screen, /^Mensagem de onboarding$/iu, fixtureFor('menuQuestion'));
+    if (!actions.some((action) => action.type === 'fill' && action.name === 'Mensagem'))
+      return plannedFill(screen, /^Mensagem$/iu, fixtureFor('menuQuestion'));
+    if (actions.filter((action) => action.type === 'click' && /^Adicionar opção \+$/iu.test(action.name)).length < 1)
+      return plannedClick(screen, /^Adicionar opção \+$/iu);
+    if (!filled(fixtureFor('menuOption', 1))) return plannedFill(screen, /^Adicione uma opção(?: \(cabeçalho(?: \d+)?\))?$/iu, fixtureFor('menuOption', 1));
+    if (actions.filter((action) => action.type === 'click' && /^Adicionar opção \+$/iu.test(action.name)).length < 2)
+      return plannedClick(screen, /^Adicionar opção \+$/iu);
+    if (!filled(fixtureFor('menuOption', 2))) {
+      const field = screen.fields.find((item) => item.role === 'textbox'
+        && /^Adicione uma opção(?: \(cabeçalho(?: \d+)?\))?$/iu.test(item.name)
+        && item.value !== fixtureFor('menuOption', 1));
+      return field ? { type: 'fill', role: 'textbox', name: field.name, value: fixtureFor('menuOption', 2) } : null;
+    }
+    if (actions.filter((action) => action.type === 'click' && /^Adicionar bloco$/iu.test(action.name)).length < 2)
+      return plannedClick(screen, /^Adicionar bloco$/iu);
+    return !done(/^Salvar$/iu) ? plannedClick(screen, /^Salvar$/iu) : finished();
+  }
+  if (id === 'robos.encaminhar') {
+    if (!done(/^Fluxo de Robô$/iu)) return plannedClick(screen, /^Fluxo de Robô$/iu, 'link');
+    if (!done(/^Adicionar bloco$/iu)) return plannedClick(screen, /^Adicionar bloco$/iu);
+    if (!done(/^Ação$/iu)) return plannedClick(screen, /^Ação$/iu);
+    if (!done(/^Encaminhar atendimento$/iu)) return plannedClick(screen, /^Encaminhar atendimento$/iu);
+    if (!done(/^opção [1-9]\d*$/iu)) return plannedClick(screen, /^opção 1$/iu, 'option');
+    if (actions.filter((action) => action.type === 'click' && /^Adicionar bloco$/iu.test(action.name)).length < 2)
+      return plannedClick(screen, /^Adicionar bloco$/iu);
+    return !done(/^Salvar$/iu) ? plannedClick(screen, /^Salvar$/iu) : finished();
+  }
+  if (id === 'robos.salvar') {
+    if (!done(/^Fluxo de Robô$/iu)) return plannedClick(screen, /^Fluxo de Robô$/iu, 'link');
+    return !done(/^Salvar$/iu) ? plannedClick(screen, /^Salvar$/iu) : finished();
+  }
+  if (id === 'robos.buscar') return !filled(fixtureFor('robotName'))
+    ? plannedFill(screen, /^Buscar robô$/iu, fixtureFor('robotName')) : finished();
+  if (id === 'robos.editar') {
+    if (!done(/^Fluxo de Robô$/iu)) return plannedClick(screen, /^Fluxo de Robô$/iu, 'link');
+    if (!done(/^Editar título do Robô$/iu)) return plannedClick(screen, /^Editar título do Robô$/iu);
+    if (!filled(fixtureFor('robotName', 2))) return plannedFill(screen, /^Digite o título do robô$/iu, fixtureFor('robotName', 2));
+    return !done(/^Voltar para lista$/iu) ? plannedClick(screen, /^Voltar para lista$/iu) : finished();
+  }
+  return null;
 }
 const fileFor = (root, module, id, key) => join(root, module, `${id}.${key}.json`);
 async function loadCache(root, module, id, key, cacheOnly = false) {
@@ -215,14 +325,16 @@ async function loadCache(root, module, id, key, cacheOnly = false) {
     return safeJourney(data);
   } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 }
-async function save(root, module, record, images) {
+export async function saveJourney(root, module, record, images) {
+  // Validate the full record before creating even a directory or screenshot.
+  const safeRecord = safeJourney(record);
   const dir = join(root, module);
   await mkdir(dir, { recursive: true, mode: 0o700 });
   for (const [id, bytes] of images) await writeFile(join(dir, `${id}.png`), bytes, { flag: 'wx', mode: 0o600 }).catch((error) => {
     if (error.code !== 'EEXIST') throw error;
   });
   const name = fileFor(root, module, record.task, record.cacheKey);
-  await writeFile(name, JSON.stringify(safeJourney(record), null, 2), { mode: 0o600 });
+  await writeFile(name, JSON.stringify(safeRecord, null, 2), { mode: 0o600 });
   await writeFile(join(dir, `${record.task}.latest`), record.cacheKey, { mode: 0o600 });
 }
 
@@ -237,7 +349,8 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
   frontSha, backSha = 'unavailable', profile, browser, model, sanitize = async (value) => value,
   allowedScreenLabels = new Set(),
   maxActionsPerTask = 30, maxActionsPerModule = 300, maxMs = 900_000, maxCostUsd = 5,
-  cacheConfig = {}, cacheBypass = false, markerChanged = () => {}, accountIdentity }) {
+  cacheConfig = {}, cacheBypass = false, markerChanged = () => {}, accountIdentity,
+  deterministicPlans = false }) {
   const invalid = [
     ['module', !modules.has(module)],
     ['tasks', !Array.isArray(tasks) || tasks.some((item) => !taskId.test(item.id) || item.modulo !== module)],
@@ -248,9 +361,10 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
   ].find(([, failed]) => failed)?.[0];
   if (invalid) throw new Error(`${invalid} ausente`);
   const account = accountIdentity ? await accountIdentity() : null;
-  if (accountIdentity && (!account || typeof account.userId !== 'string' || !account.userId
-    || typeof account.companyId !== 'string' || !account.companyId)) throw new Error('identidade autenticada indisponível');
-  const accountHash = account ? digest([account.userId, account.companyId]) : null;
+  if (accountIdentity && (!account || !(typeof account.credentialHash === 'string' && account.credentialHash
+    || typeof account.userId === 'string' && account.userId && typeof account.companyId === 'string' && account.companyId)))
+    throw new Error('identidade configurada indisponível');
+  const accountHash = account ? account.credentialHash ?? digest([account.userId, account.companyId]) : null;
   let currentMarker = marker;
   const fixtureFor = (kind, n = 1) => fixtureValue(kind, n, currentMarker);
   const generatedFor = () => currentMarker ? new Set(['contactName', 'editedName', 'robotName', 'tagName',
@@ -275,6 +389,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
         currentMarker = cached.marker;
         markerChanged(currentMarker);
         prepared.identity = cached.identity;
+        prepared.accountProof = cached.accountProof;
       }
       continue;
     }
@@ -293,8 +408,18 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       record.reason = 'sem dado de preparo';
     } else {
       let opened = false;
+      let fallbackActions = 0;
       try {
         const openedFixtures = await browser.open(task, prepared); opened = true;
+        if (openedFixtures?.account) {
+          const { userId, companyId } = openedFixtures.account;
+          if (!/^[a-z0-9-]{1,80}$/iu.test(userId ?? '') || !/^[a-z0-9-]{1,80}$/iu.test(companyId ?? ''))
+            throw new Error('identidade autenticada indisponível');
+          record.accountProof = digest([userId, companyId]);
+          if (prepared.accountProof && prepared.accountProof !== record.accountProof) {
+            const stale = new Error('conta de cache mudou'); stale.code = 'STALE_JOURNEY_REFERENCE'; throw stale;
+          }
+        }
         if (Array.isArray(openedFixtures?.fixtures)) record.fixtures.push(...openedFixtures.fixtures);
         if (openedFixtures?.environmentBlocked) {
           record.status = 'bloqueada';
@@ -382,13 +507,21 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             break;
           }
           if (validation && missingPlanned) feedback = `${missingPlanned[0]} ainda sem o valor do gerador (${missingPlanned[1]})`;
-          const decision = task.id === 'contatos.exportar' && browser.exportAction
+          const specialized = task.id === 'contatos.exportar' && typeof browser.exportAction === 'function'
+            || task.id === 'contatos.buscar' && typeof browser.searchAction === 'function';
+          let decision = task.id === 'contatos.exportar' && browser.exportAction
             ? await browser.exportAction(screen, prepared, record.actions)
             : task.id === 'contatos.buscar' && browser.searchAction
               ? await browser.searchAction(screen, prepared, record.actions)
-            : await model.decide({ task: { id: task.id, objective: task.tarefa, expected: record.expected,
-            verification: task.verificacaoM571, plan: taskPlans[task.id] ?? null }, screen, actions: record.actions, feedback,
-          });
+              : deterministicPlans ? plannedJourneyAction(task.id, screen, record.actions, fixtureFor) : null;
+          if (!decision && !specialized) {
+            if (deterministicPlans && fallbackActions >= 5) {
+              record.reason = 'plano sem alvo após 5 ações de fallback'; break;
+            }
+            decision = await model.decide({ task: { id: task.id, objective: task.tarefa, expected: record.expected,
+              verification: task.verificacaoM571, plan: taskPlans[task.id] ?? null }, screen, actions: record.actions, feedback });
+            fallbackActions++;
+          }
           if (!decision) { record.reason = 'seleção fictícia não comprovada'; break; }
           feedback = null;
           const charge = Number(decision.costUsd ?? 0);
@@ -445,13 +578,19 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             if (error?.code === 'JOURNEY_TARGET_CHANGED') {
               feedback = 'alvo mudou; observe de novo'; continue;
             }
-            if (error?.actionCategory) record.actionError = { categoria: error.actionCategory,
+            if (error?.actionCategory) record.actionError = { categoria: error.actionCategory, alvo: action.name,
+              ...(error.controlProbe ? { controlProbe: error.controlProbe } : {}),
               ...(error.coveredBy ? { coveredBy: error.coveredBy } : {}) };
             throw error;
           }
           record.actions.push(action);
           moduleActions++;
           record.usage.actions++;
+          if (task.id === 'contatos.definir_responsavel' && action.type === 'click' && action.name === 'Salvar'
+            || task.id === 'contatos.marcar_tags' && action.type === 'click' && action.role === 'option') {
+            await complete(sanitized);
+            break;
+          }
           if (['contatos.cadastrar', 'robos.criar'].includes(task.id)
             && action.type === 'click' && /^(?:Salvar|Adicionar robô)$/iu.test(action.name)) {
             const outcome = await browser.awaitCreation?.(20_000);
@@ -478,8 +617,10 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
         }
       } catch (error) {
         if (error?.code === 'STALE_JOURNEY_REFERENCE') throw error;
-        record.status = /escrita bloqueada pela política/iu.test(String(error?.message ?? '')) ? 'bloqueada' : 'inconclusiva';
-        record.reason = record.status === 'bloqueada' ? 'escrita bloqueada pela política' : journeyFailureCategory(error);
+        record.status = error?.code === 'QA_SESSION_ACTIVE' || /escrita bloqueada pela política/iu.test(String(error?.message ?? ''))
+          ? 'bloqueada' : 'inconclusiva';
+        record.reason = error?.code === 'QA_SESSION_ACTIVE' ? 'ambiente: sessão ativa'
+          : record.status === 'bloqueada' ? 'escrita bloqueada pela política' : journeyFailureCategory(error);
         if (record.status === 'bloqueada' && error.blocked) record.blocked = error.blocked;
         if (error instanceof SanitizationError) {
           record.screens = []; record.before = null; record.after = null; images.length = 0;
@@ -490,6 +631,10 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       } finally {
         const diagnostics = browser.diagnostics?.() ?? {};
         record.thirdPartyDenied = diagnostics.thirdPartyDenied ?? {};
+        if (diagnostics.searchProbe) record.searchProbe = diagnostics.searchProbe;
+        if (diagnostics.ownerProbe) record.ownerProbe = diagnostics.ownerProbe;
+        if (diagnostics.menuProbe) record.menuProbe = diagnostics.menuProbe;
+        if (diagnostics.tagProbe) record.tagProbe = diagnostics.tagProbe;
         if (['contatos.cadastrar', 'robos.criar'].includes(task.id)) record.creationCapture ??=
           diagnostics.creationCapture ?? { postSeen: false, status: null, jsonParsed: false, topKeys: [], refFound: false };
         await browser.close().catch(() => {});
@@ -499,9 +644,10 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
     record.usage.elapsedMs = Date.now() - started;
     // The caller cannot bypass this final privacy gate with an injected sanitizer.
     safeJourney(record);
-    await save(root, module, record, images);
+    await saveJourney(root, module, record, images);
     Object.assign(prepared, record.created);
     if (record.identity) prepared.identity = record.identity;
+    if (record.accountProof) prepared.accountProof = record.accountProof;
     results.push(record);
   }
   } catch (error) {
