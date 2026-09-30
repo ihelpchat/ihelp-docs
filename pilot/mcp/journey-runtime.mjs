@@ -1317,6 +1317,12 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
           ? page.waitForResponse((response) => response.request().method() === 'PUT'
             && /^\/api\/(?:v2\/)?contacts\/[a-z0-9-]+(?:\/owner)?\/?$/iu.test(new URL(response.url()).pathname),
           { timeout: 10_000 }).catch(() => null) : null;
+        const botSaveResponse = ['robos.montar_menu', 'robos.encaminhar', 'robos.salvar'].includes(currentTask)
+          && action.type === 'click' && action.name === 'Salvar'
+          ? page.waitForResponse((response) => response.request().method() === 'PUT'
+            && new URL(response.url()).origin === qaApi?.origin
+            && new RegExp(`^/api/(?:v2/)?bot/${currentPrepared?.robotRef}/save/?$`, 'iu')
+              .test(new URL(response.url()).pathname), { timeout: 60_000 }).catch(() => null) : null;
         const tagResponse = currentTask === 'contatos.marcar_tags' && action.type === 'click' && action.role === 'option'
           ? page.waitForResponse((response) => response.request().method() === 'POST'
             && /^\/api\/(?:v2\/)?contactTags\/[0-9]+\/?$/iu.test(new URL(response.url()).pathname),
@@ -1324,6 +1330,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         if (currentTask === 'contatos.cadastrar' && action.type === 'click' && action.name === 'Salvar')
           await page.waitForLoadState('networkidle', { timeout: 2_500 }).catch(() => {});
         await actJourneyAction(page, action, observedTargets, { vocabulary: [...known], generated: fixtures() });
+        if (botSaveResponse) botSaveStatus = (await botSaveResponse)?.status() ?? botSaveStatus;
         if (ownerResponse) await ownerResponse;
         if (tagResponse) {
           await tagResponse;
