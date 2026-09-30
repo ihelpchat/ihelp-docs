@@ -93,3 +93,26 @@ test('três leituras usam mediana por critério e grave só com maioria', () => 
   assert.equal(majority.aceite, false);
   assert.deepEqual(majority.defeitosGraves, ['contradiz_evidencia']);
 });
+
+test('pendência factual consensual segue para o juiz de fatos sem vazar no relatório', () => {
+  const factual = 'resultado sem prova';
+  const isolated = 'alegação isolada sem prova';
+  const readings = [
+    { ...verdict, naoVerificaveis: [factual, isolated] },
+    { ...verdict, naoVerificaveis: [factual] },
+    { ...verdict, naoVerificaveis: [factual] },
+  ].map((item) => parseEditorialVerdict(item));
+  const result = consolidateEditorialReadings(readings);
+  assert.deepEqual(result.naoVerificaveis, [factual]);
+  assert.deepEqual(result.naoVerificaveisIsolados, [isolated]);
+  assert.deepEqual(result.notas, scores);
+  assert.equal(result.aceite, true);
+  const report = publicCalibrationReport([{ id: 'G01', grupo: 'guardada',
+    bruno: { notas: scores, defeitosGraves: [] }, juiz: result }],
+  { model: 'mock', inputTokens: 0, outputTokens: 0, costUsd: 0 });
+  assert.equal(report.amostras[0].juiz.naoVerificaveisCount, 1);
+  assert.equal(report.amostras[0].juiz.naoVerificaveisIsoladosCount, 1);
+  assert.doesNotMatch(JSON.stringify(report), /resultado sem prova|alegação isolada sem prova/u);
+  assert.deepEqual(report.amostras[0].juiz.notas, scores);
+  assert.equal(report.amostras[0].juiz.aceite, true);
+});
