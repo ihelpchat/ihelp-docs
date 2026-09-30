@@ -19,8 +19,12 @@ const labels = approved.labels.filter((item) => item.file.includes(filePart)
 const knownLabels = new Set(approved.labels.map(({ label }) => label));
 const journey = await loadCalibrationJourneys(modulo, process.env.JOURNEYS_DIR, { knownLabels });
 const business = await loadBusinessContext(root, modulo, process.env.BUSINESS_CONTEXT_DIR);
+const fontes = selected === 'robos' ? [{ nome: 'recado-fora-do-horario', conteudo: await readFile(join(root,
+  'content/docs/docs/sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario.mdx'), 'utf8') }] : [];
 const evidence = { front: { routes: approved.routes.filter((item) => item.label === routeLabel), labels },
-  jornadas: journey.jornadas, negocio: business.map(({ body }) => body), fontes: [] };
+  jornadas: journey.jornadas, negocio: business.map(({ body }) => body), fontes,
+  confirmacoes: trace.filter(({ evidencia }) => evidencia.includes('confirmado:responsável de produto'))
+    .map(({ afirmacao }) => ({ fonte: 'responsável de produto', afirmacao })) };
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const call = ({ instructions, input, schema }) => client.responses.create({ model: 'gpt-6-luna', instructions, input,
   reasoning: { effort: 'none' }, text: { format: { type: 'json_schema', name: 'triagem_ouro', strict: true, schema } },

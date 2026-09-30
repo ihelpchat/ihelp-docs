@@ -7,91 +7,96 @@ description: Cadastre, busque, atualize e organize os contatos da empresa.
 
 ## O que é
 
-Contatos é a agenda de clientes da empresa no iHelp. Cada cadastro reúne as informações do cliente e permite à equipe encontrá-lo sem depender da agenda de um celular particular.
+Contatos é a agenda da empresa no iHelp. Cada cadastro reúne as informações do contato em um lugar: dados, tags, notas e histórico de atendimentos. Assim, a equipe encontra o que precisa sem depender da agenda de um celular particular.
 
 ## Para que serve
 
-Use Contatos para reconhecer quem chama, corrigir um número, separar clientes por interesse e organizar quem cuida de cada carteira. Uma loja pode marcar os clientes interessados em um produto com uma tag; quando alguém da equipe sai, o gestor pode escolher outro responsável pelos contatos. Se a lista já está numa planilha, ela pode ser importada em vez de cadastrada pessoa por pessoa.
+Quando um cliente volta a chamar, a equipe pode consultar os atendimentos anteriores e as notas antes de responder. Se a empresa quiser trabalhar com um grupo específico, pode [marcar contatos com tags](#marcar-um-contato-com-uma-tag) e [filtrar a lista](#filtrar-contatos). Para manter uma carteira com a mesma pessoa da equipe, pode [definir um responsável](#definir-o-responsavel-por-um-contato). Uma lista já existente pode ser [importada de uma planilha](#importar-contatos-de-uma-planilha).
 
 ## Buscar um contato
 
-Tenha acesso ao menu **Contatos** e pelo menos um cadastro na agenda.
+Tenha acesso a **Contatos** e pelo menos um cadastro na agenda.
 
 1. Abra **Contatos** no menu.
 2. Digite o nome ou o telefone em **Buscar contato...**.
-3. Encontre o cadastro na lista e abra-o para ver os dados. Se houver filtros ativos e ele não aparecer, use **Limpar filtros** e tente novamente.
+3. Selecione o contato na lista para abrir o cadastro. Se não aparecer, retire os filtros ativos ou use **Limpar filtros**.
 
-**O que acontece depois:** você vê o contato na lista e pode abrir o cadastro ou escolher **Editar contato**.
+Para encontrar um grupo, use também [os filtros da lista](#filtrar-contatos).
+
+## Filtrar contatos
+
+Use os filtros quando precisar encontrar um grupo, como os contatos de uma tag. Em **Contatos**, selecione **Tag**. Quem tem perfil de administrador também pode selecionar **Departamento** e **Usuário**. Os filtros podem ser combinados com **Buscar contato...**. Para voltar à lista completa, limpe os filtros.
+
+O grupo mostrado pode ser [exportado](#exportar-contatos) para trabalhar em uma planilha.
 
 ## Adicionar um contato
 
-Tenha o nome e o telefone com DDD. Por exemplo, cadastre alguém que começou a conversar com a loja para a equipe encontrá-lo depois.
+Tenha o nome e o telefone com DDD de alguém que começou a conversar com a empresa.
 
 1. Em **Contatos**, clique em **Adicionar Contato**.
 2. Preencha **Nome** e **Telefone**. Os demais campos são opcionais.
 3. Clique em **Salvar**.
-4. Localize o nome na lista e abra o cadastro para ver os dados salvos.
 
-**O que acontece depois:** o contato fica disponível na agenda. Você pode editar os dados ou adicionar uma tag.
+O contato passa a fazer parte da agenda. Você pode [marcar uma tag](#marcar-um-contato-com-uma-tag), [definir um responsável](#definir-o-responsavel-por-um-contato), adicionar notas e consultar os atendimentos no cadastro. Veja também [como usar tags no atendimento](/docs/sobre-o-sistema/atendimento#como-funcionam-as-tags).
 
 ## Corrigir os dados de um contato
 
-Use esta opção quando o cliente mudar de nome ou de telefone. Tenha o contato já cadastrado.
+Use esta opção quando o nome ou o telefone mudar.
 
 1. Em **Contatos**, encontre o cadastro e escolha **Editar contato**. Você também pode abrir o contato e editar os dados ali.
 2. Mude o campo necessário e clique em **Salvar**.
-3. Abra ou busque o contato novamente e veja o dado atualizado.
-
-**O que acontece depois:** a equipe passa a encontrar o cadastro pelo dado salvo.
 
 ## Marcar um contato com uma tag
 
-Uma tag ajuda a separar contatos por interesse ou situação. Tenha um contato cadastrado e uma tag para usar.
+Uma tag identifica contatos por interesse ou situação. Tenha um contato cadastrado.
 
 1. Abra o contato em **Contatos**.
-2. Em **Tags**, use **Buscar ou criar tag...** para escolher a tag.
-3. Abra o contato novamente e veja a tag junto aos dados. Para encontrar o grupo, volte à lista e use o filtro **Tag**.
+2. Em **Tags**, use **Buscar ou criar tag...** para escolher uma tag existente.
 
-**O que acontece depois:** o contato aparece no grupo marcado com essa tag. Se a tag desejada não existir, o mesmo campo permite criá-la.
+A tag fica vinculada ao contato. Você também pode [aplicá-la diretamente no atendimento](/docs/sobre-o-sistema/atendimento#como-funcionam-as-tags) e [filtrar a lista](#filtrar-contatos) por ela. Se ainda não existir, [crie uma tag](#criar-uma-tag).
 
-## Definir quem cuida de um contato
+## Criar uma tag
 
-Use esta opção para organizar uma carteira. Tenha o contato cadastrado e escolha um departamento; se necessário, escolha também uma pessoa da equipe.
+No cadastro do contato, abra **Tags**, digite o nome em **Buscar ou criar tag...** e escolha a opção de criar. A nova tag fica disponível para identificar esse contato e outros da empresa.
+
+## Definir o responsável por um contato
+
+Defina um responsável quando as próximas conversas desse contato devem ir direto para uma pessoa da equipe. É assim que a empresa mantém a carteira com quem já conhece o cliente: as conversas deixam de passar pelo [robô](./robos) e pela fila de novos atendimentos e chegam à lista **Meus** do responsável.
 
 1. Abra o contato em **Contatos** e encontre **Definir proprietário**.
 2. Clique em **Editar** e escolha um departamento em **Selecione um departamento**.
-3. Se a responsabilidade for do departamento inteiro, escolha **Somente departamento**. Se for de uma pessoa, selecione também o usuário.
-4. Clique em **Salvar**. Abra o contato novamente e veja o departamento e a pessoa escolhidos.
+3. Selecione o usuário responsável. Se a responsabilidade for apenas do departamento, existe a opção **Somente departamento**.
+4. Clique em **Salvar**.
 
-**O que acontece depois:** o responsável fica visível no cadastro. Essa escolha organiza a carteira; não altera, por si só, conversas já abertas.
+O efeito descrito acima vale quando há um usuário responsável definido. A opção **Somente departamento** não tem o mesmo efeito confirmado.
 
 ## Importar contatos de uma planilha
 
-Use a importação quando a empresa já tiver uma lista. Prepare um arquivo CSV ou XLSX com as informações que deseja trazer. A importação pode levar alguns minutos.
+Use a importação quando a empresa já tiver uma lista. O arquivo pode ser CSV, XLSX ou XLS. Não precisa começar com os nomes de coluna do iHelp: você escolhe a linha de cabeçalho e associa as colunas aos campos do sistema. Inclua uma coluna de nomes e, para contatos que receberão mensagens, uma de telefones com DDD.
 
 1. Em **Contatos**, abra **Mais opções** e escolha **Importar Contatos**.
 2. Em **Enviar arquivo**, selecione a planilha e clique em **Avançar**.
-3. Em **Selecionar cabeçalho**, escolha a linha com os nomes das colunas e avance.
-4. Em **Mapear colunas**, associe as colunas da planilha aos campos do iHelp e avance.
-5. Em **Verificar dados**, examine os registros sinalizados, corrija a planilha se necessário e confirme a importação.
-6. Aguarde o fim do processamento. Busque dois contatos da planilha na lista e abra seus cadastros para ver os dados.
+3. Em **Selecionar cabeçalho**, escolha a linha que contém os nomes das colunas.
+4. Em **Mapear colunas**, associe pelo menos a coluna de nome ao campo **Nome**. Associe a coluna de telefone a **Telefone** se ela existir.
+5. Em **Verificar dados**, examine os registros sinalizados e confirme em **Importar**.
+6. Aguarde o processamento terminar. Se aparecer **Importação em andamento...**, espere antes de começar outra.
 
-**O que acontece depois:** os contatos importados podem ser buscados, editados e organizados como os demais. Se houver **Importação em andamento...**, aguarde a conclusão antes de iniciar outra.
+Depois, os contatos importados podem ser [buscados](#buscar-um-contato), [filtrados](#filtrar-contatos) e organizados como os demais.
 
 ## Exportar contatos
 
-Use a exportação quando precisar trabalhar com a lista em uma planilha. Quem tiver acesso aos dados deve guardar o arquivo em local apropriado.
+Use a exportação quando precisar trabalhar com a lista numa planilha. O arquivo segue os filtros ativos.
 
-1. Em **Contatos**, use **Tag** se quiser restringir a lista a um grupo.
+1. Em **Contatos**, use [os filtros](#filtrar-contatos) se quiser restringir a lista.
 2. Abra **Mais opções** e escolha **Exportar Contatos**.
-3. Aguarde o download. Abra o arquivo baixado e veja se os contatos esperados estão nele.
+3. Aguarde o download do arquivo. Enquanto ele é preparado, aparece **Exportando...**.
 
-**O que acontece depois:** você tem uma planilha dos contatos exportados. **Exportando...** indica que o arquivo ainda está sendo preparado.
+Você pode usar a planilha para preparar uma [campanha](/docs/sobre-o-sistema/campanhas), filtrar os dados no Excel ou trabalhar apenas com o grupo exportado.
 
 ## Dúvidas comuns
 
-**O nome não aparece na busca. O que faço?** Limpe os filtros e procure pelo telefone. Se o contato não estiver cadastrado, use **Adicionar Contato**.
+**O nome não aparece na busca. O que faço?** Limpe os filtros e procure pelo telefone. Se não houver cadastro, use [Adicionar Contato](#adicionar-um-contato).
 
-**Qual a diferença entre tag e responsável?** A tag agrupa contatos por uma característica; o responsável mostra quem cuida daquele contato.
+**Qual a diferença entre tag e responsável?** A tag identifica um grupo, como clientes interessados em um serviço. O responsável é uma pessoa definida para aquele contato: as próximas conversas vão direto para **Meus** dela, sem passar pelo robô nem pela fila de novos atendimentos.
 
-**O celular importa os contatos sozinho?** Não. Para trazer uma lista, primeiro prepare uma planilha e use **Importar Contatos**.
+**O celular importa os contatos sozinho?** Não. Primeiro [exporte os contatos do celular](/docs/duvidas-e-dicas/download-de-lista-de-contatos) e prepare um CSV ou uma planilha XLSX/XLS para [importar no iHelp](#importar-contatos-de-uma-planilha). A exportação de iPhone pode gerar um arquivo vCard (.vcf), que não entra diretamente na importação; converta-o para um dos formatos aceitos.
