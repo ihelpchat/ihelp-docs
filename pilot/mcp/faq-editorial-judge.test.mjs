@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 const { judgeEditorial, parseEditorialVerdict, aggregateCalibration, publicCalibrationReport } =
   await import('./faq-editorial-judge.mjs').catch(() => ({}));
 
@@ -31,7 +34,8 @@ test('agregação cega calcula acordo, defeitos aceitos e erro médio por crité
   const rows = [
     { id: 'G01', grupo: 'guardada', bruno: { notas: scores }, juiz: { ...verdict, aceite: true } },
     { id: 'G02', grupo: 'guardada', bruno: { notas: { ...scores, clareza: 1 } }, juiz: { ...verdict, notas: { ...scores, clareza: 2 }, aceite: false } },
-    { id: 'G03', grupo: 'guardada', bruno: { notas: scores }, juiz: { ...verdict, aceite: true, defeitosGraves: ['produto_sem_evidencia'] } },
+    { id: 'G03', grupo: 'guardada', bruno: { notas: { ...scores, coerencia: 1 }, defeitosGraves: ['produto_sem_evidencia'] },
+      juiz: { ...verdict, aceite: true, defeitosGraves: ['produto_sem_evidencia'] } },
   ];
   const result = aggregateCalibration(rows);
   assert.equal(result.concordancia, 2);
@@ -39,11 +43,17 @@ test('agregação cega calcula acordo, defeitos aceitos e erro médio por crité
   assert.equal(result.erroMedioPorCriterio.clareza, 1 / 3);
 });
 
-test('relatório público descarta comentários privados inclusive em campos extras', () => {
+test('relatório público descarta comentário falso de arquivo privado', async () => {
   const secret = 'COMENTARIO_FALSO_PRIVADO_741';
-  const rows = [{ id: 'G01', grupo: 'guardada', texto: secret,
-    bruno: { notas: scores, comentario: secret }, juiz: { ...verdict, comentario: secret, aceite: true } }];
-  const report = publicCalibrationReport(rows, { model: 'mock', inputTokens: 1, outputTokens: 1, costUsd: 0 });
-  assert.doesNotMatch(JSON.stringify(report), /COMENTARIO_FALSO_PRIVADO_741/);
-  assert.deepEqual(report.amostras[0].juiz.defeitosGraves, []);
+  const dir = await mkdtemp(join(tmpdir(), 'faq-judge-'));
+  try {
+    const notesPath = join(dir, 'notas.json');
+    await writeFile(notesPath, JSON.stringify({ amostras: [{ amostra: 'G01', notas: scores, comentario: secret }] }));
+    const note = JSON.parse(await readFile(notesPath, 'utf8')).amostras[0];
+    const rows = [{ id: 'G01', grupo: 'guardada', texto: secret,
+      bruno: note, juiz: { ...verdict, comentario: secret, aceite: true } }];
+    const report = publicCalibrationReport(rows, { model: 'mock', inputTokens: 1, outputTokens: 1, costUsd: 0 });
+    assert.doesNotMatch(JSON.stringify(report), /COMENTARIO_FALSO_PRIVADO_741/);
+    assert.deepEqual(report.amostras[0].juiz.defeitosGraves, []);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

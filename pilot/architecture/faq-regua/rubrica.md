@@ -65,3 +65,5 @@ Avalie a página inteira, de 0 a 4 em cada critério. O exemplo ilustra a âncor
 ## Aceite
 
 Pelo menos **3 em cada critério**, zero afirmação de produto sem evidência, zero tarefa prometida incompleta e zero perda na montagem da última versão aprovada. O juiz editorial não valida a si mesmo: Bruno calibra as amostras sem ver a fonte. Notas baixas refletem o feedback dele de 29/09: “O que é” reduzido a navegação, “Para que serve” limitado a tags, tarefa que só abre a função e “E agora?” reduzido a “Salvando...”.
+
+Defeitos graves também incluem dados ou condições de ensaio apresentados ao cliente, pendências internas expostas como orientação e vocabulário do processo editorial no texto final. A decisão é semântica e considera as evidências fornecidas; exemplos de palavras isoladas não são regra de aceite.
