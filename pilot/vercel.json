@@ -109,7 +109,12 @@
     },
     {
       "source": "/ihelp-docs/api/crm/etapas/paginar-cards-com-filtro/",
-      "destination": "/ihelp-docs/api/crm/etapas/paginar-cards-da-etapa/",
+      "destination": "/ihelp-docs/api/crm/cards/listar-cards-da-etapa/",
+      "permanent": true
+    },
+    {
+      "source": "/ihelp-docs/api/crm/etapas/paginar-cards-da-etapa/",
+      "destination": "/ihelp-docs/api/crm/cards/listar-cards-da-etapa/",
       "permanent": true
     }
   ]
