@@ -8,124 +8,83 @@ assistantInitialSteps: 3
 assistantSuggestions: "Quero montar um menu com opções"
 ---
 
-Crie e mantenha fluxos de pré-atendimento, opções automáticas e regras de transferência para a equipe.
+# Robôs
 
 <VideoEmbed url="/videos/robo-de-pre-atendimento.mp4" />
 
-## O que é o chatbot de pré-atendimento no iHelp?
+## O que é
 
-O chatbot de pré-atendimento tem como principal função fazer o atendimento inicial, orientando o cliente sobre qual departamento ou atendente ele deseja conversar, antes de ser encaminhado para um atendimento humano.
+Um robô recebe novos atendimentos receptivos e segue um fluxo de blocos montado pela empresa. Pode mostrar opções e encaminhar a conversa para um departamento ou atendente. Ele segue esse fluxo; não responde livremente a qualquer pergunta.
 
-## Como funciona o fluxo do chatbot?
+## Para que serve
 
-O fluxo do chatbot começa com uma mensagem do cliente, ativando o atendimento. Por exemplo, se o cliente digitar "eu quero" após um anúncio, o robô inicia o atendimento com uma mensagem de boas-vindas e, em seguida, oferece opções para o cliente escolher (como falar com o departamento de vendas ou suporte).
+Quando uma empresa recebe pedidos de agendamento e cobrança no mesmo número, o robô pode apresentar essas escolhas e levar cada conversa à equipe certa. Também pode responder uma dúvida frequente antes do encaminhamento. O fluxo começa a valer quando o robô é **publicado**. Contatos com [responsável definido](/docs/sobre-o-sistema/agenda-de-contatos#definir-o-responsavel-por-um-contato) não passam pelo robô: suas conversas vão direto para **Meus** desse responsável.
 
-## Como criar um novo robô
+## Criar um robô
 
-Você pode montar um primeiro fluxo funcional com uma mensagem de boas-vindas e o encaminhamento para um departamento. Esse é só o exemplo mais simples: com **Menu de opções**, cada escolha do cliente pode abrir um caminho diferente no fluxo, como outra mensagem ou o encaminhamento para um departamento. Para começar, abra **Robôs** no menu do iHelp.
+Tenha acesso a **Robôs** e escolha o canal no qual ele deverá funcionar. Depois da criação, será preciso montar o fluxo.
 
 <ProductAction id="abrir-robos" label="Abrir a tela Robôs" route="/bot" target="robots-create" />
 
-1. No menu do iHelp, abra **Robôs**. Na lista, clique em **“Criar novo Robô”**.
+1. No menu, abra **Robôs** e clique em **Criar novo robô**.
+2. Em **Título do Robô**, escreva um nome que ajude a equipe a reconhecê-lo.
+3. Em **Canais**, escolha o número desejado e clique em **Adicionar robô**.
 
-![Tela do iHelp: Como criar um novo robô](/img/help/q4tBz2R7cevwT94eUQKB.png)
+O editor abre com o robô criado. Ele ainda está vazio e inativo; o próximo passo é [montar o fluxo](#montar-um-menu-de-opcoes).
 
-2. Em **“Adicionar um novo Robô”**, preencha **“Título do Robô”** com um nome fácil de reconhecer, como “Boas-vindas”.
+## Encontrar um robô
 
-![Tela do iHelp: Título do Robô e Canais](/img/help/Vc7GpOtHK4rebqsNycJs.png)
+Tenha um robô já criado.
 
-3. Em **“Canais”**, clique no **“+”** e selecione pelo menos um número. Canais são os números de WhatsApp nos quais esse robô atenderá. Depois, clique em **“Adicionar robô”**. O iHelp abrirá a tela de criação do fluxo.
+1. Abra **Robôs** no menu.
+2. Digite parte do título em **Buscar robô**. Se não lembrar o título, percorra a lista.
+3. Abra o robô encontrado para ver o fluxo e seu estado **Inativo** ou **Ativo**.
 
-4. No bloco **“Iniciar Fluxo”**, confira o gatilho, que é o acontecimento que inicia o robô. Para um robô de primeiro contato, mantenha **“Mensagem do Cliente”**: assim, o fluxo começa quando o cliente envia uma mensagem.
+## Montar um menu de opções
 
-![Tela do iHelp: Como criar um novo robô](/img/help/ak3BAzibQe6Ix157Ouwl.png)
+Abra um robô criado. Pense em escolhas curtas, como “Agendamento” e “Financeiro”. Cada escolha precisa levar a outro bloco.
 
-5. Clique no botão **“+”** abaixo de **“Iniciar Fluxo”**. A janela **“Adicionar bloco”** será aberta.
+1. No editor, partindo de **Iniciar Fluxo**, clique no **+** e abra **Adicionar bloco**.
+2. Escolha **Menu de opções**. Em **Bloco de pergunta**, escreva em **Mensagem** o que o cliente deverá escolher.
+3. Use **Adicione uma opção** para incluir cada resposta e conclua em **Adicionar bloco**.
+4. Ligue cada opção ao próximo bloco pelo **+**. Pode ser uma **Mensagem simples** ou uma **Ação**.
+5. Clique em **Salvar**.
 
-![Tela do iHelp: Como criar um novo robô](/img/help/maThsp6oIsur9uVCylHP.png)
+Para cada escolha chegar à equipe certa, [acrescente uma ação de encaminhamento](#encaminhar-uma-escolha-para-a-equipe). Se o robô já está publicado, **Salvar** muda o fluxo em uso.
 
-6. Para criar uma saudação, escolha **“Mensagem simples”**. Preencha **“Título da mensagem”**, escreva a saudação no campo **“Crie uma mensagem...”**, use o botão laranja para inserir a mensagem e clique em **“Adicionar bloco”**.
+## Encaminhar uma escolha para a equipe
 
-![Tela do iHelp: Como criar um novo robô](/img/help/LGLg6AJYP75yyWe4FD71.png)
+Tenha um robô com uma opção criada e um departamento ou atendente disponível.
 
-![Tela do iHelp: Mensagem simples](/img/help/PSCvUykFMxHzOHNddPJd.png)
+1. No editor, clique no **+** do caminho que deseja completar.
+2. Em **Adicionar bloco**, escolha **Ação** e depois **Encaminhar atendimento**.
+3. Use **Selecione o departamento** para levar a conversa à equipe ou **Selecione o atendente** para escolher uma pessoa.
+4. Conclua em **Adicionar bloco** e clique em **Salvar**. Repita nos outros caminhos que precisarem de destino.
 
-7. Abaixo do bloco criado, clique em **“Clique aqui para finalizar o fluxo”**. Escolha **“Encaminhar atendimento”**. Use **“Departamento”** para colocar o cliente na fila de uma equipe, como Vendas; use **“Atendente”** para enviar diretamente a uma pessoa específica. Selecione o destino e clique em **“Adicionar bloco”**.
+A escolha passa a seguir para o destino configurado quando o robô estiver publicado. Se ele já está publicado, a alteração salva passa a valer no fluxo em uso.
 
-![Tela do iHelp: Ações disponíveis no fluxo](/img/help/V1UmN3W0H1nDNQJcwwOx.png)
+## Editar um robô
 
-8. Confira se o fluxo começa em **“Iniciar Fluxo”**, passa pela mensagem e termina no encaminhamento escolhido. Use **“Salvar”** para guardar um robô ainda inativo; use **“Publicar”** quando quiser colocar o fluxo online.
+Use esta opção para alterar um texto que deixou clientes confusos ou mudar um caminho do fluxo.
 
-![Tela do iHelp: Salvar ou publicar o robô](/img/help/PJa3jnEjfcR7uSX0naA2.png)
+1. Em **Robôs**, encontre o robô e escolha **Editar**.
+2. No editor, mude o título em **Digite o título do robô** ou abra o bloco que deseja alterar.
+3. Clique em **Salvar**.
 
-## Qual bloco escolher?
+Se o robô está publicado, **Salvar** já muda a versão em uso. Revise o texto e os destinos antes de salvar.
 
-**Mensagem simples:** envia uma ou mais mensagens quando o gatilho ocorrer. É a opção mais direta para uma saudação.
+## Salvar e publicar o fluxo
 
-**Menu de opções:** mostra escolhas para o cliente. Cada escolha cria uma ramificação, ou caminho, na árvore do fluxo: pode continuar para outra mensagem, encaminhar para um departamento ou executar uma ação.
+Em um robô que ainda não foi publicado, **Salvar** guarda os blocos e ligações sem iniciar o atendimento. Monte o fluxo, clique em **Salvar** e, quando estiver pronto para receber novos atendimentos receptivos, clique em **Publicar**. A partir daí, o robô passa a valer para esses novos atendimentos, exceto os de contatos com [responsável definido](/docs/sobre-o-sistema/agenda-de-contatos#definir-o-responsavel-por-um-contato).
 
-**Ação:** executa o destino do fluxo, como **“Encaminhar atendimento”**, **“Finalizar atendimento”** ou **“Recomeçar atendimento”**.
+Depois da publicação, **Salvar** uma edição já altera o fluxo em uso; não é necessário publicar de novo.
 
-## Como editar um robô já existente
+## Dúvidas comuns
 
-Para localiza-lo clique no menu superior “Robô”
+**Criei o robô e ele já responde?** Não. Primeiro monte o fluxo e clique em **Publicar** para ele começar a valer nos novos atendimentos receptivos.
 
-![Tela do iHelp: Como editar um robô já existente](/img/help/iehw4wSmpFxkwe15zUP4.png)
+**Salvar muda o que o cliente recebe?** Se o robô já foi publicado, sim: o fluxo salvo passa a ser usado. Antes da primeira publicação, **Salvar** apenas guarda o trabalho.
 
-Na próxima tela você encontrará os robôs já criados e poderá também, criar um novo.
+**Todo contato passa pelo robô?** Não. Quando o contato tem um usuário [responsável definido](/docs/sobre-o-sistema/agenda-de-contatos#definir-o-responsavel-por-um-contato), a conversa vai direto para **Meus** dele.
 
-![Tela do iHelp: Como editar um robô já existente](/img/help/JEQG4WOMmPziWF9WYInA.png)
-
-Para editar um robô já criado, clique em “Editar”
-
-![Tela do iHelp: Como editar um robô já existente](/img/help/xgGZHsOwvBfcc1UKCrCf.png)
-
-Agora você poderá ver todo o fluxo e configuração do robô já criado, poderá realizar todas as alterações que desejar.
-
-![Tela do iHelp: Como editar um robô já existente](/img/help/r9HbhN3Xfds5J4CkXT3u.png)
-
-Sempre que realizar uma edição em um robô já existente, lembre-se sempre de “Publicar” para que as alterações fiquem online.
-
-![Tela do iHelp: Como editar um robô já existente](/img/help/Fk0uq9BHjuPbxRkskXaK.png)
-
-## Blocos de opções
-
-![Tela do iHelp: Blocos de opções](/img/help/xXkjz5jUPbvh56zDmFZb.png)
-
-Mensagem simples: Uma mensagem será enviada para o cliente quando o “Gatilho” ocorrer.
-
-![Tela do iHelp: Blocos de opções](/img/help/PSCvUykFMxHzOHNddPJd.png)
-
-Menu de opções: Você poderá criar um menu de opções para o cliente escolher, cada resposta pode também leva-lo a um departamento/usuário diferente, ou até a uma ação.
-
-![Tela do iHelp: Blocos de opções](/img/help/mBfKLzgI06X5bYCR0z2i.png)
-
-Ação: Quando você definiu o que irá ocorrer quando o cliente clica em alguma opção, por exemplo: No menu opções ele selecionou o departamento de vendas, então você adiciona uma ação “Encaminhar departamento” e ele será redirecionado.
-
-![Tela do iHelp: Blocos de opções](/img/help/V1UmN3W0H1nDNQJcwwOx.png)
-
-## Atendimentos parados no robô
-
-Acesse a aba “Robô”:
-
-![Tela do iHelp: Atendimentos parados no robô](/img/help/zt5kdEsdg1PWrZx8GSqD.png)
-
-Essa aba exibe os atendimentos que estão aguardando interação do robô, ela fica localizada acima da conversa, ao lado de “finalizados”.
-
-Clique no atendimento: Abra o atendimento para liberar o fluxo ou transferir para um atendente humano.
-
-## Configurações extras
-
-Aqui você irá definir algumas opções importantes:
-
-**Abrir atendimento de contato inativo:** Quando o cliente realiza apenas o primeiro contato e não interage mais com o robô de atendimento, você defini um tempo para que ele fique “parado no robô” após esse tempo pode encaminhá-lo para o atendimento.
-
-**Departamento para encaminhar atendimento:** Aqui você irá definir para qual departamento irá encaminhar o atendimento inativo.
-
-**Finalizar o atendimento do robô por respostas invalidas:** Neste caso, quando alguém entra em contato, porém não realiza as ações de atendimento definidas, você pode optar por finalizar esse atendimento. Ao selecionar essa opção você também poderá adicionar uma mensagem de finalização.
-
-![Tela do iHelp: Configurações extras](/img/help/pW3nrr7dbSgMA1g1itkc.png)
-
-Sempre lembre de salvar ou publicar seu robô.
-
-![Tela do iHelp: Configurações extras](/img/help/PJa3jnEjfcR7uSX0naA2.png)
+**O recado de fora do horário fica no robô?** Não. Ele fica em [Configurações > Departamentos](/docs/sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario).
