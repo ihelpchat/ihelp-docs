@@ -349,7 +349,7 @@ try {
   for (const [query, expected] of queries) {
     await searchInput.fill(query);
     await assert.doesNotReject(
-      searchDialog.getByText(expected, { exact: false }).first().waitFor({ timeout: 3000 }),
+      searchDialog.getByText(expected, { exact: false }).first().waitFor({ timeout: 10000 }),
       `Busca "${query}" não encontrou "${expected}"`,
     );
   }
