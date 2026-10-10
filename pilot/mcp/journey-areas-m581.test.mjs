@@ -4,6 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { areaPlans, areaWriteAllowed, areaFixtureValue, nextAreaAction, verifyAreaResult } from './journey-plans/index.mjs';
 import { journeyRequestAllowed, journeyWriteDecision } from './journey-runtime.mjs';
 import { journeyCoverage } from './journey-service.mjs';
+import { runJourneys, policyDecision } from './journey-service.mjs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const catalog = JSON.parse(await readFile(new URL('../architecture/faq-regua/tarefas-ouro.json', import.meta.url)));
 const matrix = JSON.parse(await readFile(new URL('../architecture/coverage-matrix.json', import.meta.url)));
@@ -96,4 +100,46 @@ test('nega envio, disparo, publicação, agendamento real, ids alheios e valores
   ];
   for (const [taskId, method, path, body] of denied)
     assert.equal(journeyRequestAllowed(request(method, path, body), context(taskId)), false, `${taskId} ${path}`);
+});
+
+test('nega PATCH de tarefa criada quando a origem da API difere', () => {
+  const foreign = { ...request('PATCH', '/task/11/status', { status: 3 }),
+    url: () => 'https://outra.example.test/api/v2/task/11/status' };
+  assert.equal(areaWriteAllowed(foreign, context('tarefas.concluir')), false);
+  assert.equal(journeyRequestAllowed(foreign, context('tarefas.concluir')), false);
+});
+
+test('estado de agendamento reconhece enviado e pendente na leitura persistida', () => {
+  const base = { status: 200, method: 'GET', url: 'https://api.example.test/api/v2/ScheduledMessages/calendar/schedules/2026-10-10' };
+  for (const sent of [true, false])
+    assert.equal(verifyAreaResult('agendamentos.consultar_estado', { ...base, body: [{ idRef: taskRef, sent }] },
+      { fixedIds: { schedule: new Set([taskRef]) }, apiOrigin: 'https://api.example.test' }), true);
+});
+
+test('runtime aceita as quatro áreas, executa plano e só conclui após verify', async () => {
+  for (const module of modules) {
+    const entry = Object.entries(areaPlans).find(([id, plan]) => id.startsWith(`${module}.`) && plan.steps.length);
+    const [id, plan] = entry;
+    const root = await mkdtemp(join(tmpdir(), 'journey-area-'));
+    let verified = 0;
+    const areaFixtureContext = { stageName: 'Etapa Exemplo 01', contactOption: 'opção 1',
+      selfLabel: 'Atendente Exemplo 01', selfOption: 'opção 1', scheduleDay: '10' };
+    const browser = { async open() { return { areaFixtureContext }; }, async observe() { return { title: module, path: plan.startRoute,
+      controls: plan.steps.filter((step) => step.type === 'click').map((step) => ({ role: step.role,
+        name: step.name ?? areaFixtureContext[step.nameFrom], enabled: true })),
+      fields: plan.steps.filter((step) => step.type === 'fill').map((step) => ({ role: step.role, name: step.name,
+        value: null, required: false })), messages: [], state: {}, screenshot: Buffer.from('masked-png') }; },
+      async act() {}, async verify() { verified++; return { confirmed: false, observed: 'leitura não confirmou' }; },
+      async close() {} };
+    try {
+      const [record] = await runJourneys({ module, tasks: [catalog.tarefas.find((item) => item.id === id)], root,
+        frontSha: 'a'.repeat(40), profile: 'qa', marker: 'a1b2c3d4', browser,
+        model: { async decide() { throw Error('plano determinístico não usado'); } }, deterministicPlans: true });
+      assert.equal(verified, 1, `${id}: ${record.reason}; ${JSON.stringify(record.actions)}`);
+      assert.equal(record.status, 'inconclusiva', id);
+      assert.ok(record.screens.length, id);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  }
+  assert.equal(policyDecision({ type: 'fill', role: 'textbox', name: 'Título', value: 'Tarefa Exemplo 01 · a1b2c3d4' },
+    new Set(['Tarefa Exemplo 01 · a1b2c3d4']), 'tarefas.criar').allowed, true);
 });
