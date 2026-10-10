@@ -11,6 +11,7 @@ import { runJourneys, fixtureValue, selectedRobotChannel } from './journey-servi
 import { searchLocalProductContext } from './local-product-context.mjs';
 import { journeyTarget, productionConfig, productionPreflight } from './journey-production.mjs';
 import { containsSensitiveData } from './sensitive-data.mjs';
+import effectfulGetInventory from './production-effectful-gets.json' with { type: 'json' };
 
 const taskCatalog = new URL('../architecture/faq-regua/tarefas-ouro.json', import.meta.url);
 const journeyCredentials = (env) => env.QA_TARGET === 'producao'
@@ -1676,10 +1677,19 @@ const productionPreflightStatic = new Set(['/', '/login', '/contact', '/index.ht
   '/favicon.ico', '/manifest.json']);
 const productionLoginPath = '/api/v2/configurations/users/login?force=false';
 const effectfulGetSegment = /(?:^|[-/])(?:reconnect|reconection|disconnect|sync|send|reset|delete|publish|activate|export|update|execute|process|import-backup|validate-contacts-business|auto-fill|fix-filters|subscription-reminder|migrate)/iu;
+const effectfulGetRoutes = effectfulGetInventory.effectfulRoutes.map((route) => {
+  const pattern = route.split('/').map((segment) => {
+    if (segment === ':id?') return '(?:/[^/]+)?';
+    if (segment === ':id') return '/[^/]+';
+    return `/${segment.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}`;
+  }).join('').replace(/^\//u, '');
+  return new RegExp(`^${pattern}/?$`, 'iu');
+});
 
 export function productionEffectfulGetDenied(path) {
   // Encoded paths can decode to a mutating route after the browser guard.
   if (path.includes('%')) return true;
+  if (effectfulGetRoutes.some((route) => route.test(path))) return true;
   if (!/^\/api\/(?:v\d+\/)?/iu.test(path)) return false;
   const route = path.replace(/^\/api\/(?:v\d+\/)?/iu, '/');
   return effectfulGetSegment.test(route) || /crmsync/iu.test(route)
