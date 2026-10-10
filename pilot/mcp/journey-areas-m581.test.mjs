@@ -8,6 +8,9 @@ import { runJourneys, policyDecision } from './journey-service.mjs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { chromium } from 'playwright-core';
+import { chromeExecutablePath } from '../scripts/visual/measure.mjs';
+import { observeJourneyDom, actJourneyAction } from './journey-runtime.mjs';
 
 const catalog = JSON.parse(await readFile(new URL('../architecture/faq-regua/tarefas-ouro.json', import.meta.url)));
 const matrix = JSON.parse(await readFile(new URL('../architecture/coverage-matrix.json', import.meta.url)));
@@ -121,6 +124,72 @@ test('estado de agendamento reconhece enviado e pendente na leitura persistida',
   for (const sent of [true, false])
     assert.equal(verifyAreaResult('agendamentos.consultar_estado', { ...base, body: [{ idRef: taskRef, sent }] },
       { fixedIds: { schedule: new Set([taskRef]) }, apiOrigin: 'https://api.example.test' }), true);
+});
+
+test('edição só confirma o título exato salvo nesta jornada', () => {
+  const read = { status: 200, method: 'GET', url: 'https://api.example.test/api/v2/task' };
+  const scope = { apiOrigin: 'https://api.example.test', createdIds: new Set([11]),
+    generated: new Set(['Tarefa Exemplo 01', 'Tarefa Exemplo 01 Editada']),
+    expectedValue: 'Tarefa Exemplo 01 Editada' };
+  assert.equal(verifyAreaResult('tarefas.editar', { ...read, body: [{ id: 11, title: 'Tarefa Exemplo 01' }] }, scope), false);
+  assert.equal(verifyAreaResult('tarefas.editar', { ...read, body: [{ id: 11, title: 'Tarefa Exemplo 01 Editada' }] }, scope), true);
+  assert.equal(verifyAreaResult('tarefas.editar', { ...read, body: [{ id: 11, title: 'Tarefa Exemplo 01 Editada' }] },
+    { ...scope, expectedValue: undefined }), false);
+});
+
+test('CRM abre ContactSelect, busca contato fictício e só então escolhe a ficha no DOM', async () => {
+  const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<input role="combobox" placeholder="Buscar por nome, telefone ou e-mail..." aria-expanded="false">
+      <div id="menu" style="display:none"><div role="option" data-value="6">Contato Exemplo 01 · a1b2c3d4</div></div>
+      <script>const input = document.querySelector('input');
+        input.onclick = () => { input.setAttribute('aria-expanded', 'true'); };
+        input.oninput = () => { document.querySelector('#menu').style.display = input.value.length >= 3 ? 'block' : 'none'; };</script>`);
+    const fixture = { cardName: 'Card Exemplo 01 · a1b2c3d4', stageName: 'Etapa Exemplo 01',
+      contactSearch: 'Contato Exemplo 01 · a1b2c3d4', contactOption: 'opção 1', selfLabel: 'Atendente Exemplo 01' };
+    const actions = [{ type: 'click', role: 'button', name: 'Adicionar oportunidade', value: null },
+      { type: 'fill', role: 'textbox', name: 'Título do card', value: fixture.cardName },
+      { type: 'click', role: 'button', name: fixture.stageName, value: null }];
+    const next = async () => {
+      const screen = await observeJourneyDom(page, { vocabulary: ['Buscar por nome, telefone ou e-mail...'],
+        generated: new Set(Object.values(fixture)) });
+      return { screen, action: nextAreaAction('crm.criar_card', screen, actions, (kind) => fixture[kind]) };
+    };
+    let step = await next();
+    assert.deepEqual([step.action?.type, step.action?.role, step.action?.name],
+      ['click', 'combobox', 'Buscar por nome, telefone ou e-mail...']);
+    await actJourneyAction(page, step.action, step.screen.targets);
+    actions.push(step.action);
+    step = await next();
+    assert.deepEqual([step.action?.type, step.action?.role, step.action?.value],
+      ['fill', 'combobox', fixture.contactSearch]);
+    await actJourneyAction(page, step.action, step.screen.targets);
+    actions.push(step.action);
+    step = await next();
+    assert.deepEqual([step.action?.type, step.action?.role, step.action?.name], ['click', 'option', 'opção 1']);
+  } finally { await browser.close(); }
+});
+
+test('campanha só confirma modo lista quando o indicador do front muda após o clique', async () => {
+  const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<button aria-label="Modo lista" class="bg-white" onclick="if(window.respond) { this.className='bg-primary-50'; document.querySelector('[aria-label=\"Modo card\"]').className='bg-white'; }"></button>
+      <button aria-label="Modo card" class="bg-primary-50"></button>`);
+    const read = { status: 200, method: 'GET', url: 'https://api.example.test/api/v2/marketing/campaigns',
+      body: [{ idRef: 'campaign-1', titulo: 'Campanha Exemplo 01' }] };
+    const scope = { apiOrigin: 'https://api.example.test', fixedIds: { campaign: new Set(['campaign-1']) },
+      generated: new Set(['Campanha Exemplo 01']) };
+    let screen = await observeJourneyDom(page, { vocabulary: ['Modo lista', 'Modo card'] });
+    await actJourneyAction(page, { type: 'click', role: 'button', name: 'Modo lista' }, screen.targets);
+    screen = await observeJourneyDom(page, { vocabulary: ['Modo lista', 'Modo card'] });
+    assert.equal(verifyAreaResult('campanhas.alternar_visualizacao', read, { ...scope, screen }), false);
+    await page.evaluate(() => { window.respond = true; });
+    await actJourneyAction(page, { type: 'click', role: 'button', name: 'Modo lista' }, screen.targets);
+    screen = await observeJourneyDom(page, { vocabulary: ['Modo lista', 'Modo card'] });
+    assert.equal(verifyAreaResult('campanhas.alternar_visualizacao', read, { ...scope, screen }), true);
+  } finally { await browser.close(); }
 });
 
 test('runtime aceita as quatro áreas, executa plano e só conclui após verify', async () => {
