@@ -22,7 +22,7 @@ test('inventário de GETs do back tem origem, data e cobertura completa', () => 
   assert.match(inventory.auditedAt, /^\d{4}-\d{2}-\d{2}$/u);
   assert.match(inventory.backend.releaseValidation.sha, /^[a-f0-9]{40}$/u);
   assert.match(inventory.backend.production.sha, /^[a-f0-9]{40}$/u);
-  assert.equal(inventory.totalGet, 352);
+  assert.equal(inventory.totalGet, 347);
   assert.equal(inventory.getEndpoints.length, inventory.totalGet);
   assert.equal(inventory.getEndpoints.filter(({ effectful }) => effectful).length, inventory.effectfulGet);
   assert.deepEqual([...new Set(inventory.getEndpoints.filter(({ effectful }) => effectful)
