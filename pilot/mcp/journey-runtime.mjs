@@ -1225,7 +1225,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         pending.finally(() => pendingPosts.delete(pending));
       });
       const route = journeyStartRoute(task, prepared);
-      await page.goto(new URL(route, target.url).href, { waitUntil: 'domcontentloaded' });
+      await page.goto(new URL(production ? '/contact' : route, target.url).href, { waitUntil: 'domcontentloaded' });
       qaApi = await settledJourneyApi(page, target, qaApi);
       if (!qaApi) throw new Error('API autenticada da homologação indisponível');
       if (production) assertProductionAccountHosts(target, qaApi.origin);
@@ -1239,6 +1239,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         if (company.status !== 200 || String(company.body?.dados?.id ?? '') !== account.companyId
           || account.companyId !== env.QA_PROD_COMPANY_ID) throw new Error('empresa divergente da sessão');
         productionReady = true;
+        if (route !== '/contact')
+          await page.goto(new URL(route, target.url).href, { waitUntil: 'domcontentloaded' });
       }
       if (prepared.identity && ['contatos', 'robos'].includes(task.modulo)) {
         const { refs, ids } = prepared.identity;
