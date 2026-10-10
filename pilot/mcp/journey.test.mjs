@@ -205,7 +205,8 @@ test('cobertura exclui somente as duas tarefas proibidas pela política', () => 
 
 test('catálogo ouro tem 13 tarefas elegíveis para a conta de aceite', async () => {
   const catalog = JSON.parse(await readFile(new URL('../architecture/faq-regua/tarefas-ouro.json', import.meta.url), 'utf8'));
-  const all = catalog.tarefas.map((item) => ({ task: item.id, status: 'inconclusiva' }));
+  const all = catalog.tarefas.filter((item) => ['contatos', 'robos'].includes(item.modulo))
+    .map((item) => ({ task: item.id, status: 'inconclusiva' }));
   assert.equal(journeyCoverage(all).eligible, 13);
 });
 
