@@ -1839,11 +1839,13 @@ export async function recordJourneys(module, selectedTasks, { env = process.env,
   preflight = browserProductionPreflight } = {}) {
   const selectedTarget = journeyTarget(env);
   const qaUrl = selectedTarget.url;
+  let connectivityAttestation;
   if (selectedTarget.mode === 'producao') {
     const gate = await preflight(env);
     if (!gate || gate.mode !== 'ready') return gate;
     if (!selectedTarget.companyId || gate.companyId !== selectedTarget.companyId)
       throw new Error('empresa divergente do pré-voo');
+    connectivityAttestation = gate.connectivityAttestation;
   }
   let marker = randomBytes(4).toString('hex');
   const markerFor = () => marker;
@@ -1879,6 +1881,7 @@ export async function recordJourneys(module, selectedTasks, { env = process.env,
     .update(await readFile(new URL('./journey-service.mjs', import.meta.url))).digest('hex');
   let accountProbe;
   const options = { module, tasks, frontSha, backSha, profile, root, marker, browser: lazyBrowser,
+    connectivityAttestation,
     deterministicPlans: !browser && !model,
     model: lazyModel, allowedScreenLabels, markerChanged: (value) => { marker = value; },
     accountIdentity: browser ? undefined : () => configuredJourneyIdentity(env),

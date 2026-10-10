@@ -432,6 +432,7 @@ export async function readJourney({ root = resolve(process.env.MCP_STATE_DIR ?? 
 
 export async function runJourneys({ module, tasks, root = resolve(process.env.MCP_STATE_DIR ?? '/data', 'journeys'), marker = '',
   frontSha, backSha = 'unavailable', profile, browser, model, sanitize = async (value) => value,
+  connectivityAttestation,
   allowedScreenLabels = new Set(),
   maxActionsPerTask = 30, maxActionsPerModule = 300, maxMs = 900_000, maxCostUsd = 5,
   cacheConfig = {}, cacheBypass = false, markerChanged = () => {}, accountIdentity, probeAccount,
@@ -466,7 +467,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       : { marker: currentMarker, contact: prepared.contact, robot: prepared.robot,
         robotRef: prepared.robotRef, robotId: prepared.robotId, identity: prepared.identity };
     const key = digest({ task, frontSha, backSha, profile, accountHash, policy: JOURNEY_POLICY_VERSION, dependency,
-      config: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd, ...cacheConfig } });
+      config: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd, connectivityAttestation, ...cacheConfig } });
     let cached = cacheBypass ? null : await loadCache(root, module, task.id, key, true);
     if (cached && accountHash && cached.configuredIdentityHash !== accountHash) cached = null;
     if (cached && probeAccount) {
@@ -490,6 +491,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       continue;
     }
     const record = { task: task.id, module, target: cacheConfig.qaTarget ?? 'homolog',
+      ...(connectivityAttestation ? { connectivityAttestation } : {}),
       objective: task.tarefa, prerequisites: task.preRequisitos,
       profile, versions: { frontSha, backSha, note: backSha === 'unavailable' ? 'SHA do back indisponível; recapturar quando disponível' : null },
       fixtures: [prepared.contact, prepared.robot].filter((value) => typeof value === 'string'), marker: currentMarker,

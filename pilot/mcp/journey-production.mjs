@@ -36,6 +36,23 @@ const active = (body, field) => {
   return list.filter((item) => item[field]).length;
 };
 const resultOf = async (get, path) => { try { return await get(path); } catch { return null; } };
+const ownerAttestationDate = (raw, channels) => {
+  let value;
+  try { value = JSON.parse(raw); } catch { return null; }
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).sort().join(',') !== 'channelIds,date'
+    || typeof value.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(value.date)
+    || !Array.isArray(value.channelIds) || value.channelIds.some((id) => typeof id !== 'string' || !identifier.test(id)))
+    return null;
+  const date = Date.parse(`${value.date}T00:00:00.000Z`);
+  const ageDays = (Date.parse(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z') - date) / 86400_000;
+  const actual = new Set(channels.map((channel) => channel.idRef));
+  if (!Number.isFinite(date) || new Date(date).toISOString().slice(0, 10) !== value.date
+    || ageDays < 0 || ageDays > 7 || actual.size !== channels.length
+    || value.channelIds.length !== actual.size || new Set(value.channelIds).size !== actual.size
+    || value.channelIds.some((id) => !actual.has(id))) return null;
+  return value.date;
+};
 
 export async function productionPreflight({ env = process.env, identity, get }) {
   const config = productionConfig(env);
@@ -55,6 +72,7 @@ export async function productionPreflight({ env = process.env, identity, get }) 
   const channels = rows(channelBody);
   let connectedChannels = unavailable;
   let channelReason = 'estado dos canais não verificável';
+  let connectivityAttestation;
   if (channels && channels.length <= 5000 && channels.every((channel) =>
     typeof channel?.idRef === 'string' && identifier.test(channel.idRef)
       && typeof channel.connected === 'boolean')) {
@@ -64,8 +82,16 @@ export async function productionPreflight({ env = process.env, identity, get }) 
       if (states.some((state, index) => state.dados.connected !== channels[index].connected))
         channelReason = 'estado dos canais divergente';
       else {
-        connectedChannels = channels.filter((channel) => channel.connected).length;
-        channelReason = connectedChannels > 0 ? 'canais conectados' : null;
+        const connected = channels.filter((channel) => channel.connected).length;
+        if (connected > 0) { connectedChannels = connected; channelReason = 'canais conectados'; }
+        else {
+          const date = ownerAttestationDate(env.QA_PROD_OWNER_ATTESTATION, channels);
+          if (date) {
+            connectedChannels = 0;
+            channelReason = null;
+            connectivityAttestation = `conectividade atestada pelo dono em ${date}`;
+          } else channelReason = 'conectividade não atestada pelo dono';
+        }
       }
     }
   }
@@ -80,5 +106,5 @@ export async function productionPreflight({ env = process.env, identity, get }) 
   const unsafe = companyName === unavailable || Object.entries(checks).some(([item, value]) =>
     typeof value === 'number' && item !== 'contacts' && value > 0 || value === unavailable);
   return unsafe ? { mode: 'bloqueado', reason: channelReason ?? 'pré-voo não comprovado', counts }
-    : { mode: 'ready', companyId, companyName, counts };
+    : { mode: 'ready', companyId, companyName, counts, connectivityAttestation };
 }
