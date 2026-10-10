@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { productionEffectfulGetDenied } from './journey-runtime.mjs';
+import { handleJourneyRoute, productionEffectfulGetDenied } from './journey-runtime.mjs';
+import { productionConfig } from './journey-production.mjs';
 
 const inventoryPath = new URL('./production-effectful-gets.json', import.meta.url);
 
@@ -21,6 +22,10 @@ test('inventário de GETs do back tem origem, data e cobertura completa', () => 
   assert.match(inventory.backend.releaseValidation.sha, /^[a-f0-9]{40}$/u);
   assert.match(inventory.backend.production.sha, /^[a-f0-9]{40}$/u);
   assert.equal(inventory.totalGet, 337);
+  assert.equal(inventory.getEndpoints.length, inventory.totalGet);
+  assert.equal(inventory.getEndpoints.filter(({ effectful }) => effectful).length, inventory.effectfulGet);
+  assert.deepEqual([...new Set(inventory.getEndpoints.filter(({ effectful }) => effectful)
+    .map(({ route }) => route))].sort(), inventory.effectfulRoutes);
   assert.equal(new Set(inventory.effectfulRoutes).size, inventory.effectfulRoutes.length);
   assert.ok(inventory.effectfulRoutes.includes('/api/v2/bot/opencall-contacts'));
 });
@@ -28,15 +33,37 @@ test('inventário de GETs do back tem origem, data e cobertura completa', () => 
 test('todo GET com efeito é bloqueado pelo guard de produção', () => {
   if (!inventory) return;
   for (const route of inventory.effectfulRoutes) {
-    const path = route.replace(/:id\b/gu, '123');
+    const path = route.replace(/:id\??/gu, '123');
     assert.equal(productionEffectfulGetDenied(path), true, path);
+  }
+  assert.equal(productionEffectfulGetDenied('/ws/chat/convert/123'), true);
+  assert.equal(productionEffectfulGetDenied('/r/123'), true);
+  assert.equal(productionEffectfulGetDenied('/api/v2/company'), false);
+});
+
+test('runner de produção nega cada GET inventariado, mesmo após o pré-voo', async () => {
+  if (!inventory) return;
+  const env = { QA_TARGET: 'producao', QA_PROD_ENABLED: 'true', QA_PROD_URL: 'https://front.example.test',
+    QA_PROD_ALLOWED_HOSTS: 'front.example.test,api.example.test', QA_PROD_EMAIL: 'qa@example.test',
+    QA_PROD_PASSWORD: 'fictional-password' };
+  for (const pattern of inventory.effectfulRoutes) {
+    const path = pattern.replace(/:id\??/gu, '123');
+    let outcome;
+    await handleJourneyRoute({ request: () => ({ method: () => 'GET',
+      url: () => `https://api.example.test${path}` }),
+    abort: async () => { outcome = 'abort'; }, fallback: async () => { outcome = 'fallback'; } }, {
+      apiOrigin: 'https://api.example.test', target: productionConfig(env).target, env,
+      thirdPartyDenied: {}, taskId: 'contatos.cadastrar', productionReady: () => true,
+      onBlocked: () => {},
+    });
+    assert.equal(outcome, 'abort', path);
   }
 });
 
 test('inventário não encolhe sem data e origem novas', () => {
   if (!inventory) return;
   const baseline = { auditedAt: '2026-10-10', releaseSha: 'f0a926e881eba56cd8aac250f39e75760c095e95',
-    productionSha: '88bc6c58dd27d7bd53b1ec48dc821ac436762c13', minimum: 1 };
+    productionSha: '88bc6c58dd27d7bd53b1ec48dc821ac436762c13', minimum: 45 };
   assert.ok(inventory.effectfulRoutes.length >= baseline.minimum
     || (inventory.auditedAt !== baseline.auditedAt
       && inventory.backend.releaseValidation.sha !== baseline.releaseSha
