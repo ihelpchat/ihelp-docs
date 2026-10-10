@@ -5,5 +5,5 @@ export const schedulePlans = {
   'agendamentos.consultar_dia': { startRoute: '/agendamentos', steps: [{ type: 'click', role: 'button', nameFrom: 'scheduleDay' }],
     persisted: { method: 'GET', path: '/ScheduledMessages/calendar/schedules/:date', idField: 'idRef', idSource: 'schedule', field: 'sent', value: false } },
   'agendamentos.consultar_estado': { startRoute: '/agendamentos', steps: [{ type: 'click', role: 'button', nameFrom: 'scheduleDay' }],
-    persisted: { method: 'GET', path: '/ScheduledMessages/calendar/schedules/:date', idField: 'idRef', idSource: 'schedule', field: 'sent', value: false } },
+    persisted: { method: 'GET', path: '/ScheduledMessages/calendar/schedules/:date', idField: 'idRef', idSource: 'schedule', field: 'sent', value: 'boolean' } },
 };

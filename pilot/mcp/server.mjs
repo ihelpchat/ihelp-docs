@@ -275,10 +275,10 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
 
   registerTool('gravar_jornada', {
     mutates: true,
-    description: 'Executa tarefas fictícias de Contatos ou Robôs na homologação e grava jornada privada sanitizada.',
+    description: 'Executa tarefas fictícias das áreas documentadas e grava jornada privada sanitizada.',
     inputSchema: z.strictObject({
-      module: z.enum(['contatos', 'robos']),
-      tasks: z.array(z.string().regex(/^(?:contatos|robos)\.[a-z_]+$/)).max(20).optional(),
+      module: z.enum(['contatos', 'robos', 'crm', 'campanhas', 'agendamentos', 'tarefas']),
+      tasks: z.array(z.string().regex(/^(?:contatos|robos|crm|campanhas|agendamentos|tarefas)\.[a-z_]+$/)).max(20).optional(),
       requestedBy: requestedBySchema,
     }),
   }, async ({ module, tasks, requestedBy }) => {
@@ -312,8 +312,8 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     mutates: false,
     description: 'Lê uma jornada privada sanitizada, incluindo ids dos prints mascarados.',
     inputSchema: z.strictObject({
-      module: z.enum(['contatos', 'robos']),
-      task: z.string().regex(/^(?:contatos|robos)\.[a-z_]+$/),
+      module: z.enum(['contatos', 'robos', 'crm', 'campanhas', 'agendamentos', 'tarefas']),
+      task: z.string().regex(/^(?:contatos|robos|crm|campanhas|agendamentos|tarefas)\.[a-z_]+$/),
       requestedBy: requestedBySchema,
     }),
   }, async ({ module, task, requestedBy }) => {

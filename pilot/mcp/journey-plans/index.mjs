@@ -127,5 +127,6 @@ export function verifyAreaResult(id, response, context = {}) {
     && (value === 'generated' ? fromGenerator(context, row[field])
       : value === 'stage' ? owns(context.fixedIds?.stage, row[field])
         : value === 'positive' ? Number.isInteger(row[field]) && row[field] > 0
+          : value === 'boolean' ? typeof row[field] === 'boolean'
           : row[field] === value)).length === 1;
 }

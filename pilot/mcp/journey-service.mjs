@@ -3,12 +3,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
-import { areaPlans } from './journey-plans/index.mjs';
+import { areaPlans, areaFixtureValue, nextAreaAction } from './journey-plans/index.mjs';
 
 export const JOURNEY_POLICY_VERSION = 'm578-3';
 const sha = /^[a-f0-9]{40}$/u;
-const taskId = /^(?:contatos|robos)\.[a-z_]+$/u;
-const modules = new Set(['contatos', 'robos']);
+const taskId = /^(?:contatos|robos|crm|campanhas|agendamentos|tarefas)\.[a-z_]+$/u;
+const modules = new Set(['contatos', 'robos', 'crm', 'campanhas', 'agendamentos', 'tarefas']);
+const areaModules = new Set(['crm', 'campanhas', 'agendamentos', 'tarefas']);
 const forbidden = /\b(?:enviar|disparar|campanha|publicar|ativar|conectar|desconectar|excluir|deletar|remover|pagar|pagamento|cobrança|convidar|convite|senha|permiss(?:ã|a)o|integra(?:ç|c)(?:ã|a)o|webhook|agendar|agendamento)\b/iu;
 const taskPlans = {
   'contatos.editar': 'Na ficha, abra a aba Informações; clique no campo editável Nome ou no lápis Editar; preencha editedName; confirme em Salvar ou Enter. Mais não edita.',
@@ -44,6 +45,7 @@ const generatedValues = () => new Set(['contactName', 'editedName', 'robotName',
   .flatMap((kind) => Array.from({ length: 99 }, (_, index) => fixtureValue(kind, index + 1))));
 const fixtureValues = generatedValues();
 const fictionalPhone = /^\+44 20 7946 0\d{3}$/u;
+const fictionalAreaValue = /^(?:Card|Campanha|Nota|Tarefa|Etapa|Atendente) Exemplo \d{2}(?: Editada)?(?: · [a-f0-9]{8})?$/u;
 class SanitizationError extends Error {}
 
 export function journeyFailureCategory(error) {
@@ -66,6 +68,7 @@ export function journeyCoverage(records) {
     .map((record) => ({ task: record.task, reason: record.reason }));
   const eligible = records.filter((record) => !['contatos.agendar_mensagem', 'robos.publicar_ativar'].includes(record.task)
     && (!/^(?:crm|campanhas|agendamentos|tarefas)\./u.test(record.task) || areaPlans[record.task])
+    && (!areaPlans[record.task] || !['dado de preparo', 'sem dado de preparo'].includes(record.reason))
     && !environmentBlocked.some((blocked) => blocked.task === record.task));
   const completed = eligible.filter((record) => record.status === 'concluída').length;
   return { completed, eligible: eligible.length, percent: eligible.length ? Math.round(completed * 100 / eligible.length) : 0,
@@ -107,7 +110,7 @@ export function selectedRobotChannel(actions) {
 
 function safeString(value) {
   if (typeof value !== 'string' || value.length > 180 || /[\r\n<>]/u.test(value)
-    || !fixtureValues.has(value) && !fictionalPhone.test(value)
+    || !fixtureValues.has(value) && !fictionalAreaValue.test(value) && !fictionalPhone.test(value)
       && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
       && containsSensitiveData(value, { detectOpaque: true })) throw new Error('sanitização falhou');
   return value;
@@ -117,7 +120,7 @@ const commonLabels = new Set(['Adicionar Contato', 'Importar Contatos', 'Exporta
 const personLike = /\b[\p{Lu}][\p{Ll}]{2,}\s+[\p{Lu}][\p{Ll}]{2,}\b/u;
 function screenString(value, allowedLabels) {
   if (typeof value !== 'string' || value.length > 180 || /[\r\n<>]/u.test(value)) throw new Error('sanitização falhou');
-  return !fixtureValues.has(value) && !fictionalPhone.test(value)
+  return !fixtureValues.has(value) && !fictionalAreaValue.test(value) && !fictionalPhone.test(value)
     && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
     && !/^Selecionar Contato Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
     && (containsSensitiveData(value, { detectOpaque: true })
@@ -160,7 +163,7 @@ function safeJourney(record) {
   if (copy.configuredIdentityHash != null && !/^[a-f0-9]{64}$/u.test(copy.configuredIdentityHash)) throw new Error('sanitização falhou');
   const check = (value) => {
     if (typeof value === 'string' && !sha.test(value) && !/^[a-f0-9]{64}$/u.test(value)
-      && !fixtureValues.has(value) && !fictionalPhone.test(value)
+      && !fixtureValues.has(value) && !fictionalAreaValue.test(value) && !fictionalPhone.test(value)
       && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
       && value !== copy.created?.robotRef && value !== copy.createdRef
       && containsSensitiveData(value, { detectOpaque: true })) throw new Error('sanitização falhou');
@@ -172,7 +175,7 @@ function safeJourney(record) {
   return copy;
 }
 function orderTasks(tasks) {
-  const priority = { 'contatos.cadastrar': 0, 'robos.criar': 0 };
+  const priority = { 'contatos.cadastrar': 0, 'robos.criar': 0, 'crm.criar_card': 0, 'tarefas.criar': 0 };
   return [...tasks].sort((a, b) => (priority[a.id] ?? 1) - (priority[b.id] ?? 1));
 }
 function prerequisites(id, prepared) {
@@ -181,6 +184,7 @@ function prerequisites(id, prepared) {
   return true;
 }
 function actionEvidence(id, actions, fixtureFor = fixtureValue) {
+  if (areaPlans[id]) return nextAreaAction(id, { controls: [], fields: [] }, actions, fixtureFor)?.type === 'finish';
   const fills = actions.filter((action) => action.type === 'fill').map((action) => action.value);
   const clickedSave = actions.some((action) => action.type === 'click' && /^(?:salvar|criar(?: novo)? robô|criar|cadastrar)$/iu.test(action.name));
   if (id === 'contatos.cadastrar') return fills.includes(fixtureFor('contactName'))
@@ -440,10 +444,17 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
     throw new Error('identidade configurada indisponível');
   const accountHash = account ? account.credentialHash ?? digest([account.userId, account.companyId]) : null;
   let currentMarker = marker;
-  const fixtureFor = (kind, n = 1) => fixtureValue(kind, n, currentMarker);
-  const generatedFor = () => currentMarker ? new Set([currentMarker, ...['contactName', 'editedName', 'robotName', 'tagName',
+  let areaFixtureContext = {};
+  const fixtureFor = (kind, n = 1) => areaModules.has(module)
+    ? areaFixtureContext[kind] ?? areaFixtureValue(kind, { marker: currentMarker, ...areaFixtureContext })
+    : fixtureValue(kind, n, currentMarker);
+  const generatedFor = () => areaModules.has(module) ? new Set([...Object.values(areaFixtureContext),
+    ...['cardName', 'campaignName', 'noteText', 'taskName', 'editedTaskName']
+      .map((kind) => areaFixtureValue(kind, { marker: currentMarker }))])
+    : currentMarker ? new Set([currentMarker, ...['contactName', 'editedName', 'robotName', 'tagName',
     'menuQuestion', 'menuOption', 'departmentName', 'userName', 'email', 'phone']
-    .flatMap((kind) => Array.from({ length: 99 }, (_, index) => fixtureFor(kind, index + 1)))]) : fixtureValues;
+    .flatMap((kind) => areaModules.has(module) ? [] : Array.from({ length: 99 }, (_, index) => fixtureFor(kind, index + 1))),
+    ]) : fixtureValues;
   const results = [];
   const prepared = {};
   let moduleActions = 0;
@@ -456,7 +467,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
         robotRef: prepared.robotRef, robotId: prepared.robotId, identity: prepared.identity };
     const key = digest({ task, frontSha, backSha, profile, accountHash, policy: JOURNEY_POLICY_VERSION, dependency,
       config: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd, ...cacheConfig } });
-    let cached = cacheBypass ? null : await loadCache(root, module, task.id, key, true);
+    let cached = cacheBypass || areaModules.has(module) ? null : await loadCache(root, module, task.id, key, true);
     if (cached && accountHash && cached.configuredIdentityHash !== accountHash) cached = null;
     if (cached && probeAccount) {
       const live = await probeAccount();
@@ -487,7 +498,8 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       ...(accountHash ? { configuredIdentityHash: accountHash } : {}),
       usage: { actions: 0, costUsd: 0, elapsedMs: 0 }, cacheKey: key, policyVersion: JOURNEY_POLICY_VERSION };
     const images = [];
-    if (task.id === 'robos.publicar_ativar' || task.id === 'contatos.agendar_mensagem') {
+    if (task.id === 'robos.publicar_ativar' || task.id === 'contatos.agendar_mensagem'
+      || areaModules.has(module) && !areaPlans[task.id]) {
       record.status = 'bloqueada'; record.reason = 'ação proibida pela política';
     } else if (!prerequisites(task.id, prepared)) {
       record.reason = 'sem dado de preparo';
@@ -496,6 +508,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       let fallbackActions = 0;
       try {
         const openedFixtures = await browser.open(task, prepared); opened = true;
+        areaFixtureContext = openedFixtures?.areaFixtureContext ?? {};
         if (openedFixtures?.account) {
           const { userId, companyId } = openedFixtures.account;
           if (!/^[a-z0-9-]{1,80}$/iu.test(userId ?? '') || !/^[a-z0-9-]{1,80}$/iu.test(companyId ?? ''))
@@ -599,7 +612,9 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             ? await browser.exportAction(screen, prepared, record.actions)
             : task.id === 'contatos.buscar' && browser.searchAction
               ? await browser.searchAction(screen, prepared, record.actions)
-              : deterministicPlans ? plannedJourneyAction(task.id, screen, record.actions, fixtureFor) : null;
+              : areaModules.has(module) ? nextAreaAction(task.id, screen, record.actions, fixtureFor)
+                : deterministicPlans ? plannedJourneyAction(task.id, screen, record.actions, fixtureFor) : null;
+          if (areaModules.has(module) && !decision) { record.reason = 'plano sem alvo'; break; }
           if (!decision && !specialized) {
             if (deterministicPlans && fallbackActions >= 5) {
               record.reason = 'plano sem alvo após 5 ações de fallback'; break;
