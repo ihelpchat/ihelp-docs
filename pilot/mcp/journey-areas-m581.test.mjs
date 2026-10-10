@@ -124,14 +124,14 @@ test('estado de agendamento reconhece enviado e pendente na leitura persistida',
 });
 
 test('runtime aceita as quatro áreas, executa plano e só conclui após verify', async () => {
-  for (const module of modules) {
-    const entry = Object.entries(areaPlans).find(([id, plan]) => id.startsWith(`${module}.`) && plan.steps.length);
+  for (const area of modules) {
+    const entry = Object.entries(areaPlans).find(([id, plan]) => id.startsWith(`${area}.`) && plan.steps.length);
     const [id, plan] = entry;
     const root = await mkdtemp(join(tmpdir(), 'journey-area-'));
     let verified = 0;
     const areaFixtureContext = { stageName: 'Etapa Exemplo 01', contactOption: 'opção 1',
       selfLabel: 'Atendente Exemplo 01', selfOption: 'opção 1', scheduleDay: '10' };
-    const browser = { async open() { return { areaFixtureContext }; }, async observe() { return { title: module, path: plan.startRoute,
+    const browser = { async open() { return { areaFixtureContext }; }, async observe() { return { title: area, path: plan.startRoute,
       controls: plan.steps.filter((step) => step.type === 'click').map((step) => ({ role: step.role,
         name: step.name ?? areaFixtureContext[step.nameFrom], enabled: true })),
       fields: plan.steps.filter((step) => step.type === 'fill').map((step) => ({ role: step.role, name: step.name,
@@ -139,7 +139,7 @@ test('runtime aceita as quatro áreas, executa plano e só conclui após verify'
       async act() {}, async verify() { verified++; return { confirmed: false, observed: 'leitura não confirmou' }; },
       async close() {} };
     try {
-      const [record] = await runJourneys({ module, tasks: [catalog.tarefas.find((item) => item.id === id)], root,
+      const [record] = await runJourneys({ module: area, tasks: [catalog.tarefas.find((item) => item.id === id)], root,
         frontSha: 'a'.repeat(40), profile: 'qa', marker: 'a1b2c3d4', browser,
         model: { async decide() { throw Error('plano determinístico não usado'); } }, deterministicPlans: true });
       assert.equal(verified, 1, `${id}: ${record.reason}; ${JSON.stringify(record.actions)}`);
