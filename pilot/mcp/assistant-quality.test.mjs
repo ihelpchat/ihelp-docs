@@ -10,6 +10,13 @@ const projectRoot = new URL('../', import.meta.url).pathname;
 const testRoot = await mkdtemp(join(tmpdir(), 'ihelp-docs-quality-'));
 await cp(join(projectRoot, 'architecture'), join(testRoot, 'architecture'), { recursive: true });
 await cp(join(projectRoot, 'content'), join(testRoot, 'content'), { recursive: true });
+// O cenário de oito passos testa a continuidade do assistente com um roteiro fixo.
+// A página pública agora usa o texto oficial de Robôs, com outra sequência de passos.
+const publishedRobot = await readFile(join(projectRoot, 'content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx'), 'utf8');
+assert.match(publishedRobot, /Se o robô está publicado, \*\*Salvar\*\* já muda a versão em uso/);
+assert.match(publishedRobot, /contatos com \[responsável definido\]/i);
+await cp(join(projectRoot, 'mcp/fixtures/assistant-quality-robot.mdx'),
+  join(testRoot, 'content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx'));
 // Estes cenários exercitam o assistente de resposta livre; os guias canônicos têm suítes próprias.
 for (const path of [
   'docs/principais-motivos-de-suporte/reconectar-canal-qr',
@@ -412,7 +419,7 @@ const menuSources = await retrieveContext(testRoot, menuQuestion);
 assert.equal(menuSources[0]?.path, menuPath, 'pergunta editorial exata deve priorizar o procedimento do Menu de opções');
 const lastMenuStep = menuSources[0].documentedSteps.at(-1);
 assert.match(lastMenuStep, /Publicar[\s\S]*online/i, 'passo 7 deve explicar o efeito de Publicar');
-assert.match(lastMenuStep, /Salvar[\s\S]*inativo/i, 'passo 7 deve explicar o efeito de Salvar');
+assert.match(lastMenuStep, /Salvar[\s\S]*fluxo em uso/i, 'passo 7 deve explicar o efeito de Salvar num robô publicado');
 const menuArticle = await readFile(join(testRoot, 'content/docs', `${menuPath.slice(1)}.mdx`), 'utf8');
 assert.match(menuArticle, /Adicionar bloco[\s\S]*Menu de opções/i);
 assert.match(menuArticle, /título do bloco[\s\S]*Bloco de pergunta/i);

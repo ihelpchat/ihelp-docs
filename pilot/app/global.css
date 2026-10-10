@@ -5881,6 +5881,7 @@ button {
 }
 
 @media (pointer: coarse), (max-width: 1019px) {
+  .ih-prose li a:not(.ih-ai-product-action) { display: inline-flex; align-items: center; min-height: 44px; }
   .ih-header .ih-brand, .ih-header .ih-nav-link, .ih-header .ih-header-search,
   .ih-header .ih-header-cta, .ih-header .ih-menu-button, .ih-sidebar .ih-side-all,
   .ih-sidebar .ih-side-group-toggle, .ih-sidebar .ih-side-link,
