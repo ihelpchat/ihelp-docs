@@ -10,7 +10,7 @@
       "sha": "da2e55cbf0b944284a0193eb38478173e308a92f"
     }
   },
-  "totalGet": 352,
+  "totalGet": 347,
   "effectfulGet": 47,
   "getEndpoints": [
     {
@@ -19,10 +19,6 @@
     },
     {
       "route": "/ws/chat/:id",
-      "effectful": false
-    },
-    {
-      "route": "/ws/chat",
       "effectful": false
     },
     {
@@ -47,10 +43,6 @@
     },
     {
       "route": "/api/tiny",
-      "effectful": false
-    },
-    {
-      "route": "/api/tiny/magento",
       "effectful": false
     },
     {
@@ -206,10 +198,6 @@
       "effectful": false
     },
     {
-      "route": "/api/v2/marketing/campaigns/test-block-channel/:id",
-      "effectful": false
-    },
-    {
       "route": "/api/v2/notification",
       "effectful": false
     },
@@ -220,10 +208,6 @@
     {
       "route": "/api/v2/customers/auto-fill-contacts/:id",
       "effectful": true
-    },
-    {
-      "route": "/api/v2/customers/chat/:id",
-      "effectful": false
     },
     {
       "route": "/api/v2/customers/:id/:id?",
@@ -819,10 +803,6 @@
     },
     {
       "route": "/api/v2/agent/:id/tools",
-      "effectful": false
-    },
-    {
-      "route": "/api/v2/agent/conversations/:id",
       "effectful": false
     },
     {
