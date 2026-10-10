@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runJourneys, readJourney, fixtureValue, policyDecision, journeyFailureCategory, journeyFailureLog, journeyCoverage } from './journey-service.mjs';
@@ -77,6 +77,21 @@ test('ação proibida sugerida bloqueia sem tentativa alternativa; página injet
     assert.equal(result.status, 'bloqueada');
     assert.equal(acted, 0);
     assert.equal(policyDecision({ type: 'click', role: 'button', name: 'Enviar campanha' }).allowed, false);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('registro de jornada em produção guarda a conectividade atestada', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-attestation-'));
+  try {
+    const [record] = await runJourneys({ module: 'contatos',
+      tasks: [task('contatos.agendar_mensagem')], root, frontSha: 'a'.repeat(40), profile: 'qa',
+      browser: { async open() { throw Error('não deve abrir'); } }, model: {},
+      cacheConfig: { qaTarget: 'producao' },
+      connectivityAttestation: 'conectividade atestada pelo dono em 2026-10-10' });
+    assert.equal(record.connectivityAttestation, 'conectividade atestada pelo dono em 2026-10-10');
+    const file = (await readdir(join(root, 'contatos'))).find((name) => name.endsWith('.json'));
+    const stored = JSON.parse(await readFile(join(root, 'contatos', file), 'utf8'));
+    assert.equal(stored.connectivityAttestation, record.connectivityAttestation);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

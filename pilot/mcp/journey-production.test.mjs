@@ -7,7 +7,8 @@ import { assertProductionAccountHosts, handleJourneyRoute, productionPreflightRe
 
 const env = { QA_TARGET: 'producao', QA_PROD_ENABLED: 'true', QA_PROD_URL: 'https://front.example.test',
   QA_PROD_ALLOWED_HOSTS: 'front.example.test,api.example.test', QA_PROD_EMAIL: 'qa@example.test',
-  QA_PROD_PASSWORD: 'fictional-password' };
+  QA_PROD_PASSWORD: 'fictional-password', QA_PROD_OWNER_ATTESTATION: JSON.stringify({
+    date: new Date().toISOString().slice(0, 10), channelIds: ['channel-1'] }) };
 const data = { company: { dados: { id: 42, nome: 'Empresa Fictícia' } },
   contacts: { count: 2 }, channels: { dados: [{ idRef: 'channel-1', connected: false }] },
   bots: [], automations: { dados: [] }, webhooks: { dados: [] }, connection: { dados: { connected: false } } };
@@ -125,6 +126,27 @@ test('canais só ficam prontos quando listagem e status concordam em desconectad
   const ready = await productionPreflight({ env: cfg, identity: { companyId: '42' }, get: read });
   assert.equal(ready.mode, 'ready');
   assert.equal(ready.counts.connectedChannels, 0);
+});
+
+test('SDK fora nas duas fontes só libera com atestado recente e exato do dono', async () => {
+  const cfg = { ...env, QA_PROD_COMPANY_ID: '42' };
+  const preflight = (attestation, get = read) => productionPreflight({
+    env: { ...cfg, QA_PROD_OWNER_ATTESTATION: attestation }, identity: { companyId: '42' }, get });
+  const today = new Date().toISOString().slice(0, 10);
+  const daysAgo = (n) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
+  const signed = (date, channelIds) => JSON.stringify({ date, channelIds });
+  for (const attestation of [undefined, '', '{}', signed(daysAgo(8), ['channel-1']),
+    signed('2099-01-01', ['channel-1']), signed(today, []), signed(today, ['other-channel']),
+    signed(today, ['channel-1', 'other-channel']), signed(today, ['channel-1', 'channel-1']),
+    signed(today, ['channel-1']).replace(today, `${today}T00:00:00Z`)]) {
+    const result = await preflight(attestation);
+    assert.equal(result.mode, 'bloqueado', String(attestation));
+  }
+  const ready = await preflight(signed(today, ['channel-1']));
+  assert.equal(ready.mode, 'ready');
+  assert.equal(ready.connectivityAttestation, `conectividade atestada pelo dono em ${today}`);
+  assert.equal((await preflight(signed(today, ['channel-1']), async (path) =>
+    path === '/channel/connect-status/channel-1' ? { dados: { connected: true } } : read(path))).mode, 'bloqueado');
 });
 
 test('hash da homologação preserva a chave dos ponteiros anteriores', () => {
