@@ -82,7 +82,7 @@ export function assertAllowedTarget(value, env = process.env, { allowProduction 
       || new Set(hosts).size !== hosts.length || !hosts.includes(url.hostname)
       || hosts.some((host) => host !== url.hostname && !/^api(?:v\d+)?[.-]/u.test(host))
       || !env.QA_PROD_EMAIL || !env.QA_PROD_PASSWORD) throw new Error('Destino recusado: produção desabilitada');
-    target = { ...target, mode: 'producao', allowedHosts: hosts };
+    target = { ...target, url: url.origin, mode: 'producao', allowedHosts: hosts };
   }
   const staging = qaRequestDecision(url.href, target, env).allowed;
   if (!local && !staging) throw new Error('Destino recusado: host não permitido');

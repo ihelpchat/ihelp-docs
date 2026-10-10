@@ -1773,10 +1773,11 @@ export function productionPreflightRequestAllowed(method, path) {
     && (normalized === 'GET' || normalized === 'OPTIONS');
 }
 
-export async function browserProductionPreflight(env = process.env) {
+export async function browserProductionPreflight(env = process.env,
+  { launchBrowser = launch, login = loginToQa } = {}) {
   const config = productionConfig(env);
   const target = assertAllowedTarget(config.url, env, { allowProduction: true });
-  const browser = await launch();
+  const browser = await launchBrowser();
   try {
     const context = await browser.newContext({ serviceWorkers: 'block' });
     await installQaNetworkGuard(context, target, env);
@@ -1793,7 +1794,7 @@ export async function browserProductionPreflight(env = process.env) {
     page.on('request', observer.request);
     page.on('response', observer.response);
     try {
-      await loginToQa(page, target.url, journeyCredentials(env), { timeoutMs: 15000 });
+      await login(page, target.url, journeyCredentials(env), { timeoutMs: 15000 });
       observer.loginFinished(page);
     } catch (error) {
       observer.loginFailed(page, error);
