@@ -14,6 +14,7 @@ const inventory = existsSync(inventoryPath) ? JSON.parse(readFileSync(inventoryP
 
 test('GET que abre atendimentos é bloqueado', () => {
   assert.equal(productionEffectfulGetDenied('/api/v2/bot/opencall-contacts'), true);
+  assert.equal(productionEffectfulGetDenied('/api/v2/crm/company-profile'), true);
 });
 
 test('inventário de GETs do back tem origem, data e cobertura completa', () => {
@@ -21,7 +22,7 @@ test('inventário de GETs do back tem origem, data e cobertura completa', () => 
   assert.match(inventory.auditedAt, /^\d{4}-\d{2}-\d{2}$/u);
   assert.match(inventory.backend.releaseValidation.sha, /^[a-f0-9]{40}$/u);
   assert.match(inventory.backend.production.sha, /^[a-f0-9]{40}$/u);
-  assert.equal(inventory.totalGet, 337);
+  assert.equal(inventory.totalGet, 352);
   assert.equal(inventory.getEndpoints.length, inventory.totalGet);
   assert.equal(inventory.getEndpoints.filter(({ effectful }) => effectful).length, inventory.effectfulGet);
   assert.deepEqual([...new Set(inventory.getEndpoints.filter(({ effectful }) => effectful)
@@ -62,8 +63,8 @@ test('runner de produção nega cada GET inventariado, mesmo após o pré-voo', 
 
 test('inventário não encolhe sem data e origem novas', () => {
   if (!inventory) return;
-  const baseline = { auditedAt: '2026-10-10', releaseSha: 'f0a926e881eba56cd8aac250f39e75760c095e95',
-    productionSha: '88bc6c58dd27d7bd53b1ec48dc821ac436762c13', minimum: 45 };
+  const baseline = { auditedAt: '2026-10-10', releaseSha: 'af982c8795115045d00a8b6b862c6e6a4b0c69f9',
+    productionSha: 'da2e55cbf0b944284a0193eb38478173e308a92f', minimum: 47 };
   assert.ok(inventory.effectfulRoutes.length >= baseline.minimum
     || (inventory.auditedAt !== baseline.auditedAt
       && inventory.backend.releaseValidation.sha !== baseline.releaseSha
