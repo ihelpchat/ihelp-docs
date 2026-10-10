@@ -48,7 +48,8 @@ const diagnosticSegments = new Set(['api', 'v2', 'v3', 'login', 'contact', 'cont
 const diagnosticPath = (value) => `/${value.split('/').filter(Boolean)
   .map((segment) => diagnosticSegments.has(segment) ? segment : ':id').join('/')}`;
 const diagnosticHost = (host) => /^[a-z0-9.-]{1,120}$/u.test(host) ? host : 'host-inválido';
-const knownLoginMessage = (messages = []) => messages.some((message) =>
+const knownLoginMessage = (messages = [], outcome) => outcome === '2fa' ? '2FA exigido'
+  : outcome === 'session' ? 'sessão já ativa' : messages.some((message) =>
   /usuário já se encontra logado|desconectar e entrar/iu.test(message)) ? 'sessão já ativa'
   : messages.some((message) => /credenciais inválidas|usuário ou senha|senha incorreta/iu.test(message))
     ? 'credenciais recusadas' : messages.length ? 'mensagem de login não reconhecida' : null;
@@ -68,7 +69,7 @@ export function createProductionApiObserver(target, env = process.env) {
     request(request) {
       const raw = request.url();
       const url = sanitizedUrl(raw);
-      if (!url.path.startsWith('/api/') || requests.length >= 100) return;
+      if (requests.length >= 100) return;
       const bearer = /^Bearer \S+$/iu.test(request.headers().authorization ?? '');
       const entry = { host: url.host, path: url.path, method: request.method(), bearer, status: null };
       requests.push(entry);
@@ -93,7 +94,9 @@ export function createProductionApiObserver(target, env = process.env) {
     loginFailed(page, error) {
       const url = sanitizedUrl(page.url());
       login = { finished: false, url: `${url.host}${url.path}`,
-        message: knownLoginMessage(error?.diagnostic?.messages) };
+        message: knownLoginMessage(error?.diagnostic?.messages, error?.diagnostic?.outcome),
+        fields: error?.diagnostic?.fields ?? [], buttons: error?.diagnostic?.buttons ?? [],
+        links: error?.diagnostic?.links ?? [] };
     },
     api: () => api,
     diagnostic: () => ({ login: { ...login }, requests: requests.map((entry) => ({ ...entry })) }),
@@ -1739,7 +1742,7 @@ const productionPreflightReads = new Set(['/api/v2/company', '/api/v2/configurat
   '/api/v2/configurations/channels', '/api/v2/bot', '/api/v2/automation', '/api/v2/webhook',
   '/api/v2/contacts?page=1&limit=1']);
 const productionPreflightStatic = new Set(['/', '/login', '/contact', '/index.html',
-  '/favicon.ico', '/manifest.json']);
+  '/favicon.ico', '/favicon.png', '/manifest.json']);
 const productionLoginPath = '/api/v2/configurations/users/login?force=false';
 const effectfulGetSegment = /(?:^|[-/])(?:reconnect|reconection|disconnect|sync|send|reset|delete|publish|activate|export|update|execute|process|import-backup|validate-contacts-business|auto-fill|fix-filters|subscription-reminder|migrate)/iu;
 const effectfulGetRoutes = effectfulGetInventory.effectfulRoutes.map((route) => {
@@ -1764,9 +1767,12 @@ export function productionEffectfulGetDenied(path) {
 export function productionPreflightRequestAllowed(method, path) {
   const normalized = method.toUpperCase();
   if (normalized === 'POST') return path === productionLoginPath;
-  if (normalized === 'GET' && !path.startsWith('/api/'))
-    return productionPreflightStatic.has(path)
-      || /^\/(?:assets|static|_next\/static)\/[a-z0-9._/-]+$/iu.test(path);
+  if (normalized === 'GET' && !path.startsWith('/api/')) {
+    const asset = path.replace(/\?v=[a-z0-9.]+$/iu, '');
+    return productionPreflightStatic.has(asset)
+      || /^\/(?:assets|static|_next\/static|javascripts|ihelp-angular|ihelp-react)\/[a-z0-9._/-]+\.(?:js|css|png|svg|ico|woff2?)$/iu.test(asset)
+      || /^\/(?:mfe-root-config|runtime|polyfills|main|styles)(?:\.[a-z0-9]+)?\.(?:js|css)$/iu.test(asset);
+  }
   const safeRead = productionPreflightReads.has(path)
     || /^\/api\/v2\/channel\/connect-status\/[a-z0-9-]{1,80}$/iu.test(path);
   return safeRead && !productionEffectfulGetDenied(path)
@@ -1798,7 +1804,8 @@ export async function browserProductionPreflight(env = process.env,
       observer.loginFinished(page);
     } catch (error) {
       observer.loginFailed(page, error);
-      const result = { mode: 'bloqueado', reason: 'login', diagnostic: observer.diagnostic() };
+      const result = { mode: 'bloqueado', reason: error.code === 'LOGIN_2FA' ? 'login_2fa' : 'login',
+        diagnostic: observer.diagnostic() };
       console.error(`gravar_jornada: diagnóstico: ${JSON.stringify(result)}`);
       return result;
     }

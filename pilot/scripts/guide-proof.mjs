@@ -183,21 +183,51 @@ async function loginControls(page) {
     .filter(Boolean));
 }
 
+const loginLabels = ['E-mail', 'Senha', 'Código', 'Entrar', 'Validar', 'Continuar', 'Cancelar',
+  'Esqueceu sua senha?', 'Voltar para o login', 'Sim, continuar', 'Desconectar e entrar',
+  'Código de confirmação'];
+const knownLoginLabel = (value) => loginLabels.find((label) =>
+  String(value ?? '').trim().toLocaleLowerCase('pt-BR') === label.toLocaleLowerCase('pt-BR')) ?? null;
+const knownLoginAlert = (value) => /senha incorreta/iu.test(value) ? 'Senha incorreta'
+  : /usuário já se encontra logado|usuário já conectado/iu.test(value) ? 'Usuário já conectado'
+    : /credenciais inválidas|usuário ou senha inválido/iu.test(value) ? 'Credenciais inválidas'
+      : 'Alerta não reconhecido';
+const loginPath = (value) => `/${value.split('/').filter(Boolean).map((part) =>
+  /^(?:api|v2|v3|configurations|users|login|login-2fa|send-login-otp|verify-login-otp)$/u.test(part)
+    ? part : ':id').join('/')}`;
+async function visibleLoginUi(page) {
+  const visible = await page.evaluate(() => {
+    const shown = (node) => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
+    const label = (node) => node.labels?.[0]?.textContent?.trim() || node.getAttribute('aria-label')
+      || node.getAttribute('placeholder') || '';
+    return {
+      fields: [...document.querySelectorAll('input,select,textarea')].filter(shown)
+        .filter((node) => node.type !== 'hidden').map((node) => ({
+          role: node.type === 'password' ? 'password' : node.type === 'email' ? 'email' : 'textbox',
+          label: label(node) || (/code|otp|input\d+/iu.test(node.name) ? 'Código' : '') })),
+      buttons: [...document.querySelectorAll('button,[role="button"]')].filter(shown)
+        .map((node) => node.textContent?.trim() || node.getAttribute('aria-label') || ''),
+      links: [...document.querySelectorAll('a')].filter(shown)
+        .map((node) => node.textContent?.trim() || ''),
+    };
+  }).catch(() => ({ fields: [], buttons: [], links: [] }));
+  return { fields: visible.fields.map((field) => ({ role: field.role,
+    label: knownLoginLabel(field.label) ?? 'não identificado' })).slice(0, 10),
+  buttons: visible.buttons.map(knownLoginLabel).filter(Boolean).slice(0, 10),
+  links: visible.links.map(knownLoginLabel).filter(Boolean).slice(0, 10) };
+}
+
 export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs = 30000, networkGuard } = {}) {
   if (!email || !password) throw new Error('Credenciais de QA ausentes');
-  await page.goto(new URL('/login', baseUrl).href, { waitUntil: 'domcontentloaded' });
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill(password);
-  const before = new Set(await loginControls(page));
   const responses = [];
   const failed = [];
-  const origin = new URL(baseUrl).origin;
   const onResponse = (response) => {
     try {
       const url = new URL(response.url());
-      if (url.origin !== origin) return;
-      responses.push(`${response.request().method()} ${safeLoginText(url.pathname, [email, password])} ${response.status()}`);
-    } catch { responses.push('resposta indisponível'); }
+      if (!url.pathname.startsWith('/api/') || responses.length >= 20) return;
+      responses.push({ host: /^[a-z0-9.-]{1,120}$/u.test(url.hostname) ? url.hostname : 'host-inválido',
+        path: loginPath(url.pathname), method: response.request().method(), status: response.status() });
+    } catch { /* no untrusted URL in diagnostic */ }
   };
   const onFailed = (request) => {
     try { failed.push(qaFailedRequest(request, networkGuard)); }
@@ -205,25 +235,42 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
   };
   page.on('response', onResponse);
   page.on('requestfailed', onFailed);
-  const alert = page.locator('[role="alert"]:visible, [class*="toast"]:visible, .error:visible').first();
-  let outcome;
+  let outcome = 'error';
   try {
+    await page.goto(new URL('/login', baseUrl).href, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[type="email"], input[formcontrolname="email"]').first().fill(email);
+    await page.locator('input[type="password"], input[formcontrolname="senha"]').first().fill(password);
+    const before = new Set(await loginControls(page));
     await page.getByRole('button', { name: /^Entrar$/iu }).click();
-    outcome = await Promise.race([
-      page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: timeoutMs })
-        .then(() => 'navigated').catch(() => 'timeout'),
-      alert.waitFor({ state: 'visible', timeout: timeoutMs })
-        .then(() => 'alert').catch(() => 'timeout'),
-    ]);
+    outcome = await page.waitForFunction(() => {
+      if (!location.pathname.startsWith('/login')) return 'navigated';
+      const shown = (node) => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
+      if ([...document.querySelectorAll('h4,label')].some((node) => shown(node)
+        && /insira o código que você recebeu|código de confirmação|código de verificação/iu.test(node.textContent))) return '2fa';
+      if ([...document.querySelectorAll('h5,p,[role="dialog"]')].some((node) => shown(node)
+        && /usuário já conectado|usuário já se encontra logado/iu.test(node.textContent))) return 'session';
+      if ([...document.querySelectorAll('[role="alert"],[class*="toast"],.error')].some(shown)) return 'alert';
+      return null;
+    }, null, { timeout: timeoutMs }).then((handle) => handle.jsonValue()).catch(() => 'timeout');
     if (outcome === 'navigated') return;
+    const ui = await visibleLoginUi(page);
+    if (outcome === 'timeout' && ui.fields.some((field) => field.label === 'Código')
+      && ui.buttons.includes('Validar')) outcome = '2fa';
     const path = safeLoginText(new URL(page.url()).pathname, [email, password]);
     const messages = await page.locator('[role="alert"]:visible, [class*="toast"]:visible, .error:visible, form .error:visible, form [aria-live]:visible, form + p:visible')
       .allTextContents();
     const controls = (await loginControls(page)).filter((label) => !before.has(label));
-    const diagnostic = { outcome, path, messages: messages.map((message) => safeLoginText(message, [email, password]))
-      .filter(Boolean).slice(0, 5), requests: responses.slice(0, 20), failed: failed.slice(0, 20),
-    controls: controls.map((label) => safeLoginText(label, [email, password])).slice(0, 10) };
-    throw Object.assign(new Error('Login na homologação falhou'), { diagnostic });
+    const diagnostic = { outcome, path, messages: messages.map(knownLoginAlert)
+      .filter(Boolean).slice(0, 5), requests: responses, failed: failed.slice(0, 20),
+    controls: controls.map(knownLoginLabel).filter(Boolean).slice(0, 10), ...ui };
+    throw Object.assign(new Error('Login falhou'), { code: outcome === '2fa' ? 'LOGIN_2FA' : undefined, diagnostic });
+  } catch (error) {
+    if (error.diagnostic) throw error;
+    const ui = await visibleLoginUi(page);
+    let path = '/:id';
+    try { path = loginPath(new URL(page.url()).pathname); } catch { /* no raw URL */ }
+    throw Object.assign(new Error('Login falhou'), { diagnostic: { outcome, path, messages: [],
+      requests: responses, failed: failed.slice(0, 20), controls: [], ...ui } });
   } finally {
     page.off('response', onResponse);
     page.off('requestfailed', onFailed);
