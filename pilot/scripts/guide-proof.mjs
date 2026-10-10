@@ -191,8 +191,10 @@ export function qaFailedRequest(request, guard) {
 function safeLoginText(value, secrets) {
   let text = String(value ?? '').replace(/\s+/gu, ' ')
     .replace(/https?:\/\/[^\s"'<>]+/giu, '[URL removida]')
+    .replace(/\/[\w./-]+\?[^\s"'<>]+/gu, '[URL removida]')
     .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, '[e-mail removido]')
-    .replace(/\b(?:token|senha|password|secret|api[_-]?key)\s*[:=]\s*[^\s,;]+/giu, '[segredo removido]')
+    .replace(/\b(?:token|senha|password|secret|api[_-]?key|session|cookie|authorization)\s*[:=]\s*[^\s,;]+/giu, '[segredo removido]')
+    .replace(/\bBearer\s+\S+/giu, '[segredo removido]')
     .replace(/\beyJ[A-Za-z0-9_.-]{20,}\b/gu, '[segredo removido]');
   for (const secret of secrets) if (typeof secret === 'string' && secret.length >= 4)
     text = text.replaceAll(secret, '[segredo removido]');
@@ -241,10 +243,85 @@ async function visibleLoginUi(page) {
   links: visible.links.map(knownLoginLabel).filter(Boolean).slice(0, 10) };
 }
 
-export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs = 30000, networkGuard } = {}) {
+function loginSurfaceSnapshot(frame, secrets) {
+  return frame.evaluate(() => {
+    const shown = (node) => node.getClientRects().length > 0
+      && getComputedStyle(node).visibility !== 'hidden';
+    const roots = [document];
+    for (let index = 0; index < roots.length; index++) {
+      for (const node of roots[index].querySelectorAll('*')) if (node.shadowRoot) roots.push(node.shadowRoot);
+    }
+    const all = (selector) => roots.flatMap((root) => [...root.querySelectorAll(selector)]);
+    const label = (node) => node.labels?.[0]?.textContent?.trim() || node.getAttribute('aria-label')
+      || node.getAttribute('placeholder') || '';
+    return { shadowRoots: roots.length - 1, inputs: all('input').length,
+      buttons: all('button,[role="button"]').length, forms: all('form').length,
+      visibleInputs: all('input').filter((node) => shown(node) && node.type !== 'hidden').length,
+      labels: all('input').filter((node) => shown(node) && node.type !== 'hidden').map(label),
+      placeholders: all('input').filter((node) => shown(node) && node.type !== 'hidden')
+        .map((node) => node.getAttribute('placeholder') || ''),
+      titles: all('title,h1,h2,h3,h4').filter(shown).map((node) => node.textContent?.trim() || ''),
+      buttonTexts: all('button,[role="button"]').filter(shown)
+        .map((node) => node.textContent?.trim() || node.getAttribute('aria-label') || '') };
+  }).then((data) => ({ ...data,
+    labels: data.labels.slice(0, 20).map((value) => safeLoginText(value, secrets).slice(0, 60)),
+    placeholders: data.placeholders.slice(0, 20).map((value) => safeLoginText(value, secrets).slice(0, 60)),
+    titles: data.titles.slice(0, 20).map((value) => safeLoginText(value, secrets).slice(0, 60)),
+    buttonTexts: data.buttonTexts.slice(0, 20).map((value) => safeLoginText(value, secrets).slice(0, 60)) }));
+}
+
+async function loginSurfaces(page, secrets) {
+  const frames = await Promise.all(page.frames().map(async (frame, index) => ({ index,
+    ...await loginSurfaceSnapshot(frame, secrets).catch(() => ({ shadowRoots: 0, inputs: 0,
+      buttons: 0, forms: 0, visibleInputs: 0, labels: [], placeholders: [], titles: [], buttonTexts: [] })) })));
+  return { frameCount: frames.length, shadowRootCount: frames.reduce((sum, frame) => sum + frame.shadowRoots, 0), frames };
+}
+
+async function waitForLoginInput(page, secrets, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const surfaces = await loginSurfaces(page, secrets);
+    for (const frame of page.frames()) {
+      const email = frame.locator('input[type="email"]:visible, input[formcontrolname="email"]:visible').first();
+      const password = frame.locator('input[type="password"]:visible, input[formcontrolname="senha"]:visible').first();
+      if (await email.count().catch(() => 0) && await password.count().catch(() => 0)) return { frame, surfaces };
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(250, Math.max(0, deadline - Date.now()))));
+  } while (Date.now() < deadline);
+  return { frame: null, surfaces: await loginSurfaces(page, secrets) };
+}
+
+async function waitForLoginOutcome(page, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    if (!new URL(page.url()).pathname.startsWith('/login')) return 'navigated';
+    const surfaces = await loginSurfaces(page, []);
+    if (surfaces.frames.some((frame) => [...frame.titles, ...frame.labels]
+      .some((value) => /insira o código que você recebeu|código de confirmação|código de verificação/iu.test(value)))) return '2fa';
+    for (const frame of page.frames()) {
+      const texts = await frame.locator('h4:visible,label:visible,h5:visible,p:visible,[role="dialog"]:visible')
+        .allTextContents().catch(() => []);
+      if (texts.some((value) => /insira o código que você recebeu|código de confirmação|código de verificação/iu.test(value))) return '2fa';
+      if (texts.some((value) => /usuário já conectado|usuário já se encontra logado/iu.test(value))) return 'session';
+      if (await frame.locator('[role="alert"]:visible,[class*="toast"]:visible,.error:visible').count().catch(() => 0)) return 'alert';
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(250, Math.max(0, deadline - Date.now()))));
+  } while (Date.now() < deadline);
+  return 'timeout';
+}
+
+export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs = 30000, networkGuard,
+  productionDiagnostics = false, captureLoginScreenshot, inputTimeoutMs = 30_000 } = {}) {
   if (!email || !password) throw new Error('Credenciais de QA ausentes');
   const responses = [];
   const failed = [];
+  const consoleErrors = [];
+  let surfaceDiagnostic;
+  let screenshotId;
+  const onConsole = (message) => {
+    if (message.type() === 'error' && consoleErrors.length < 20)
+      consoleErrors.push(safeLoginText(message.text(), [email, password]).slice(0, 200));
+  };
   const onResponse = (response) => {
     try {
       const url = new URL(response.url());
@@ -259,14 +336,25 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
   };
   page.on('response', onResponse);
   page.on('requestfailed', onFailed);
+  if (productionDiagnostics) page.on('console', onConsole);
   let outcome = 'error';
   try {
     await page.goto(new URL('/login', baseUrl).href, { waitUntil: 'domcontentloaded' });
-    await page.locator('input[type="email"], input[formcontrolname="email"]').first().fill(email);
-    await page.locator('input[type="password"], input[formcontrolname="senha"]').first().fill(password);
+    let loginFrame = page;
+    if (productionDiagnostics) {
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+      const found = await waitForLoginInput(page, [email, password], Math.min(inputTimeoutMs, 30_000));
+      loginFrame = found.frame;
+      surfaceDiagnostic = found.surfaces;
+      if (new URL(page.url()).pathname === '/login' && captureLoginScreenshot)
+        screenshotId = await captureLoginScreenshot(await page.screenshot({ fullPage: false }));
+      if (!loginFrame) throw new Error('Login falhou');
+    }
+    await loginFrame.locator('input[type="email"], input[formcontrolname="email"]').first().fill(email);
+    await loginFrame.locator('input[type="password"], input[formcontrolname="senha"]').first().fill(password);
     const before = new Set(await loginControls(page));
-    await page.getByRole('button', { name: /^Entrar$/iu }).click();
-    outcome = await page.waitForFunction(() => {
+    await loginFrame.getByRole('button', { name: /^Entrar$/iu }).click();
+    outcome = productionDiagnostics ? await waitForLoginOutcome(page, timeoutMs) : await page.waitForFunction(() => {
       if (!location.pathname.startsWith('/login')) return 'navigated';
       const shown = (node) => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
       if ([...document.querySelectorAll('h4,label')].some((node) => shown(node)
@@ -276,8 +364,14 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
       if ([...document.querySelectorAll('[role="alert"],[class*="toast"],.error')].some(shown)) return 'alert';
       return null;
     }, null, { timeout: timeoutMs }).then((handle) => handle.jsonValue()).catch(() => 'timeout');
-    if (outcome === 'navigated') return;
-    const ui = await visibleLoginUi(page);
+    if (outcome === 'navigated') return productionDiagnostics
+      ? { screenshotId, surfaces: surfaceDiagnostic, consoleErrors } : undefined;
+    const ui = productionDiagnostics ? {
+      fields: (await loginSurfaces(page, [email, password])).frames.flatMap((frame) => frame.labels.map((label) => ({
+        role: /senha/iu.test(label) ? 'password' : /e-mail|email/iu.test(label) ? 'email' : 'textbox',
+        label: knownLoginLabel(label) ?? (/code|otp|input\d+/iu.test(label) ? 'Código' : 'não identificado') }))).slice(0, 10),
+      buttons: (await loginSurfaces(page, [email, password])).frames.flatMap((frame) => frame.buttonTexts.map(knownLoginLabel).filter(Boolean)).slice(0, 10),
+      links: [] } : await visibleLoginUi(page);
     if (outcome === 'timeout' && ui.fields.some((field) => field.label === 'Código')
       && ui.buttons.includes('Validar')) outcome = '2fa';
     const path = safeLoginText(new URL(page.url()).pathname, [email, password]);
@@ -286,7 +380,8 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
     const controls = (await loginControls(page)).filter((label) => !before.has(label));
     const diagnostic = { outcome, path, messages: messages.map(knownLoginAlert)
       .filter(Boolean).slice(0, 5), requests: responses, failed: failed.slice(0, 20),
-    controls: controls.map(knownLoginLabel).filter(Boolean).slice(0, 10), ...ui };
+    controls: controls.map(knownLoginLabel).filter(Boolean).slice(0, 10), ...ui,
+    ...(productionDiagnostics ? { surfaces: surfaceDiagnostic, consoleErrors, screenshotId } : {}) };
     throw Object.assign(new Error('Login falhou'), { code: outcome === '2fa' ? 'LOGIN_2FA' : undefined, diagnostic });
   } catch (error) {
     if (error.diagnostic) throw error;
@@ -294,10 +389,12 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
     let path = '/:id';
     try { path = loginPath(new URL(page.url()).pathname); } catch { /* no raw URL */ }
     throw Object.assign(new Error('Login falhou'), { diagnostic: { outcome, path, messages: [],
-      requests: responses, failed: failed.slice(0, 20), controls: [], ...ui } });
+      requests: responses, failed: failed.slice(0, 20), controls: [], ...ui,
+      ...(productionDiagnostics ? { surfaces: surfaceDiagnostic, consoleErrors, screenshotId } : {}) } });
   } finally {
     page.off('response', onResponse);
     page.off('requestfailed', onFailed);
+    if (productionDiagnostics) page.off('console', onConsole);
   }
 }
 

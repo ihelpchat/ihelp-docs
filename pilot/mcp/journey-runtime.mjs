@@ -2,8 +2,8 @@ import OpenAI from 'openai';
 import ts from 'typescript';
 import { createHash, randomBytes } from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { launch } from '../scripts/visual/measure.mjs';
 import { assertAllowedTarget, credentialsFromEnv, installQaNetworkGuard, loginToQa, qaRequestDecision, qaStaticCdnAllowed } from '../scripts/guide-proof.mjs';
 import { captureMaskedFrame, waitForStableScreen } from '../scripts/screen-capture/capture.mjs';
@@ -94,16 +94,22 @@ export function createProductionApiObserver(target, env = process.env) {
       entry.failure = reason ?? (/^net::[A-Z_]+$/u.test(request.failure()?.errorText ?? '')
         ? request.failure().errorText : 'falha de rede');
     },
-    loginFinished(page) {
+    loginFinished(page, details = {}) {
       const url = sanitizedUrl(page.url());
-      login = { finished: true, url: `${url.host}${url.path}`, message: null };
+      login = { finished: true, url: `${url.host}${url.path}`, message: null,
+        ...(details.screenshotId ? { screenshotId: details.screenshotId } : {}),
+        ...(details.surfaces ? { surfaces: details.surfaces } : {}),
+        ...(details.consoleErrors ? { consoleErrors: details.consoleErrors } : {}) };
     },
     loginFailed(page, error) {
       const url = sanitizedUrl(page.url());
       login = { finished: false, url: `${url.host}${url.path}`,
         message: knownLoginMessage(error?.diagnostic?.messages, error?.diagnostic?.outcome),
         fields: error?.diagnostic?.fields ?? [], buttons: error?.diagnostic?.buttons ?? [],
-        links: error?.diagnostic?.links ?? [] };
+        links: error?.diagnostic?.links ?? [],
+        ...(error?.diagnostic?.surfaces ? { surfaces: error.diagnostic.surfaces } : {}),
+        ...(error?.diagnostic?.consoleErrors ? { consoleErrors: error.diagnostic.consoleErrors } : {}),
+        ...(error?.diagnostic?.screenshotId ? { screenshotId: error.diagnostic.screenshotId } : {}) };
     },
     api: () => api,
     diagnostic: () => ({ login: { ...login }, requests: requests.map((entry) => ({ ...entry })) }),
@@ -1809,9 +1815,19 @@ export async function browserProductionPreflight(env = process.env,
     page.on('request', observer.request);
     page.on('response', observer.response);
     page.on('requestfailed', (request) => observer.failed(request, networkGuard));
+    const captureLoginScreenshot = async (bytes) => {
+      const id = createHash('sha256').update(bytes).digest('hex');
+      const dir = resolve(env.MCP_STATE_DIR ?? '/data', 'journeys', 'login');
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      await writeFile(join(dir, `${id}.png`), bytes, { flag: 'wx', mode: 0o600 }).catch((error) => {
+        if (error.code !== 'EEXIST') throw error;
+      });
+      return id;
+    };
     try {
-      await login(page, target.url, journeyCredentials(env), { timeoutMs: 15000 });
-      observer.loginFinished(page);
+      const loginResult = await login(page, target.url, journeyCredentials(env), { timeoutMs: 15000,
+        productionDiagnostics: true, captureLoginScreenshot });
+      observer.loginFinished(page, loginResult);
     } catch (error) {
       observer.loginFailed(page, error);
       const result = { mode: 'bloqueado', reason: error.code === 'LOGIN_2FA' ? 'login_2fa' : 'login',
