@@ -557,10 +557,8 @@ export async function answerQuestion(root, question, options = {}) {
       actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
       resolution: 'partial', found: false,
     };
-    if (route.kind === 'perguntar' || route.kind === 'none') return {
-      answer: 'Qual tarefa você quer fazer no iHelp?', sections: [], steps: [], code: null,
-      sources: [], suggestions: ['Falar com uma pessoa'], resolution: 'not_found', found: false,
-    };
+    // Sem guia escolhido ("none") ou pergunta ambígua para a triagem ("perguntar"): segue para a
+    // resposta pelo conteúdo do FAQ. A triagem só escolhe guia; ela não decide que não há resposta.
     routerFailed = route.kind === 'provider_failed';
   }
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
