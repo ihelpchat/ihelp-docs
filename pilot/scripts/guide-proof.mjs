@@ -94,6 +94,22 @@ const productionHost = (host) => host === 'ihelpchat.com' || host === 'ihelpchat
   || host.endsWith('.ihelpchat.com') || host.endsWith('.ihelpchat.com.br')
   || host === 'api.ihelp.com.br';
 
+const productionStaticCdns = new Set(['stackpath.bootstrapcdn.com', 'use.fontawesome.com',
+  'cdn.tiny.cloud', 'fonts.googleapis.com', 'fonts.gstatic.com']);
+const staticResourceTypes = new Set(['script', 'stylesheet', 'font', 'image']);
+export function qaStaticCdnAllowed(request, target, env = process.env) {
+  if (target.mode !== 'producao' || env.QA_TARGET !== 'producao' || env.QA_PROD_ENABLED !== 'true'
+    || request.method().toUpperCase() !== 'GET'
+    || !staticResourceTypes.has(request.resourceType?.())) return false;
+  if (!qaRequestDecision(target.url, target, env).allowed) return false;
+  let url;
+  try { url = new URL(request.url()); } catch { return false; }
+  const headers = request.headers();
+  return url.protocol === 'https:' && !url.port && !url.username && !url.password
+    && productionStaticCdns.has(url.hostname)
+    && !Object.keys(headers).some((key) => /^(authorization|cookie|proxy-authorization)$/iu.test(key));
+}
+
 export function qaRequestDecision(value, target, env = process.env, { fixtureAllowedOrigins = [] } = {}) {
   let url;
   try { url = new URL(value); } catch { return { allowed: false, host: 'inválido', reason: 'bloqueado: URL inválida' }; }
@@ -125,7 +141,9 @@ export async function installQaNetworkGuard(context, target, env = process.env, 
   await context.route('**/*', async (route) => {
     try {
       const request = route.request();
-      const decision = qaRequestDecision(request.url(), target, env, options);
+      const decision = qaStaticCdnAllowed(request, target, env)
+        ? { allowed: true, host: new URL(request.url()).host }
+        : qaRequestDecision(request.url(), target, env, options);
       if (!decision.allowed) {
         guard.blocked.push(decision);
         guard.reasons.set(request, decision);
@@ -137,7 +155,12 @@ export async function installQaNetworkGuard(context, target, env = process.env, 
       const response = await route.fetch({ maxRedirects: 0, ...(streaming ? { timeout: 1500 } : {}) });
       const location = response.headers().location;
       if (location) {
-        const redirected = qaRequestDecision(new URL(location, request.url()).href, target, env, options);
+        const redirectedUrl = new URL(location, request.url()).href;
+        const redirected = qaStaticCdnAllowed({ url: () => redirectedUrl,
+          method: () => request.method(), resourceType: () => request.resourceType(),
+          headers: () => request.headers() }, target, env)
+          ? { allowed: true, host: new URL(redirectedUrl).host }
+          : qaRequestDecision(redirectedUrl, target, env, options);
         if (!redirected.allowed) {
           guard.blocked.push(redirected);
           guard.reasons.set(request, redirected);
@@ -148,6 +171,7 @@ export async function installQaNetworkGuard(context, target, env = process.env, 
     } catch {
       // A route callback must not create an unhandled rejection (Playwright's
       // own error can contain request headers). A closed context needs no abort.
+      try { guard.reasons.set(route.request(), { reason: 'bloqueado: fetch do guard falhou' }); } catch { /* closed */ }
       await route.abort().catch(() => {});
     }
   });

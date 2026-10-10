@@ -5,7 +5,7 @@ import { inflateRawSync } from 'node:zlib';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { launch } from '../scripts/visual/measure.mjs';
-import { assertAllowedTarget, credentialsFromEnv, installQaNetworkGuard, loginToQa, qaRequestDecision } from '../scripts/guide-proof.mjs';
+import { assertAllowedTarget, credentialsFromEnv, installQaNetworkGuard, loginToQa, qaRequestDecision, qaStaticCdnAllowed } from '../scripts/guide-proof.mjs';
 import { captureMaskedFrame, waitForStableScreen } from '../scripts/screen-capture/capture.mjs';
 import { runJourneys, fixtureValue, selectedRobotChannel } from './journey-service.mjs';
 import { searchLocalProductContext } from './local-product-context.mjs';
@@ -86,6 +86,13 @@ export function createProductionApiObserver(target, env = process.env) {
         if (url.pathname.startsWith('/api/') && qaRequestDecision(url.href, target, env).allowed)
           api = { origin: url.origin, authorization: request.headers().authorization };
       } catch { /* no API candidate */ }
+    },
+    failed(request, guard) {
+      const entry = pending.get(request);
+      if (!entry) return;
+      const reason = guard?.reasons.get(request)?.reason;
+      entry.failure = reason ?? (/^net::[A-Z_]+$/u.test(request.failure()?.errorText ?? '')
+        ? request.failure().errorText : 'falha de rede');
     },
     loginFinished(page) {
       const url = sanitizedUrl(page.url());
@@ -493,6 +500,7 @@ export function journeyWriteDecision(request, context = {}) {
 }
 export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdPartyDenied, onBlocked, ...context }) {
   const request = route.request();
+  if (qaStaticCdnAllowed(request, target, env)) return route.fallback();
   let url;
   try { url = new URL(request.url()); } catch { return route.fallback(); }
   const allowedHost = qaRequestDecision(url.href, target, env).allowed;
@@ -1786,19 +1794,21 @@ export async function browserProductionPreflight(env = process.env,
   const browser = await launchBrowser();
   try {
     const context = await browser.newContext({ serviceWorkers: 'block' });
-    await installQaNetworkGuard(context, target, env);
+    const networkGuard = await installQaNetworkGuard(context, target, env);
     await context.route('**/*', (route) => {
       const request = route.request();
       const url = new URL(request.url());
       const path = url.pathname + url.search;
-      if (productionPreflightRequestAllowed(request.method(), path))
+      if (qaStaticCdnAllowed(request, target, env) || productionPreflightRequestAllowed(request.method(), path))
         return route.fallback();
+      networkGuard.reasons.set(request, { reason: 'bloqueado: pré-voo' });
       return route.abort();
     });
     const page = await context.newPage();
     const observer = createProductionApiObserver(target, env);
     page.on('request', observer.request);
     page.on('response', observer.response);
+    page.on('requestfailed', (request) => observer.failed(request, networkGuard));
     try {
       await login(page, target.url, journeyCredentials(env), { timeoutMs: 15000 });
       observer.loginFinished(page);
@@ -1854,7 +1864,8 @@ export async function authenticatedJourneyIdentity(env) {
     if (env.QA_TARGET === 'producao') await context.route('**/*', (route) => {
       const request = route.request();
       const url = new URL(request.url());
-      return productionPreflightRequestAllowed(request.method(), url.pathname + url.search)
+      return (qaStaticCdnAllowed(request, target, env)
+        || productionPreflightRequestAllowed(request.method(), url.pathname + url.search))
         ? route.fallback() : route.abort();
     });
     const page = await context.newPage();

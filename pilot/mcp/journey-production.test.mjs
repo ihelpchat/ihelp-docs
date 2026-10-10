@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertAllowedTarget, qaRequestDecision } from '../scripts/guide-proof.mjs';
+import { assertAllowedTarget, qaRequestDecision, qaStaticCdnAllowed, installQaNetworkGuard } from '../scripts/guide-proof.mjs';
 import { productionConfig, productionPreflight } from './journey-production.mjs';
 import * as runtime from './journey-runtime.mjs';
 import { journeyFailureCategory } from './journey-service.mjs';
@@ -43,6 +43,62 @@ test('produção requer chave geral e somente hosts explícitos da conta', () =>
   assert.doesNotThrow(() => assertProductionAccountHosts(prodTarget, 'https://api-fixture.ihelpchat.com'));
   assert.throws(() => assertProductionAccountHosts(prodTarget, 'https://other-api.ihelpchat.com'),
     /hosts da conta divergentes/u);
+});
+
+test('CDN de interface só aceita GET estático em produção, sem credenciais', async () => {
+  const target = productionConfig(env).target;
+  const request = (url, method = 'GET', type = 'script', headers = {}) => ({
+    url: () => url, method: () => method, resourceType: () => type, headers: () => headers,
+  });
+  const cdn = 'https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js';
+  assert.equal(qaStaticCdnAllowed(request(cdn), target, env), true);
+  assert.equal(qaStaticCdnAllowed(request(cdn), { local: false }, env), false);
+  assert.equal(qaStaticCdnAllowed(request(cdn, 'POST'), target, env), false);
+  assert.equal(qaStaticCdnAllowed(request(cdn, 'GET', 'fetch'), target, env), false);
+  assert.equal(qaStaticCdnAllowed(request(cdn, 'GET', 'script', { authorization: 'Bearer secret' }), target, env), false);
+  assert.equal(qaStaticCdnAllowed(request('https://www.googletagmanager.com/gtm.js', 'GET', 'script'), target, env), false);
+  let handler;
+  const guard = await installQaNetworkGuard({ async route(_pattern, callback) { handler = callback; } }, target, env);
+  const run = async (input) => {
+    let result;
+    await handler({ request: () => input, fetch: async () => ({ headers: () => ({}) }),
+      fulfill: async () => { result = 'allowed'; }, abort: async () => { result = 'denied'; } });
+    return result;
+  };
+  assert.equal(await run(request(cdn)), 'allowed');
+  assert.equal(await run(request(cdn, 'POST')), 'denied');
+  assert.equal(await run(request('https://www.googletagmanager.com/gtm.js')), 'denied');
+  assert.equal(guard.blocked.length, 2);
+  let homologHandler;
+  await installQaNetworkGuard({ async route(_pattern, callback) { homologHandler = callback; } },
+    { local: false, url: 'https://qa.example.test' }, { GUIDE_QA_ALLOWED_HOSTS: 'qa.example.test' });
+  let homologResult;
+  await homologHandler({ request: () => request(cdn),
+    abort: async () => { homologResult = 'denied'; } });
+  assert.equal(homologResult, 'denied');
+  let blocked;
+  const denied = {};
+  let journeyResult;
+  await handleJourneyRoute({ request: () => request(cdn),
+    fallback: async () => { journeyResult = 'allowed'; }, abort: async () => { journeyResult = 'denied'; } },
+  { target, env, thirdPartyDenied: denied, productionReady: () => false,
+    taskId: 'contatos.cadastrar', onBlocked: (value) => { blocked = value; } });
+  assert.equal(journeyResult, 'allowed');
+  assert.equal(blocked, undefined);
+  assert.deepEqual(denied, {});
+});
+
+test('requisição sem resposta registra motivo sanitizado da falha', () => {
+  const observer = createProductionApiObserver(productionConfig(env).target, env);
+  const request = { url: () => 'https://front.example.test/private?token=secret',
+    method: () => 'GET', headers: () => ({ authorization: 'Bearer secret' }),
+    failure: () => ({ errorText: 'net::ERR_FAILED' }) };
+  const guard = { reasons: new WeakMap([[request, { reason: 'bloqueado: pré-voo' }]]) };
+  observer.request(request);
+  observer.failed(request, guard);
+  assert.deepEqual(observer.diagnostic().requests[0], { host: 'front.example.test', path: '/:id',
+    method: 'GET', bearer: true, status: null, failure: 'bloqueado: pré-voo' });
+  assert.doesNotMatch(JSON.stringify(observer.diagnostic()), /secret|token=/u);
 });
 
 test('configuração real de confirmação chega ao login sem rede nem navegador', async () => {
