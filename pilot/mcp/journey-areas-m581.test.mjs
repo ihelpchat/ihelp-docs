@@ -175,7 +175,7 @@ test('campanha só confirma modo lista quando o indicador do front muda após o 
   const browser = await chromium.launch({ executablePath: chromeExecutablePath(), headless: true });
   try {
     const page = await browser.newPage();
-    await page.setContent(`<button aria-label="Modo lista" class="bg-white" onclick="if(window.respond) { this.className='bg-primary-50'; document.querySelector('[aria-label=\"Modo card\"]').className='bg-white'; }"></button>
+    await page.setContent(`<button aria-label="Modo lista" class="bg-white"></button>
       <button aria-label="Modo card" class="bg-primary-50"></button>`);
     const read = { status: 200, method: 'GET', url: 'https://api.example.test/api/v2/marketing/campaigns',
       body: [{ idRef: 'campaign-1', titulo: 'Campanha Exemplo 01' }] };
@@ -185,10 +185,14 @@ test('campanha só confirma modo lista quando o indicador do front muda após o 
     await actJourneyAction(page, { type: 'click', role: 'button', name: 'Modo lista' }, screen.targets);
     screen = await observeJourneyDom(page, { vocabulary: ['Modo lista', 'Modo card'] });
     assert.equal(verifyAreaResult('campanhas.alternar_visualizacao', read, { ...scope, screen }), false);
-    await page.evaluate(() => { window.respond = true; });
+    await page.locator('button[aria-label="Modo lista"]').evaluate((button) => {
+      button.onclick = () => { button.className = 'bg-primary-50';
+        document.querySelector('button[aria-label="Modo card"]').className = 'bg-white'; };
+    });
     await actJourneyAction(page, { type: 'click', role: 'button', name: 'Modo lista' }, screen.targets);
     screen = await observeJourneyDom(page, { vocabulary: ['Modo lista', 'Modo card'] });
-    assert.equal(verifyAreaResult('campanhas.alternar_visualizacao', read, { ...scope, screen }), true);
+    assert.equal(verifyAreaResult('campanhas.alternar_visualizacao', read, { ...scope, screen }), true,
+      JSON.stringify(screen.state));
   } finally { await browser.close(); }
 });
 
@@ -198,7 +202,7 @@ test('runtime aceita as quatro áreas, executa plano e só conclui após verify'
     const [id, plan] = entry;
     const root = await mkdtemp(join(tmpdir(), 'journey-area-'));
     let verified = 0;
-    const areaFixtureContext = { stageName: 'Etapa Exemplo 01', contactOption: 'opção 1',
+    const areaFixtureContext = { stageName: 'Etapa Exemplo 01', contactSearch: 'Contato Exemplo 01 · a1b2c3d4', contactOption: 'opção 1',
       selfLabel: 'Atendente Exemplo 01', selfOption: 'opção 1', scheduleDay: '10' };
     const browser = { async open() { return { areaFixtureContext }; }, async observe() { return { title: area, path: plan.startRoute,
       controls: plan.steps.filter((step) => step.type === 'click').map((step) => ({ role: step.role,

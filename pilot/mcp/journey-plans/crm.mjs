@@ -4,6 +4,8 @@ export const crmPlans = {
   'crm.criar_card': { startRoute: '/crm/pipeline', steps: [click('button', 'Adicionar oportunidade'),
     fill('Título do card', 'cardName'),
     { type: 'click', role: 'button', nameFrom: 'stageName' },
+    click('combobox', 'Buscar por nome, telefone ou e-mail...'),
+    { type: 'fill', role: 'combobox', name: 'Buscar por nome, telefone ou e-mail...', value: 'contactSearch' },
     { type: 'click', role: 'option', nameFrom: 'contactOption' },
     { type: 'click', role: 'button', nameFrom: 'selfLabel' }, click('button', 'Criar card')],
     persisted: { method: 'GET', path: '/crm/card/:id', idField: 'id', field: 'title', value: 'generated' } },

@@ -582,7 +582,13 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
       phoneCountry: node.matches('select,[role="combobox"]') && Boolean(node.closest('.phoneInputWrapper,.PhoneInput,[class*="phoneInput" i]')?.querySelector('input[type="tel"]')),
       field: node.matches('input:not([type="hidden"]),textarea,select,[role="combobox"]') }] : []);
     const rows = [...document.querySelectorAll('tbody tr')].filter(visible).map((row) => compact(row.innerText));
-    return { controls, rows, title: document.title,
+    const listButton = document.querySelector('button[aria-label="Modo lista"]');
+    const cardButton = document.querySelector('button[aria-label="Modo card"]');
+    const campaignViewMode = listButton && cardButton && visible(listButton) && visible(cardButton)
+      ? listButton.classList.contains('bg-primary-50') && !cardButton.classList.contains('bg-primary-50') ? 'list'
+        : cardButton.classList.contains('bg-primary-50') && !listButton.classList.contains('bg-primary-50') ? 'card' : ''
+      : '';
+    return { controls, rows, campaignViewMode, title: document.title,
       messages: [...document.querySelectorAll('[role="alert"],[role="status"],[aria-live],[class*="toast" i],.error,[class*="text-red"]')]
         .filter(visible).map((node) => compact(node.textContent)).filter(Boolean),
       headings: [...document.querySelectorAll('h1,h2,h3')].filter(visible).map((node) => compact(node.textContent)).join(' | ').slice(0, 180) };
@@ -633,6 +639,7 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
   }
   return { controls, fields, messages: raw.messages.map((value) => known.has(value) ? value : '[conteúdo oculto]'),
     state: { headings: raw.headings.split(' | ').map((value) => known.has(value) ? value : '[conteúdo oculto]').join(' | '),
+      campaignViewMode: raw.campaignViewMode,
       visibleRows: String(raw.rows.length), generatedRows: String(raw.rows.filter((row) => [...generated].some((value) =>
         /^(?:Contato|Card|Campanha|Tarefa) Exemplo/u.test(value) && row.includes(value))).length) },
     title: raw.title, targets };
@@ -1336,6 +1343,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
             && /^\+?44\s?20\s?7946\s?0\d{3}$/u.test(row?.telefone ?? row?.numero ?? ''));
           if (!contact) throw new Error('contato de preparo indisponível');
           fixedIds.contact.add(contact.id);
+          areaFixtureContext.contactSearch = contact.nome;
           areaFixtureContext.contactOption = 'opção 1';
           areaFixtureContext.selfLabel = 'Atendente Exemplo 01';
         }
@@ -1666,9 +1674,14 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
           return { confirmed: false, observed: 'referência fictícia ausente' };
         const read = await authenticatedGet(path + (task.id === 'agendamentos.consultar_mes'
           ? areaNames.scheduleRange ?? '' : ''));
+        const observed = task.id === 'campanhas.alternar_visualizacao'
+          ? await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures() }) : null;
         const confirmed = verifyAreaResult(task.id, { ...read, method: 'GET',
           url: new URL(`/api/v2${path}`, qaApi.origin).href },
-        { apiOrigin: qaApi.origin, createdIds, fixedIds, generated: fixtures() });
+        { apiOrigin: qaApi.origin, createdIds, fixedIds, generated: fixtures(),
+          expectedValue: task.id === 'tarefas.editar'
+            ? areaFixtureValue('editedTaskName', { marker: markerFor() }) : undefined,
+          screen: observed });
         return { confirmed, observed: confirmed ? 'Resultado fictício persistido' : 'Leitura posterior não confirmou' };
       }
       if (task.id === 'contatos.buscar') return filteredContactVerified

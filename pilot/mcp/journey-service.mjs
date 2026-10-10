@@ -88,7 +88,9 @@ export function policyDecision(action, generated = fixtureValues, taskId = '') {
   if (forbidden.test(name) && !(action.type === 'click' && action.role === 'button'
     && name === 'enviar mensagem' && taskId === 'robos.montar_menu')) return deny('ação proibida');
   if (action.type === 'fill' && (action.role !== 'textbox'
-    && !(taskId === 'contatos.marcar_tags' && action.role === 'combobox') || !generated.has(action.value)))
+    && !(taskId === 'contatos.marcar_tags' && action.role === 'combobox')
+    && !(taskId === 'crm.criar_card' && action.role === 'combobox'
+      && action.name === 'Buscar por nome, telefone ou e-mail...') || !generated.has(action.value)))
     return deny('valor fora do gerador');
   if (action.type === 'select' && (action.role !== 'combobox' || !generated.has(action.value)
     && !(taskId === 'contatos.importar' && ['Nome', 'Contato', 'Email'].includes(action.value)))) return deny('valor fora do gerador');

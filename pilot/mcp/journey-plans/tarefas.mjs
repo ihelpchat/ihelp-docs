@@ -8,7 +8,7 @@ export const taskPlans = {
     { type: 'click', role: 'option', nameFrom: 'selfOption' }, click('button', 'Salvar')],
     persisted: { method: 'GET', path: '/task', field: 'title', value: 'generated' } },
   'tarefas.editar': { startRoute: '/tarefas?task=:id', steps: [fill('Título', 'editedTaskName'), click('button', 'Salvar')],
-    persisted: { method: 'GET', path: '/task', field: 'title', value: 'generated' } },
+    persisted: { method: 'GET', path: '/task', field: 'title', value: 'expected' } },
   'tarefas.concluir': { startRoute: '/tarefas?task=:id', steps: [click('button', 'Concluir')],
     persisted: { method: 'GET', path: '/task', field: 'status', value: 3 } },
   'tarefas.arquivar': { startRoute: '/tarefas?task=:id', steps: [click('button', 'Arquivar')],

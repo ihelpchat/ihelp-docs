@@ -130,8 +130,11 @@ export function verifyAreaResult(id, response, context = {}) {
   const allowedIds = idSource === 'createdIds' ? context.createdIds : context.fixedIds?.[idSource];
   return rows.filter((row) => object(row) && owns(allowedIds, row[idField])
     && (value === 'generated' ? fromGenerator(context, row[field])
+      : value === 'expected' ? fromGenerator(context, context.expectedValue)
+        && row[field] === context.expectedValue
       : value === 'stage' ? owns(context.fixedIds?.stage, row[field])
         : value === 'positive' ? Number.isInteger(row[field]) && row[field] > 0
           : value === 'boolean' ? typeof row[field] === 'boolean'
-          : row[field] === value)).length === 1;
+          : row[field] === value)).length === 1
+    && (id !== 'campanhas.alternar_visualizacao' || context.screen?.state?.campaignViewMode === 'list');
 }
