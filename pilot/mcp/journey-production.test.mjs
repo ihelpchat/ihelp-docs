@@ -106,6 +106,15 @@ test('host do front também pode ser API quando recebe resposta Bearer autentica
   assert.doesNotThrow(() => assertProductionAccountHosts(target, observer.api()?.origin));
 });
 
+test('sem API detectada, gravar_jornada retorna categoria e diagnóstico sem lançar', async () => {
+  const diagnostic = { login: { finished: true, url: 'front.example.test/contact', message: null },
+    requests: [{ host: 'api.example.test', path: '/api/v2/company', method: 'GET', bearer: false, status: 200 }] };
+  const result = await recordJourneys('contatos', ['contatos.cadastrar'], { env,
+    preflight: async () => ({ mode: 'bloqueado', reason: 'api_nao_detectada', diagnostic }) });
+  assert.equal(result.reason, 'api_nao_detectada');
+  assert.deepEqual(result.diagnostic, diagnostic);
+});
+
 test('sem id confirmado retorna contagens e não chama nenhuma escrita', async () => {
   const paths = [];
   const result = await productionPreflight({ env, identity: { companyId: '42' },
