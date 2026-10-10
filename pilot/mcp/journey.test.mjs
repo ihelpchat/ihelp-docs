@@ -194,6 +194,13 @@ test('falha por tarefa preserva resultado anterior e devolve diagnóstico seguro
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('diagnóstico conserva a causa e remove dados sensíveis', () => {
+  const message = journeyFailureLog(new Error('Invalid URL para https://app.ihelpchat.com/?token=segredo maria@example.com'),
+    { QA_PROD_PASSWORD: 'segredo' });
+  assert.match(message, /Invalid URL/u);
+  assert.doesNotMatch(message, /segredo|maria@example.com|app\.ihelpchat\.com/u);
+});
+
 test('cobertura exclui somente as duas tarefas proibidas pela política', () => {
   assert.deepEqual(journeyCoverage([
     { task: 'contatos.cadastrar', status: 'concluída' },

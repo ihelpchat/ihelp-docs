@@ -45,6 +45,35 @@ test('produção requer chave geral e somente hosts explícitos da conta', () =>
     /hosts da conta divergentes/u);
 });
 
+test('configuração real de confirmação chega ao login sem rede nem navegador', async () => {
+  const confirmationEnv = { QA_TARGET: 'producao', QA_PROD_ENABLED: 'true',
+    QA_PROD_URL: 'https://app.ihelpchat.com',
+    QA_PROD_ALLOWED_HOSTS: 'app.ihelpchat.com,apiv3.ihelpchat.com',
+    QA_PROD_EMAIL: 'ficticio@example.test', QA_PROD_PASSWORD: 'senha-ficticia',
+    GUIDE_QA_STAGING_URL: 'https://staging.example.test',
+    GUIDE_QA_ALLOWED_HOSTS: 'staging.example.test', CAPTURE_AGENT_MODEL: 'mock' };
+  let launched = false;
+  let loginReached = false;
+  const page = { on() {}, url: () => 'https://app.ihelpchat.com/login' };
+  const context = { async route() {}, async newPage() { return page; } };
+  const result = await recordJourneys('contatos', ['contatos.cadastrar'], {
+    env: confirmationEnv,
+    preflight: (configured) => runtime.browserProductionPreflight(configured, {
+      launchBrowser: async () => { launched = true; return { async newContext() { return context; }, async close() {} }; },
+      login: async (_page, baseUrl, credentials) => {
+        loginReached = true;
+        assert.equal(baseUrl, confirmationEnv.QA_PROD_URL);
+        assert.equal(credentials.email, confirmationEnv.QA_PROD_EMAIL);
+        throw new Error('login fictício interrompido');
+      },
+    }),
+  });
+  assert.equal(launched, true);
+  assert.equal(loginReached, true);
+  assert.equal(result.mode, 'bloqueado');
+  assert.equal(result.reason, 'login');
+});
+
 test('API indefinida falha fechada com categoria específica, sem Invalid URL', () => {
   const target = productionConfig(env).target;
   assert.throws(() => assertProductionAccountHosts(target, undefined), (error) =>
