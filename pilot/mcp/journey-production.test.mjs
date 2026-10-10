@@ -2,8 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assertAllowedTarget, qaRequestDecision } from '../scripts/guide-proof.mjs';
 import { productionConfig, productionPreflight } from './journey-production.mjs';
-import { assertProductionAccountHosts, handleJourneyRoute, productionPreflightRequestAllowed,
-  recordJourneys, configuredJourneyIdentity } from './journey-runtime.mjs';
+import * as runtime from './journey-runtime.mjs';
+import { journeyFailureCategory } from './journey-service.mjs';
+
+const { assertProductionAccountHosts, handleJourneyRoute, productionPreflightRequestAllowed,
+  recordJourneys, configuredJourneyIdentity, createProductionApiObserver } = runtime;
 
 const env = { QA_TARGET: 'producao', QA_PROD_ENABLED: 'true', QA_PROD_URL: 'https://front.example.test',
   QA_PROD_ALLOWED_HOSTS: 'front.example.test,api.example.test', QA_PROD_EMAIL: 'qa@example.test',
@@ -40,6 +43,47 @@ test('produção requer chave geral e somente hosts explícitos da conta', () =>
   assert.doesNotThrow(() => assertProductionAccountHosts(prodTarget, 'https://api-fixture.ihelpchat.com'));
   assert.throws(() => assertProductionAccountHosts(prodTarget, 'https://other-api.ihelpchat.com'),
     /hosts da conta divergentes/u);
+});
+
+test('API indefinida falha fechada com categoria específica, sem Invalid URL', () => {
+  const target = productionConfig(env).target;
+  assert.throws(() => assertProductionAccountHosts(target, undefined), (error) =>
+    journeyFailureCategory(error) === 'api_nao_detectada' && !/Invalid URL/u.test(error.message));
+});
+
+test('diagnóstico do login guarda só host, padrão de caminho, Bearer e status', () => {
+  const observer = createProductionApiObserver(productionConfig(env).target, env);
+  const bearer = 'Bearer secret-authorization-value';
+  const cookie = 'session=secret-cookie-value';
+  const request = {
+    url: () => 'https://api.example.test/api/v2/contacts/12345?token=secret-query-value',
+    method: () => 'GET', headers: () => ({ authorization: bearer, cookie }),
+  };
+  observer.request(request);
+  observer.response({ request: () => request, status: () => 200 });
+  observer.loginFinished({ url: () => 'https://front.example.test/contact/98765?cookie=secret-cookie-value' });
+  const diagnostic = observer.diagnostic();
+  assert.equal(observer.api()?.origin, 'https://api.example.test');
+  assert.deepEqual(diagnostic.requests, [{ host: 'api.example.test', path: '/api/v2/contacts/:id',
+    method: 'GET', bearer: true, status: 200 }]);
+  assert.equal(diagnostic.login.finished, true);
+  assert.equal(diagnostic.login.url, 'front.example.test/contact/:id');
+  assert.doesNotMatch(JSON.stringify(diagnostic), /secret-|session=|token=|cookie=|Authorization/iu);
+});
+
+test('API sem Bearer ou fora da allowlist aparece no diagnóstico mas não é descoberta', () => {
+  const observer = createProductionApiObserver(productionConfig(env).target, env);
+  for (const [url, headers] of [
+    ['https://api.example.test/api/v2/company', { cookie: 'session=secret-cookie-value' }],
+    ['https://api.other.test/api/v2/company', { authorization: 'Bearer secret-authorization-value' }],
+  ]) {
+    const request = { url: () => url, method: () => 'GET', headers: () => headers };
+    observer.request(request);
+    observer.response({ request: () => request, status: () => 401 });
+  }
+  assert.equal(observer.api(), null);
+  assert.deepEqual(observer.diagnostic().requests.map((entry) => [entry.host, entry.bearer, entry.status]),
+    [['api.example.test', false, 401], ['api.other.test', true, 401]]);
 });
 
 test('sem id confirmado retorna contagens e não chama nenhuma escrita', async () => {
