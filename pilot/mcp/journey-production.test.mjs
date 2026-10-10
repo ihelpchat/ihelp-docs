@@ -100,19 +100,35 @@ test('diagnóstico do login guarda só host, padrão de caminho, Bearer e status
   assert.doesNotMatch(JSON.stringify(diagnostic), /secret-|session=|token=|cookie=|Authorization/iu);
 });
 
-test('API sem Bearer ou fora da allowlist aparece no diagnóstico mas não é descoberta', () => {
+test('falha 2FA preserva campos e botões sanitizados e bloqueia a confirmação', async () => {
+  const target = productionConfig(env).target;
+  const observer = createProductionApiObserver(target, env);
+  observer.loginFailed({ url: () => 'https://front.example.test/login?token=secret' },
+    { code: 'LOGIN_2FA', diagnostic: { outcome: '2fa', fields: [{ role: 'textbox', label: 'Código' }],
+      buttons: ['Validar'], links: [], messages: [] } });
+  assert.deepEqual(observer.diagnostic().login, { finished: false, url: 'front.example.test/login',
+    message: '2FA exigido', fields: [{ role: 'textbox', label: 'Código' }], buttons: ['Validar'], links: [] });
+  const result = await runtime.browserProductionPreflight(env, {
+    launchBrowser: async () => ({ async newContext() { return { async route() {}, async newPage() {
+      return { on() {}, url: () => 'https://front.example.test/login' }; } }; }, async close() {} }),
+    login: async () => { throw Object.assign(new Error('Login falhou'), { code: 'LOGIN_2FA' }); },
+  });
+  assert.equal(result.reason, 'login_2fa');
+});
+
+for (const [label, url, headers, status] of [
+  ['200 sem Bearer', 'https://api.example.test/api/v2/company', {}, 200],
+  ['401 com Bearer no host permitido', 'https://api.example.test/api/v2/company',
+    { authorization: 'Bearer secret-authorization-value' }, 401],
+  ['200 com Bearer fora da allowlist', 'https://api.other.test/api/v2/company',
+    { authorization: 'Bearer secret-authorization-value' }, 200],
+]) test(`descoberta recusa ${label}`, () => {
   const observer = createProductionApiObserver(productionConfig(env).target, env);
-  for (const [url, headers] of [
-    ['https://api.example.test/api/v2/company', { cookie: 'session=secret-cookie-value' }],
-    ['https://api.other.test/api/v2/company', { authorization: 'Bearer secret-authorization-value' }],
-  ]) {
-    const request = { url: () => url, method: () => 'GET', headers: () => headers };
-    observer.request(request);
-    observer.response({ request: () => request, status: () => 401 });
-  }
+  const request = { url: () => url, method: () => 'GET', headers: () => headers };
+  observer.request(request);
+  observer.response({ request: () => request, status: () => status });
   assert.equal(observer.api(), null);
-  assert.deepEqual(observer.diagnostic().requests.map((entry) => [entry.host, entry.bearer, entry.status]),
-    [['api.example.test', false, 401], ['api.other.test', true, 401]]);
+  assert.equal(observer.diagnostic().requests[0].status, status);
 });
 
 test('mensagem de login desconhecida não devolve conteúdo potencialmente sensível', () => {
@@ -120,7 +136,7 @@ test('mensagem de login desconhecida não devolve conteúdo potencialmente sens�
   observer.loginFailed({ url: () => 'https://front.example.test/login?token=secret-query-value' },
     { diagnostic: { messages: ['Falha: session=secret-cookie-value Bearer secret-authorization-value'] } });
   assert.deepEqual(observer.diagnostic().login, { finished: false, url: 'front.example.test/login',
-    message: 'mensagem de login não reconhecida' });
+    message: 'mensagem de login não reconhecida', fields: [], buttons: [], links: [] });
   assert.doesNotMatch(JSON.stringify(observer.diagnostic()), /secret-|session=|Bearer/iu);
 });
 
@@ -261,6 +277,10 @@ test('hash da homologação preserva a chave dos ponteiros anteriores', () => {
 });
 
 test('pré-voo só admite leituras exatas e nega GETs com efeito', () => {
+  for (const path of ['/mfe-root-config.js?v=1.0.0', '/ihelp-angular/main.js?v=1.0.0',
+    '/ihelp-angular/styles.css', '/javascripts/WebAudioRecorder.js'])
+    assert.equal(productionPreflightRequestAllowed('GET', path), true, path);
+  assert.equal(productionPreflightRequestAllowed('POST', '/ihelp-angular/main.js'), false);
   for (const path of ['/api/v2/company', '/api/v2/automation', '/api/v2/webhook',
     '/api/v2/channel/connect-status/channel-1', '/api/v2/contacts?page=1&limit=1'])
     assert.equal(productionPreflightRequestAllowed('GET', path), true, path);
