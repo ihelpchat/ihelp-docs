@@ -10,6 +10,7 @@ import { captureMaskedFrame, waitForStableScreen } from '../scripts/screen-captu
 import { runJourneys, fixtureValue, selectedRobotChannel } from './journey-service.mjs';
 import { searchLocalProductContext } from './local-product-context.mjs';
 import { containsSensitiveData } from './sensitive-data.mjs';
+import { areaWriteAllowed, areaWriteRules } from './journey-plans/index.mjs';
 
 const taskCatalog = new URL('../architecture/faq-regua/tarefas-ouro.json', import.meta.url);
 const exportHeader = ['Nome', 'Telefone', 'E-mail', 'Usuário Responsável', 'Departamento', 'Data de Criação'];
@@ -129,6 +130,7 @@ const writeRules = {
   'robos.montar_menu': [{ method: 'PUT', path: /^\/bot\/([a-z0-9-]+)\/save\/?$/iu }],
   'robos.encaminhar': [{ method: 'PUT', path: /^\/bot\/([a-z0-9-]+)\/save\/?$/iu }],
   'robos.salvar': [{ method: 'PUT', path: /^\/bot\/([a-z0-9-]+)\/save\/?$/iu }],
+  ...areaWriteRules,
 };
 const forbiddenKeys = /(?:^|_)(?:enabled|send|schedule|typeSave|saveOrigin|webhook)(?:$|_)/iu;
 const inactiveState = (value) => value === false || value === 'inactive' || value === 'draft';
@@ -340,6 +342,8 @@ export function journeyRequestAllowed(request, { taskId, apiOrigin, generated = 
   fixedIds = {}, contactSnapshot } = {}) {
   const method = request.method().toUpperCase();
   if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return true;
+  if (['crm.', 'campanhas.', 'agendamentos.', 'tarefas.'].some((prefix) => taskId?.startsWith(prefix)))
+    return areaWriteAllowed(request, { taskId, apiOrigin, generated, createdIds, fixedIds });
   let path; let query;
   try {
     const url = new URL(request.url());
@@ -521,7 +525,7 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
       || (node.closest('[data-tooltip-content="Editar"]') && node.closest('dd')?.previousElementSibling?.textContent?.trim() === 'Proprietário do Contato'
         ? 'Editar Proprietário do Contato' : '')
       || node.closest('[data-tooltip-content]')?.getAttribute('data-tooltip-content')
-      || node.getAttribute('placeholder') || node.innerText);
+      || node.getAttribute('placeholder') || node.getAttribute('title') || node.innerText);
     const role = (node) => node.matches('div.rounded-xl.cursor-pointer,svg.cursor-pointer') ? 'button'
       : node.matches('[role="option"],[data-value]') ? 'option'
       : node.getAttribute('role') || ({ BUTTON: 'button', A: 'link', INPUT: node.type === 'checkbox' ? 'checkbox' : 'textbox',

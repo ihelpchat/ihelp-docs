@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
+import { areaPlans } from './journey-plans/index.mjs';
 
 export const JOURNEY_POLICY_VERSION = 'm578-3';
 const sha = /^[a-f0-9]{40}$/u;
@@ -64,6 +65,7 @@ export function journeyCoverage(records) {
   const environmentBlocked = records.filter((record) => record.status === 'bloqueada' && record.reason?.startsWith('ambiente: '))
     .map((record) => ({ task: record.task, reason: record.reason }));
   const eligible = records.filter((record) => !['contatos.agendar_mensagem', 'robos.publicar_ativar'].includes(record.task)
+    && (!/^(?:crm|campanhas|agendamentos|tarefas)\./u.test(record.task) || areaPlans[record.task])
     && !environmentBlocked.some((blocked) => blocked.task === record.task));
   const completed = eligible.filter((record) => record.status === 'concluída').length;
   return { completed, eligible: eligible.length, percent: eligible.length ? Math.round(completed * 100 / eligible.length) : 0,
