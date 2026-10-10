@@ -86,6 +86,26 @@ test('API sem Bearer ou fora da allowlist aparece no diagnóstico mas não é de
     [['api.example.test', false, 401], ['api.other.test', true, 401]]);
 });
 
+test('mensagem de login desconhecida não devolve conteúdo potencialmente sensível', () => {
+  const observer = createProductionApiObserver(productionConfig(env).target, env);
+  observer.loginFailed({ url: () => 'https://front.example.test/login?token=secret-query-value' },
+    { diagnostic: { messages: ['Falha: session=secret-cookie-value Bearer secret-authorization-value'] } });
+  assert.deepEqual(observer.diagnostic().login, { finished: false, url: 'front.example.test/login',
+    message: 'mensagem de login não reconhecida' });
+  assert.doesNotMatch(JSON.stringify(observer.diagnostic()), /secret-|session=|Bearer/iu);
+});
+
+test('host do front também pode ser API quando recebe resposta Bearer autenticada', () => {
+  const target = productionConfig(env).target;
+  const observer = createProductionApiObserver(target, env);
+  const request = { url: () => 'https://front.example.test/api/v2/company', method: () => 'GET',
+    headers: () => ({ authorization: 'Bearer secret-authorization-value' }) };
+  observer.request(request);
+  observer.response({ request: () => request, status: () => 200 });
+  assert.equal(observer.api()?.origin, target.url);
+  assert.doesNotThrow(() => assertProductionAccountHosts(target, observer.api()?.origin));
+});
+
 test('sem id confirmado retorna contagens e não chama nenhuma escrita', async () => {
   const paths = [];
   const result = await productionPreflight({ env, identity: { companyId: '42' },
