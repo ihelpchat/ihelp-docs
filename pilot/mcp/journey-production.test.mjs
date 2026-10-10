@@ -91,13 +91,13 @@ test('CDN de interface só aceita GET estático em produção, sem credenciais',
 test('requisição sem resposta registra motivo sanitizado da falha', () => {
   const observer = createProductionApiObserver(productionConfig(env).target, env);
   const request = { url: () => 'https://front.example.test/private?token=secret',
-    method: () => 'GET', headers: () => ({ authorization: 'Bearer secret' }),
+    method: () => 'GET', resourceType: () => 'script', headers: () => ({ authorization: 'Bearer secret' }),
     failure: () => ({ errorText: 'net::ERR_FAILED' }) };
   const guard = { reasons: new WeakMap([[request, { reason: 'bloqueado: pré-voo' }]]) };
   observer.request(request);
   observer.failed(request, guard);
   assert.deepEqual(observer.diagnostic().requests[0], { host: 'front.example.test', path: '/:id',
-    method: 'GET', bearer: true, status: null, failure: 'bloqueado: pré-voo' });
+    method: 'GET', resourceType: 'script', bearer: true, status: null, failure: 'bloqueado: pré-voo' });
   assert.doesNotMatch(JSON.stringify(observer.diagnostic()), /secret|token=/u);
 });
 
@@ -333,10 +333,21 @@ test('hash da homologação preserva a chave dos ponteiros anteriores', () => {
 });
 
 test('pré-voo só admite leituras exatas e nega GETs com efeito', () => {
-  for (const path of ['/mfe-root-config.js?v=1.0.0', '/ihelp-angular/main.js?v=1.0.0',
-    '/ihelp-angular/styles.css', '/javascripts/WebAudioRecorder.js'])
-    assert.equal(productionPreflightRequestAllowed('GET', path), true, path);
-  assert.equal(productionPreflightRequestAllowed('POST', '/ihelp-angular/main.js'), false);
+  const target = productionConfig(env).target;
+  for (const [path, type] of [['/mfe-root-config.js?v=1.0.0', 'script'],
+    ['/ihelp-angular/main.js?v=1.0.0', 'script'], ['/ihelp-angular/styles.css', 'stylesheet'],
+    ['/javascripts/WebAudioRecorder.js', 'script'], ['/shell/remoteEntry', 'script'],
+    ['/shell/config.json', 'fetch'], ['/login', 'document']])
+    assert.equal(productionPreflightRequestAllowed('GET', path, {
+      url: `https://front.example.test${path}`, resourceType: type, target }), true, path);
+  assert.equal(productionPreflightRequestAllowed('POST', '/ihelp-angular/main.js', {
+    url: 'https://front.example.test/ihelp-angular/main.js', resourceType: 'script', target }), false);
+  assert.equal(productionPreflightRequestAllowed('GET', '/shell/remoteEntry', {
+    url: 'https://api.example.test/shell/remoteEntry', resourceType: 'script', target }), false);
+  assert.equal(productionPreflightRequestAllowed('GET', '/channel/reconnect-all', {
+    url: 'https://front.example.test/channel/reconnect-all', resourceType: 'fetch', target }), false);
+  assert.equal(productionPreflightRequestAllowed('GET', '/shell/data.json', {
+    url: 'https://front.example.test/shell/data.json', resourceType: 'fetch', target }), false);
   for (const path of ['/api/v2/company', '/api/v2/automation', '/api/v2/webhook',
     '/api/v2/channel/connect-status/channel-1', '/api/v2/contacts?page=1&limit=1'])
     assert.equal(productionPreflightRequestAllowed('GET', path), true, path);
@@ -344,6 +355,8 @@ test('pré-voo só admite leituras exatas e nega GETs com efeito', () => {
     '/api/v2/contacts/sync-contacts', '/api/v2/contacts/validate-contacts-business',
     '/api/v2/anything'])
     assert.equal(productionPreflightRequestAllowed('GET', path), false, path);
+  assert.equal(productionPreflightRequestAllowed('GET', '/api/v2/anything', {
+    url: 'https://front.example.test/api/v2/anything', resourceType: 'script', target }), false);
   assert.equal(productionPreflightRequestAllowed('HEAD', '/api/v2/company'), false);
 });
 

@@ -91,6 +91,8 @@ export function createProductionApiObserver(target, env = process.env) {
       const entry = pending.get(request);
       if (!entry) return;
       const reason = guard?.reasons.get(request)?.reason;
+      if (reason) entry.resourceType = /^[a-z]{1,30}$/u.test(request.resourceType?.() ?? '')
+        ? request.resourceType() : 'desconhecido';
       entry.failure = reason ?? (/^net::[A-Z_]+$/u.test(request.failure()?.errorText ?? '')
         ? request.failure().errorText : 'falha de rede');
     },
@@ -517,7 +519,8 @@ export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdP
   const method = request.method().toUpperCase();
   const path = url.pathname + url.search;
   if (target.mode === 'producao' && !context.productionReady?.()) {
-    if (productionPreflightRequestAllowed(method, path)) return route.fallback();
+    if (productionPreflightRequestAllowed(method, path, {
+      url: request.url(), resourceType: request.resourceType?.(), target })) return route.fallback();
     onBlocked({ allowed: false, reason: 'pré-voo ausente', task: context.taskId });
     return route.abort();
   }
@@ -1755,9 +1758,8 @@ export function makeLazyJourneyBrowser(createBrowser) {
 const productionPreflightReads = new Set(['/api/v2/company', '/api/v2/configurations/users',
   '/api/v2/configurations/channels', '/api/v2/bot', '/api/v2/automation', '/api/v2/webhook',
   '/api/v2/contacts?page=1&limit=1']);
-const productionPreflightStatic = new Set(['/', '/login', '/contact', '/index.html',
-  '/favicon.ico', '/favicon.png', '/manifest.json']);
 const productionLoginPath = '/api/v2/configurations/users/login?force=false';
+const productionAppResourceTypes = new Set(['document', 'script', 'stylesheet', 'font', 'image', 'manifest']);
 const effectfulGetSegment = /(?:^|[-/])(?:reconnect|reconection|disconnect|sync|send|reset|delete|publish|activate|export|update|execute|process|import-backup|validate-contacts-business|auto-fill|fix-filters|subscription-reminder|migrate)/iu;
 const effectfulGetRoutes = effectfulGetInventory.effectfulRoutes.map((route) => {
   const pattern = route.split('/').map((segment) => {
@@ -1778,15 +1780,19 @@ export function productionEffectfulGetDenied(path) {
     || /^\/validator(?:\/|$)/iu.test(route);
 }
 
-export function productionPreflightRequestAllowed(method, path) {
+export function productionPreflightRequestAllowed(method, path, { url, resourceType, target } = {}) {
   const normalized = method.toUpperCase();
-  if (normalized === 'POST') return path === productionLoginPath;
-  if (normalized === 'GET' && !path.startsWith('/api/')) {
-    const asset = path.replace(/\?v=[a-z0-9.]+$/iu, '');
-    return productionPreflightStatic.has(asset)
-      || /^\/(?:assets|static|_next\/static|javascripts|ihelp-angular|ihelp-react)\/[a-z0-9._/-]+\.(?:js|css|png|svg|ico|woff2?)$/iu.test(asset)
-      || /^\/(?:mfe-root-config|runtime|polyfills|main|styles)(?:\.[a-z0-9]+)?\.(?:js|css)$/iu.test(asset);
+  if (normalized === 'GET' && !/^\/api(?:\/|$)/iu.test(path)) {
+    try {
+      const resource = new URL(url);
+      if (target?.mode !== 'producao' || resource.origin !== new URL(target.url).origin
+        || resource.pathname + resource.search !== path || resource.pathname.includes('%')) return false;
+      if (productionAppResourceTypes.has(resourceType)) return true;
+      return ['fetch', 'xhr'].includes(resourceType)
+        && /(?:^|\/)(?:[^/]*config[^/]*|import-map|manifest)\.json$/iu.test(resource.pathname);
+    } catch { return false; }
   }
+  if (normalized === 'POST') return path === productionLoginPath;
   const safeRead = productionPreflightReads.has(path)
     || /^\/api\/v2\/channel\/connect-status\/[a-z0-9-]{1,80}$/iu.test(path);
   return safeRead && !productionEffectfulGetDenied(path)
@@ -1805,7 +1811,8 @@ export async function browserProductionPreflight(env = process.env,
       const request = route.request();
       const url = new URL(request.url());
       const path = url.pathname + url.search;
-      if (qaStaticCdnAllowed(request, target, env) || productionPreflightRequestAllowed(request.method(), path))
+      if (qaStaticCdnAllowed(request, target, env) || productionPreflightRequestAllowed(request.method(), path,
+        { url: request.url(), resourceType: request.resourceType?.(), target }))
         return route.fallback();
       networkGuard.reasons.set(request, { reason: 'bloqueado: pré-voo' });
       return route.abort();
@@ -1881,7 +1888,8 @@ export async function authenticatedJourneyIdentity(env) {
       const request = route.request();
       const url = new URL(request.url());
       return (qaStaticCdnAllowed(request, target, env)
-        || productionPreflightRequestAllowed(request.method(), url.pathname + url.search))
+        || productionPreflightRequestAllowed(request.method(), url.pathname + url.search,
+          { url: request.url(), resourceType: request.resourceType?.(), target }))
         ? route.fallback() : route.abort();
     });
     const page = await context.newPage();

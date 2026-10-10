@@ -183,9 +183,11 @@ export function qaFailedRequest(request, guard) {
   try { host = new URL(request.url()).host; } catch { /* no URL is logged */ }
   const blocked = guard?.reasons.get(request);
   if (blocked) host = blocked.host;
+  const resourceType = request.resourceType?.();
+  const kind = blocked ? ` resourceType=${/^[a-z]{1,30}$/u.test(resourceType ?? '') ? resourceType : 'desconhecido'}` : '';
   const failure = /^net::[A-Z_]+$/u.test(request.failure()?.errorText ?? '')
     ? request.failure().errorText : 'falha';
-  return `${request.method()} ${host} ${blocked ? `${blocked.reason} ` : ''}${failure}`;
+  return `${request.method()} ${host}${kind} ${blocked ? `${blocked.reason} ` : ''}${failure}`;
 }
 
 function safeLoginText(value, secrets) {
