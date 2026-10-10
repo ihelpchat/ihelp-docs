@@ -3,15 +3,15 @@
   "backend": {
     "releaseValidation": {
       "branch": "origin/release/validation",
-      "sha": "f0a926e881eba56cd8aac250f39e75760c095e95"
+      "sha": "af982c8795115045d00a8b6b862c6e6a4b0c69f9"
     },
     "production": {
       "branch": "origin/master",
-      "sha": "88bc6c58dd27d7bd53b1ec48dc821ac436762c13"
+      "sha": "da2e55cbf0b944284a0193eb38478173e308a92f"
     }
   },
-  "totalGet": 337,
-  "effectfulGet": 45,
+  "totalGet": 352,
+  "effectfulGet": 47,
   "getEndpoints": [
     {
       "route": "/ws/chat/byCampaign/:id/:id",
@@ -386,6 +386,18 @@
       "effectful": true
     },
     {
+      "route": "/api/v2/customers/outbound-holds/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/outbound-holds/by-client-message/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/outbound-holds/mine",
+      "effectful": false
+    },
+    {
       "route": "/api/v2/tags",
       "effectful": false
     },
@@ -435,6 +447,10 @@
     },
     {
       "route": "/api/v2/dashboard/get-calls-by-agent",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/track/origin-leads",
       "effectful": false
     },
     {
@@ -1034,6 +1050,14 @@
       "effectful": false
     },
     {
+      "route": "/api/v2/crm/carriers",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/pdf-templates",
+      "effectful": false
+    },
+    {
       "route": "/api/v2/crm/stages/:id/task-templates",
       "effectful": false
     },
@@ -1134,6 +1158,10 @@
       "effectful": false
     },
     {
+      "route": "/api/v2/crm/company-profile",
+      "effectful": true
+    },
+    {
       "route": "/api/v2/crm/card/latest-contact-call/:id",
       "effectful": false
     },
@@ -1230,6 +1258,22 @@
       "effectful": false
     },
     {
+      "route": "/api/v2/crm/proposals/card/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/proposals/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/proposals/:id/send-context",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/proposals/public/:id",
+      "effectful": false
+    },
+    {
       "route": "/api/v2/crm/saved-views",
       "effectful": false
     },
@@ -1254,6 +1298,10 @@
       "effectful": false
     },
     {
+      "route": "/api/v2/crm/payment-methods",
+      "effectful": false
+    },
+    {
       "route": "/api/v2/crm/pipelines",
       "effectful": false
     },
@@ -1272,6 +1320,18 @@
     {
       "route": "/api/v2/crm/loss-reasons",
       "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/shipping-types",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/catalog",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/catalog/export",
+      "effectful": true
     },
     {
       "route": "/api/v2/crm/saved-filters",
@@ -1381,6 +1441,8 @@
     "/api/v2/crm/card/cardhistory/sync",
     "/api/v2/crm/card/cardnote/sync",
     "/api/v2/crm/card/sync",
+    "/api/v2/crm/catalog/export",
+    "/api/v2/crm/company-profile",
     "/api/v2/crm/pipelines/:id/export",
     "/api/v2/crm/sse/connect",
     "/api/v2/crm/sync/cardhistory",
