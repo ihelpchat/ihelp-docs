@@ -165,6 +165,33 @@ test('ler jornada segrega ponteiro por identidade configurada', async () => {
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('ler registro de produção exige prova de conta autenticada antes de devolver conteúdo', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-production-read-'));
+  const accountHash = 'a'.repeat(64);
+  const browser = browserFor();
+  const originalOpen = browser.open.bind(browser);
+  browser.open = async () => { await originalOpen(); return { account: { userId: 'user-1', companyId: '42' } }; };
+  try {
+    await runJourneys({ module: 'contatos', tasks: [task], root, marker,
+      frontSha: 'a'.repeat(40), profile: 'qa', browser, model,
+      cacheConfig: { qaTarget: 'producao' }, accountIdentity: async () => ({ credentialHash: accountHash }) });
+    const args = { root, module: 'contatos', task: task.id, accountHash };
+    await assert.rejects(service.readJourney(args), /prova de conta/u);
+    await assert.rejects(service.readJourney({ ...args, probeAccount: async () => null }), /prova de conta/u);
+    await assert.rejects(service.readJourney({ ...args,
+      probeAccount: async () => ({ userId: '', companyId: '42' }) }), /prova de conta/u);
+    assert.equal(service.journeyReadFailureCategory(new Error('prova de conta indisponível')),
+      'prova de conta indisponível');
+    assert.equal((await service.readJourney({ ...args,
+      probeAccount: async () => ({ userId: 'user-1', companyId: '42' }) })).identityVerified, true);
+    let online = true;
+    const probe = async () => online ? { userId: 'user-1', companyId: '42' } : null;
+    assert.equal((await service.readJourney({ ...args, probeAccount: probe })).identityVerified, true);
+    online = false;
+    await assert.rejects(service.readJourney({ ...args, probeAccount: probe }), /prova de conta/u);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('identidade configurada depende de host, e-mail e perfil, sem derivar da senha', () => {
   const env = { GUIDE_QA_STAGING_URL: 'https://qa.example.test', GUIDE_QA_ALLOWED_HOSTS: 'qa.example.test',
     GUIDE_QA_AUTHORIZED_EMAIL: 'Qa@example.com', GUIDE_QA_AUTHORIZED_PASSWORD: 'fixture-pass' };

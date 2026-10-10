@@ -69,14 +69,25 @@ export async function publishedGuides(packageRoot = root) {
   return guides;
 }
 
-export function assertAllowedTarget(value, env = process.env) {
+export function assertAllowedTarget(value, env = process.env, { allowProduction = false } = {}) {
   let url;
   try { url = new URL(value); } catch { throw new Error('Destino recusado: URL inválida'); }
   if (url.username || url.password || url.search || url.hash) throw new Error('Destino recusado: URL com credencial ou parâmetro');
   const local = url.protocol === 'http:' && url.hostname === '127.0.0.1';
-  const staging = qaRequestDecision(url.href, { local: false }, env).allowed;
+  const production = allowProduction && env.QA_TARGET === 'producao';
+  let target = { local: false };
+  if (production) {
+    const hosts = String(env.QA_PROD_ALLOWED_HOSTS ?? '').split(',').map((item) => item.trim());
+    if (env.QA_PROD_ENABLED !== 'true' || hosts.length < 1 || hosts.length > 2
+      || new Set(hosts).size !== hosts.length || !hosts.includes(url.hostname)
+      || hosts.some((host) => host !== url.hostname && !/^api(?:v\d+)?[.-]/u.test(host))
+      || !env.QA_PROD_EMAIL || !env.QA_PROD_PASSWORD) throw new Error('Destino recusado: produção desabilitada');
+    target = { ...target, mode: 'producao', allowedHosts: hosts };
+  }
+  const staging = qaRequestDecision(url.href, target, env).allowed;
   if (!local && !staging) throw new Error('Destino recusado: host não permitido');
-  return { url: url.origin, local };
+  if (production && local) throw new Error('Destino recusado: produção exige HTTPS');
+  return { ...target, url: url.origin, local };
 }
 
 const productionHost = (host) => host === 'ihelpchat.com' || host === 'ihelpchat.com.br'
@@ -87,6 +98,17 @@ export function qaRequestDecision(value, target, env = process.env, { fixtureAll
   let url;
   try { url = new URL(value); } catch { return { allowed: false, host: 'inválido', reason: 'bloqueado: URL inválida' }; }
   const host = url.host;
+  if (target.mode === 'producao') {
+    const allowed = target.allowedHosts;
+    const valid = Array.isArray(allowed) && allowed.length >= 1 && allowed.length <= 2
+      && new Set(allowed).size === allowed.length && allowed.includes(new URL(target.url).hostname)
+      && allowed.every((item) => /^[a-z0-9.-]+$/u.test(item)
+        && (item === new URL(target.url).hostname || /^api(?:v\d+)?[.-]/u.test(item)));
+    return { allowed: Boolean(valid && env.QA_TARGET === 'producao' && env.QA_PROD_ENABLED === 'true'
+      && url.protocol === 'https:' && !url.port && !url.username
+      && !url.password && allowed.includes(url.hostname)), host,
+    reason: 'bloqueado: host fora da conta permitida' };
+  }
   if (productionHost(url.hostname)) return { allowed: false, host, reason: 'bloqueado: host de produção' };
   if (target.local && url.protocol === 'http:' && url.hostname === '127.0.0.1'
     && (url.origin === target.url || fixtureAllowedOrigins.includes(url.origin))) return { allowed: true, host };

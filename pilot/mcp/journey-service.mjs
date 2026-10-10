@@ -395,6 +395,7 @@ async function cachedAccountProof(accountHash, probeAccount) {
 
 export function journeyReadFailureCategory(error) {
   if (error?.code === 'ENOENT' || error?.message === 'registro ausente') return 'registro ausente';
+  if (error?.message === 'prova de conta indisponível') return 'prova de conta indisponível';
   if (/sanitização|cache inválido|cache incompatível|print do cache inválido/u.test(error?.message ?? '')) return 'sanitização';
   return 'leitura falhou';
 }
@@ -407,18 +408,31 @@ export async function readJourney({ root = resolve(process.env.MCP_STATE_DIR ?? 
   const record = await loadCache(root, module, task, key);
   if (!record) throw new Error('registro ausente');
   if (record?.configuredIdentityHash !== accountHash) throw new Error('identidade configurada divergente');
+  if (record.target === 'producao' && !record.accountProof) throw new Error('prova de conta indisponível');
   if (!record.accountProof) return { ...record, identityVerified: false, accountless: true };
-  const { live, reason } = probeAccount ? await cachedAccountProof(accountHash, probeAccount)
-    : { live: null, reason: 'prova indisponível' };
-  if (!live) return { ...record, identityVerified: false, identityReason: reason };
-  if (!/^[a-z0-9-]{1,80}$/iu.test(live.userId ?? '') || !/^[a-z0-9-]{1,80}$/iu.test(live.companyId ?? ''))
+  let proof = { live: null, reason: 'prova indisponível' };
+  if (probeAccount) {
+    if (record.target === 'producao') {
+      try { proof = { live: await probeAccount(), reason: 'prova indisponível' }; }
+      catch { /* A leitura de produção recusa sem expor o erro de login. */ }
+    } else proof = await cachedAccountProof(accountHash, probeAccount);
+  }
+  const { live, reason } = proof;
+  if (!live) {
+    if (record.target === 'producao') throw new Error('prova de conta indisponível');
+    return { ...record, identityVerified: false, identityReason: reason };
+  }
+  if (!/^[a-z0-9-]{1,80}$/iu.test(live.userId ?? '') || !/^[a-z0-9-]{1,80}$/iu.test(live.companyId ?? '')) {
+    if (record.target === 'producao') throw new Error('prova de conta indisponível');
     return { ...record, identityVerified: false, identityReason: 'identidade inválida' };
+  }
   if (record.accountProof !== digest([live.userId, live.companyId])) throw new Error('jornada de outra conta');
   return { ...record, identityVerified: true };
 }
 
 export async function runJourneys({ module, tasks, root = resolve(process.env.MCP_STATE_DIR ?? '/data', 'journeys'), marker = '',
   frontSha, backSha = 'unavailable', profile, browser, model, sanitize = async (value) => value,
+  connectivityAttestation,
   allowedScreenLabels = new Set(),
   maxActionsPerTask = 30, maxActionsPerModule = 300, maxMs = 900_000, maxCostUsd = 5,
   cacheConfig = {}, cacheBypass = false, markerChanged = () => {}, accountIdentity, probeAccount,
@@ -453,7 +467,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       : { marker: currentMarker, contact: prepared.contact, robot: prepared.robot,
         robotRef: prepared.robotRef, robotId: prepared.robotId, identity: prepared.identity };
     const key = digest({ task, frontSha, backSha, profile, accountHash, policy: JOURNEY_POLICY_VERSION, dependency,
-      config: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd, ...cacheConfig } });
+      config: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd, connectivityAttestation, ...cacheConfig } });
     let cached = cacheBypass ? null : await loadCache(root, module, task.id, key, true);
     if (cached && accountHash && cached.configuredIdentityHash !== accountHash) cached = null;
     if (cached && probeAccount) {
@@ -462,7 +476,8 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
         const proof = digest([live.userId, live.companyId]);
         if (cached.accountProof !== proof) cached = null;
         else cached.identityVerified = true;
-      } else cached.identityVerified = false;
+      } else if (cacheConfig.qaTarget === 'producao') cached = null;
+      else cached.identityVerified = false;
       if (cached) await writeFile(fileFor(root, module, task.id, key), JSON.stringify(cached, null, 2), { mode: 0o600 });
     }
     if (cached) {
@@ -475,7 +490,9 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       }
       continue;
     }
-    const record = { task: task.id, module, objective: task.tarefa, prerequisites: task.preRequisitos,
+    const record = { task: task.id, module, target: cacheConfig.qaTarget ?? 'homolog',
+      ...(connectivityAttestation ? { connectivityAttestation } : {}),
+      objective: task.tarefa, prerequisites: task.preRequisitos,
       profile, versions: { frontSha, backSha, note: backSha === 'unavailable' ? 'SHA do back indisponível; recapturar quando disponível' : null },
       fixtures: [prepared.contact, prepared.robot].filter((value) => typeof value === 'string'), marker: currentMarker,
       actions: [], screens: [], before: null, after: null,
