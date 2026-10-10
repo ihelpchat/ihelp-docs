@@ -275,7 +275,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
 
   registerTool('gravar_jornada', {
     mutates: true,
-    description: 'Executa tarefas fictícias das áreas documentadas e grava jornada privada sanitizada.',
+    description: 'Executa tarefas fictícias das áreas documentadas na homologação ou na conta de teste de produção após pré-voo.',
     inputSchema: z.strictObject({
       module: z.enum(['contatos', 'robos', 'crm', 'campanhas', 'agendamentos', 'tarefas']),
       tasks: z.array(z.string().regex(/^(?:contatos|robos|crm|campanhas|agendamentos|tarefas)\.[a-z_]+$/)).max(20).optional(),
@@ -291,6 +291,11 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'attempt' });
       const { recordJourneys } = await import('./journey-runtime.mjs');
       const records = await withJourneyGate(() => recordJourneys(module, tasks));
+      if (!Array.isArray(records)) {
+        await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target,
+          result: records?.mode === 'confirmacao' ? 'confirmation' : 'blocked' });
+        return textResult(records, records?.mode !== 'confirmacao');
+      }
       const { journeyCoverage } = await import('./journey-service.mjs');
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'success' });
       return textResult({ tasks: records.map(journeyTaskSummary),

@@ -1,0 +1,1454 @@
+{
+  "auditedAt": "2026-10-10",
+  "backend": {
+    "releaseValidation": {
+      "branch": "origin/release/validation",
+      "sha": "af982c8795115045d00a8b6b862c6e6a4b0c69f9"
+    },
+    "production": {
+      "branch": "origin/master",
+      "sha": "da2e55cbf0b944284a0193eb38478173e308a92f"
+    }
+  },
+  "totalGet": 347,
+  "effectfulGet": 47,
+  "getEndpoints": [
+    {
+      "route": "/ws/chat/byCampaign/:id/:id",
+      "effectful": false
+    },
+    {
+      "route": "/ws/chat/:id",
+      "effectful": false
+    },
+    {
+      "route": "/ws/chat/historico-mensagens/:id/:id?",
+      "effectful": false
+    },
+    {
+      "route": "/ws/chat/get-mensagem-id/:id",
+      "effectful": false
+    },
+    {
+      "route": "/ws/chat/countMensagens",
+      "effectful": false
+    },
+    {
+      "route": "/ws/chat/convert/:id",
+      "effectful": true
+    },
+    {
+      "route": "/ws/chat/cleanChat",
+      "effectful": true
+    },
+    {
+      "route": "/api/tiny",
+      "effectful": false
+    },
+    {
+      "route": "/api/tiny/precode",
+      "effectful": false
+    },
+    {
+      "route": "/api/tiny/lead",
+      "effectful": false
+    },
+    {
+      "route": "/api/tiny/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/whatsappwebhook/cloud-api-messages",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/whatsappwebhook/message-queue",
+      "effectful": false
+    },
+    {
+      "route": "/ws/mk",
+      "effectful": false
+    },
+    {
+      "route": "/ws/mk",
+      "effectful": false
+    },
+    {
+      "route": "/ws/mk",
+      "effectful": false
+    },
+    {
+      "route": "/ws/mk",
+      "effectful": false
+    },
+    {
+      "route": "/ws/mk",
+      "effectful": false
+    },
+    {
+      "route": "/ws/ix",
+      "effectful": false
+    },
+    {
+      "route": "/ws/ix",
+      "effectful": false
+    },
+    {
+      "route": "/ws/ix",
+      "effectful": false
+    },
+    {
+      "route": "/ws/ix",
+      "effectful": false
+    },
+    {
+      "route": "/ws/ix",
+      "effectful": false
+    },
+    {
+      "route": "/api/teste",
+      "effectful": false
+    },
+    {
+      "route": "/api/teste/ack/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/teste/connections-real-time",
+      "effectful": false
+    },
+    {
+      "route": "/api/teste/test-notification",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/assist/suggestions/:id",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/shortcuts",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/vindicharges/GetMyExpenses",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/vindicharges/GetMyExpensesByDelaydedDays/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/vindicharges/GetPaymentMethods",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/vindicharges/UpdateEmpresaStatus",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/vindicharges/GetPaymentProfiles",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/vindicharges/GetSubscription",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/vindicharges/GetPaymentUrl/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/vindicharges/GetAllBusiness",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/vindicharges/ContasReceber",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/filters",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/filters/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/filters/fix-filters-user/:id/:id",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/marketing/campaigns",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/marketing/campaigns/robo",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/marketing/campaigns/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/marketing/new-campaign-infos",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/marketing/campaigns/details/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/notification",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/search",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/auto-fill-contacts/:id",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/customers/:id/:id?",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/mobile-deep-link/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/call-chat/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/latest-calls",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/initial-tab-numbers",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/initial-filters",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/department-closing-reasons/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/department-agents/:id/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/active-calls",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/company-departments",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/my-company-departments",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/company-agents/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/phone-calls",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/filtered-calls/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/new-calls",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/department-calls",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/my-calls",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/made-calls",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/calls-bot",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/calls-by-number/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/calls-timeline/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/call-log/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/transcribe-audio/disable-all-users",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/customers/transcribe-audio/disable-users",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/customers/transcribe-audio/users",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/check-number/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/chat/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/:id/log",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/import-backup",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/customers/:id/agent/status",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/channel-reconection-check",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/company/auto-close/companies",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/company/new-companies",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/company/unused-companies",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/company/call-priority/businesses",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/company",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/company/subscription-reminder",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/company/limits",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/company/limits-available",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/company/migrate-v3/:id",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/customers/outbound-holds/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/outbound-holds/by-client-message/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customers/outbound-holds/mine",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/tags",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/customized-field",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/webhookReceive",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/webhookReceive/queue",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/channel-notifications/my",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/onboarding/subscription",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/whatsapp-session/status",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/general/properties",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/dashboard/get-indicators",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/dashboard/get-status-calls",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/dashboard/get-departament-calls",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/dashboard/get-closereasons-calls",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/dashboard/get-calls-by-agent",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/track/origin-leads",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/sync/calls",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/sync/basic-infos",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/activecamp/get-contact-id/:id",
+      "effectful": false
+    },
+    {
+      "route": "/crm/card/:id/activities",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/ScheduledMessages",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/ScheduledMessages/by-ref/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/ScheduledMessages/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/ScheduledMessages/call/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/ScheduledMessages/contact/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/ScheduledMessages/user",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/ScheduledMessages/ByDate",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/ScheduledMessages/calendar/amount-per-day",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/ScheduledMessages/calendar/schedules/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/ScheduledMessages/date",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/ScheduledMessages/phone-number/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/track/backfill",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/track/rules",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/track/overview",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/track/attendance/:id/origin",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/track/card/:id/origin",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/track/origins",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/track/queue",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/track/links",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/status",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/status/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/whatsAppCloudApi/message-templates/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/whatsAppCloudApi/message-templates/item/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/users/seat-status",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/users",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/users/by-email/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/users/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/users/user-types",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/users/options",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/users/getUsuarioRelatorios/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/users/getReportTypes",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/users/users-connect-sync",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/users/me",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/users/me/profile",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/contactTags/getContactsTagByBusinessId",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/contactTags/getContactsTagByContactId/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/contactTags/getContactsTagByTagId/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/notifications/sse/connect",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/admin/companies",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/admin/companies/:id/properties",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/admin/companies/:id/users",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/admin/companies/:id/departments",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/admin/companies/:id/seat-status",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/admin/companies/:id/users/:id/codes",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/admin/companies/:id/channels",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/admin/companies/:id/channel-limits",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/admin/companies/:id/channel-status",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/admin/companies/:id/vindi-link",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/admin/vindi/subscriptions/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/admin/vindi/subscriptions",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/admin/vindi/transactions/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/departments/events/listing/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/departments/events/details/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/departments",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/departments/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/departments/users/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/departments/distribution-users/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/vindi/check/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/contacts/activities/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/contacts/childContacts/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/contacts/validate-contacts-business",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/contacts/import",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/contacts/export",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/contacts/sync-contacts",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/contacts/:id?",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/contacts/details/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/contacts/sync-contacts-call",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/contacts/campaign-format",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/contacts/return-idref/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/syncclientspayment",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/syncclientspayment/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/reports",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/reports/bi/daily",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/tool/default",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/tool/business",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/tool/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/Groups",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/Groups/list/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/Groups/groupById/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/Groups/GetPartitipantsByGroupId/:id",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/Groups/groupByCanal/:id/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/Groups/getGroupMessagesByGroupId/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/Groups/getPropriedadeGroup/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/contact-notes/contact/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/contact-notes/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/agent",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/agent/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/agent/:id/tools",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/agent/conversations/:id/messages",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/agent/conversations/:id/messages/last",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/bot/opencall-contacts",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/bot",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/bot/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/bot/:id/versions",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/bot/:id/versions/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/bot/:id/contacts",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/bot/event-types",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/bot/reaction-types",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/bot/message-types",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/bot/open-inactive-calls",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/configurations/shortcuts",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/shortcuts/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/shortcuts/fix-media-types",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/configurations/shortcuts/move-shortcuts-files",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/task/dashboard",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/task",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/updates/check",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/updates/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/webhook",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/webhook/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/webhook/platforms",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/webhook/platform-variables/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/webhook/:id/variables",
+      "effectful": false
+    },
+    {
+      "route": "/r/:id",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/reportsBusiness/getLoginList",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/reportsBusiness/getCallAmountByBusiness",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/reportsBusiness/getBusinessPanel",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/reportsBusiness/getMessages",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/stats/latest-users-login",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/stats/disconnected-channels",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/stats/trial-companies",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/stats/new-attendances-stuck",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/channel/disconnected-phone-numbers",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/channel/connect-status/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/channel/q6n9g3plg365-update-oci-ip/:id/:id",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/channel/reconnect-all/:id?",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/channel/disconnect-all/:id?",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/channel/channels-connection",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/notificationUser/listNotifications",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/validate/email-login/:id",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/validate/email/:id",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/validate/email/:id/whats",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/validate/user-email/:id",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/notifications",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/notifications/unread-count",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/notifications/counts",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/nps",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/nps/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/nps/reports/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/nps/available",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/channels",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/channels/channelsStatus/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/channels/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/configurations/channels/history/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/carriers",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/pdf-templates",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/stages/:id/task-templates",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnelstage/funnel/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnelstage/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnelstage/funnel/:id/first",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnelstage/:id/cards",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/attendancefunnel",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/crm/attendancefunnel/stage/new",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/attendancefunnel/stage/my",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/attendancefunnel/stage/department",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/attendancefunnel/stage/finished",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/sync/funnel",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/crm/sync/funnelstage",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/crm/sync/cardnote",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/crm/sync/cardhistory",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/crm/sync/funnelrule",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/crm/filters/quick-options",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/filters/contatos/search",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/filters/tags/search",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/filters/canais/search",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/filters/departamentos/search",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/dashboard",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnelrule/funnel/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnelrule/stage/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnelrule/funnel/:id/stage/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnelrule/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/company-profile",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/crm/card/latest-contact-call/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/monthly-forecast",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/sync",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/crm/card/cardnote/sync",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/crm/card/cardhistory/sync",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/crm/card/overdue-list",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/business/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/stage/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/responsible/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/by-owner/ranking",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/contact/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/api/v2/crm/contacts/:id/cards",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/by-idref/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/:id/full",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/:id/history",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/:id/activities",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/:id/notes",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/:id/popover-summary",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/:id/notes/public",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/sync/business/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/:id/history/sync",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/:id/notes/sync",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/card/funnel/:id/initial",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/proposals/card/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/proposals/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/proposals/:id/send-context",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/proposals/public/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/saved-views",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/saved-views/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/automation",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/automation/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/automation/:id/executions",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/automation/executions",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/payment-methods",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/pipelines",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/pipelines/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/pipelines/:id/export",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/crm/pipelines/:id/permissions",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/loss-reasons",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/shipping-types",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/catalog",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/catalog/export",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/crm/saved-filters",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/saved-filters/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/default",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/:id/kpis",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/:id/stages/metrics",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/:id/loss-reasons/aggregate",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/:id/goal/current",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/:id/goal/progress",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/:id/with-stages",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/:id/with-rules",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/:id/with-stages-and-rules",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/:id/cards",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/sync",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/report",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/funnel/user-funnels",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/crm/sse/connect",
+      "effectful": true
+    },
+    {
+      "route": "/api/v2/automation",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/automation/:id",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/automation/:id/executions",
+      "effectful": false
+    },
+    {
+      "route": "/api/v2/automation/executions",
+      "effectful": false
+    }
+  ],
+  "effectfulRoutes": [
+    "/api/v2/Groups/GetPartitipantsByGroupId/:id",
+    "/api/v2/assist/suggestions/:id",
+    "/api/v2/bot/open-inactive-calls",
+    "/api/v2/bot/opencall-contacts",
+    "/api/v2/channel/disconnect-all/:id?",
+    "/api/v2/channel/q6n9g3plg365-update-oci-ip/:id/:id",
+    "/api/v2/channel/reconnect-all/:id?",
+    "/api/v2/company/migrate-v3/:id",
+    "/api/v2/company/subscription-reminder",
+    "/api/v2/configurations/shortcuts/fix-media-types",
+    "/api/v2/contacts/export",
+    "/api/v2/contacts/sync-contacts",
+    "/api/v2/contacts/sync-contacts-call",
+    "/api/v2/contacts/validate-contacts-business",
+    "/api/v2/crm/attendancefunnel",
+    "/api/v2/crm/card/cardhistory/sync",
+    "/api/v2/crm/card/cardnote/sync",
+    "/api/v2/crm/card/sync",
+    "/api/v2/crm/catalog/export",
+    "/api/v2/crm/company-profile",
+    "/api/v2/crm/pipelines/:id/export",
+    "/api/v2/crm/sse/connect",
+    "/api/v2/crm/sync/cardhistory",
+    "/api/v2/crm/sync/cardnote",
+    "/api/v2/crm/sync/funnel",
+    "/api/v2/crm/sync/funnelrule",
+    "/api/v2/crm/sync/funnelstage",
+    "/api/v2/customers/auto-fill-contacts/:id",
+    "/api/v2/customers/channel-reconection-check",
+    "/api/v2/customers/import-backup",
+    "/api/v2/customers/transcribe-audio/disable-all-users",
+    "/api/v2/customers/transcribe-audio/disable-users",
+    "/api/v2/filters/fix-filters-user/:id/:id",
+    "/api/v2/notifications/sse/connect",
+    "/api/v2/sync/calls",
+    "/api/v2/syncclientspayment",
+    "/api/v2/validate/email-login/:id",
+    "/api/v2/validate/email/:id",
+    "/api/v2/validate/email/:id/whats",
+    "/api/v2/validate/user-email/:id",
+    "/api/v2/vindicharges/ContasReceber",
+    "/api/v2/vindicharges/GetAllBusiness",
+    "/api/v2/vindicharges/UpdateEmpresaStatus",
+    "/api/v2/webhookReceive/queue",
+    "/r/:id",
+    "/ws/chat/cleanChat",
+    "/ws/chat/convert/:id"
+  ]
+}

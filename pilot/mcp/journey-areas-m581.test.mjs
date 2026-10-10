@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { areaPlans, areaWriteAllowed, areaFixtureValue, nextAreaAction, verifyAreaResult } from './journey-plans/index.mjs';
+import { areaPlans, areaWriteAllowed, areaFixtureValue, areaStageSafe, nextAreaAction, verifyAreaResult } from './journey-plans/index.mjs';
 import { journeyRequestAllowed, journeyWriteDecision } from './journey-runtime.mjs';
 import { journeyCoverage } from './journey-service.mjs';
 import { runJourneys, policyDecision } from './journey-service.mjs';
@@ -107,6 +107,13 @@ test('nega PATCH de tarefa criada quando a origem da API difere', () => {
     url: () => 'https://outra.example.test/api/v2/task/11/status' };
   assert.equal(areaWriteAllowed(foreign, context('tarefas.concluir')), false);
   assert.equal(journeyRequestAllowed(foreign, context('tarefas.concluir')), false);
+});
+
+test('CRM só usa etapa sem regras ativas nem tarefas automáticas', () => {
+  assert.equal(areaStageSafe([], []), true);
+  assert.equal(areaStageSafe([{ isActive: true, actions: [{ type: 'send' }] }], []), false);
+  assert.equal(areaStageSafe([], [{ isActive: true }]), false);
+  assert.equal(areaStageSafe(null, []), false);
 });
 
 test('estado de agendamento reconhece enviado e pendente na leitura persistida', () => {

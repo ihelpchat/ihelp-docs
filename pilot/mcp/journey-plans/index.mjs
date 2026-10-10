@@ -5,6 +5,11 @@ import { taskPlans, taskWrites } from './tarefas.mjs';
 
 export const areaPlans = Object.freeze({ ...crmPlans, ...campaignPlans, ...schedulePlans, ...taskPlans });
 export const areaWriteRules = Object.freeze({ ...crmWrites, ...taskWrites });
+export function areaStageSafe(rules, templates) {
+  return Array.isArray(rules) && Array.isArray(templates)
+    && rules.every((rule) => rule?.isActive === false || Array.isArray(rule?.actions) && rule.actions.length === 0)
+    && templates.every((template) => template?.isActive === false);
+}
 export function areaFixtureValue(kind, { marker = '', scheduleDay, selfOption, contactOption,
   stageName, selfLabel } = {}) {
   if (marker && !/^[a-f0-9]{8}$/u.test(marker)) throw new Error('marcador inválido');
