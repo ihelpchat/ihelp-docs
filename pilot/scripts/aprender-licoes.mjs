@@ -1,25 +1,14 @@
-import { access, chmod, lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { access, chmod, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 import { judgeEditorial, consolidateEditorialReadings, EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
 import { chooseHeldReview, validateCandidate, validateInitialLessons, firstJsonObject, loadFeedback,
   resolveReviewSection, publicLearningReport, candidateRejectionReason } from './aprender-licoes-core.mjs';
+import { assertPrivateFile, outsideRepo } from './private-output-path.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const dir = join(root, 'architecture/faq-regua');
-const repo = resolve(root, '..');
-const realRepo = await realpath(repo);
-const outsideRepo = (path) => {
-  const rel = relative(realRepo, path);
-  return rel === '..' || rel.startsWith(`..${sep}`);
-};
-async function assertPrivateFile(path, label) {
-  if (!outsideRepo(await realpath(dirname(path)))) throw new Error(`${label} deve ficar fora do repo`);
-  try {
-    if ((await lstat(path)).isSymbolicLink()) throw new Error(`${label} não aceita symlink`);
-  } catch (error) { if (error.code !== 'ENOENT') throw error; }
-}
 const privateReportFile = process.env.LEARNING_PRIVATE_REPORT_FILE;
 if (!privateReportFile || !isAbsolute(privateReportFile))
   throw new Error('LEARNING_PRIVATE_REPORT_FILE deve ser caminho absoluto fora do repo');

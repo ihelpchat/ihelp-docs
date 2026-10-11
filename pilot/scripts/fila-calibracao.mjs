@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
-import { dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadFeedback } from './aprender-licoes-core.mjs';
+import { assertPrivateFile } from './private-output-path.mjs';
 
 const pilotRoot = resolve(import.meta.dirname, '..');
-const repoRoot = resolve(pilotRoot, '..');
 
 export async function buildFeedbackQueue(contentDir, feedbackDir) {
   const { review } = await loadFeedback(feedbackDir);
@@ -31,10 +31,8 @@ export async function buildFeedbackQueue(contentDir, feedbackDir) {
 
 export async function writeFeedbackQueue(file, queue) {
   const output = resolve(file);
-  const withinRepo = relative(repoRoot, output);
-  if (withinRepo === '' || (!withinRepo.startsWith(`..${sep}`) && withinRepo !== '..'))
-    throw new Error('FEEDBACK_QUEUE_FILE precisa ficar fora do repositório público');
   await mkdir(dirname(output), { recursive: true, mode: 0o700 });
+  await assertPrivateFile(output, 'FEEDBACK_QUEUE_FILE');
   await writeFile(output, `${JSON.stringify(queue, null, 2)}\n`, { mode: 0o600 });
 }
 
