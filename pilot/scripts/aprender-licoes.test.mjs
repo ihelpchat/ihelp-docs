@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const { chooseHeldReview, validateCandidate, safeCandidate, publicLearningReport, resolveReviewSection,
-  validateInitialLessons, firstJsonObject } =
+  validateInitialLessons, firstJsonObject, loadFeedback } =
   await import('./aprender-licoes-core.mjs').catch(() => ({}));
 import { editorialPrompt } from '../mcp/faq-editorial-judge.mjs';
 const { learnedWriterContract } = await import('../mcp/learned-editorial-guide.mjs').catch(() => ({}));
@@ -91,6 +91,32 @@ test('candidata recusa identificadores sintéticos e quatro palavras privadas co
     criterio: 'clareza' }, comments), true);
 });
 
+test('palavra presente só no feedback privado impede publicação mesmo em minúsculas', () => {
+  const comments = ['o cliente carlos migrou uma conta especial'];
+  assert.equal(safeCandidate({ texto: 'Oriente o cliente carlos ao migrar uma conta especial.', criterio: 'clareza' }, comments), false);
+  assert.equal(safeCandidate({ texto: 'Explique o resultado da ação para orientar o cliente.', criterio: 'clareza' }, comments), true);
+});
+
+test('nova revisão entra no digest e no sorteio sem redistribuir casos antigos', async () => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = await mkdtemp(join(tmpdir(), 'm579-feedback-'));
+  try {
+    await writeFile(join(dir, 'antigas.json'), JSON.stringify({ secoes: [
+      { secao: 'contatos-1', pagina: 'contatos', titulo: 'O que é', decisao: 'ajustar', comentario: 'Exemplo' },
+    ] }));
+    const first = await loadFeedback(dir);
+    await writeFile(join(dir, 'nova.json'), JSON.stringify({ secao: 'robos-1', pagina: 'robos', titulo: 'O que é', decisao: 'ajustar', comentario: 'Outro exemplo' }));
+    const second = await loadFeedback(dir);
+    assert.notEqual(first.digest, second.digest);
+    assert.equal(second.review.length, first.review.length + 1);
+    assert.equal(second.review.at(-1).pagina, 'robos');
+    assert.equal(chooseHeldReview(first.review[0].secao), chooseHeldReview(second.review[0].secao));
+    assert.equal(typeof chooseHeldReview(second.review.at(-1).secao), 'boolean');
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 test('revisão de Robôs usa página e seção da origem; seção ausente é pulada', async () => {
   const root = new URL('../architecture/faq-regua/', import.meta.url).pathname;
   const found = await resolveReviewSection({ pagina: 'robos', titulo: 'O que é' }, root);
@@ -123,4 +149,14 @@ test('lição vetada no juiz preserva o contrato do redator', () => {
   assert.match(editorialPrompt(), /Não leve dados, cenários ou instruções de ensaio/u);
   assert.doesNotMatch(editorialPrompt(), /Uma tarefa ensinada precisa chegar ao resultado observável/u);
   assert.match(learnedWriterContract(), /Uma tarefa ensinada precisa chegar ao resultado observável/u);
+});
+
+test('redator mantém regra do dono recusada pelo juiz, mas exclui aprendida recusada', () => {
+  const guide = [
+    { id: 'L002', texto: 'Regra explícita do dono.', criterio: 'clareza', origem: 'regra-do-dono', ativa: false, vetada: false },
+    { id: 'L099', texto: 'Lição aprendida recusada.', criterio: 'clareza', origem: 'aprendida', ativa: false, vetada: false },
+  ];
+  assert.match(learnedWriterContract(guide), /Regra explícita do dono/u);
+  assert.doesNotMatch(learnedWriterContract(guide), /Lição aprendida recusada/u);
+  assert.doesNotMatch(editorialPrompt({ licoesBase: guide }), /Lição aprendida recusada/u);
 });
