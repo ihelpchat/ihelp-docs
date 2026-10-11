@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { launch } from './visual/measure.mjs';
+import { captureMaskedFrame } from './screen-capture/capture.mjs';
 import { envCompatibility } from '../mcp/env-compat.mjs';
 import productActions from '../architecture/product-actions.json' with { type: 'json' };
 
@@ -82,7 +83,7 @@ export function assertAllowedTarget(value, env = process.env, { allowProduction 
       || new Set(hosts).size !== hosts.length || !hosts.includes(url.hostname)
       || hosts.some((host) => host !== url.hostname && !/^api(?:v\d+)?[.-]/u.test(host))
       || !env.QA_PROD_EMAIL || !env.QA_PROD_PASSWORD) throw new Error('Destino recusado: produção desabilitada');
-    target = { ...target, mode: 'producao', allowedHosts: hosts };
+    target = { ...target, url: url.origin, mode: 'producao', allowedHosts: hosts };
   }
   const staging = qaRequestDecision(url.href, target, env).allowed;
   if (!local && !staging) throw new Error('Destino recusado: host não permitido');
@@ -93,6 +94,22 @@ export function assertAllowedTarget(value, env = process.env, { allowProduction 
 const productionHost = (host) => host === 'ihelpchat.com' || host === 'ihelpchat.com.br'
   || host.endsWith('.ihelpchat.com') || host.endsWith('.ihelpchat.com.br')
   || host === 'api.ihelp.com.br';
+
+const productionStaticCdns = new Set(['stackpath.bootstrapcdn.com', 'use.fontawesome.com',
+  'cdn.tiny.cloud', 'fonts.googleapis.com', 'fonts.gstatic.com']);
+const staticResourceTypes = new Set(['script', 'stylesheet', 'font', 'image']);
+export function qaStaticCdnAllowed(request, target, env = process.env) {
+  if (target.mode !== 'producao' || env.QA_TARGET !== 'producao' || env.QA_PROD_ENABLED !== 'true'
+    || request.method().toUpperCase() !== 'GET'
+    || !staticResourceTypes.has(request.resourceType?.())) return false;
+  if (!qaRequestDecision(target.url, target, env).allowed) return false;
+  let url;
+  try { url = new URL(request.url()); } catch { return false; }
+  const headers = request.headers();
+  return url.protocol === 'https:' && !url.port && !url.username && !url.password
+    && productionStaticCdns.has(url.hostname)
+    && !Object.keys(headers).some((key) => /^(authorization|cookie|proxy-authorization)$/iu.test(key));
+}
 
 export function qaRequestDecision(value, target, env = process.env, { fixtureAllowedOrigins = [] } = {}) {
   let url;
@@ -125,7 +142,9 @@ export async function installQaNetworkGuard(context, target, env = process.env, 
   await context.route('**/*', async (route) => {
     try {
       const request = route.request();
-      const decision = qaRequestDecision(request.url(), target, env, options);
+      const decision = qaStaticCdnAllowed(request, target, env)
+        ? { allowed: true, host: new URL(request.url()).host }
+        : qaRequestDecision(request.url(), target, env, options);
       if (!decision.allowed) {
         guard.blocked.push(decision);
         guard.reasons.set(request, decision);
@@ -137,7 +156,12 @@ export async function installQaNetworkGuard(context, target, env = process.env, 
       const response = await route.fetch({ maxRedirects: 0, ...(streaming ? { timeout: 1500 } : {}) });
       const location = response.headers().location;
       if (location) {
-        const redirected = qaRequestDecision(new URL(location, request.url()).href, target, env, options);
+        const redirectedUrl = new URL(location, request.url()).href;
+        const redirected = qaStaticCdnAllowed({ url: () => redirectedUrl,
+          method: () => request.method(), resourceType: () => request.resourceType(),
+          headers: () => request.headers() }, target, env)
+          ? { allowed: true, host: new URL(redirectedUrl).host }
+          : qaRequestDecision(redirectedUrl, target, env, options);
         if (!redirected.allowed) {
           guard.blocked.push(redirected);
           guard.reasons.set(request, redirected);
@@ -148,6 +172,7 @@ export async function installQaNetworkGuard(context, target, env = process.env, 
     } catch {
       // A route callback must not create an unhandled rejection (Playwright's
       // own error can contain request headers). A closed context needs no abort.
+      try { guard.reasons.set(route.request(), { reason: 'bloqueado: fetch do guard falhou' }); } catch { /* closed */ }
       await route.abort().catch(() => {});
     }
   });
@@ -159,16 +184,20 @@ export function qaFailedRequest(request, guard) {
   try { host = new URL(request.url()).host; } catch { /* no URL is logged */ }
   const blocked = guard?.reasons.get(request);
   if (blocked) host = blocked.host;
+  const resourceType = request.resourceType?.();
+  const kind = blocked ? ` resourceType=${/^[a-z]{1,30}$/u.test(resourceType ?? '') ? resourceType : 'desconhecido'}` : '';
   const failure = /^net::[A-Z_]+$/u.test(request.failure()?.errorText ?? '')
     ? request.failure().errorText : 'falha';
-  return `${request.method()} ${host} ${blocked ? `${blocked.reason} ` : ''}${failure}`;
+  return `${request.method()} ${host}${kind} ${blocked ? `${blocked.reason} ` : ''}${failure}`;
 }
 
 function safeLoginText(value, secrets) {
   let text = String(value ?? '').replace(/\s+/gu, ' ')
     .replace(/https?:\/\/[^\s"'<>]+/giu, '[URL removida]')
+    .replace(/\/[\w./-]+\?[^\s"'<>]+/gu, '[URL removida]')
     .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/giu, '[e-mail removido]')
-    .replace(/\b(?:token|senha|password|secret|api[_-]?key)\s*[:=]\s*[^\s,;]+/giu, '[segredo removido]')
+    .replace(/\b(?:token|senha|password|secret|api[_-]?key|session|cookie|authorization)\s*[:=]\s*[^\s,;]+/giu, '[segredo removido]')
+    .replace(/\bBearer\s+\S+/giu, '[segredo removido]')
     .replace(/\beyJ[A-Za-z0-9_.-]{20,}\b/gu, '[segredo removido]');
   for (const secret of secrets) if (typeof secret === 'string' && secret.length >= 4)
     text = text.replaceAll(secret, '[segredo removido]');
@@ -183,21 +212,137 @@ async function loginControls(page) {
     .filter(Boolean));
 }
 
-export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs = 30000, networkGuard } = {}) {
+const loginLabels = ['E-mail', 'Senha', 'Código', 'Entrar', 'Validar', 'Continuar', 'Cancelar',
+  'Esqueceu sua senha?', 'Voltar para o login', 'Sim, continuar', 'Desconectar e entrar',
+  'Código de confirmação'];
+const knownLoginLabel = (value) => loginLabels.find((label) =>
+  String(value ?? '').trim().toLocaleLowerCase('pt-BR') === label.toLocaleLowerCase('pt-BR')) ?? null;
+const consoleCategory = (value) => /\bTypeError\b/u.test(value) ? 'TypeError'
+  : /\b(?:Failed to load resource|net::ERR_|404 \(Not Found\))/iu.test(value) ? 'resourceFailure'
+    : /\b(?:TinyMCE|editor)\b/iu.test(value) ? 'editorWarning' : 'other';
+const knownLoginAlert = (value) => /senha incorreta/iu.test(value) ? 'Senha incorreta'
+  : /usuário já se encontra logado|usuário já conectado/iu.test(value) ? 'Usuário já conectado'
+    : /credenciais inválidas|usuário ou senha inválido/iu.test(value) ? 'Credenciais inválidas'
+      : 'Alerta não reconhecido';
+const loginPath = (value) => `/${value.split('/').filter(Boolean).map((part) =>
+  /^(?:api|v2|v3|configurations|users|login|login-2fa|send-login-otp|verify-login-otp)$/u.test(part)
+    ? part : ':id').join('/')}`;
+async function visibleLoginUi(page) {
+  const visible = await page.evaluate(() => {
+    const shown = (node) => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
+    const label = (node) => node.labels?.[0]?.textContent?.trim() || node.getAttribute('aria-label')
+      || node.getAttribute('placeholder') || '';
+    return {
+      fields: [...document.querySelectorAll('input,select,textarea')].filter(shown)
+        .filter((node) => node.type !== 'hidden').map((node) => ({
+          role: node.type === 'password' ? 'password' : node.type === 'email' ? 'email' : 'textbox',
+          label: label(node) || (/code|otp|input\d+/iu.test(node.name) ? 'Código' : '') })),
+      buttons: [...document.querySelectorAll('button,[role="button"]')].filter(shown)
+        .map((node) => node.textContent?.trim() || node.getAttribute('aria-label') || ''),
+      links: [...document.querySelectorAll('a')].filter(shown)
+        .map((node) => node.textContent?.trim() || ''),
+    };
+  }).catch(() => ({ fields: [], buttons: [], links: [] }));
+  return { fields: visible.fields.map((field) => ({ role: field.role,
+    label: knownLoginLabel(field.label) ?? 'não identificado' })).slice(0, 10),
+  buttons: visible.buttons.map(knownLoginLabel).filter(Boolean).slice(0, 10),
+  links: visible.links.map(knownLoginLabel).filter(Boolean).slice(0, 10) };
+}
+
+function loginSurfaceSnapshot(frame) {
+  return frame.evaluate(() => {
+    const shown = (node) => node.getClientRects().length > 0
+      && getComputedStyle(node).visibility !== 'hidden';
+    const roots = [document];
+    for (let index = 0; index < roots.length; index++) {
+      for (const node of roots[index].querySelectorAll('*')) if (node.shadowRoot) roots.push(node.shadowRoot);
+    }
+    const all = (selector) => roots.flatMap((root) => [...root.querySelectorAll(selector)]);
+    const label = (node) => node.labels?.[0]?.textContent?.trim() || node.getAttribute('aria-label')
+      || node.getAttribute('placeholder') || '';
+    return { shadowRoots: roots.length - 1, inputs: all('input').length,
+      buttons: all('button,[role="button"]').length, forms: all('form').length,
+      visibleInputs: all('input').filter((node) => shown(node) && node.type !== 'hidden').length,
+      labels: all('input').filter((node) => shown(node) && node.type !== 'hidden').map(label),
+      placeholders: all('input').filter((node) => shown(node) && node.type !== 'hidden')
+        .map((node) => node.getAttribute('placeholder') || ''),
+      titles: all('title,h1,h2,h3,h4').filter(shown).map((node) => node.textContent?.trim() || ''),
+      buttonTexts: all('button,[role="button"]').filter(shown)
+        .map((node) => node.textContent?.trim() || node.getAttribute('aria-label') || '') };
+  }).then((data) => {
+    const known = (values) => values.map(knownLoginLabel).filter(Boolean).slice(0, 20);
+    return { shadowRoots: data.shadowRoots, inputs: data.inputs, buttons: data.buttons,
+      forms: data.forms, visibleInputs: data.visibleInputs,
+      labels: known(data.labels), placeholders: known(data.placeholders),
+      titles: known(data.titles), buttonTexts: known(data.buttonTexts),
+      unknownLabels: data.labels.filter((value) => !knownLoginLabel(value)).length,
+      unknownPlaceholders: data.placeholders.filter((value) => !knownLoginLabel(value)).length,
+      unknownTitles: data.titles.filter((value) => !knownLoginLabel(value)).length,
+      unknownButtons: data.buttonTexts.filter((value) => !knownLoginLabel(value)).length };
+  });
+}
+
+async function loginSurfaces(page) {
+  const frames = await Promise.all(page.frames().map(async (frame, index) => ({ index,
+    ...await loginSurfaceSnapshot(frame).catch(() => ({ shadowRoots: 0, inputs: 0,
+      buttons: 0, forms: 0, visibleInputs: 0, labels: [], placeholders: [], titles: [], buttonTexts: [] })) })));
+  return { frameCount: frames.length, shadowRootCount: frames.reduce((sum, frame) => sum + frame.shadowRoots, 0), frames };
+}
+
+async function waitForLoginInput(page, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const surfaces = await loginSurfaces(page);
+    for (const frame of page.frames()) {
+      const email = frame.locator('input[type="email"]:visible, input[formcontrolname="email"]:visible').first();
+      const password = frame.locator('input[type="password"]:visible, input[formcontrolname="senha"]:visible').first();
+      if (await email.count().catch(() => 0) && await password.count().catch(() => 0)) return { frame, surfaces };
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(250, Math.max(0, deadline - Date.now()))));
+  } while (Date.now() < deadline);
+  return { frame: null, surfaces: await loginSurfaces(page) };
+}
+
+async function waitForLoginOutcome(page, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    if (!new URL(page.url()).pathname.startsWith('/login')) return 'navigated';
+    const surfaces = await loginSurfaces(page);
+    if (surfaces.frames.some((frame) => [...frame.titles, ...frame.labels]
+      .some((value) => /insira o código que você recebeu|código de confirmação|código de verificação/iu.test(value)))) return '2fa';
+    for (const frame of page.frames()) {
+      const texts = await frame.locator('h4:visible,label:visible,h5:visible,p:visible,[role="dialog"]:visible')
+        .allTextContents().catch(() => []);
+      if (texts.some((value) => /insira o código que você recebeu|código de confirmação|código de verificação/iu.test(value))) return '2fa';
+      if (texts.some((value) => /usuário já conectado|usuário já se encontra logado/iu.test(value))) return 'session';
+      if (await frame.locator('[role="alert"]:visible,[class*="toast"]:visible,.error:visible').count().catch(() => 0)) return 'alert';
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(250, Math.max(0, deadline - Date.now()))));
+  } while (Date.now() < deadline);
+  return 'timeout';
+}
+
+export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs = 30000, networkGuard,
+  productionDiagnostics = false, captureLoginScreenshot, inputTimeoutMs = 30_000 } = {}) {
   if (!email || !password) throw new Error('Credenciais de QA ausentes');
-  await page.goto(new URL('/login', baseUrl).href, { waitUntil: 'domcontentloaded' });
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill(password);
-  const before = new Set(await loginControls(page));
   const responses = [];
   const failed = [];
-  const origin = new URL(baseUrl).origin;
+  const consoleErrors = {};
+  let surfaceDiagnostic;
+  let screenshotId;
+  const onConsole = (message) => {
+    if (message.type() === 'error') {
+      const category = consoleCategory(message.text());
+      consoleErrors[category] = Math.min(20, (consoleErrors[category] ?? 0) + 1);
+    }
+  };
   const onResponse = (response) => {
     try {
       const url = new URL(response.url());
-      if (url.origin !== origin) return;
-      responses.push(`${response.request().method()} ${safeLoginText(url.pathname, [email, password])} ${response.status()}`);
-    } catch { responses.push('resposta indisponível'); }
+      if (!url.pathname.startsWith('/api/') || responses.length >= 20) return;
+      responses.push({ host: /^[a-z0-9.-]{1,120}$/u.test(url.hostname) ? url.hostname : 'host-inválido',
+        path: loginPath(url.pathname), method: response.request().method(), status: response.status() });
+    } catch { /* no untrusted URL in diagnostic */ }
   };
   const onFailed = (request) => {
     try { failed.push(qaFailedRequest(request, networkGuard)); }
@@ -205,28 +350,65 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
   };
   page.on('response', onResponse);
   page.on('requestfailed', onFailed);
-  const alert = page.locator('[role="alert"]:visible, [class*="toast"]:visible, .error:visible').first();
-  let outcome;
+  if (productionDiagnostics) page.on('console', onConsole);
+  let outcome = 'error';
   try {
-    await page.getByRole('button', { name: /^Entrar$/iu }).click();
-    outcome = await Promise.race([
-      page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: timeoutMs })
-        .then(() => 'navigated').catch(() => 'timeout'),
-      alert.waitFor({ state: 'visible', timeout: timeoutMs })
-        .then(() => 'alert').catch(() => 'timeout'),
-    ]);
-    if (outcome === 'navigated') return;
+    await page.goto(new URL('/login', baseUrl).href, { waitUntil: 'domcontentloaded' });
+    let loginFrame = page;
+    if (productionDiagnostics) {
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+      const found = await waitForLoginInput(page, Math.min(inputTimeoutMs, 30_000));
+      loginFrame = found.frame;
+      surfaceDiagnostic = found.surfaces;
+      if (new URL(page.url()).pathname === '/login' && captureLoginScreenshot)
+        screenshotId = await captureLoginScreenshot(await captureMaskedFrame(page, loginLabels));
+      if (!loginFrame) throw new Error('Login falhou');
+    }
+    await loginFrame.locator('input[type="email"], input[formcontrolname="email"]').first().fill(email);
+    await loginFrame.locator('input[type="password"], input[formcontrolname="senha"]').first().fill(password);
+    const before = new Set(await loginControls(page));
+    await loginFrame.getByRole('button', { name: /^Entrar$/iu }).click();
+    outcome = productionDiagnostics ? await waitForLoginOutcome(page, timeoutMs) : await page.waitForFunction(() => {
+      if (!location.pathname.startsWith('/login')) return 'navigated';
+      const shown = (node) => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
+      if ([...document.querySelectorAll('h4,label')].some((node) => shown(node)
+        && /insira o código que você recebeu|código de confirmação|código de verificação/iu.test(node.textContent))) return '2fa';
+      if ([...document.querySelectorAll('h5,p,[role="dialog"]')].some((node) => shown(node)
+        && /usuário já conectado|usuário já se encontra logado/iu.test(node.textContent))) return 'session';
+      if ([...document.querySelectorAll('[role="alert"],[class*="toast"],.error')].some(shown)) return 'alert';
+      return null;
+    }, null, { timeout: timeoutMs }).then((handle) => handle.jsonValue()).catch(() => 'timeout');
+    if (outcome === 'navigated') return productionDiagnostics
+      ? { screenshotId, surfaces: surfaceDiagnostic, consoleErrors } : undefined;
+    const ui = productionDiagnostics ? {
+      fields: (await loginSurfaces(page, [email, password])).frames.flatMap((frame) => frame.labels.map((label) => ({
+        role: /senha/iu.test(label) ? 'password' : /e-mail|email/iu.test(label) ? 'email' : 'textbox',
+        label: knownLoginLabel(label) ?? (/code|otp|input\d+/iu.test(label) ? 'Código' : 'não identificado') }))).slice(0, 10),
+      buttons: (await loginSurfaces(page, [email, password])).frames.flatMap((frame) => frame.buttonTexts.map(knownLoginLabel).filter(Boolean)).slice(0, 10),
+      links: [] } : await visibleLoginUi(page);
+    if (outcome === 'timeout' && ui.fields.some((field) => field.label === 'Código')
+      && ui.buttons.includes('Validar')) outcome = '2fa';
     const path = safeLoginText(new URL(page.url()).pathname, [email, password]);
     const messages = await page.locator('[role="alert"]:visible, [class*="toast"]:visible, .error:visible, form .error:visible, form [aria-live]:visible, form + p:visible')
       .allTextContents();
     const controls = (await loginControls(page)).filter((label) => !before.has(label));
-    const diagnostic = { outcome, path, messages: messages.map((message) => safeLoginText(message, [email, password]))
-      .filter(Boolean).slice(0, 5), requests: responses.slice(0, 20), failed: failed.slice(0, 20),
-    controls: controls.map((label) => safeLoginText(label, [email, password])).slice(0, 10) };
-    throw Object.assign(new Error('Login na homologação falhou'), { diagnostic });
+    const diagnostic = { outcome, path, messages: messages.map(knownLoginAlert)
+      .filter(Boolean).slice(0, 5), requests: responses, failed: failed.slice(0, 20),
+    controls: controls.map(knownLoginLabel).filter(Boolean).slice(0, 10), ...ui,
+    ...(productionDiagnostics ? { surfaces: surfaceDiagnostic, consoleErrors, screenshotId } : {}) };
+    throw Object.assign(new Error('Login falhou'), { code: outcome === '2fa' ? 'LOGIN_2FA' : undefined, diagnostic });
+  } catch (error) {
+    if (error.diagnostic) throw error;
+    const ui = await visibleLoginUi(page);
+    let path = '/:id';
+    try { path = loginPath(new URL(page.url()).pathname); } catch { /* no raw URL */ }
+    throw Object.assign(new Error('Login falhou'), { diagnostic: { outcome, path, messages: [],
+      requests: responses, failed: failed.slice(0, 20), controls: [], ...ui,
+      ...(productionDiagnostics ? { surfaces: surfaceDiagnostic, consoleErrors, screenshotId } : {}) } });
   } finally {
     page.off('response', onResponse);
     page.off('requestfailed', onFailed);
+    if (productionDiagnostics) page.off('console', onConsole);
   }
 }
 

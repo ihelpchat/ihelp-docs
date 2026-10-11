@@ -304,7 +304,8 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       const { journeyFailureCategory, journeyFailureLog } = await import('./journey-service.mjs');
       console.error(journeyFailureLog(error));
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'failure' });
-      return textResult({ error: journeyFailureCategory(error), tasks: error?.results?.map(journeyTaskSummary) ?? [],
+      return textResult({ error: journeyFailureCategory(error), diagnostic: journeyFailureLog(error),
+        tasks: error?.results?.map(journeyTaskSummary) ?? [],
         elapsedMs: Date.now() - started }, true);
     } finally {
       const { clearJourneyProofCache } = await import('./journey-service.mjs');

@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertAllowedTarget, qaRequestDecision } from '../scripts/guide-proof.mjs';
+import { assertAllowedTarget, qaRequestDecision, qaStaticCdnAllowed, installQaNetworkGuard } from '../scripts/guide-proof.mjs';
 import { productionConfig, productionPreflight } from './journey-production.mjs';
-import { assertProductionAccountHosts, handleJourneyRoute, productionPreflightRequestAllowed,
-  recordJourneys, configuredJourneyIdentity } from './journey-runtime.mjs';
+import * as runtime from './journey-runtime.mjs';
+import { journeyFailureCategory } from './journey-service.mjs';
+
+const { assertProductionAccountHosts, handleJourneyRoute, productionPreflightRequestAllowed,
+  recordJourneys, configuredJourneyIdentity, createProductionApiObserver } = runtime;
 
 const env = { QA_TARGET: 'producao', QA_PROD_ENABLED: 'true', QA_PROD_URL: 'https://front.example.test',
   QA_PROD_ALLOWED_HOSTS: 'front.example.test,api.example.test', QA_PROD_EMAIL: 'qa@example.test',
@@ -40,6 +43,179 @@ test('produção requer chave geral e somente hosts explícitos da conta', () =>
   assert.doesNotThrow(() => assertProductionAccountHosts(prodTarget, 'https://api-fixture.ihelpchat.com'));
   assert.throws(() => assertProductionAccountHosts(prodTarget, 'https://other-api.ihelpchat.com'),
     /hosts da conta divergentes/u);
+});
+
+test('CDN de interface só aceita GET estático em produção, sem credenciais', async () => {
+  const target = productionConfig(env).target;
+  const request = (url, method = 'GET', type = 'script', headers = {}) => ({
+    url: () => url, method: () => method, resourceType: () => type, headers: () => headers,
+  });
+  const cdn = 'https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js';
+  assert.equal(qaStaticCdnAllowed(request(cdn), target, env), true);
+  assert.equal(qaStaticCdnAllowed(request(cdn), { local: false }, env), false);
+  assert.equal(qaStaticCdnAllowed(request(cdn, 'POST'), target, env), false);
+  assert.equal(qaStaticCdnAllowed(request(cdn, 'GET', 'fetch'), target, env), false);
+  assert.equal(qaStaticCdnAllowed(request(cdn, 'GET', 'script', { authorization: 'Bearer secret' }), target, env), false);
+  assert.equal(qaStaticCdnAllowed(request('https://www.googletagmanager.com/gtm.js', 'GET', 'script'), target, env), false);
+  let handler;
+  const guard = await installQaNetworkGuard({ async route(_pattern, callback) { handler = callback; } }, target, env);
+  const run = async (input) => {
+    let result;
+    await handler({ request: () => input, fetch: async () => ({ headers: () => ({}) }),
+      fulfill: async () => { result = 'allowed'; }, abort: async () => { result = 'denied'; } });
+    return result;
+  };
+  assert.equal(await run(request(cdn)), 'allowed');
+  assert.equal(await run(request(cdn, 'POST')), 'denied');
+  assert.equal(await run(request('https://www.googletagmanager.com/gtm.js')), 'denied');
+  assert.equal(guard.blocked.length, 2);
+  let homologHandler;
+  await installQaNetworkGuard({ async route(_pattern, callback) { homologHandler = callback; } },
+    { local: false, url: 'https://qa.example.test' }, { GUIDE_QA_ALLOWED_HOSTS: 'qa.example.test' });
+  let homologResult;
+  await homologHandler({ request: () => request(cdn),
+    abort: async () => { homologResult = 'denied'; } });
+  assert.equal(homologResult, 'denied');
+  let blocked;
+  const denied = {};
+  let journeyResult;
+  await handleJourneyRoute({ request: () => request(cdn),
+    fallback: async () => { journeyResult = 'allowed'; }, abort: async () => { journeyResult = 'denied'; } },
+  { target, env, thirdPartyDenied: denied, productionReady: () => false,
+    taskId: 'contatos.cadastrar', onBlocked: (value) => { blocked = value; } });
+  assert.equal(journeyResult, 'allowed');
+  assert.equal(blocked, undefined);
+  assert.deepEqual(denied, {});
+});
+
+test('requisição sem resposta registra motivo sanitizado da falha', () => {
+  const observer = createProductionApiObserver(productionConfig(env).target, env);
+  const request = { url: () => 'https://front.example.test/private?token=secret',
+    method: () => 'GET', resourceType: () => 'script', headers: () => ({ authorization: 'Bearer secret' }),
+    failure: () => ({ errorText: 'net::ERR_FAILED' }) };
+  const guard = { reasons: new WeakMap([[request, { reason: 'bloqueado: pré-voo' }]]) };
+  observer.request(request);
+  observer.failed(request, guard);
+  assert.deepEqual(observer.diagnostic().requests[0], { host: 'front.example.test', path: '/:id',
+    method: 'GET', resourceType: 'script', bearer: true, status: null, failure: 'bloqueado: pré-voo' });
+  assert.doesNotMatch(JSON.stringify(observer.diagnostic()), /secret|token=/u);
+});
+
+test('configuração real de confirmação chega ao login sem rede nem navegador', async () => {
+  const confirmationEnv = { QA_TARGET: 'producao', QA_PROD_ENABLED: 'true',
+    QA_PROD_URL: 'https://app.ihelpchat.com',
+    QA_PROD_ALLOWED_HOSTS: 'app.ihelpchat.com,apiv3.ihelpchat.com',
+    QA_PROD_EMAIL: 'ficticio@example.test', QA_PROD_PASSWORD: 'senha-ficticia',
+    GUIDE_QA_STAGING_URL: 'https://staging.example.test',
+    GUIDE_QA_ALLOWED_HOSTS: 'staging.example.test', CAPTURE_AGENT_MODEL: 'mock' };
+  let launched = false;
+  let loginReached = false;
+  const page = { on() {}, url: () => 'https://app.ihelpchat.com/login' };
+  const context = { async route() {}, async newPage() { return page; } };
+  const result = await recordJourneys('contatos', ['contatos.cadastrar'], {
+    env: confirmationEnv,
+    preflight: (configured) => runtime.browserProductionPreflight(configured, {
+      launchBrowser: async () => { launched = true; return { async newContext() { return context; }, async close() {} }; },
+      login: async (_page, baseUrl, credentials) => {
+        loginReached = true;
+        assert.equal(baseUrl, confirmationEnv.QA_PROD_URL);
+        assert.equal(credentials.email, confirmationEnv.QA_PROD_EMAIL);
+        throw new Error('login fictício interrompido');
+      },
+    }),
+  });
+  assert.equal(launched, true);
+  assert.equal(loginReached, true);
+  assert.equal(result.mode, 'bloqueado');
+  assert.equal(result.reason, 'login');
+});
+
+test('API indefinida falha fechada com categoria específica, sem Invalid URL', () => {
+  const target = productionConfig(env).target;
+  assert.throws(() => assertProductionAccountHosts(target, undefined), (error) =>
+    journeyFailureCategory(error) === 'api_nao_detectada' && !/Invalid URL/u.test(error.message));
+});
+
+test('diagnóstico do login guarda só host, padrão de caminho, Bearer e status', () => {
+  const observer = createProductionApiObserver(productionConfig(env).target, env);
+  const bearer = 'Bearer secret-authorization-value';
+  const cookie = 'session=secret-cookie-value';
+  const request = {
+    url: () => 'https://api.example.test/api/v2/contacts/12345?token=secret-query-value',
+    method: () => 'GET', headers: () => ({ authorization: bearer, cookie }),
+  };
+  observer.request(request);
+  observer.response({ request: () => request, status: () => 200 });
+  observer.loginFinished({ url: () => 'https://front.example.test/contact/98765?cookie=secret-cookie-value' });
+  const diagnostic = observer.diagnostic();
+  assert.equal(observer.api()?.origin, 'https://api.example.test');
+  assert.deepEqual(diagnostic.requests, [{ host: 'api.example.test', path: '/api/v2/contacts/:id',
+    method: 'GET', bearer: true, status: 200 }]);
+  assert.equal(diagnostic.login.finished, true);
+  assert.equal(diagnostic.login.url, 'front.example.test/contact/:id');
+  assert.doesNotMatch(JSON.stringify(diagnostic), /secret-|session=|token=|cookie=|Authorization/iu);
+});
+
+test('falha 2FA preserva campos e botões sanitizados e bloqueia a confirmação', async () => {
+  const target = productionConfig(env).target;
+  const observer = createProductionApiObserver(target, env);
+  observer.loginFailed({ url: () => 'https://front.example.test/login?token=secret' },
+    { code: 'LOGIN_2FA', diagnostic: { outcome: '2fa', fields: [{ role: 'textbox', label: 'Código' }],
+      buttons: ['Validar'], links: [], messages: [] } });
+  assert.deepEqual(observer.diagnostic().login, { finished: false, url: 'front.example.test/login',
+    message: '2FA exigido', fields: [{ role: 'textbox', label: 'Código' }], buttons: ['Validar'], links: [] });
+  const result = await runtime.browserProductionPreflight(env, {
+    launchBrowser: async () => ({ async newContext() { return { async route() {}, async newPage() {
+      return { on() {}, url: () => 'https://front.example.test/login' }; } }; }, async close() {} }),
+    login: async () => { throw Object.assign(new Error('Login falhou'), { code: 'LOGIN_2FA' }); },
+  });
+  assert.equal(result.reason, 'login_2fa');
+});
+
+for (const [label, url, headers, status] of [
+  ['200 com Bearer em página do front', 'https://front.example.test/contact',
+    { authorization: 'Bearer secret-authorization-value' }, 200],
+  ['200 sem Bearer', 'https://api.example.test/api/v2/company', {}, 200],
+  ['401 com Bearer no host permitido', 'https://api.example.test/api/v2/company',
+    { authorization: 'Bearer secret-authorization-value' }, 401],
+  ['200 com Bearer fora da allowlist', 'https://api.other.test/api/v2/company',
+    { authorization: 'Bearer secret-authorization-value' }, 200],
+]) test(`descoberta recusa ${label}`, () => {
+  const observer = createProductionApiObserver(productionConfig(env).target, env);
+  const request = { url: () => url, method: () => 'GET', headers: () => headers };
+  observer.request(request);
+  observer.response({ request: () => request, status: () => status });
+  assert.equal(observer.api(), null);
+  assert.equal(observer.diagnostic().requests[0].status, status);
+});
+
+test('mensagem de login desconhecida não devolve conteúdo potencialmente sensível', () => {
+  const observer = createProductionApiObserver(productionConfig(env).target, env);
+  observer.loginFailed({ url: () => 'https://front.example.test/login?token=secret-query-value' },
+    { diagnostic: { messages: ['Falha: session=secret-cookie-value Bearer secret-authorization-value'] } });
+  assert.deepEqual(observer.diagnostic().login, { finished: false, url: 'front.example.test/login',
+    message: 'mensagem de login não reconhecida', fields: [], buttons: [], links: [] });
+  assert.doesNotMatch(JSON.stringify(observer.diagnostic()), /secret-|session=|Bearer/iu);
+});
+
+test('host do front também pode ser API quando recebe resposta Bearer autenticada', () => {
+  const target = productionConfig(env).target;
+  const observer = createProductionApiObserver(target, env);
+  const request = { url: () => 'https://front.example.test/api/v2/company', method: () => 'GET',
+    headers: () => ({ authorization: 'Bearer secret-authorization-value' }) };
+  observer.request(request);
+  observer.response({ request: () => request, status: () => 200 });
+  assert.equal(observer.api()?.origin, target.url);
+  assert.doesNotThrow(() => assertProductionAccountHosts(target, observer.api()?.origin));
+});
+
+test('sem API detectada, gravar_jornada retorna categoria e diagnóstico sem lançar', async () => {
+  const diagnostic = { login: { finished: true, url: 'front.example.test/contact', message: null },
+    requests: [{ host: 'api.example.test', path: '/api/v2/company', method: 'GET', bearer: false, status: 200 }] };
+  const result = await recordJourneys('contatos', ['contatos.cadastrar'], { env,
+    preflight: async () => ({ mode: 'bloqueado', reason: 'api_nao_detectada', diagnostic }) });
+  assert.equal(result.reason, 'api_nao_detectada');
+  assert.deepEqual(result.diagnostic, diagnostic);
 });
 
 test('sem id confirmado retorna contagens e não chama nenhuma escrita', async () => {
@@ -159,6 +335,21 @@ test('hash da homologação preserva a chave dos ponteiros anteriores', () => {
 });
 
 test('pré-voo só admite leituras exatas e nega GETs com efeito', () => {
+  const target = productionConfig(env).target;
+  for (const [path, type] of [['/mfe-root-config.js?v=1.0.0', 'script'],
+    ['/ihelp-angular/main.js?v=1.0.0', 'script'], ['/ihelp-angular/styles.css', 'stylesheet'],
+    ['/javascripts/WebAudioRecorder.js', 'script'], ['/shell/remoteEntry', 'script'],
+    ['/shell/config.json', 'fetch'], ['/login', 'document']])
+    assert.equal(productionPreflightRequestAllowed('GET', path, {
+      url: `https://front.example.test${path}`, resourceType: type, target }), true, path);
+  assert.equal(productionPreflightRequestAllowed('POST', '/ihelp-angular/main.js', {
+    url: 'https://front.example.test/ihelp-angular/main.js', resourceType: 'script', target }), false);
+  assert.equal(productionPreflightRequestAllowed('GET', '/shell/remoteEntry', {
+    url: 'https://api.example.test/shell/remoteEntry', resourceType: 'script', target }), false);
+  assert.equal(productionPreflightRequestAllowed('GET', '/channel/reconnect-all', {
+    url: 'https://front.example.test/channel/reconnect-all', resourceType: 'fetch', target }), false);
+  assert.equal(productionPreflightRequestAllowed('GET', '/shell/data.json', {
+    url: 'https://front.example.test/shell/data.json', resourceType: 'fetch', target }), false);
   for (const path of ['/api/v2/company', '/api/v2/automation', '/api/v2/webhook',
     '/api/v2/channel/connect-status/channel-1', '/api/v2/contacts?page=1&limit=1'])
     assert.equal(productionPreflightRequestAllowed('GET', path), true, path);
@@ -166,6 +357,8 @@ test('pré-voo só admite leituras exatas e nega GETs com efeito', () => {
     '/api/v2/contacts/sync-contacts', '/api/v2/contacts/validate-contacts-business',
     '/api/v2/anything'])
     assert.equal(productionPreflightRequestAllowed('GET', path), false, path);
+  assert.equal(productionPreflightRequestAllowed('GET', '/api/v2/anything', {
+    url: 'https://front.example.test/api/v2/anything', resourceType: 'script', target }), false);
   assert.equal(productionPreflightRequestAllowed('HEAD', '/api/v2/company'), false);
 });
 
