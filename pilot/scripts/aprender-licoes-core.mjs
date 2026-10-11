@@ -1,10 +1,45 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
+import { readFileSync, readdirSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
 
 export function chooseHeldReview(id) {
   return createHash('sha256').update(`M5.79:revisao:${id}`).digest()[0] < 128;
+}
+
+const normalized = (s) => String(s).normalize('NFKC').toLocaleLowerCase('pt-BR').replaceAll(/[^\p{L}\p{N}]+/gu, ' ').trim();
+const words = (s) => normalized(s).split(' ').filter(Boolean);
+let publicWords;
+function vocabulary() {
+  if (publicWords) return publicWords;
+  const pilot = resolve(import.meta.dirname, '..');
+  const roots = [join(pilot, 'content'), join(pilot, 'architecture/faq-regua')];
+  publicWords = new Set();
+  for (const root of roots) {
+    for (const file of readdirSync(root, { recursive: true })) {
+      // Rubrica, guia e glossário são públicos; outros artefatos da régua podem conter avaliações.
+      if (root.endsWith('faq-regua') && !/^(rubrica\.(?:json|md)|guia-aprendido\.json|glossario\.(?:json|md))$/iu.test(file)) continue;
+      if (!/\.(?:mdx?|json)$/iu.test(file)) continue;
+      for (const word of words(readFileSync(join(root, file), 'utf8'))) publicWords.add(word);
+    }
+  }
+  return publicWords;
+}
+
+export async function loadFeedback(dir) {
+  const files = (await readdir(dir, { recursive: true })).filter((file) => file.endsWith('.json') && !file.startsWith('.m5-79-')).sort();
+  const calibration = [], review = [], digest = createHash('sha256');
+  for (const file of files) {
+    const raw = await readFile(join(dir, file), 'utf8');
+    digest.update(file).update('\0').update(raw).update('\0');
+    const data = JSON.parse(raw);
+    if (Array.isArray(data.amostras)) calibration.push(...data.amostras);
+    if (Array.isArray(data.secoes)) review.push(...data.secoes);
+    if (Array.isArray(data.revisoes)) review.push(...data.revisoes);
+    if (data.pagina && data.decisao) review.push(data);
+  }
+  return { calibration, review, digest: digest.digest('hex') };
 }
 
 export function firstJsonObject(output) {
@@ -27,8 +62,9 @@ export function firstJsonObject(output) {
 export function safeCandidate(candidate, comments) {
   if (!candidate || !EDITORIAL_CRITERIA.includes(candidate.criterio)
     || typeof candidate.texto !== 'string' || candidate.texto.length < 24 || candidate.texto.length > 220) return false;
-  const normalized = (s) => s.normalize('NFKC').toLocaleLowerCase('pt-BR').replaceAll(/[^\p{L}\p{N}]+/gu, ' ').trim();
   const text = normalized(candidate.texto);
+  const privateOnly = new Set(comments.flatMap(words).filter((word) => !vocabulary().has(word)));
+  if (words(candidate.texto).some((word) => privateOnly.has(word))) return false;
   // O destino é público. Candidatas com identificadores ou nomes próprios são recusadas.
   if (/[\w.+-]+@[\w.-]+\.[a-z]{2,}/iu.test(candidate.texto)
     || /\d{4,}/u.test(candidate.texto)
@@ -49,8 +85,8 @@ export function safeCandidate(candidate, comments) {
 }
 
 export async function resolveReviewSection(review, dir) {
-  const page = String(review.pagina ?? '').trim();
-  const originalTitle = String(review.titulo ?? '').trim();
+  const page = basename(String(review.pagina ?? '').trim(), extname(String(review.pagina ?? '').trim()));
+  const originalTitle = String(review.titulo ?? review.secao ?? '').trim();
   // A revisão M5.75 registra o título anterior à edição aprovada da página.
   const title = page === 'contatos' && originalTitle === 'Definir quem cuida de um contato'
     ? 'Definir o responsável por um contato' : originalTitle;

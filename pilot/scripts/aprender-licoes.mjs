@@ -3,22 +3,32 @@ import { dirname, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 import { judgeEditorial, consolidateEditorialReadings, EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
-import { chooseHeldReview, validateCandidate, validateInitialLessons, safeCandidate, firstJsonObject,
+import { chooseHeldReview, validateCandidate, validateInitialLessons, safeCandidate, firstJsonObject, loadFeedback,
   resolveReviewSection, publicLearningReport } from './aprender-licoes-core.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const dir = join(root, 'architecture/faq-regua');
 const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
-if (!process.env.CALIBRATION_NOTES_FILE || !process.env.REVIEW_NOTES_FILE || !process.env.OPENAI_API_KEY)
+if (!(process.env.FEEDBACK_DIR || (process.env.CALIBRATION_NOTES_FILE && process.env.REVIEW_NOTES_FILE)) || !process.env.OPENAI_API_KEY)
   throw new Error('ambiente privado indisponível');
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const model = 'gpt-6-luna';
 const guide = await readJson(join(dir, 'guia-aprendido.json'));
 const samples = (await readJson(join(dir, 'amostras-calibracao.json'))).amostras;
-const calibration = (await readJson(process.env.CALIBRATION_NOTES_FILE)).amostras;
-const review = (await readJson(process.env.REVIEW_NOTES_FILE)).secoes;
-const sourceDigest = createHash('sha256').update(JSON.stringify({ calibration, review })).digest('hex');
-const privateDir = dirname(process.env.CALIBRATION_NOTES_FILE);
+const feedback = process.env.FEEDBACK_DIR ? await loadFeedback(process.env.FEEDBACK_DIR) : {
+  calibration: (await readJson(process.env.CALIBRATION_NOTES_FILE)).amostras,
+  review: (await readJson(process.env.REVIEW_NOTES_FILE)).secoes,
+};
+const { calibration, review } = feedback;
+const resolvedReviews = [];
+for (const item of review) {
+  const pagina = await resolveReviewSection(item, dir);
+  if (!pagina) { console.warn('revisão ignorada: seção pública não encontrada'); continue; }
+  resolvedReviews.push({ ...item, textoDaSecao: pagina });
+}
+const sourceDigest = createHash('sha256').update(JSON.stringify({ feedback: feedback.digest ?? { calibration, review },
+  paginas: resolvedReviews.map(({ secao, textoDaSecao }) => [secao, textoDaSecao]) })).digest('hex');
+const privateDir = process.env.FEEDBACK_DIR || dirname(process.env.CALIBRATION_NOTES_FILE);
 const processedFile = join(privateDir, '.m5-79-processado.json');
 let processed;
 try { processed = await readJson(processedFile); } catch { processed = null; }
@@ -35,12 +45,6 @@ if (privateCache.candidateVersion !== 2) privateCache.candidates = null;
 const saveCache = async () => writeFile(cacheFile, `${JSON.stringify(privateCache)}\n`, { mode: 0o600 });
 const notes = new Map(calibration.map((item) => [item.amostra, item]));
 const humanAccept = (notas) => EDITORIAL_CRITERIA.every((id) => notas[id] >= 3);
-const resolvedReviews = [];
-for (const item of review) {
-  const pagina = await resolveReviewSection(item, dir);
-  if (!pagina) { console.warn(`revisão ignorada: seção não encontrada (${item.secao}, ${item.pagina}, ${item.titulo})`); continue; }
-  resolvedReviews.push({ ...item, textoDaSecao: pagina });
-}
 const heldReviews = resolvedReviews.filter((item) => chooseHeldReview(item.secao))
   .map((item) => ({ id: item.secao, modulo: item.pagina, pagina: item.textoDaSecao,
     bruno: { aceite: item.decisao !== 'ajustar' } }));
@@ -121,7 +125,7 @@ for (const candidate of candidates) {
     acceptedExtras.push(candidate);
     guide.licoes.push({ id: `L${String(guide.licoes.length + 1).padStart(3, '0')}`,
     texto: candidate.texto, criterio: candidate.criterio, data: new Date().toISOString().slice(0, 10),
-    origem: { tipo: 'calibração e revisão de página', contagem: adjustment.length },
+    origem: { classe: 'aprendida', tipo: 'calibração e revisão de página', contagem: adjustment.length },
     ganho: { concordancia: result.after.agreement - result.before.agreement,
       erroMedio: result.before.meanError - result.after.meanError, guardadas: held.length }, vetada: false,
     ativa: true, validada: true });

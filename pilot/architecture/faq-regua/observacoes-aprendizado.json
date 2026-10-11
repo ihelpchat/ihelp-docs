@@ -1,9 +1,9 @@
 {
   "observacoes": [
     {
-      "id": "L002",
-      "texto": "Uma tarefa ensinada precisa chegar ao resultado observável, além de abrir o recurso.",
-      "criterio": "tarefas_completas",
+      "id": "L001",
+      "texto": "Não leve dados, cenários ou instruções de ensaio para um procedimento destinado ao cliente.",
+      "criterio": "clareza",
       "data": "2026-09-29",
       "motivo": "não passou no conjunto guardado"
     },
@@ -29,6 +29,13 @@
       "motivo": "não passou no conjunto guardado"
     },
     {
+      "id": "L006",
+      "texto": "Nomeie papéis e áreas pelo vocabulário do produto, sem substituir o contexto da empresa por um ramo específico.",
+      "criterio": "clareza",
+      "data": "2026-10-01",
+      "motivo": "não passou no conjunto guardado"
+    },
+    {
       "id": "L007",
       "texto": "Conecte temas relacionados por um próximo passo útil, respeitando condições e alternativas comprovadas.",
       "criterio": "coerencia",
@@ -50,13 +57,13 @@
       "motivo": "não passou no conjunto guardado"
     },
     {
-      "texto": "Apresente os recursos do módulo de forma integrada, mostrando como se complementam na organização e no uso das informações.",
+      "texto": "Apresente cada recurso pelo que permite organizar ou fazer no trabalho, incluindo suas funções relacionadas sem reduzir a explicação a uma definição genérica.",
       "criterio": "entende_modulo",
       "data": "2026-10-11",
       "motivo": "não passou no conjunto guardado"
     },
     {
-      "texto": "Dê contexto suficiente para distinguir conceitos e papéis do produto e indique materiais específicos para etapas relacionadas, quando existirem.",
+      "texto": "Ao explicar uma configuração ou diferença entre recursos, esclareça o papel envolvido e o efeito prático, e indique materiais específicos para plataformas ou formatos alternativos quando disponíveis.",
       "criterio": "casos_concretos",
       "data": "2026-10-11",
       "motivo": "não passou no conjunto guardado"

@@ -145,9 +145,10 @@ test('guia versionado chega ao juiz e ao redator', () => {
   assert.match(learnedWriterContract(), /lições editoriais aprendidas/u);
 });
 
-test('lição vetada no juiz preserva o contrato do redator', () => {
-  assert.match(editorialPrompt(), /Não leve dados, cenários ou instruções de ensaio/u);
-  assert.doesNotMatch(editorialPrompt(), /Uma tarefa ensinada precisa chegar ao resultado observável/u);
+test('regra do dono inativa no juiz preserva o contrato do redator', () => {
+  assert.doesNotMatch(editorialPrompt(), /Não leve dados, cenários ou instruções de ensaio/u);
+  assert.match(editorialPrompt(), /Uma tarefa ensinada precisa chegar ao resultado observável/u);
+  assert.match(learnedWriterContract(), /Não leve dados, cenários ou instruções de ensaio/u);
   assert.match(learnedWriterContract(), /Uma tarefa ensinada precisa chegar ao resultado observável/u);
 });
 
@@ -158,5 +159,5 @@ test('redator mantém regra do dono recusada pelo juiz, mas exclui aprendida rec
   ];
   assert.match(learnedWriterContract(guide), /Regra explícita do dono/u);
   assert.doesNotMatch(learnedWriterContract(guide), /Lição aprendida recusada/u);
-  assert.doesNotMatch(editorialPrompt({ licoesBase: guide }), /Lição aprendida recusada/u);
+  assert.doesNotMatch(editorialPrompt([], true, guide), /Lição aprendida recusada/u);
 });

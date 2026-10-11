@@ -4,15 +4,15 @@
   "iniciais": {
     "antes": {
       "total": 7,
-      "agreement": 2,
+      "agreement": 3,
       "severeApproved": 0,
-      "meanError": 1.0769230769230769
+      "meanError": 1.3076923076923077
     },
     "depois": {
       "total": 7,
-      "agreement": 4,
+      "agreement": 3,
       "severeApproved": 0,
-      "meanError": 1
+      "meanError": 1.1538461538461537
     },
     "porCaso": [
       {
@@ -25,7 +25,7 @@
       {
         "id": "G02",
         "before": false,
-        "after": true,
+        "after": false,
         "severeApprovedBefore": false,
         "severeApprovedAfter": false
       },
@@ -45,7 +45,7 @@
       },
       {
         "id": "contatos-03",
-        "before": false,
+        "before": true,
         "after": true,
         "severeApprovedBefore": false,
         "severeApprovedAfter": false
@@ -68,18 +68,18 @@
     "porLicao": [
       {
         "id": "L001",
-        "accepted": true,
+        "accepted": false,
         "before": {
           "total": 7,
-          "agreement": 2,
+          "agreement": 3,
           "severeApproved": 0,
-          "meanError": 1.0769230769230769
+          "meanError": 1.3076923076923077
         },
         "after": {
           "total": 7,
           "agreement": 3,
           "severeApproved": 0,
-          "meanError": 1.0769230769230769
+          "meanError": 1.3076923076923077
         },
         "cases": [
           {
@@ -92,7 +92,7 @@
           {
             "id": "G02",
             "before": false,
-            "after": true,
+            "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
@@ -112,8 +112,8 @@
           },
           {
             "id": "contatos-03",
-            "before": false,
-            "after": false,
+            "before": true,
+            "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
@@ -135,18 +135,18 @@
       },
       {
         "id": "L002",
-        "accepted": false,
+        "accepted": true,
         "before": {
           "total": 7,
           "agreement": 3,
           "severeApproved": 0,
-          "meanError": 1.0769230769230769
+          "meanError": 1.3076923076923077
         },
         "after": {
           "total": 7,
-          "agreement": 2,
+          "agreement": 3,
           "severeApproved": 0,
-          "meanError": 1.0769230769230769
+          "meanError": 1.1538461538461537
         },
         "cases": [
           {
@@ -158,7 +158,7 @@
           },
           {
             "id": "G02",
-            "before": true,
+            "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
@@ -179,8 +179,8 @@
           },
           {
             "id": "contatos-03",
-            "before": false,
-            "after": false,
+            "before": true,
+            "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
@@ -207,13 +207,13 @@
           "total": 7,
           "agreement": 3,
           "severeApproved": 0,
-          "meanError": 1.0769230769230769
+          "meanError": 1.1538461538461537
         },
         "after": {
           "total": 7,
           "agreement": 2,
           "severeApproved": 0,
-          "meanError": 1
+          "meanError": 1.1538461538461537
         },
         "cases": [
           {
@@ -225,7 +225,7 @@
           },
           {
             "id": "G02",
-            "before": true,
+            "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
@@ -246,7 +246,7 @@
           },
           {
             "id": "contatos-03",
-            "before": false,
+            "before": true,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
@@ -274,13 +274,13 @@
           "total": 7,
           "agreement": 3,
           "severeApproved": 0,
-          "meanError": 1.0769230769230769
+          "meanError": 1.1538461538461537
         },
         "after": {
           "total": 7,
           "agreement": 2,
           "severeApproved": 0,
-          "meanError": 1
+          "meanError": 1.0769230769230769
         },
         "cases": [
           {
@@ -292,7 +292,7 @@
           },
           {
             "id": "G02",
-            "before": true,
+            "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
@@ -313,7 +313,7 @@
           },
           {
             "id": "contatos-03",
-            "before": false,
+            "before": true,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
@@ -341,13 +341,13 @@
           "total": 7,
           "agreement": 3,
           "severeApproved": 0,
-          "meanError": 1.0769230769230769
+          "meanError": 1.1538461538461537
         },
         "after": {
           "total": 7,
-          "agreement": 3,
+          "agreement": 2,
           "severeApproved": 0,
-          "meanError": 1.0769230769230769
+          "meanError": 1
         },
         "cases": [
           {
@@ -359,8 +359,8 @@
           },
           {
             "id": "G02",
-            "before": true,
-            "after": true,
+            "before": false,
+            "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
@@ -380,7 +380,7 @@
           },
           {
             "id": "contatos-03",
-            "before": false,
+            "before": true,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
@@ -403,16 +403,16 @@
       },
       {
         "id": "L006",
-        "accepted": true,
+        "accepted": false,
         "before": {
           "total": 7,
           "agreement": 3,
           "severeApproved": 0,
-          "meanError": 1.0769230769230769
+          "meanError": 1.1538461538461537
         },
         "after": {
           "total": 7,
-          "agreement": 4,
+          "agreement": 2,
           "severeApproved": 0,
           "meanError": 1
         },
@@ -426,8 +426,8 @@
           },
           {
             "id": "G02",
-            "before": true,
-            "after": true,
+            "before": false,
+            "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
@@ -447,8 +447,8 @@
           },
           {
             "id": "contatos-03",
-            "before": false,
-            "after": true,
+            "before": true,
+            "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
@@ -473,13 +473,13 @@
         "accepted": false,
         "before": {
           "total": 7,
-          "agreement": 4,
+          "agreement": 3,
           "severeApproved": 0,
-          "meanError": 1
+          "meanError": 1.1538461538461537
         },
         "after": {
           "total": 7,
-          "agreement": 3,
+          "agreement": 2,
           "severeApproved": 0,
           "meanError": 1.0769230769230769
         },
@@ -493,7 +493,7 @@
           },
           {
             "id": "G02",
-            "before": true,
+            "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
@@ -515,7 +515,7 @@
           {
             "id": "contatos-03",
             "before": true,
-            "after": true,
+            "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
@@ -540,15 +540,15 @@
         "accepted": false,
         "before": {
           "total": 7,
-          "agreement": 4,
+          "agreement": 3,
           "severeApproved": 0,
-          "meanError": 1
+          "meanError": 1.1538461538461537
         },
         "after": {
           "total": 7,
           "agreement": 2,
           "severeApproved": 0,
-          "meanError": 1.1538461538461537
+          "meanError": 1.0769230769230769
         },
         "cases": [
           {
@@ -560,7 +560,7 @@
           },
           {
             "id": "G02",
-            "before": true,
+            "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
@@ -607,13 +607,13 @@
         "accepted": false,
         "before": {
           "total": 7,
-          "agreement": 4,
+          "agreement": 3,
           "severeApproved": 0,
-          "meanError": 1
+          "meanError": 1.1538461538461537
         },
         "after": {
           "total": 7,
-          "agreement": 2,
+          "agreement": 3,
           "severeApproved": 0,
           "meanError": 1.1538461538461537
         },
@@ -627,7 +627,7 @@
           },
           {
             "id": "G02",
-            "before": true,
+            "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
@@ -649,7 +649,7 @@
           {
             "id": "contatos-03",
             "before": true,
-            "after": false,
+            "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
@@ -674,8 +674,8 @@
   "aceitas": 0,
   "recusadas": 2,
   "concordanciaAntes": [
-    4,
-    4
+    3,
+    3
   ],
   "concordanciaDepois": [
     2,
@@ -686,11 +686,11 @@
     7
   ],
   "erroMedioAntes": [
-    1,
-    1
+    1.1538461538461537,
+    1.1538461538461537
   ],
   "erroMedioDepois": [
-    1.1538461538461537,
-    1.0769230769230769
+    1,
+    1.3076923076923077
   ]
 }

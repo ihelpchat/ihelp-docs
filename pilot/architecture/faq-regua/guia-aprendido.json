@@ -8,29 +8,11 @@
       "data": "2026-09-29",
       "origem": {
         "tipo": "calibração",
-        "contagem": 6
+        "contagem": 6,
+        "classe": "regra-do-dono"
       },
       "ganho": {
-        "concordancia": 1,
-        "erroMedio": 0,
-        "guardadas": 7,
-        "medicao": "isolada por lição"
-      },
-      "vetada": false,
-      "validada": true,
-      "ativa": true
-    },
-    {
-      "id": "L002",
-      "texto": "Uma tarefa ensinada precisa chegar ao resultado observável, além de abrir o recurso.",
-      "criterio": "tarefas_completas",
-      "data": "2026-09-29",
-      "origem": {
-        "tipo": "calibração",
-        "contagem": 6
-      },
-      "ganho": {
-        "concordancia": -1,
+        "concordancia": 0,
         "erroMedio": 0,
         "guardadas": 7,
         "medicao": "isolada por lição"
@@ -40,17 +22,38 @@
       "ativa": false
     },
     {
+      "id": "L002",
+      "texto": "Uma tarefa ensinada precisa chegar ao resultado observável, além de abrir o recurso.",
+      "criterio": "tarefas_completas",
+      "data": "2026-09-29",
+      "origem": {
+        "tipo": "calibração",
+        "contagem": 6,
+        "classe": "regra-do-dono"
+      },
+      "ganho": {
+        "concordancia": 0,
+        "erroMedio": 0.15384615384615397,
+        "guardadas": 7,
+        "medicao": "isolada por lição"
+      },
+      "vetada": false,
+      "validada": true,
+      "ativa": true
+    },
+    {
       "id": "L003",
       "texto": "Mantenha dúvidas da equipe, aprovação interna e limitações da prova fora da orientação pública.",
       "criterio": "clareza",
       "data": "2026-09-29",
       "origem": {
         "tipo": "calibração",
-        "contagem": 6
+        "contagem": 6,
+        "classe": "regra-do-dono"
       },
       "ganho": {
         "concordancia": -1,
-        "erroMedio": 0.07692307692307687,
+        "erroMedio": 0,
         "guardadas": 7,
         "medicao": "isolada por lição"
       },
@@ -65,7 +68,8 @@
       "data": "2026-09-29",
       "origem": {
         "tipo": "calibração",
-        "contagem": 6
+        "contagem": 6,
+        "classe": "regra-do-dono"
       },
       "ganho": {
         "concordancia": -1,
@@ -84,11 +88,12 @@
       "data": "2026-10-01",
       "origem": {
         "tipo": "revisão de página",
-        "contagem": 10
+        "contagem": 10,
+        "classe": "regra-do-dono"
       },
       "ganho": {
-        "concordancia": 0,
-        "erroMedio": 0,
+        "concordancia": -1,
+        "erroMedio": 0.15384615384615374,
         "guardadas": 7,
         "medicao": "isolada por lição"
       },
@@ -103,17 +108,18 @@
       "data": "2026-10-01",
       "origem": {
         "tipo": "revisão de página",
-        "contagem": 10
+        "contagem": 10,
+        "classe": "regra-do-dono"
       },
       "ganho": {
-        "concordancia": 1,
-        "erroMedio": 0.07692307692307687,
+        "concordancia": -1,
+        "erroMedio": 0.15384615384615374,
         "guardadas": 7,
         "medicao": "isolada por lição"
       },
       "vetada": false,
       "validada": true,
-      "ativa": true
+      "ativa": false
     },
     {
       "id": "L007",
@@ -122,11 +128,12 @@
       "data": "2026-10-01",
       "origem": {
         "tipo": "revisão de página",
-        "contagem": 10
+        "contagem": 10,
+        "classe": "regra-do-dono"
       },
       "ganho": {
         "concordancia": -1,
-        "erroMedio": -0.07692307692307687,
+        "erroMedio": 0.07692307692307687,
         "guardadas": 7,
         "medicao": "isolada por lição"
       },
@@ -141,11 +148,12 @@
       "data": "2026-10-01",
       "origem": {
         "tipo": "revisão de página",
-        "contagem": 10
+        "contagem": 10,
+        "classe": "regra-do-dono"
       },
       "ganho": {
-        "concordancia": -2,
-        "erroMedio": -0.15384615384615374,
+        "concordancia": -1,
+        "erroMedio": 0.07692307692307687,
         "guardadas": 7,
         "medicao": "isolada por lição"
       },
@@ -160,11 +168,12 @@
       "data": "2026-10-01",
       "origem": {
         "tipo": "revisão de página",
-        "contagem": 10
+        "contagem": 10,
+        "classe": "regra-do-dono"
       },
       "ganho": {
-        "concordancia": -2,
-        "erroMedio": -0.15384615384615374,
+        "concordancia": 0,
+        "erroMedio": 0,
         "guardadas": 7,
         "medicao": "isolada por lição"
       },
