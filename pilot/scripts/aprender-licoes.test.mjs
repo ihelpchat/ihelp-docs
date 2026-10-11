@@ -120,7 +120,7 @@ test('guia versionado chega ao juiz e ao redator', () => {
 });
 
 test('lição vetada no juiz preserva o contrato do redator', () => {
-  const original = 'Não leve dados, cenários ou instruções de ensaio';
-  assert.doesNotMatch(editorialPrompt([], true, []), /Não leve dados, cenários ou instruções de ensaio/u);
-  assert.match(learnedWriterContract(), /Não leve dados, cenários ou instruções de ensaio/u);
+  assert.match(editorialPrompt(), /Não leve dados, cenários ou instruções de ensaio/u);
+  assert.doesNotMatch(editorialPrompt(), /Uma tarefa ensinada precisa chegar ao resultado observável/u);
+  assert.match(learnedWriterContract(), /Uma tarefa ensinada precisa chegar ao resultado observável/u);
 });
