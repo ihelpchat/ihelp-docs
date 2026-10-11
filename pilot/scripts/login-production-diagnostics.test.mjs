@@ -17,20 +17,21 @@ async function withPage(html, callback) {
   finally { await browser.close(); server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); }
 }
 
-test('login tardio em iframe: captura print, encontra formulário e para no 2FA', async () => {
+test('login tardio em iframe: não captura print, encontra formulário e para no 2FA', async () => {
   await withPage('<script>setTimeout(() => document.body.innerHTML = `<iframe src="/frame"></iframe>`, 150)</script>',
     async (page, baseUrl) => {
+      page.screenshot = () => { throw new Error('captura de tela proibida'); };
       let screenshots = 0;
       await assert.rejects(loginToQa(page, baseUrl, credentials, { productionDiagnostics: true, timeoutMs: 1000,
-        captureLoginScreenshot: (bytes) => { assert.ok(bytes.length > 100); screenshots++; return 'fixture-id'; } }),
+        captureLoginScreenshot: () => { screenshots++; throw new Error('PNG proibido'); } }),
       (error) => {
         assert.equal(error.code, 'LOGIN_2FA', JSON.stringify(error.diagnostic));
         assert.equal(error.diagnostic.surfaces.frameCount, 2);
-        assert.equal(error.diagnostic.screenshotId, 'fixture-id');
+        assert.equal(Object.hasOwn(error.diagnostic, 'screenshotId'), false);
         assert.doesNotMatch(JSON.stringify(error.diagnostic), /fixture@|fixture-password/iu);
         return true;
       });
-      assert.equal(screenshots, 1);
+      assert.equal(screenshots, 0);
     });
 });
 
@@ -40,6 +41,7 @@ test('login em shadow root aberto: usa os controles sem acionar sessão ativa', 
     root.innerHTML = '<form><input aria-label="E-mail" type="email"><input aria-label="Senha" type="password"><button>Entrar</button></form>';
     root.querySelector('form').onsubmit = e => { e.preventDefault(); root.innerHTML = '<h4>Código de confirmação</h4><input aria-label="Código"><button>Validar</button>'; };
     </script>`, async (page, baseUrl) => {
+    page.screenshot = () => { throw new Error('captura de tela proibida'); };
     await assert.rejects(loginToQa(page, baseUrl, credentials, { productionDiagnostics: true, timeoutMs: 1000,
       captureLoginScreenshot: () => 'fixture-id' }), (error) => {
       assert.equal(error.code, 'LOGIN_2FA', JSON.stringify(error.diagnostic));
@@ -49,16 +51,17 @@ test('login em shadow root aberto: usa os controles sem acionar sessão ativa', 
   });
 });
 
-test('sem formulário: retorna categorias, contagens e print mascarado', async () => {
-  await withPage('<h1>Cliente 5511998765432</h1><button>Conta 5511998765432</button><script>console.error("Cliente 5511998765432 falhou")</script>',
+test('sem formulário: canvas e imagem não geram print; retorna apenas categorias e contagens', async () => {
+  await withPage('<h1>Cliente 5511998765432</h1><button>Conta 5511998765432</button><canvas></canvas><img alt="Cliente 5511998765432"><script>document.querySelector("canvas").getContext("2d").fillText("Cliente 5511998765432", 1, 10); console.error("Cliente 5511998765432 falhou")</script>',
     async (page, baseUrl) => {
+      page.screenshot = () => { throw new Error('captura de tela proibida'); };
       await assert.rejects(loginToQa(page, baseUrl, credentials, { productionDiagnostics: true,
         inputTimeoutMs: 300, captureLoginScreenshot: () => 'fixture-id' }), (error) => {
         assert.equal(error.diagnostic.surfaces.frames[0].inputs, 0);
         assert.deepEqual(error.diagnostic.surfaces.frames[0].titles, []);
         assert.equal(error.diagnostic.surfaces.frames[0].unknownTitles, 1);
         assert.equal(error.diagnostic.surfaces.frames[0].unknownButtons, 1);
-        assert.equal(error.diagnostic.screenshotId, 'fixture-id');
+        assert.equal(Object.hasOwn(error.diagnostic, 'screenshotId'), false);
         assert.deepEqual(error.diagnostic.consoleErrors, { other: 1 });
         assert.doesNotMatch(JSON.stringify(error.diagnostic), /5511998765432/u);
         return true;
@@ -66,9 +69,10 @@ test('sem formulário: retorna categorias, contagens e print mascarado', async (
     });
 });
 
-test('login concluído preserva diagnóstico inicial e id do print', async () => {
+test('login concluído preserva diagnóstico inicial sem print', async () => {
   await withPage('<form><input type="email"><input type="password"><button>Entrar</button></form><script>document.querySelector("form").onsubmit = e => { e.preventDefault(); location.href = "/contact"; }</script>',
     async (page, baseUrl) => {
+      page.screenshot = () => { throw new Error('captura de tela proibida'); };
       let captures = 0;
       const result = await loginToQa(page, baseUrl, credentials, { productionDiagnostics: true,
         timeoutMs: 1000, captureLoginScreenshot: async () => {
@@ -77,8 +81,8 @@ test('login concluído preserva diagnóstico inicial e id do print', async () =>
           assert.deepEqual(await page.locator('input').evaluateAll((inputs) => inputs.map((input) => input.value)), ['', '']);
           return 'fixture-id';
         } });
-      assert.equal(captures, 1);
-      assert.equal(result.screenshotId, 'fixture-id');
+      assert.equal(captures, 0);
+      assert.equal(Object.hasOwn(result, 'screenshotId'), false);
       assert.equal(result.surfaces.frames[0].inputs, 2);
       assert.deepEqual(result.consoleErrors, {});
     });

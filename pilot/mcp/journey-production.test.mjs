@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { assertAllowedTarget, qaRequestDecision, qaStaticCdnAllowed, installQaNetworkGuard } from '../scripts/guide-proof.mjs';
 import { productionConfig, productionPreflight } from './journey-production.mjs';
 import * as runtime from './journey-runtime.mjs';
@@ -19,6 +22,30 @@ const read = async (path) => path === '/company' ? data.company : path.startsWit
   : path === '/configurations/channels' ? data.channels : path.startsWith('/channel/connect-status/') ? data.connection
   : path === '/bot' ? data.bots : path === '/automation' ? data.automations
     : path === '/webhook' ? data.webhooks : null;
+
+test('diagnóstico de login em produção e confirmação não captura nem grava PNG', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'm580-login-'));
+  try {
+    for (const companyId of [undefined, '42']) {
+      const page = { on() {}, url: () => 'https://front.example.test/login',
+        screenshot() { throw new Error('captura de tela proibida'); } };
+      const browser = { async newContext() { return { async route() {}, async newPage() { return page; } }; },
+        async close() {} };
+      const cfg = { ...env, MCP_STATE_DIR: root, ...(companyId ? { QA_PROD_COMPANY_ID: companyId } : {}) };
+      const result = await runtime.browserProductionPreflight(cfg, {
+        launchBrowser: async () => browser,
+        login: async (_page, _url, _credentials, options) => {
+          assert.equal(options.productionDiagnostics, true);
+          assert.equal(Object.hasOwn(options, 'captureLoginScreenshot'), false);
+          throw Object.assign(new Error('Login falhou'), { code: 'LOGIN_2FA', diagnostic: { outcome: '2fa' } });
+        },
+      });
+      assert.equal(result.reason, 'login_2fa');
+      assert.equal(Object.hasOwn(result.diagnostic.login, 'screenshotId'), false);
+      assert.deepEqual(await readdir(root), []);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 test('produção requer chave geral e somente hosts explícitos da conta', () => {
   assert.throws(() => productionConfig({ ...env, QA_PROD_ENABLED: 'false' }), /produção desabilitada/u);
