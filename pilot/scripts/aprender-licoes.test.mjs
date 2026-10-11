@@ -58,6 +58,27 @@ test('portão preserva cada acerto mesmo quando a média melhora', async () => {
   ]);
 });
 
+test('portão recusa erro médio maior mesmo com concordância melhor e sem regressões', async () => {
+  const held = ['certo', 'corrigido'].map((id) => ({
+    id, bruno: { aceite: true, notas: scores, defeitosGraves: [] },
+  }));
+  const result = await validateCandidate(held, async (row, withLesson) => {
+    if (withLesson) return row.id === 'certo'
+      ? { aceite: true, notas: Object.fromEntries(Object.keys(scores).map((id) => [id, 4])), defeitosGraves: [] }
+      : verdict(true);
+    return row.id === 'certo' ? verdict(true) : verdict(false, 2);
+  });
+  assert.equal(result.before.agreement, 1);
+  assert.equal(result.after.agreement, 2);
+  assert.equal(result.before.meanError, 1 / 12);
+  assert.equal(result.after.meanError, 1 / 2);
+  assert.equal(result.after.severeApproved, 0);
+  assert.deepEqual(result.cases.map(({ before, after }) => ({ before, after })), [
+    { before: true, after: true }, { before: false, after: true },
+  ]);
+  assert.equal(result.accepted, false);
+});
+
 test('lições iniciais são validadas separadamente e só aprovadas ficam ativas', async () => {
   const held = [{ id: 'caso', bruno: { aceite: true, notas: scores, defeitosGraves: [] } }];
   const lessons = [{ id: 'L001', texto: 'Primeira lição de teste.', criterio: 'clareza', vetada: false },
