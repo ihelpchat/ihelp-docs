@@ -130,6 +130,82 @@ test('nova revisão entra no digest e no sorteio sem redistribuir casos antigos'
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
+test('duas execuções sem feedback novo ignoram saídas privadas no digest', async () => {
+  const { mkdtemp, writeFile, mkdir, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = await mkdtemp(join(tmpdir(), 'm579-feedback-'));
+  try {
+    await writeFile(join(dir, 'revisao.json'), JSON.stringify({ pagina: 'contatos', titulo: 'O que é', decisao: 'ajustar' }));
+    const first = await loadFeedback(dir);
+    await mkdir(join(dir, '.saida'));
+    await writeFile(join(dir, '.saida', 'relatorio-aprendizado-privado.json'), '{"detalhe":"privado"}');
+    await writeFile(join(dir, '.saida', '.m5-79-processado.json'), '{"sourceDigest":"antigo"}');
+    await writeFile(join(dir, 'relatorio-aprendizado-privado.json'), '{"detalhe":"legado"}');
+    await writeFile(join(dir, '.m5-79-cache.json'), '{"candidates":[]}');
+    const second = await loadFeedback(dir);
+    assert.equal(second.digest, first.digest);
+    assert.deepEqual(second.review, first.review);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('segunda execução do script pula sem feedback novo', async () => {
+  const { mkdtemp, writeFile, mkdir, rm, readdir } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join, resolve } = await import('node:path');
+  const { createHash } = await import('node:crypto');
+  const { spawnSync } = await import('node:child_process');
+  const external = await mkdtemp(join(tmpdir(), 'm579-skip-'));
+  const feedbackDir = join(external, 'feedback');
+  const outputDir = join(feedbackDir, '.saida');
+  const privateReport = join(external, 'relatorio.json');
+  try {
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(join(feedbackDir, 'revisao.json'), '{"amostras":[]}');
+    await writeFile(privateReport, '{}');
+    const feedback = await loadFeedback(feedbackDir);
+    const sourceDigest = createHash('sha256').update(JSON.stringify({ feedback: feedback.digest, paginas: [] })).digest('hex');
+    await writeFile(join(outputDir, '.m5-79-processado.json'), JSON.stringify({ sourceDigest }));
+    const run = () => spawnSync(process.execPath, [join(import.meta.dirname, 'aprender-licoes.mjs')], {
+      cwd: resolve(import.meta.dirname, '../..'), encoding: 'utf8', env: { ...process.env,
+        FEEDBACK_DIR: feedbackDir, LEARNING_PRIVATE_REPORT_FILE: privateReport, OPENAI_API_KEY: 'teste' },
+    });
+    const first = run();
+    assert.equal(first.status, 0, first.stderr);
+    await writeFile(join(outputDir, 'relatorio-aprendizado-privado.json'), '{"gerado":true}');
+    const second = run();
+    assert.equal(second.status, 0, second.stderr);
+    assert.equal(second.stdout, first.stdout);
+    assert.deepEqual(await readdir(outputDir), ['.m5-79-processado.json', 'relatorio-aprendizado-privado.json']);
+  } finally { await rm(external, { recursive: true, force: true }); }
+});
+
+test('execução recusa diretório privado interno e symlink antes de gravar', async () => {
+  const { mkdtemp, symlink, rm, readdir } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join, resolve } = await import('node:path');
+  const { spawnSync } = await import('node:child_process');
+  const repo = resolve(import.meta.dirname, '../..');
+  const internal = await mkdtemp(join(import.meta.dirname, '.m579-internal-'));
+  const external = await mkdtemp(join(tmpdir(), 'm579-external-'));
+  try {
+    const alias = join(external, 'alias');
+    await symlink(internal, alias);
+    for (const feedbackDir of [internal, alias]) {
+      const result = spawnSync(process.execPath, [join(import.meta.dirname, 'aprender-licoes.mjs')], {
+        cwd: repo, encoding: 'utf8', env: { ...process.env, FEEDBACK_DIR: feedbackDir,
+          LEARNING_PRIVATE_REPORT_FILE: join(external, 'relatorio.json'), OPENAI_API_KEY: 'teste' },
+      });
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /FEEDBACK_DIR.*fora do repo/u);
+      assert.deepEqual(await readdir(internal), []);
+    }
+  } finally {
+    await rm(internal, { recursive: true, force: true });
+    await rm(external, { recursive: true, force: true });
+  }
+});
+
 test('revisão de Robôs usa página e seção da origem; seção ausente é pulada', async () => {
   const root = new URL('../architecture/faq-regua/', import.meta.url).pathname;
   const found = await resolveReviewSection({ pagina: 'robos', titulo: 'O que é' }, root);
