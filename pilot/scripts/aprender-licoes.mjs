@@ -6,6 +6,9 @@ import { judgeEditorial, consolidateEditorialReadings, EDITORIAL_CRITERIA } from
 import { chooseHeldReview, validateCandidate, validateInitialLessons, firstJsonObject, loadFeedback,
   resolveReviewSection, publicLearningReport, candidateRejectionReason, splitQueueFeedback } from './aprender-licoes-core.mjs';
 import { assertPrivateFile, outsideRepo } from './private-output-path.mjs';
+import { installPrivateCliErrorHandler, PrivateCliError } from './private-cli-error.mjs';
+
+installPrivateCliErrorHandler();
 
 const root = resolve(import.meta.dirname, '..');
 const dir = join(root, 'architecture/faq-regua');
@@ -14,11 +17,14 @@ if (!privateReportFile || !isAbsolute(privateReportFile))
   throw new Error('LEARNING_PRIVATE_REPORT_FILE deve ser caminho absoluto fora do repo');
 const privateReport = resolve(privateReportFile);
 await assertPrivateFile(privateReport, 'LEARNING_PRIVATE_REPORT_FILE');
-const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
+const readJson = async (path) => {
+  try { return JSON.parse(await readFile(path, 'utf8')); }
+  catch { throw new PrivateCliError('JSON inválido'); }
+};
 if (!(process.env.FEEDBACK_DIR || (process.env.CALIBRATION_NOTES_FILE && process.env.REVIEW_NOTES_FILE)) || !process.env.OPENAI_API_KEY)
   throw new Error('ambiente privado indisponível');
 const privateDir = await realpath(process.env.FEEDBACK_DIR || dirname(process.env.CALIBRATION_NOTES_FILE));
-if (!outsideRepo(privateDir)) throw new Error('FEEDBACK_DIR/CALIBRATION_NOTES_FILE deve ficar fora do repo');
+if (!outsideRepo(privateDir)) throw new PrivateCliError('FEEDBACK_DIR/CALIBRATION_NOTES_FILE deve ficar fora do repo');
 const outputDir = join(privateDir, '.saida');
 await mkdir(outputDir, { recursive: true });
 if (!outsideRepo(await realpath(outputDir))) throw new Error('cache deve ficar fora do repo');
@@ -35,9 +41,9 @@ const feedback = process.env.FEEDBACK_DIR ? await loadFeedback(process.env.FEEDB
 const { calibration, review } = feedback;
 const queue = feedback.queue ?? [];
 const resolvedReviews = [];
-for (const item of review) {
+for (const [reviewIndex, item] of review.entries()) {
   const pagina = await resolveReviewSection(item, dir);
-  if (!pagina) { console.warn('revisão ignorada: seção pública não encontrada'); continue; }
+  if (!pagina) { console.warn(`revisão ignorada: caso #${reviewIndex + 1}, seção pública não encontrada`); continue; }
   resolvedReviews.push({ ...item, textoDaSecao: pagina });
 }
 const sourceDigest = createHash('sha256').update(JSON.stringify({ feedback: feedback.digest ?? { calibration, review },
@@ -77,10 +83,11 @@ const adjustment = [...samples.filter((s) => s.grupo === 'ajuste').map((s) => ({
 ...resolvedReviews.filter((s) => !chooseHeldReview(s.secao)).map((s) => ({ tipo: 'revisão de página',
   modulo: s.pagina, pagina: s.textoDaSecao, decisao: s.decisao, comentario: s.comentario })),
 ...queueCases.adjustment];
-const allComments = [...calibration.map((item) => item.comentario), ...review.map((item) => item.comentario),
-  ...queue.map((item) => item.comentario)];
+const allComments = [...calibration.map((item) => item.comentario),
+  ...review.flatMap((item) => [item.comentario, item.titulo]),
+  ...queue.flatMap((item) => [item.comentario, item.texto])].filter((value) => typeof value === 'string');
 const privateMetadata = [...review.flatMap((item) => [item.id, item.secao, item.titulo]),
-  ...queue.map((item) => item.amostra)].filter(Boolean);
+  ...queue.flatMap((item) => [item.amostra, item.modulo])].filter(Boolean);
 const schema = { type: 'object', additionalProperties: false, required: ['licoes'], properties: {
   licoes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['texto', 'criterio'],
     properties: { texto: { type: 'string' }, criterio: { type: 'string', enum: EDITORIAL_CRITERIA } } } },
@@ -91,7 +98,8 @@ const extraction = privateCache.candidates ? null : await client.responses.creat
   reasoning: { effort: 'none' }, text: { format: { type: 'json_schema', name: 'licoes_candidatas', strict: true, schema } },
   max_output_tokens: 1000 });
 if (!privateCache.candidates) {
-  privateCache.candidates = JSON.parse(extraction.output_text).licoes;
+  try { privateCache.candidates = JSON.parse(extraction.output_text).licoes; }
+  catch { throw new PrivateCliError('JSON inválido do provider'); }
   privateCache.candidateVersion = 2;
   await saveCache();
 }
@@ -125,7 +133,7 @@ async function judge(row, active) {
       } catch (error) {
         if (attempt === 7 || !(error instanceof SyntaxError || error.message === 'veredito editorial inválido'
           || error.message === 'propósito divergente')) {
-          throw new Error(`leitura indisponível: ${row.id}`, { cause: error });
+          throw new PrivateCliError('leitura indisponível', held.indexOf(row) + 1);
         }
       }
     }

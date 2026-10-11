@@ -3,6 +3,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
 import { assertPrivateFile, outsideRepo } from './private-output-path.mjs';
+import { installPrivateCliErrorHandler, PrivateCliError } from './private-cli-error.mjs';
 
 const unwrap = (value) => value && typeof value === 'object' && !Array.isArray(value)
   && value.data && typeof value.data === 'object' && !Array.isArray(value.data)
@@ -11,9 +12,12 @@ const unwrap = (value) => value && typeof value === 'object' && !Array.isArray(v
 async function readCollection(dir) {
   if (!outsideRepo(await realpath(dir))) throw new Error('dump deve ficar fora do repo');
   const documents = new Map();
-  for (const file of (await readdir(dir)).filter((name) => name.endsWith('.json')).sort()) {
+  for (const [index, file] of (await readdir(dir)).filter((name) => name.endsWith('.json')).sort().entries()) {
     const id = basename(file, '.json');
-    documents.set(id, unwrap(JSON.parse(await readFile(join(dir, file), 'utf8'))));
+    let data;
+    try { data = JSON.parse(await readFile(join(dir, file), 'utf8')); }
+    catch { throw new PrivateCliError('dump ilegível ou JSON inválido', index + 1); }
+    documents.set(id, unwrap(data));
   }
   return documents;
 }
@@ -42,10 +46,11 @@ export async function exportQueueEvaluations(queueDir, notesDir, feedbackDir) {
   await mkdir(dirname(output), { recursive: true, mode: 0o700 });
   await assertPrivateFile(output, 'FEEDBACK_DIR');
   await writeFile(output, `${JSON.stringify({ tipo: 'avaliacao-fila', itens }, null, 2)}\n`, { mode: 0o600 });
-  return { itens: itens.length, arquivo: output };
+  return { itens: itens.length };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  installPrivateCliErrorHandler();
   if (process.argv.length !== 4 || !process.env.FEEDBACK_DIR)
     throw new Error('uso: FEEDBACK_DIR=<dir-privado> node pilot/scripts/exportar-avaliacoes-fila.mjs <dir-fila> <dir-notas>');
   console.log(JSON.stringify(await exportQueueEvaluations(process.argv[2], process.argv[3], process.env.FEEDBACK_DIR)));

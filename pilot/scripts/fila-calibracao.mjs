@@ -4,6 +4,7 @@ import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadFeedback } from './aprender-licoes-core.mjs';
 import { assertPrivateFile } from './private-output-path.mjs';
+import { installPrivateCliErrorHandler } from './private-cli-error.mjs';
 
 const pilotRoot = resolve(import.meta.dirname, '..');
 
@@ -37,6 +38,7 @@ export async function writeFeedbackQueue(file, queue) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  installPrivateCliErrorHandler();
   if (!process.env.FEEDBACK_DIR || !process.env.FEEDBACK_QUEUE_FILE)
     throw new Error('FEEDBACK_DIR e FEEDBACK_QUEUE_FILE são obrigatórios');
   const queue = await buildFeedbackQueue(join(pilotRoot, 'content/docs'), process.env.FEEDBACK_DIR);

@@ -3,6 +3,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
+import { PrivateCliError } from './private-cli-error.mjs';
 
 export function chooseHeldReview(id) {
   return createHash('sha256').update(`M5.79:revisao:${id}`).digest()[0] < 128;
@@ -37,10 +38,16 @@ export async function loadFeedback(dir) {
       && name !== 'relatorio-aprendizado-privado.json';
   }).sort();
   const calibration = [], review = [], queue = [], digest = createHash('sha256');
-  for (const file of files) {
-    const raw = await readFile(join(dir, file), 'utf8');
+  for (const [index, file] of files.entries()) {
+    let raw;
+    try { raw = await readFile(join(dir, file), 'utf8'); }
+    catch { throw new PrivateCliError('falha ao ler feedback', index + 1); }
     digest.update(file).update('\0').update(raw).update('\0');
-    const data = JSON.parse(raw);
+    let data;
+    try { data = JSON.parse(raw); }
+    catch { throw new PrivateCliError('JSON inválido no feedback', index + 1); }
+    if (!data || typeof data !== 'object' || Array.isArray(data))
+      throw new PrivateCliError('feedback malformado', index + 1);
     if (Array.isArray(data.amostras)) calibration.push(...data.amostras);
     if (Array.isArray(data.secoes)) review.push(...data.secoes);
     if (Array.isArray(data.revisoes)) review.push(...data.revisoes);
