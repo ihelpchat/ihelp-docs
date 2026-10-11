@@ -1,0 +1,40 @@
+{
+  "guardadas": 7,
+  "ajuste": 13,
+  "iniciais": {
+    "antes": {
+      "total": 7,
+      "agreement": 3,
+      "severeApproved": 0,
+      "meanError": 1.0769230769230769
+    },
+    "depois": {
+      "total": 7,
+      "agreement": 3,
+      "severeApproved": 0,
+      "meanError": 1.2307692307692308
+    }
+  },
+  "aceitas": 1,
+  "recusadas": 1,
+  "concordanciaAntes": [
+    3,
+    3
+  ],
+  "concordanciaDepois": [
+    3,
+    3
+  ],
+  "totalGuardado": [
+    7,
+    7
+  ],
+  "erroMedioAntes": [
+    1.2307692307692308,
+    1.1538461538461537
+  ],
+  "erroMedioDepois": [
+    1.1538461538461537,
+    1.1538461538461537
+  ]
+}

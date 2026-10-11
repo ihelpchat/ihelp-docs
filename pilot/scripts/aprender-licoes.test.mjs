@@ -34,6 +34,12 @@ test('portão recusa regressão de aceite pelo juiz mockado', async () => {
   assert.equal(result.after.severeApproved, 1);
 });
 
+test('portão recusa lição sem ganho medido', async () => {
+  const held = [{ id: 'G01', bruno: { aceite: true, notas: scores, defeitosGraves: [] } }];
+  const result = await validateCandidate(held, async () => verdict(true));
+  assert.equal(result.accepted, false);
+});
+
 test('candidata não pode copiar comentário privado fictício', () => {
   const secret = 'COMENTARIO_PRIVADO_FICTICIO_741 O texto tem uma falha singular nesta etapa';
   assert.equal(safeCandidate({ texto: secret, criterio: 'clareza' }, [secret]), false);
