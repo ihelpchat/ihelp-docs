@@ -16,49 +16,49 @@
     },
     "porCaso": [
       {
-        "id": "G01",
+        "id": "caso-e67dba05",
         "before": false,
         "after": false,
         "severeApprovedBefore": false,
         "severeApprovedAfter": false
       },
       {
-        "id": "G02",
+        "id": "caso-fae8f68d",
         "before": false,
         "after": false,
         "severeApprovedBefore": false,
         "severeApprovedAfter": false
       },
       {
-        "id": "G03",
+        "id": "caso-efa337c3",
         "before": true,
         "after": true,
         "severeApprovedBefore": false,
         "severeApprovedAfter": false
       },
       {
-        "id": "G04",
+        "id": "caso-77c85568",
         "before": true,
         "after": true,
         "severeApprovedBefore": false,
         "severeApprovedAfter": false
       },
       {
-        "id": "contatos-03",
+        "id": "caso-d9fab4b5",
         "before": true,
         "after": true,
         "severeApprovedBefore": false,
         "severeApprovedAfter": false
       },
       {
-        "id": "contatos-04",
+        "id": "caso-0ae22748",
         "before": false,
         "after": false,
         "severeApprovedBefore": false,
         "severeApprovedAfter": false
       },
       {
-        "id": "contatos-07",
+        "id": "caso-a0cbefb8",
         "before": false,
         "after": false,
         "severeApprovedBefore": false,
@@ -83,49 +83,49 @@
         },
         "cases": [
           {
-            "id": "G01",
+            "id": "caso-e67dba05",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G02",
+            "id": "caso-fae8f68d",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G03",
+            "id": "caso-efa337c3",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G04",
+            "id": "caso-77c85568",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-03",
+            "id": "caso-d9fab4b5",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-04",
+            "id": "caso-0ae22748",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-07",
+            "id": "caso-a0cbefb8",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
@@ -150,49 +150,49 @@
         },
         "cases": [
           {
-            "id": "G01",
+            "id": "caso-e67dba05",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G02",
+            "id": "caso-fae8f68d",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G03",
+            "id": "caso-efa337c3",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G04",
+            "id": "caso-77c85568",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-03",
+            "id": "caso-d9fab4b5",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-04",
+            "id": "caso-0ae22748",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-07",
+            "id": "caso-a0cbefb8",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
@@ -217,49 +217,49 @@
         },
         "cases": [
           {
-            "id": "G01",
+            "id": "caso-e67dba05",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G02",
+            "id": "caso-fae8f68d",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G03",
+            "id": "caso-efa337c3",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G04",
+            "id": "caso-77c85568",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-03",
+            "id": "caso-d9fab4b5",
             "before": true,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-04",
+            "id": "caso-0ae22748",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-07",
+            "id": "caso-a0cbefb8",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
@@ -284,49 +284,49 @@
         },
         "cases": [
           {
-            "id": "G01",
+            "id": "caso-e67dba05",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G02",
+            "id": "caso-fae8f68d",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G03",
+            "id": "caso-efa337c3",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G04",
+            "id": "caso-77c85568",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-03",
+            "id": "caso-d9fab4b5",
             "before": true,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-04",
+            "id": "caso-0ae22748",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-07",
+            "id": "caso-a0cbefb8",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
@@ -351,49 +351,49 @@
         },
         "cases": [
           {
-            "id": "G01",
+            "id": "caso-e67dba05",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G02",
+            "id": "caso-fae8f68d",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G03",
+            "id": "caso-efa337c3",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G04",
+            "id": "caso-77c85568",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-03",
+            "id": "caso-d9fab4b5",
             "before": true,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-04",
+            "id": "caso-0ae22748",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-07",
+            "id": "caso-a0cbefb8",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
@@ -418,49 +418,49 @@
         },
         "cases": [
           {
-            "id": "G01",
+            "id": "caso-e67dba05",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G02",
+            "id": "caso-fae8f68d",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G03",
+            "id": "caso-efa337c3",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G04",
+            "id": "caso-77c85568",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-03",
+            "id": "caso-d9fab4b5",
             "before": true,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-04",
+            "id": "caso-0ae22748",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-07",
+            "id": "caso-a0cbefb8",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
@@ -485,49 +485,49 @@
         },
         "cases": [
           {
-            "id": "G01",
+            "id": "caso-e67dba05",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G02",
+            "id": "caso-fae8f68d",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G03",
+            "id": "caso-efa337c3",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G04",
+            "id": "caso-77c85568",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-03",
+            "id": "caso-d9fab4b5",
             "before": true,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-04",
+            "id": "caso-0ae22748",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-07",
+            "id": "caso-a0cbefb8",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
@@ -552,49 +552,49 @@
         },
         "cases": [
           {
-            "id": "G01",
+            "id": "caso-e67dba05",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G02",
+            "id": "caso-fae8f68d",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G03",
+            "id": "caso-efa337c3",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G04",
+            "id": "caso-77c85568",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-03",
+            "id": "caso-d9fab4b5",
             "before": true,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-04",
+            "id": "caso-0ae22748",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-07",
+            "id": "caso-a0cbefb8",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
@@ -619,49 +619,49 @@
         },
         "cases": [
           {
-            "id": "G01",
+            "id": "caso-e67dba05",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G02",
+            "id": "caso-fae8f68d",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G03",
+            "id": "caso-efa337c3",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "G04",
+            "id": "caso-77c85568",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-03",
+            "id": "caso-d9fab4b5",
             "before": true,
             "after": true,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-04",
+            "id": "caso-0ae22748",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,
             "severeApprovedAfter": false
           },
           {
-            "id": "contatos-07",
+            "id": "caso-a0cbefb8",
             "before": false,
             "after": false,
             "severeApprovedBefore": false,

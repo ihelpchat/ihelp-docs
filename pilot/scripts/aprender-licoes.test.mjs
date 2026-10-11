@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const { chooseHeldReview, validateCandidate, safeCandidate, publicLearningReport, resolveReviewSection,
-  validateInitialLessons, firstJsonObject, loadFeedback, candidateRejectionReason } =
+  validateInitialLessons, firstJsonObject, loadFeedback, candidateRejectionReason, publicCases } =
   await import('./aprender-licoes-core.mjs').catch(() => ({}));
 import { editorialPrompt } from '../mcp/faq-editorial-judge.mjs';
 const { learnedWriterContract } = await import('../mcp/learned-editorial-guide.mjs').catch(() => ({}));
@@ -151,6 +151,32 @@ test('relatório público contém só números', () => {
     after: { agreement: 1, total: 4, meanError: 2 } }]);
   assert.doesNotMatch(JSON.stringify(report), /COMENTARIO_PRIVADO_FICTICIO_741/);
   assert.equal(report.recusadas, 1);
+});
+
+test('casos do relatório usam ids opacos estáveis sem seção privada', () => {
+  const secret = 'cliente-privado-123';
+  const cases = [{ id: secret, before: true, after: false, severeApprovedBefore: false,
+    severeApprovedAfter: false }];
+  const publicRows = publicCases(cases);
+  assert.match(publicRows[0].id, /^caso-[a-f0-9]{8}$/u);
+  assert.deepEqual(publicRows, publicCases(cases));
+  assert.doesNotMatch(JSON.stringify(publicRows), /cliente|privado|123/u);
+  assert.deepEqual({ ...publicRows[0], id: undefined }, { ...cases[0], id: undefined });
+});
+
+test('relatório versionado não expõe ids das revisões privadas', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const report = await readFile(new URL('../architecture/faq-regua/relatorio-aprendizado.json', import.meta.url), 'utf8');
+  assert.doesNotMatch(report, /contatos-0[347]|cliente-privado-123/u);
+  const { porCaso, porLicao } = JSON.parse(report).iniciais;
+  for (const row of [...porCaso, ...porLicao.flatMap(({ cases }) => cases)])
+    assert.match(row.id, /^caso-[a-f0-9]{8}$/u);
+});
+
+test('lição não pode reproduzir id, seção ou título do feedback privado', () => {
+  const candidate = { texto: 'Explique o resultado observável da ação para orientar o próximo passo.', criterio: 'clareza' };
+  assert.equal(candidateRejectionReason(candidate, [], ['resultado observável']), 'privacidade');
+  assert.equal(candidateRejectionReason(candidate, [], ['cliente-privado-123']), null);
 });
 
 test('guia versionado chega ao juiz e ao redator', () => {

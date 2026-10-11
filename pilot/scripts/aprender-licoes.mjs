@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 import { judgeEditorial, consolidateEditorialReadings, EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
 import { chooseHeldReview, validateCandidate, validateInitialLessons, firstJsonObject, loadFeedback,
-  resolveReviewSection, publicLearningReport, candidateRejectionReason } from './aprender-licoes-core.mjs';
+  resolveReviewSection, publicLearningReport, candidateRejectionReason, publicCases } from './aprender-licoes-core.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const dir = join(root, 'architecture/faq-regua');
@@ -60,6 +60,7 @@ const adjustment = [...samples.filter((s) => s.grupo === 'ajuste').map((s) => ({
 ...resolvedReviews.filter((s) => !chooseHeldReview(s.secao)).map((s) => ({ tipo: 'revisão de página',
   modulo: s.pagina, pagina: s.textoDaSecao, decisao: s.decisao, comentario: s.comentario }))];
 const allComments = [...calibration.map((item) => item.comentario), ...review.map((item) => item.comentario)];
+const privateMetadata = review.flatMap((item) => [item.id, item.secao, item.titulo]).filter(Boolean);
 const schema = { type: 'object', additionalProperties: false, required: ['licoes'], properties: {
   licoes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['texto', 'criterio'],
     properties: { texto: { type: 'string' }, criterio: { type: 'string', enum: EDITORIAL_CRITERIA } } } },
@@ -77,7 +78,7 @@ if (!privateCache.candidates) {
 const candidates = [];
 const rejectedCandidates = [];
 for (const item of privateCache.candidates.slice(0, 2)) {
-  const reason = candidateRejectionReason(item, allComments);
+  const reason = candidateRejectionReason(item, allComments, privateMetadata);
   if (reason) rejectedCandidates.push({ motivo: reason });
   else if (!guide.licoes.some((known) => known.texto.toLocaleLowerCase('pt-BR') === item.texto.toLocaleLowerCase('pt-BR')))
     candidates.push(item);
@@ -143,7 +144,9 @@ await writeFile(join(dir, 'guia-aprendido.json'), `${JSON.stringify(guide, null,
 await writeFile(join(dir, 'observacoes-aprendizado.json'), `${JSON.stringify({ observacoes: observations }, null, 2)}\n`);
 const report = { guardadas: held.length, ajuste: adjustment.length,
   iniciais: { antes: initialOverall.before, depois: initialOverall.after,
-    porCaso: initialOverall.cases, porLicao: initial.results }, ...publicLearningReport(results) };
+    porCaso: publicCases(initialOverall.cases),
+    porLicao: initial.results.map((item) => ({ ...item, cases: publicCases(item.cases) })) },
+  ...publicLearningReport(results) };
 await writeFile(join(dir, 'relatorio-aprendizado.json'), `${JSON.stringify(report, null, 2)}\n`);
 await writeFile(processedFile, `${JSON.stringify({ sourceDigest })}\n`, { mode: 0o600 });
 console.log(JSON.stringify({ ...report, aceitasGeneralizadas: results.filter((r) => r.accepted).map(({ texto }) => texto),

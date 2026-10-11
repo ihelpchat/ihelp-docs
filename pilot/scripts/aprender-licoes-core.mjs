@@ -61,10 +61,14 @@ export function firstJsonObject(output) {
   throw new SyntaxError('veredito JSON incompleto');
 }
 
-export function candidateRejectionReason(candidate, comments) {
+export function candidateRejectionReason(candidate, comments, privateMetadata = []) {
   if (!candidate || !EDITORIAL_CRITERIA.includes(candidate.criterio)
     || typeof candidate.texto !== 'string' || candidate.texto.length < 24 || candidate.texto.length > 220) return 'formato';
   const text = normalized(candidate.texto);
+  if (privateMetadata.some((value) => {
+    const phrase = normalized(value);
+    return phrase && text.includes(phrase);
+  })) return 'privacidade';
   if (words(candidate.texto).some((word) => !vocabulary().has(word))) return 'vocabulário';
   // O destino é público. Candidatas com identificadores ou nomes próprios são recusadas.
   if (/[\w.+-]+@[\w.-]+\.[a-z]{2,}/iu.test(candidate.texto)
@@ -173,4 +177,11 @@ export function publicLearningReport(results) {
     totalGuardado: results.map((item) => item.after?.total ?? null),
     erroMedioAntes: results.map((item) => item.before?.meanError ?? null),
     erroMedioDepois: results.map((item) => item.after?.meanError ?? null) };
+}
+
+export function publicCases(cases) {
+  return cases.map(({ id, ...result }) => ({
+    id: `caso-${createHash('sha256').update(`${id}:M5.79:caso-publico:v1`).digest('hex').slice(0, 8)}`,
+    ...result,
+  }));
 }
