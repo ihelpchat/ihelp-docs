@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { launch } from './visual/measure.mjs';
+import { captureMaskedFrame } from './screen-capture/capture.mjs';
 import { envCompatibility } from '../mcp/env-compat.mjs';
 import productActions from '../architecture/product-actions.json' with { type: 'json' };
 
@@ -216,6 +217,9 @@ const loginLabels = ['E-mail', 'Senha', 'Código', 'Entrar', 'Validar', 'Continu
   'Código de confirmação'];
 const knownLoginLabel = (value) => loginLabels.find((label) =>
   String(value ?? '').trim().toLocaleLowerCase('pt-BR') === label.toLocaleLowerCase('pt-BR')) ?? null;
+const consoleCategory = (value) => /\bTypeError\b/u.test(value) ? 'TypeError'
+  : /\b(?:Failed to load resource|net::ERR_|404 \(Not Found\))/iu.test(value) ? 'resourceFailure'
+    : /\b(?:TinyMCE|editor)\b/iu.test(value) ? 'editorWarning' : 'other';
 const knownLoginAlert = (value) => /senha incorreta/iu.test(value) ? 'Senha incorreta'
   : /usuário já se encontra logado|usuário já conectado/iu.test(value) ? 'Usuário já conectado'
     : /credenciais inválidas|usuário ou senha inválido/iu.test(value) ? 'Credenciais inválidas'
@@ -245,7 +249,7 @@ async function visibleLoginUi(page) {
   links: visible.links.map(knownLoginLabel).filter(Boolean).slice(0, 10) };
 }
 
-function loginSurfaceSnapshot(frame, secrets) {
+function loginSurfaceSnapshot(frame) {
   return frame.evaluate(() => {
     const shown = (node) => node.getClientRects().length > 0
       && getComputedStyle(node).visibility !== 'hidden';
@@ -265,24 +269,30 @@ function loginSurfaceSnapshot(frame, secrets) {
       titles: all('title,h1,h2,h3,h4').filter(shown).map((node) => node.textContent?.trim() || ''),
       buttonTexts: all('button,[role="button"]').filter(shown)
         .map((node) => node.textContent?.trim() || node.getAttribute('aria-label') || '') };
-  }).then((data) => ({ ...data,
-    labels: data.labels.slice(0, 20).map((value) => safeLoginText(value, secrets).slice(0, 60)),
-    placeholders: data.placeholders.slice(0, 20).map((value) => safeLoginText(value, secrets).slice(0, 60)),
-    titles: data.titles.slice(0, 20).map((value) => safeLoginText(value, secrets).slice(0, 60)),
-    buttonTexts: data.buttonTexts.slice(0, 20).map((value) => safeLoginText(value, secrets).slice(0, 60)) }));
+  }).then((data) => {
+    const known = (values) => values.map(knownLoginLabel).filter(Boolean).slice(0, 20);
+    return { shadowRoots: data.shadowRoots, inputs: data.inputs, buttons: data.buttons,
+      forms: data.forms, visibleInputs: data.visibleInputs,
+      labels: known(data.labels), placeholders: known(data.placeholders),
+      titles: known(data.titles), buttonTexts: known(data.buttonTexts),
+      unknownLabels: data.labels.filter((value) => !knownLoginLabel(value)).length,
+      unknownPlaceholders: data.placeholders.filter((value) => !knownLoginLabel(value)).length,
+      unknownTitles: data.titles.filter((value) => !knownLoginLabel(value)).length,
+      unknownButtons: data.buttonTexts.filter((value) => !knownLoginLabel(value)).length };
+  });
 }
 
-async function loginSurfaces(page, secrets) {
+async function loginSurfaces(page) {
   const frames = await Promise.all(page.frames().map(async (frame, index) => ({ index,
-    ...await loginSurfaceSnapshot(frame, secrets).catch(() => ({ shadowRoots: 0, inputs: 0,
+    ...await loginSurfaceSnapshot(frame).catch(() => ({ shadowRoots: 0, inputs: 0,
       buttons: 0, forms: 0, visibleInputs: 0, labels: [], placeholders: [], titles: [], buttonTexts: [] })) })));
   return { frameCount: frames.length, shadowRootCount: frames.reduce((sum, frame) => sum + frame.shadowRoots, 0), frames };
 }
 
-async function waitForLoginInput(page, secrets, timeoutMs) {
+async function waitForLoginInput(page, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   do {
-    const surfaces = await loginSurfaces(page, secrets);
+    const surfaces = await loginSurfaces(page);
     for (const frame of page.frames()) {
       const email = frame.locator('input[type="email"]:visible, input[formcontrolname="email"]:visible').first();
       const password = frame.locator('input[type="password"]:visible, input[formcontrolname="senha"]:visible').first();
@@ -290,14 +300,14 @@ async function waitForLoginInput(page, secrets, timeoutMs) {
     }
     await new Promise((resolve) => setTimeout(resolve, Math.min(250, Math.max(0, deadline - Date.now()))));
   } while (Date.now() < deadline);
-  return { frame: null, surfaces: await loginSurfaces(page, secrets) };
+  return { frame: null, surfaces: await loginSurfaces(page) };
 }
 
 async function waitForLoginOutcome(page, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   do {
     if (!new URL(page.url()).pathname.startsWith('/login')) return 'navigated';
-    const surfaces = await loginSurfaces(page, []);
+    const surfaces = await loginSurfaces(page);
     if (surfaces.frames.some((frame) => [...frame.titles, ...frame.labels]
       .some((value) => /insira o código que você recebeu|código de confirmação|código de verificação/iu.test(value)))) return '2fa';
     for (const frame of page.frames()) {
@@ -317,12 +327,14 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
   if (!email || !password) throw new Error('Credenciais de QA ausentes');
   const responses = [];
   const failed = [];
-  const consoleErrors = [];
+  const consoleErrors = {};
   let surfaceDiagnostic;
   let screenshotId;
   const onConsole = (message) => {
-    if (message.type() === 'error' && consoleErrors.length < 20)
-      consoleErrors.push(safeLoginText(message.text(), [email, password]).slice(0, 200));
+    if (message.type() === 'error') {
+      const category = consoleCategory(message.text());
+      consoleErrors[category] = Math.min(20, (consoleErrors[category] ?? 0) + 1);
+    }
   };
   const onResponse = (response) => {
     try {
@@ -345,11 +357,11 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
     let loginFrame = page;
     if (productionDiagnostics) {
       await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
-      const found = await waitForLoginInput(page, [email, password], Math.min(inputTimeoutMs, 30_000));
+      const found = await waitForLoginInput(page, Math.min(inputTimeoutMs, 30_000));
       loginFrame = found.frame;
       surfaceDiagnostic = found.surfaces;
       if (new URL(page.url()).pathname === '/login' && captureLoginScreenshot)
-        screenshotId = await captureLoginScreenshot(await page.screenshot({ fullPage: false }));
+        screenshotId = await captureLoginScreenshot(await captureMaskedFrame(page, loginLabels));
       if (!loginFrame) throw new Error('Login falhou');
     }
     await loginFrame.locator('input[type="email"], input[formcontrolname="email"]').first().fill(email);
