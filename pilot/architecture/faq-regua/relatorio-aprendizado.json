@@ -1,0 +1,94 @@
+{
+  "ajuste": 13,
+  "guardadas": 7,
+  "iniciais": {
+    "acertosAntes": 3,
+    "acertosDepois": 3,
+    "regressoes": 0,
+    "erroMedioAntes": 1.3076923076923077,
+    "erroMedioDepois": 1.1538461538461537
+  },
+  "licoes": [
+    {
+      "id": "L001",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 3,
+      "regressoes": 0,
+      "erroMedioAntes": 1.3076923076923077,
+      "erroMedioDepois": 1.3076923076923077
+    },
+    {
+      "id": "L002",
+      "aceita": true,
+      "acertosAntes": 3,
+      "acertosDepois": 3,
+      "regressoes": 0,
+      "erroMedioAntes": 1.3076923076923077,
+      "erroMedioDepois": 1.1538461538461537
+    },
+    {
+      "id": "L003",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 2,
+      "regressoes": 1,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1.1538461538461537
+    },
+    {
+      "id": "L004",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 2,
+      "regressoes": 1,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1.0769230769230769
+    },
+    {
+      "id": "L005",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 2,
+      "regressoes": 1,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1
+    },
+    {
+      "id": "L006",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 2,
+      "regressoes": 1,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1
+    },
+    {
+      "id": "L007",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 2,
+      "regressoes": 1,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1.0769230769230769
+    },
+    {
+      "id": "L008",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 2,
+      "regressoes": 1,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1.0769230769230769
+    },
+    {
+      "id": "L009",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 3,
+      "regressoes": 0,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1.1538461538461537
+    }
+  ]
+}
