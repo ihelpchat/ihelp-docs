@@ -1,7 +1,6 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { launch } from './visual/measure.mjs';
-import { captureMaskedFrame } from './screen-capture/capture.mjs';
 import { envCompatibility } from '../mcp/env-compat.mjs';
 import productActions from '../architecture/product-actions.json' with { type: 'json' };
 
@@ -323,13 +322,12 @@ async function waitForLoginOutcome(page, timeoutMs) {
 }
 
 export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs = 30000, networkGuard,
-  productionDiagnostics = false, captureLoginScreenshot, inputTimeoutMs = 30_000 } = {}) {
+  productionDiagnostics = false, inputTimeoutMs = 30_000 } = {}) {
   if (!email || !password) throw new Error('Credenciais de QA ausentes');
   const responses = [];
   const failed = [];
   const consoleErrors = {};
   let surfaceDiagnostic;
-  let screenshotId;
   const onConsole = (message) => {
     if (message.type() === 'error') {
       const category = consoleCategory(message.text());
@@ -360,8 +358,6 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
       const found = await waitForLoginInput(page, Math.min(inputTimeoutMs, 30_000));
       loginFrame = found.frame;
       surfaceDiagnostic = found.surfaces;
-      if (new URL(page.url()).pathname === '/login' && captureLoginScreenshot)
-        screenshotId = await captureLoginScreenshot(await captureMaskedFrame(page, loginLabels));
       if (!loginFrame) throw new Error('Login falhou');
     }
     await loginFrame.locator('input[type="email"], input[formcontrolname="email"]').first().fill(email);
@@ -379,7 +375,7 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
       return null;
     }, null, { timeout: timeoutMs }).then((handle) => handle.jsonValue()).catch(() => 'timeout');
     if (outcome === 'navigated') return productionDiagnostics
-      ? { screenshotId, surfaces: surfaceDiagnostic, consoleErrors } : undefined;
+      ? { surfaces: surfaceDiagnostic, consoleErrors } : undefined;
     const ui = productionDiagnostics ? {
       fields: (await loginSurfaces(page, [email, password])).frames.flatMap((frame) => frame.labels.map((label) => ({
         role: /senha/iu.test(label) ? 'password' : /e-mail|email/iu.test(label) ? 'email' : 'textbox',
@@ -395,7 +391,7 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
     const diagnostic = { outcome, path, messages: messages.map(knownLoginAlert)
       .filter(Boolean).slice(0, 5), requests: responses, failed: failed.slice(0, 20),
     controls: controls.map(knownLoginLabel).filter(Boolean).slice(0, 10), ...ui,
-    ...(productionDiagnostics ? { surfaces: surfaceDiagnostic, consoleErrors, screenshotId } : {}) };
+    ...(productionDiagnostics ? { surfaces: surfaceDiagnostic, consoleErrors } : {}) };
     throw Object.assign(new Error('Login falhou'), { code: outcome === '2fa' ? 'LOGIN_2FA' : undefined, diagnostic });
   } catch (error) {
     if (error.diagnostic) throw error;
@@ -404,7 +400,7 @@ export async function loginToQa(page, baseUrl, { email, password }, { timeoutMs 
     try { path = loginPath(new URL(page.url()).pathname); } catch { /* no raw URL */ }
     throw Object.assign(new Error('Login falhou'), { diagnostic: { outcome, path, messages: [],
       requests: responses, failed: failed.slice(0, 20), controls: [], ...ui,
-      ...(productionDiagnostics ? { surfaces: surfaceDiagnostic, consoleErrors, screenshotId } : {}) } });
+      ...(productionDiagnostics ? { surfaces: surfaceDiagnostic, consoleErrors } : {}) } });
   } finally {
     page.off('response', onResponse);
     page.off('requestfailed', onFailed);
