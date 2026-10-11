@@ -36,7 +36,7 @@ export async function loadFeedback(dir) {
     return parts.every((part) => !part.startsWith('.')) && name.endsWith('.json')
       && name !== 'relatorio-aprendizado-privado.json';
   }).sort();
-  const calibration = [], review = [], digest = createHash('sha256');
+  const calibration = [], review = [], queue = [], digest = createHash('sha256');
   for (const file of files) {
     const raw = await readFile(join(dir, file), 'utf8');
     digest.update(file).update('\0').update(raw).update('\0');
@@ -45,8 +45,30 @@ export async function loadFeedback(dir) {
     if (Array.isArray(data.secoes)) review.push(...data.secoes);
     if (Array.isArray(data.revisoes)) review.push(...data.revisoes);
     if (data.pagina && data.decisao) review.push(data);
+    if (data.tipo === 'avaliacao-fila' && Array.isArray(data.itens)) queue.push(...data.itens);
   }
-  return { calibration, review, digest: digest.digest('hex') };
+  return { calibration, review, queue, digest: digest.digest('hex') };
+}
+
+export function splitQueueFeedback(items) {
+  const adjustment = [], held = [];
+  for (const item of items) {
+    if (typeof item.amostra !== 'string' || !item.amostra.trim()
+      || typeof item.modulo !== 'string' || typeof item.texto !== 'string'
+      || typeof item.comentario !== 'string' || !item.notas
+      || !EDITORIAL_CRITERIA.every((id) => item.notas[id] === 'na'
+        || (Number.isInteger(item.notas[id]) && item.notas[id] >= 0 && item.notas[id] <= 4)))
+      throw new Error('item de avaliacao-fila inválido');
+    const notas = Object.fromEntries(EDITORIAL_CRITERIA.map((id) => [id,
+      item.notas[id] === 'na' ? null : item.notas[id]]));
+    const id = item.amostra;
+    if (chooseHeldReview(id)) held.push({ id, modulo: item.modulo, pagina: item.texto,
+      bruno: { aceite: EDITORIAL_CRITERIA.every((criterion) => notas[criterion] === null || notas[criterion] >= 3),
+        notas, defeitosGraves: [] } });
+    else adjustment.push({ tipo: 'avaliação de fila', id, modulo: item.modulo,
+      pagina: item.texto, notas, comentario: item.comentario });
+  }
+  return { adjustment, held };
 }
 
 export function firstJsonObject(output) {
@@ -124,7 +146,8 @@ export async function resolveReviewSection(review, dir) {
 function metrics(rows) {
   const scored = rows.filter(({ bruno }) => bruno.notas);
   const errors = scored.flatMap(({ bruno, judge }) => EDITORIAL_CRITERIA
-    .filter((id) => judge.notas[id] !== null).map((id) => Math.abs(bruno.notas[id] - judge.notas[id])));
+    .filter((id) => bruno.notas[id] !== null && judge.notas[id] !== null)
+    .map((id) => Math.abs(bruno.notas[id] - judge.notas[id])));
   return { total: rows.length,
     agreement: rows.filter(({ bruno, judge }) => bruno.aceite === judge.aceite).length,
     severeApproved: rows.filter(({ bruno, judge }) => judge.aceite && bruno.defeitosGraves?.length).length,

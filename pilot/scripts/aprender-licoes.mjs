@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 import { judgeEditorial, consolidateEditorialReadings, EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
 import { chooseHeldReview, validateCandidate, validateInitialLessons, firstJsonObject, loadFeedback,
-  resolveReviewSection, publicLearningReport, candidateRejectionReason } from './aprender-licoes-core.mjs';
+  resolveReviewSection, publicLearningReport, candidateRejectionReason, splitQueueFeedback } from './aprender-licoes-core.mjs';
 import { assertPrivateFile, outsideRepo } from './private-output-path.mjs';
 
 const root = resolve(import.meta.dirname, '..');
@@ -33,6 +33,7 @@ const feedback = process.env.FEEDBACK_DIR ? await loadFeedback(process.env.FEEDB
   review: (await readJson(process.env.REVIEW_NOTES_FILE)).secoes,
 };
 const { calibration, review } = feedback;
+const queue = feedback.queue ?? [];
 const resolvedReviews = [];
 for (const item of review) {
   const pagina = await resolveReviewSection(item, dir);
@@ -58,6 +59,7 @@ try { privateCache = await readJson(cacheFile); } catch { privateCache = { candi
 if (privateCache.candidateVersion !== 2) privateCache.candidates = null;
 const saveCache = async () => writeFile(cacheFile, `${JSON.stringify(privateCache)}\n`, { mode: 0o600 });
 const notes = new Map(calibration.map((item) => [item.amostra, item]));
+const queueCases = splitQueueFeedback(queue);
 const humanAccept = (notas) => EDITORIAL_CRITERIA.every((id) => notas[id] >= 3);
 const heldReviews = resolvedReviews.filter((item) => chooseHeldReview(item.secao))
   .map((item) => ({ id: item.secao, modulo: item.pagina, pagina: item.textoDaSecao,
@@ -67,14 +69,18 @@ const held = [
     bruno: { aceite: humanAccept(notes.get(s.id).notas), notas: notes.get(s.id).notas,
       defeitosGraves: ['G03', 'G04'].includes(s.id) ? ['contradiz_evidencia'] : [] } })),
   ...heldReviews,
+  ...queueCases.held,
 ];
 if (!held.length) throw new Error('conjunto guardado vazio');
 const adjustment = [...samples.filter((s) => s.grupo === 'ajuste').map((s) => ({ tipo: 'calibração',
   notas: notes.get(s.id).notas, comentario: notes.get(s.id).comentario })),
 ...resolvedReviews.filter((s) => !chooseHeldReview(s.secao)).map((s) => ({ tipo: 'revisão de página',
-  modulo: s.pagina, pagina: s.textoDaSecao, decisao: s.decisao, comentario: s.comentario }))];
-const allComments = [...calibration.map((item) => item.comentario), ...review.map((item) => item.comentario)];
-const privateMetadata = review.flatMap((item) => [item.id, item.secao, item.titulo]).filter(Boolean);
+  modulo: s.pagina, pagina: s.textoDaSecao, decisao: s.decisao, comentario: s.comentario })),
+...queueCases.adjustment];
+const allComments = [...calibration.map((item) => item.comentario), ...review.map((item) => item.comentario),
+  ...queue.map((item) => item.comentario)];
+const privateMetadata = [...review.flatMap((item) => [item.id, item.secao, item.titulo]),
+  ...queue.map((item) => item.amostra)].filter(Boolean);
 const schema = { type: 'object', additionalProperties: false, required: ['licoes'], properties: {
   licoes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['texto', 'criterio'],
     properties: { texto: { type: 'string' }, criterio: { type: 'string', enum: EDITORIAL_CRITERIA } } } },
