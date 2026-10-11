@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const { chooseHeldReview, validateCandidate, safeCandidate, publicLearningReport, resolveReviewSection,
-  validateInitialLessons } =
+  validateInitialLessons, firstJsonObject } =
   await import('./aprender-licoes-core.mjs').catch(() => ({}));
 import { editorialPrompt } from '../mcp/faq-editorial-judge.mjs';
 const { learnedWriterContract } = await import('../mcp/learned-editorial-guide.mjs').catch(() => ({}));
@@ -93,6 +93,14 @@ test('revisão de Robôs usa página e seção da origem; seção ausente é pul
   const found = await resolveReviewSection({ pagina: 'robos', titulo: 'O que é' }, root);
   assert.match(found, /^## O que é/mu);
   assert.equal(await resolveReviewSection({ pagina: 'robos', titulo: 'Seção que não existe' }, root), null);
+  assert.match(await resolveReviewSection({ pagina: 'contatos', titulo: 'Definir quem cuida de um contato' }, root),
+    /^## Definir o responsável por um contato/mu);
+});
+
+test('leitura privada isola o primeiro veredito JSON completo quando Luna repete objetos', () => {
+  assert.deepEqual(firstJsonObject('{"ok":true}{"ok":false}'), { ok: true });
+  assert.deepEqual(firstJsonObject(' {"texto":"chave } interna"}\n{"outro":1}'), { texto: 'chave } interna' });
+  assert.throws(() => firstJsonObject('{"ok":'), SyntaxError);
 });
 
 test('relatório público contém só números', () => {
@@ -106,4 +114,10 @@ test('relatório público contém só números', () => {
 test('guia versionado chega ao juiz e ao redator', () => {
   assert.match(editorialPrompt(), /lições editoriais aprendidas/u);
   assert.match(learnedWriterContract(), /lições editoriais aprendidas/u);
+});
+
+test('lição vetada no juiz preserva o contrato do redator', () => {
+  const original = 'Não leve dados, cenários ou instruções de ensaio';
+  assert.doesNotMatch(editorialPrompt([], true, []), /Não leve dados, cenários ou instruções de ensaio/u);
+  assert.match(learnedWriterContract(), /Não leve dados, cenários ou instruções de ensaio/u);
 });
