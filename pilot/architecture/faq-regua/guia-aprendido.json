@@ -11,12 +11,14 @@
         "contagem": 6
       },
       "ganho": {
-        "concordancia": -1,
-        "erroMedio": -0.0769230769230771,
+        "concordancia": 1,
+        "erroMedio": 0,
         "guardadas": 7,
-        "medicao": "pacote inicial; não isolada por lição"
+        "medicao": "isolada por lição"
       },
-      "vetada": false
+      "vetada": false,
+      "validada": true,
+      "ativa": true
     },
     {
       "id": "L002",
@@ -29,11 +31,13 @@
       },
       "ganho": {
         "concordancia": -1,
-        "erroMedio": -0.0769230769230771,
+        "erroMedio": 0,
         "guardadas": 7,
-        "medicao": "pacote inicial; não isolada por lição"
+        "medicao": "isolada por lição"
       },
-      "vetada": false
+      "vetada": false,
+      "validada": true,
+      "ativa": false
     },
     {
       "id": "L003",
@@ -46,11 +50,13 @@
       },
       "ganho": {
         "concordancia": -1,
-        "erroMedio": -0.0769230769230771,
+        "erroMedio": 0.07692307692307687,
         "guardadas": 7,
-        "medicao": "pacote inicial; não isolada por lição"
+        "medicao": "isolada por lição"
       },
-      "vetada": false
+      "vetada": false,
+      "validada": true,
+      "ativa": false
     },
     {
       "id": "L004",
@@ -63,11 +69,13 @@
       },
       "ganho": {
         "concordancia": -1,
-        "erroMedio": -0.0769230769230771,
+        "erroMedio": 0.07692307692307687,
         "guardadas": 7,
-        "medicao": "pacote inicial; não isolada por lição"
+        "medicao": "isolada por lição"
       },
-      "vetada": false
+      "vetada": false,
+      "validada": true,
+      "ativa": false
     },
     {
       "id": "L005",
@@ -79,12 +87,14 @@
         "contagem": 10
       },
       "ganho": {
-        "concordancia": -1,
-        "erroMedio": -0.0769230769230771,
+        "concordancia": 0,
+        "erroMedio": 0,
         "guardadas": 7,
-        "medicao": "pacote inicial; não isolada por lição"
+        "medicao": "isolada por lição"
       },
-      "vetada": false
+      "vetada": false,
+      "validada": true,
+      "ativa": false
     },
     {
       "id": "L006",
@@ -96,12 +106,14 @@
         "contagem": 10
       },
       "ganho": {
-        "concordancia": -1,
-        "erroMedio": -0.0769230769230771,
+        "concordancia": 1,
+        "erroMedio": 0.07692307692307687,
         "guardadas": 7,
-        "medicao": "pacote inicial; não isolada por lição"
+        "medicao": "isolada por lição"
       },
-      "vetada": false
+      "vetada": false,
+      "validada": true,
+      "ativa": true
     },
     {
       "id": "L007",
@@ -114,11 +126,13 @@
       },
       "ganho": {
         "concordancia": -1,
-        "erroMedio": -0.0769230769230771,
+        "erroMedio": -0.07692307692307687,
         "guardadas": 7,
-        "medicao": "pacote inicial; não isolada por lição"
+        "medicao": "isolada por lição"
       },
-      "vetada": false
+      "vetada": false,
+      "validada": true,
+      "ativa": false
     },
     {
       "id": "L008",
@@ -130,12 +144,14 @@
         "contagem": 10
       },
       "ganho": {
-        "concordancia": -1,
-        "erroMedio": -0.0769230769230771,
+        "concordancia": -2,
+        "erroMedio": -0.15384615384615374,
         "guardadas": 7,
-        "medicao": "pacote inicial; não isolada por lição"
+        "medicao": "isolada por lição"
       },
-      "vetada": false
+      "vetada": false,
+      "validada": true,
+      "ativa": false
     },
     {
       "id": "L009",
@@ -147,12 +163,14 @@
         "contagem": 10
       },
       "ganho": {
-        "concordancia": -1,
-        "erroMedio": -0.0769230769230771,
+        "concordancia": -2,
+        "erroMedio": -0.15384615384615374,
         "guardadas": 7,
-        "medicao": "pacote inicial; não isolada por lição"
+        "medicao": "isolada por lição"
       },
-      "vetada": false
+      "vetada": false,
+      "validada": true,
+      "ativa": false
     }
   ]
 }

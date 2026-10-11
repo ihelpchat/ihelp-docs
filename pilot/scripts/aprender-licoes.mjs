@@ -3,7 +3,8 @@ import { dirname, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 import { judgeEditorial, consolidateEditorialReadings, EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
-import { chooseHeldReview, validateCandidate, safeCandidate, publicLearningReport } from './aprender-licoes-core.mjs';
+import { chooseHeldReview, validateCandidate, validateInitialLessons, safeCandidate, firstJsonObject,
+  resolveReviewSection, publicLearningReport } from './aprender-licoes-core.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const dir = join(root, 'architecture/faq-regua');
@@ -30,27 +31,30 @@ const fingerprint = createHash('sha256').update(JSON.stringify({ sourceDigest,
 const cacheFile = join(privateDir, `.m5-79-${fingerprint}.json`);
 let privateCache;
 try { privateCache = await readJson(cacheFile); } catch { privateCache = { candidates: null, judges: {} }; }
+if (privateCache.candidateVersion !== 2) privateCache.candidates = null;
 const saveCache = async () => writeFile(cacheFile, `${JSON.stringify(privateCache)}\n`, { mode: 0o600 });
 const notes = new Map(calibration.map((item) => [item.amostra, item]));
-const page = await readFile(join(dir, 'ouro/contatos.mdx'), 'utf8');
-const sections = [...page.matchAll(/^## (.+)$/gmu)].map((match, i, all) => ({
-  title: match[1], text: page.slice(match.index, all[i + 1]?.index ?? page.length).trim(),
-}));
-const sectionByTitle = new Map(sections.map((item) => [item.title, item.text]));
-sectionByTitle.set('Definir quem cuida de um contato', sectionByTitle.get('Definir o responsável por um contato'));
 const humanAccept = (notas) => EDITORIAL_CRITERIA.every((id) => notas[id] >= 3);
+const resolvedReviews = [];
+for (const item of review) {
+  const pagina = await resolveReviewSection(item, dir);
+  if (!pagina) { console.warn(`revisão ignorada: seção não encontrada (${item.secao}, ${item.pagina}, ${item.titulo})`); continue; }
+  resolvedReviews.push({ ...item, textoDaSecao: pagina });
+}
+const heldReviews = resolvedReviews.filter((item) => chooseHeldReview(item.secao))
+  .map((item) => ({ id: item.secao, modulo: item.pagina, pagina: item.textoDaSecao,
+    bruno: { aceite: item.decisao !== 'ajustar' } }));
 const held = [
   ...samples.filter((s) => s.grupo === 'guardada').map((s) => ({ id: s.id, modulo: s.modulo, pagina: s.texto,
     bruno: { aceite: humanAccept(notes.get(s.id).notas), notas: notes.get(s.id).notas,
       defeitosGraves: ['G03', 'G04'].includes(s.id) ? ['contradiz_evidencia'] : [] } })),
-  ...review.filter((s) => chooseHeldReview(s.secao)).map((s) => ({ id: s.secao, modulo: 'Contatos',
-    pagina: sectionByTitle.get(s.titulo), bruno: { aceite: s.decisao !== 'ajustar' } })),
+  ...heldReviews,
 ];
-if (held.some((row) => !row.pagina) || held.length < 7) throw new Error('conjunto guardado incompleto');
+if (!held.length) throw new Error('conjunto guardado vazio');
 const adjustment = [...samples.filter((s) => s.grupo === 'ajuste').map((s) => ({ tipo: 'calibração',
   notas: notes.get(s.id).notas, comentario: notes.get(s.id).comentario })),
-...review.filter((s) => !chooseHeldReview(s.secao)).map((s) => ({ tipo: 'revisão de página',
-  decisao: s.decisao, comentario: s.comentario }))];
+...resolvedReviews.filter((s) => !chooseHeldReview(s.secao)).map((s) => ({ tipo: 'revisão de página',
+  modulo: s.pagina, pagina: s.textoDaSecao, decisao: s.decisao, comentario: s.comentario }))];
 const allComments = [...calibration.map((item) => item.comentario), ...review.map((item) => item.comentario)];
 const schema = { type: 'object', additionalProperties: false, required: ['licoes'], properties: {
   licoes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['texto', 'criterio'],
@@ -63,30 +67,36 @@ const extraction = privateCache.candidates ? null : await client.responses.creat
   max_output_tokens: 1000 });
 if (!privateCache.candidates) {
   privateCache.candidates = JSON.parse(extraction.output_text).licoes;
+  privateCache.candidateVersion = 2;
   await saveCache();
 }
 const candidates = privateCache.candidates.slice(0, 2)
   .filter((item) => safeCandidate(item, allComments))
   .filter((item) => !guide.licoes.some((known) => known.texto.toLocaleLowerCase('pt-BR') === item.texto.toLocaleLowerCase('pt-BR')));
 
-async function judge(row, extras, usarGuia) {
-  const key = `${row.id}:${extras.map((item) => item.texto).join('|')}:${usarGuia}`;
+async function judge(row, active) {
+  const key = `${row.id}:${active.map((item) => item.id ?? item.texto).join('|')}:isolado-v2`;
   if (privateCache.judges[key]) return privateCache.judges[key];
   const readings = [];
   for (let i = 0; i < 3; i++) {
     for (let attempt = 0; attempt < 8; attempt++) {
       try {
         const result = await judgeEditorial({ pagina: row.pagina, modulo: row.modulo,
-          proposito: readings[0]?.proposito, usarGuia,
-          licoesExtras: extras },
-        async ({ instructions, input, schema: verdictSchema }) => client.responses.create({ model, instructions, input,
-          reasoning: { effort: 'none' }, text: { format: { type: 'json_schema', name: 'faq_editorial_verdict', strict: true,
-            schema: verdictSchema } }, max_output_tokens: 4000 }));
+          proposito: readings[0]?.proposito, licoesBase: active },
+        async ({ instructions, input, schema: verdictSchema }) => {
+          const response = await client.responses.create({ model,
+            instructions: `${instructions}\n\nProduza exatamente um objeto JSON, uma única vez.`, input,
+            reasoning: { effort: 'none' }, text: { format: { type: 'json_schema', name: 'faq_editorial_verdict', strict: true,
+              schema: verdictSchema } }, max_output_tokens: 1200 });
+          return { ...response, output_text: JSON.stringify(firstJsonObject(response.output_text)) };
+        });
         readings.push(result);
         break;
       } catch (error) {
         if (attempt === 7 || !(error instanceof SyntaxError || error.message === 'veredito editorial inválido'
-          || error.message === 'propósito divergente')) throw new Error(`leitura indisponível: ${row.id}`, { cause: error });
+          || error.message === 'propósito divergente')) {
+          throw new Error(`leitura indisponível: ${row.id}`, { cause: error });
+        }
       }
     }
   }
@@ -97,12 +107,14 @@ async function judge(row, extras, usarGuia) {
   return result;
 }
 
-const initial = await validateCandidate(held, (row, withGuide) => judge(row, [], withGuide));
+const initial = await validateInitialLessons(guide.licoes, held, judge);
+guide.licoes = initial.lessons;
 const results = [];
-const observations = [];
-const acceptedExtras = [];
+const observations = [...initial.observations];
+const acceptedExtras = [...initial.active];
 for (const candidate of candidates) {
-  const result = await validateCandidate(held, (row, withLesson) => judge(row, withLesson ? [...acceptedExtras, candidate] : acceptedExtras, true));
+  const result = await validateCandidate(held, (row, withLesson) => judge(row,
+    withLesson ? [...acceptedExtras, candidate] : acceptedExtras));
   const entry = { ...candidate, accepted: result.accepted, before: result.before, after: result.after };
   results.push(entry);
   if (result.accepted) {
@@ -111,19 +123,20 @@ for (const candidate of candidates) {
     texto: candidate.texto, criterio: candidate.criterio, data: new Date().toISOString().slice(0, 10),
     origem: { tipo: 'calibração e revisão de página', contagem: adjustment.length },
     ganho: { concordancia: result.after.agreement - result.before.agreement,
-      erroMedio: result.before.meanError - result.after.meanError, guardadas: held.length }, vetada: false });
+      erroMedio: result.before.meanError - result.after.meanError, guardadas: held.length }, vetada: false,
+    ativa: true, validada: true });
   } else observations.push({ texto: candidate.texto, criterio: candidate.criterio, data: new Date().toISOString().slice(0, 10),
     motivo: 'não passou no conjunto guardado' });
 }
-for (const lesson of guide.licoes) if (lesson.ganho === null) lesson.ganho = {
-  concordancia: initial.after.agreement - initial.before.agreement,
-  erroMedio: initial.before.meanError - initial.after.meanError,
-  guardadas: held.length, medicao: 'pacote inicial; não isolada por lição' };
+const initialOverall = await validateCandidate(held, (row, withGuide) => judge(row,
+  withGuide ? initial.active : []));
 await writeFile(join(dir, 'guia-aprendido.json'), `${JSON.stringify(guide, null, 2)}\n`);
 await writeFile(join(dir, 'observacoes-aprendizado.json'), `${JSON.stringify({ observacoes: observations }, null, 2)}\n`);
 const report = { guardadas: held.length, ajuste: adjustment.length,
-  iniciais: { antes: initial.before, depois: initial.after }, ...publicLearningReport(results) };
+  iniciais: { antes: initialOverall.before, depois: initialOverall.after,
+    porCaso: initialOverall.cases, porLicao: initial.results }, ...publicLearningReport(results) };
 await writeFile(join(dir, 'relatorio-aprendizado.json'), `${JSON.stringify(report, null, 2)}\n`);
 await writeFile(processedFile, `${JSON.stringify({ sourceDigest })}\n`, { mode: 0o600 });
 console.log(JSON.stringify({ ...report, aceitasGeneralizadas: results.filter((r) => r.accepted).map(({ texto }) => texto),
-  recusadasGeneralizadas: observations.map(({ texto }) => texto) }));
+  recusadasGeneralizadas: observations.filter((item) => !item.id).map(({ texto }) => texto),
+  iniciaisAtivas: initial.active.map(({ id }) => id), iniciaisObservacao: initial.observations.map(({ id }) => id) }));

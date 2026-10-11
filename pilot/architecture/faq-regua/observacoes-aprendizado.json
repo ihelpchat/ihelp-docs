@@ -1,8 +1,63 @@
 {
   "observacoes": [
     {
-      "texto": "Apresente passos de conexão e configuração apenas quando forem necessários à tarefa; diferencie requisitos de conexão de ajustes opcionais e não acrescente etapas sem benefício claro para o objetivo da pessoa.",
+      "id": "L002",
+      "texto": "Uma tarefa ensinada precisa chegar ao resultado observável, além de abrir o recurso.",
       "criterio": "tarefas_completas",
+      "data": "2026-09-29",
+      "motivo": "não passou no conjunto guardado"
+    },
+    {
+      "id": "L003",
+      "texto": "Mantenha dúvidas da equipe, aprovação interna e limitações da prova fora da orientação pública.",
+      "criterio": "clareza",
+      "data": "2026-09-29",
+      "motivo": "não passou no conjunto guardado"
+    },
+    {
+      "id": "L004",
+      "texto": "Explique a utilidade com uma situação de trabalho e uma decisão pertinente; controles isolados não bastam.",
+      "criterio": "utilidade_negocio",
+      "data": "2026-09-29",
+      "motivo": "não passou no conjunto guardado"
+    },
+    {
+      "id": "L005",
+      "texto": "Indique o efeito posterior de uma ação quando ele ajudar a pessoa a decidir o próximo passo.",
+      "criterio": "coerencia",
+      "data": "2026-10-01",
+      "motivo": "não passou no conjunto guardado"
+    },
+    {
+      "id": "L007",
+      "texto": "Conecte temas relacionados por um próximo passo útil, respeitando condições e alternativas comprovadas.",
+      "criterio": "coerencia",
+      "data": "2026-10-01",
+      "motivo": "não passou no conjunto guardado"
+    },
+    {
+      "id": "L008",
+      "texto": "Explique um caminho alternativo quando a ação principal não estiver disponível para a pessoa.",
+      "criterio": "tarefas_completas",
+      "data": "2026-10-01",
+      "motivo": "não passou no conjunto guardado"
+    },
+    {
+      "id": "L009",
+      "texto": "Oriente a pessoa diretamente sobre o que fazer, sem atribuir a ela avisos abstratos de responsabilidade.",
+      "criterio": "clareza",
+      "data": "2026-10-01",
+      "motivo": "não passou no conjunto guardado"
+    },
+    {
+      "texto": "Apresente os recursos do módulo de forma integrada, mostrando como se complementam na organização e no uso das informações.",
+      "criterio": "entende_modulo",
+      "data": "2026-10-11",
+      "motivo": "não passou no conjunto guardado"
+    },
+    {
+      "texto": "Dê contexto suficiente para distinguir conceitos e papéis do produto e indique materiais específicos para etapas relacionadas, quando existirem.",
+      "criterio": "casos_concretos",
       "data": "2026-10-11",
       "motivo": "não passou no conjunto guardado"
     }
