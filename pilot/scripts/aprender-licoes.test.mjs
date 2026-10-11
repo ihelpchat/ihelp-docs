@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const { chooseHeldReview, validateCandidate, safeCandidate, publicLearningReport, resolveReviewSection,
-  validateInitialLessons, firstJsonObject, loadFeedback } =
+  validateInitialLessons, firstJsonObject, loadFeedback, candidateRejectionReason } =
   await import('./aprender-licoes-core.mjs').catch(() => ({}));
 import { editorialPrompt } from '../mcp/faq-editorial-judge.mjs';
 const { learnedWriterContract } = await import('../mcp/learned-editorial-guide.mjs').catch(() => ({}));
@@ -95,6 +95,19 @@ test('palavra presente só no feedback privado impede publicação mesmo em min�
   const comments = ['o cliente carlos migrou uma conta especial'];
   assert.equal(safeCandidate({ texto: 'Oriente o cliente carlos ao migrar uma conta especial.', criterio: 'clareza' }, comments), false);
   assert.equal(safeCandidate({ texto: 'Explique o resultado da ação para orientar o cliente.', criterio: 'clareza' }, comments), true);
+});
+
+test('lista fechada recusa nomes mesmo quando existem em páginas públicas', async () => {
+  for (const name of ['ana', 'carlos']) {
+    const comments = [`o cliente ${name} teve uma dúvida sobre atendimento`];
+    const candidate = { texto: `Ao orientar o cliente ${name}, explique o resultado da ação antes de avançar.`, criterio: 'clareza' };
+    assert.equal(candidateRejectionReason(candidate, comments), 'vocabulário');
+    assert.equal(safeCandidate(candidate, comments), false);
+  }
+  const { licoes } = JSON.parse(await (await import('node:fs/promises')).readFile(
+    new URL('../architecture/faq-regua/guia-aprendido.json', import.meta.url), 'utf8'));
+  for (const lesson of licoes.filter(({ ativa }) => ativa))
+    assert.equal(candidateRejectionReason(lesson, []), null, lesson.id);
 });
 
 test('nova revisão entra no digest e no sorteio sem redistribuir casos antigos', async () => {
