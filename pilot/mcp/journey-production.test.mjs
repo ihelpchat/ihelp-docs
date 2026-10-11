@@ -173,6 +173,8 @@ test('falha 2FA preserva campos e botões sanitizados e bloqueia a confirmação
 });
 
 for (const [label, url, headers, status] of [
+  ['200 com Bearer em página do front', 'https://front.example.test/contact',
+    { authorization: 'Bearer secret-authorization-value' }, 200],
   ['200 sem Bearer', 'https://api.example.test/api/v2/company', {}, 200],
   ['401 com Bearer no host permitido', 'https://api.example.test/api/v2/company',
     { authorization: 'Bearer secret-authorization-value' }, 401],

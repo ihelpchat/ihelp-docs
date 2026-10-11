@@ -49,15 +49,18 @@ test('login em shadow root aberto: usa os controles sem acionar sessão ativa', 
   });
 });
 
-test('sem formulário: retorna contagens, console sanitizado e id do print', async () => {
-  await withPage('<h1>Aguarde</h1><script>console.error("falha https://example.test/a?token=secret-value")</script>',
+test('sem formulário: retorna categorias, contagens e print mascarado', async () => {
+  await withPage('<h1>Cliente 5511998765432</h1><button>Conta 5511998765432</button><script>console.error("Cliente 5511998765432 falhou")</script>',
     async (page, baseUrl) => {
       await assert.rejects(loginToQa(page, baseUrl, credentials, { productionDiagnostics: true,
         inputTimeoutMs: 300, captureLoginScreenshot: () => 'fixture-id' }), (error) => {
         assert.equal(error.diagnostic.surfaces.frames[0].inputs, 0);
-        assert.deepEqual(error.diagnostic.surfaces.frames[0].titles, ['Aguarde']);
+        assert.deepEqual(error.diagnostic.surfaces.frames[0].titles, []);
+        assert.equal(error.diagnostic.surfaces.frames[0].unknownTitles, 1);
+        assert.equal(error.diagnostic.surfaces.frames[0].unknownButtons, 1);
         assert.equal(error.diagnostic.screenshotId, 'fixture-id');
-        assert.doesNotMatch(JSON.stringify(error.diagnostic), /secret-value|token=/u);
+        assert.deepEqual(error.diagnostic.consoleErrors, { other: 1 });
+        assert.doesNotMatch(JSON.stringify(error.diagnostic), /5511998765432/u);
         return true;
       });
     });
@@ -66,10 +69,17 @@ test('sem formulário: retorna contagens, console sanitizado e id do print', asy
 test('login concluído preserva diagnóstico inicial e id do print', async () => {
   await withPage('<form><input type="email"><input type="password"><button>Entrar</button></form><script>document.querySelector("form").onsubmit = e => { e.preventDefault(); location.href = "/contact"; }</script>',
     async (page, baseUrl) => {
+      let captures = 0;
       const result = await loginToQa(page, baseUrl, credentials, { productionDiagnostics: true,
-        timeoutMs: 1000, captureLoginScreenshot: () => 'fixture-id' });
+        timeoutMs: 1000, captureLoginScreenshot: async () => {
+          captures++;
+          assert.equal(new URL(page.url()).pathname, '/login');
+          assert.deepEqual(await page.locator('input').evaluateAll((inputs) => inputs.map((input) => input.value)), ['', '']);
+          return 'fixture-id';
+        } });
+      assert.equal(captures, 1);
       assert.equal(result.screenshotId, 'fixture-id');
       assert.equal(result.surfaces.frames[0].inputs, 2);
-      assert.deepEqual(result.consoleErrors, []);
+      assert.deepEqual(result.consoleErrors, {});
     });
 });
