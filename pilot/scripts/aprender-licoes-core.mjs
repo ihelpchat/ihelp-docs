@@ -30,7 +30,12 @@ function vocabulary() {
 }
 
 export async function loadFeedback(dir) {
-  const files = (await readdir(dir, { recursive: true })).filter((file) => file.endsWith('.json') && !file.startsWith('.m5-79-')).sort();
+  const files = (await readdir(dir, { recursive: true })).filter((file) => {
+    const parts = file.split(/[\\/]/u);
+    const name = parts.at(-1);
+    return parts.every((part) => !part.startsWith('.')) && name.endsWith('.json')
+      && name !== 'relatorio-aprendizado-privado.json';
+  }).sort();
   const calibration = [], review = [], digest = createHash('sha256');
   for (const file of files) {
     const raw = await readFile(join(dir, file), 'utf8');

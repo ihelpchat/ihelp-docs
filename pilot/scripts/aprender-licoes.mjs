@@ -1,5 +1,5 @@
-import { access, chmod, lstat, readFile, realpath, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { access, chmod, lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 import { judgeEditorial, consolidateEditorialReadings, EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
@@ -9,19 +9,32 @@ import { chooseHeldReview, validateCandidate, validateInitialLessons, firstJsonO
 const root = resolve(import.meta.dirname, '..');
 const dir = join(root, 'architecture/faq-regua');
 const repo = resolve(root, '..');
+const realRepo = await realpath(repo);
+const outsideRepo = (path) => {
+  const rel = relative(realRepo, path);
+  return rel === '..' || rel.startsWith(`..${sep}`);
+};
+async function assertPrivateFile(path, label) {
+  if (!outsideRepo(await realpath(dirname(path)))) throw new Error(`${label} deve ficar fora do repo`);
+  try {
+    if ((await lstat(path)).isSymbolicLink()) throw new Error(`${label} não aceita symlink`);
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+}
 const privateReportFile = process.env.LEARNING_PRIVATE_REPORT_FILE;
 if (!privateReportFile || !isAbsolute(privateReportFile))
   throw new Error('LEARNING_PRIVATE_REPORT_FILE deve ser caminho absoluto fora do repo');
 const privateReport = resolve(privateReportFile);
-const privateParent = await realpath(dirname(privateReport));
-if (relative(repo, privateParent) === '' || !relative(repo, privateParent).startsWith('..'))
-  throw new Error('LEARNING_PRIVATE_REPORT_FILE deve ficar fora do repo');
-try {
-  if ((await lstat(privateReport)).isSymbolicLink()) throw new Error('LEARNING_PRIVATE_REPORT_FILE não aceita symlink');
-} catch (error) { if (error.code !== 'ENOENT') throw error; }
+await assertPrivateFile(privateReport, 'LEARNING_PRIVATE_REPORT_FILE');
 const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 if (!(process.env.FEEDBACK_DIR || (process.env.CALIBRATION_NOTES_FILE && process.env.REVIEW_NOTES_FILE)) || !process.env.OPENAI_API_KEY)
   throw new Error('ambiente privado indisponível');
+const privateDir = await realpath(process.env.FEEDBACK_DIR || dirname(process.env.CALIBRATION_NOTES_FILE));
+if (!outsideRepo(privateDir)) throw new Error('FEEDBACK_DIR/CALIBRATION_NOTES_FILE deve ficar fora do repo');
+const outputDir = join(privateDir, '.saida');
+await mkdir(outputDir, { recursive: true });
+if (!outsideRepo(await realpath(outputDir))) throw new Error('cache deve ficar fora do repo');
+const processedFile = join(outputDir, '.m5-79-processado.json');
+await assertPrivateFile(processedFile, 'cache');
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const model = 'gpt-6-luna';
 const guide = await readJson(join(dir, 'guia-aprendido.json'));
@@ -39,8 +52,6 @@ for (const item of review) {
 }
 const sourceDigest = createHash('sha256').update(JSON.stringify({ feedback: feedback.digest ?? { calibration, review },
   paginas: resolvedReviews.map(({ secao, textoDaSecao }) => [secao, textoDaSecao]) })).digest('hex');
-const privateDir = process.env.FEEDBACK_DIR || dirname(process.env.CALIBRATION_NOTES_FILE);
-const processedFile = join(privateDir, '.m5-79-processado.json');
 let processed;
 try { processed = await readJson(processedFile); } catch { processed = null; }
 let privateReportExists = false;
@@ -51,7 +62,8 @@ if (processed?.sourceDigest === sourceDigest && privateReportExists && !process.
 }
 const fingerprint = createHash('sha256').update(JSON.stringify({ sourceDigest,
   guia: guide.licoes.map(({ texto }) => texto) })).digest('hex').slice(0, 16);
-const cacheFile = join(privateDir, `.m5-79-${fingerprint}.json`);
+const cacheFile = join(outputDir, `.m5-79-${fingerprint}.json`);
+await assertPrivateFile(cacheFile, 'cache');
 let privateCache;
 try { privateCache = await readJson(cacheFile); } catch { privateCache = { candidates: null, judges: {} }; }
 if (privateCache.candidateVersion !== 2) privateCache.candidates = null;
