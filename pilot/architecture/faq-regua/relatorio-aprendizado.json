@@ -1,696 +1,94 @@
 {
-  "guardadas": 7,
   "ajuste": 13,
+  "guardadas": 7,
   "iniciais": {
-    "antes": {
-      "total": 7,
-      "agreement": 3,
-      "severeApproved": 0,
-      "meanError": 1.3076923076923077
-    },
-    "depois": {
-      "total": 7,
-      "agreement": 3,
-      "severeApproved": 0,
-      "meanError": 1.1538461538461537
-    },
-    "porCaso": [
-      {
-        "id": "caso-e67dba05",
-        "before": false,
-        "after": false,
-        "severeApprovedBefore": false,
-        "severeApprovedAfter": false
-      },
-      {
-        "id": "caso-fae8f68d",
-        "before": false,
-        "after": false,
-        "severeApprovedBefore": false,
-        "severeApprovedAfter": false
-      },
-      {
-        "id": "caso-efa337c3",
-        "before": true,
-        "after": true,
-        "severeApprovedBefore": false,
-        "severeApprovedAfter": false
-      },
-      {
-        "id": "caso-77c85568",
-        "before": true,
-        "after": true,
-        "severeApprovedBefore": false,
-        "severeApprovedAfter": false
-      },
-      {
-        "id": "caso-d9fab4b5",
-        "before": true,
-        "after": true,
-        "severeApprovedBefore": false,
-        "severeApprovedAfter": false
-      },
-      {
-        "id": "caso-0ae22748",
-        "before": false,
-        "after": false,
-        "severeApprovedBefore": false,
-        "severeApprovedAfter": false
-      },
-      {
-        "id": "caso-a0cbefb8",
-        "before": false,
-        "after": false,
-        "severeApprovedBefore": false,
-        "severeApprovedAfter": false
-      }
-    ],
-    "porLicao": [
-      {
-        "id": "L001",
-        "accepted": false,
-        "before": {
-          "total": 7,
-          "agreement": 3,
-          "severeApproved": 0,
-          "meanError": 1.3076923076923077
-        },
-        "after": {
-          "total": 7,
-          "agreement": 3,
-          "severeApproved": 0,
-          "meanError": 1.3076923076923077
-        },
-        "cases": [
-          {
-            "id": "caso-e67dba05",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-fae8f68d",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-efa337c3",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-77c85568",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-d9fab4b5",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-0ae22748",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-a0cbefb8",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          }
-        ]
-      },
-      {
-        "id": "L002",
-        "accepted": true,
-        "before": {
-          "total": 7,
-          "agreement": 3,
-          "severeApproved": 0,
-          "meanError": 1.3076923076923077
-        },
-        "after": {
-          "total": 7,
-          "agreement": 3,
-          "severeApproved": 0,
-          "meanError": 1.1538461538461537
-        },
-        "cases": [
-          {
-            "id": "caso-e67dba05",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-fae8f68d",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-efa337c3",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-77c85568",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-d9fab4b5",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-0ae22748",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-a0cbefb8",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          }
-        ]
-      },
-      {
-        "id": "L003",
-        "accepted": false,
-        "before": {
-          "total": 7,
-          "agreement": 3,
-          "severeApproved": 0,
-          "meanError": 1.1538461538461537
-        },
-        "after": {
-          "total": 7,
-          "agreement": 2,
-          "severeApproved": 0,
-          "meanError": 1.1538461538461537
-        },
-        "cases": [
-          {
-            "id": "caso-e67dba05",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-fae8f68d",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-efa337c3",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-77c85568",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-d9fab4b5",
-            "before": true,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-0ae22748",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-a0cbefb8",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          }
-        ]
-      },
-      {
-        "id": "L004",
-        "accepted": false,
-        "before": {
-          "total": 7,
-          "agreement": 3,
-          "severeApproved": 0,
-          "meanError": 1.1538461538461537
-        },
-        "after": {
-          "total": 7,
-          "agreement": 2,
-          "severeApproved": 0,
-          "meanError": 1.0769230769230769
-        },
-        "cases": [
-          {
-            "id": "caso-e67dba05",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-fae8f68d",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-efa337c3",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-77c85568",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-d9fab4b5",
-            "before": true,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-0ae22748",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-a0cbefb8",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          }
-        ]
-      },
-      {
-        "id": "L005",
-        "accepted": false,
-        "before": {
-          "total": 7,
-          "agreement": 3,
-          "severeApproved": 0,
-          "meanError": 1.1538461538461537
-        },
-        "after": {
-          "total": 7,
-          "agreement": 2,
-          "severeApproved": 0,
-          "meanError": 1
-        },
-        "cases": [
-          {
-            "id": "caso-e67dba05",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-fae8f68d",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-efa337c3",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-77c85568",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-d9fab4b5",
-            "before": true,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-0ae22748",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-a0cbefb8",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          }
-        ]
-      },
-      {
-        "id": "L006",
-        "accepted": false,
-        "before": {
-          "total": 7,
-          "agreement": 3,
-          "severeApproved": 0,
-          "meanError": 1.1538461538461537
-        },
-        "after": {
-          "total": 7,
-          "agreement": 2,
-          "severeApproved": 0,
-          "meanError": 1
-        },
-        "cases": [
-          {
-            "id": "caso-e67dba05",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-fae8f68d",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-efa337c3",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-77c85568",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-d9fab4b5",
-            "before": true,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-0ae22748",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-a0cbefb8",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          }
-        ]
-      },
-      {
-        "id": "L007",
-        "accepted": false,
-        "before": {
-          "total": 7,
-          "agreement": 3,
-          "severeApproved": 0,
-          "meanError": 1.1538461538461537
-        },
-        "after": {
-          "total": 7,
-          "agreement": 2,
-          "severeApproved": 0,
-          "meanError": 1.0769230769230769
-        },
-        "cases": [
-          {
-            "id": "caso-e67dba05",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-fae8f68d",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-efa337c3",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-77c85568",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-d9fab4b5",
-            "before": true,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-0ae22748",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-a0cbefb8",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          }
-        ]
-      },
-      {
-        "id": "L008",
-        "accepted": false,
-        "before": {
-          "total": 7,
-          "agreement": 3,
-          "severeApproved": 0,
-          "meanError": 1.1538461538461537
-        },
-        "after": {
-          "total": 7,
-          "agreement": 2,
-          "severeApproved": 0,
-          "meanError": 1.0769230769230769
-        },
-        "cases": [
-          {
-            "id": "caso-e67dba05",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-fae8f68d",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-efa337c3",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-77c85568",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-d9fab4b5",
-            "before": true,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-0ae22748",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-a0cbefb8",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          }
-        ]
-      },
-      {
-        "id": "L009",
-        "accepted": false,
-        "before": {
-          "total": 7,
-          "agreement": 3,
-          "severeApproved": 0,
-          "meanError": 1.1538461538461537
-        },
-        "after": {
-          "total": 7,
-          "agreement": 3,
-          "severeApproved": 0,
-          "meanError": 1.1538461538461537
-        },
-        "cases": [
-          {
-            "id": "caso-e67dba05",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-fae8f68d",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-efa337c3",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-77c85568",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-d9fab4b5",
-            "before": true,
-            "after": true,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-0ae22748",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          },
-          {
-            "id": "caso-a0cbefb8",
-            "before": false,
-            "after": false,
-            "severeApprovedBefore": false,
-            "severeApprovedAfter": false
-          }
-        ]
-      }
-    ]
+    "acertosAntes": 3,
+    "acertosDepois": 3,
+    "regressoes": 0,
+    "erroMedioAntes": 1.3076923076923077,
+    "erroMedioDepois": 1.1538461538461537
   },
-  "aceitas": 0,
-  "recusadas": 2,
-  "concordanciaAntes": [
-    3,
-    3
-  ],
-  "concordanciaDepois": [
-    2,
-    2
-  ],
-  "totalGuardado": [
-    7,
-    7
-  ],
-  "erroMedioAntes": [
-    1.1538461538461537,
-    1.1538461538461537
-  ],
-  "erroMedioDepois": [
-    1,
-    1.3076923076923077
+  "licoes": [
+    {
+      "id": "L001",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 3,
+      "regressoes": 0,
+      "erroMedioAntes": 1.3076923076923077,
+      "erroMedioDepois": 1.3076923076923077
+    },
+    {
+      "id": "L002",
+      "aceita": true,
+      "acertosAntes": 3,
+      "acertosDepois": 3,
+      "regressoes": 0,
+      "erroMedioAntes": 1.3076923076923077,
+      "erroMedioDepois": 1.1538461538461537
+    },
+    {
+      "id": "L003",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 2,
+      "regressoes": 1,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1.1538461538461537
+    },
+    {
+      "id": "L004",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 2,
+      "regressoes": 1,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1.0769230769230769
+    },
+    {
+      "id": "L005",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 2,
+      "regressoes": 1,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1
+    },
+    {
+      "id": "L006",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 2,
+      "regressoes": 1,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1
+    },
+    {
+      "id": "L007",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 2,
+      "regressoes": 1,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1.0769230769230769
+    },
+    {
+      "id": "L008",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 2,
+      "regressoes": 1,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1.0769230769230769
+    },
+    {
+      "id": "L009",
+      "aceita": false,
+      "acertosAntes": 3,
+      "acertosDepois": 3,
+      "regressoes": 0,
+      "erroMedioAntes": 1.1538461538461537,
+      "erroMedioDepois": 1.1538461538461537
+    }
   ]
 }

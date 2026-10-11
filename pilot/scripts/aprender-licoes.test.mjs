@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const { chooseHeldReview, validateCandidate, safeCandidate, publicLearningReport, resolveReviewSection,
-  validateInitialLessons, firstJsonObject, loadFeedback, candidateRejectionReason, publicCases } =
+  validateInitialLessons, firstJsonObject, loadFeedback, candidateRejectionReason } =
   await import('./aprender-licoes-core.mjs').catch(() => ({}));
 import { editorialPrompt } from '../mcp/faq-editorial-judge.mjs';
 const { learnedWriterContract } = await import('../mcp/learned-editorial-guide.mjs').catch(() => ({}));
@@ -145,32 +145,37 @@ test('leitura privada isola o primeiro veredito JSON completo quando Luna repete
   assert.throws(() => firstJsonObject('{"ok":'), SyntaxError);
 });
 
-test('relatório público contém só números', () => {
-  const secret = 'COMENTARIO_PRIVADO_FICTICIO_741';
-  const report = publicLearningReport([{ texto: secret, accepted: false, before: { agreement: 2, total: 4, meanError: 1 },
-    after: { agreement: 1, total: 4, meanError: 2 } }]);
-  assert.doesNotMatch(JSON.stringify(report), /COMENTARIO_PRIVADO_FICTICIO_741/);
-  assert.equal(report.recusadas, 1);
+test('relatório público contém só agregados e ids de lição', () => {
+  const cases = [{ id: 'G01', before: true, after: false },
+    { id: 'contatos-01', before: false, after: true }];
+  const metric = (agreement, meanError) => ({ total: 2, agreement, meanError, severeApproved: 0 });
+  const report = publicLearningReport({ ajuste: 3, guardadas: 2,
+    iniciais: { before: metric(1, 1.5), after: metric(1, 1), cases },
+    lessons: [{ id: 'L001', accepted: false, before: metric(1, 1.5), after: metric(1, 1), cases }],
+    candidates: [{ id: 'L002', texto: 'COMENTARIO_PRIVADO_FICTICIO_741', accepted: true,
+      before: metric(1, 1), after: metric(2, 0.5), cases }] });
+  assert.deepEqual(Object.keys(report).sort(), ['ajuste', 'guardadas', 'iniciais', 'licoes']);
+  assert.deepEqual(report.iniciais, { acertosAntes: 1, acertosDepois: 1, regressoes: 1,
+    erroMedioAntes: 1.5, erroMedioDepois: 1 });
+  assert.deepEqual(report.licoes.map(({ id, aceita }) => [id, aceita]), [['L001', false], ['L002', true]]);
+  for (const lesson of report.licoes)
+    assert.deepEqual(Object.keys(lesson).sort(), ['aceita', 'acertosAntes', 'acertosDepois', 'erroMedioAntes',
+      'erroMedioDepois', 'id', 'regressoes']);
+  assert.doesNotMatch(JSON.stringify(report), /G01|contatos-01|caso-|COMENTARIO_PRIVADO_FICTICIO_741/u);
 });
 
-test('casos do relatório usam ids opacos estáveis sem seção privada', () => {
-  const secret = 'cliente-privado-123';
-  const cases = [{ id: secret, before: true, after: false, severeApprovedBefore: false,
-    severeApprovedAfter: false }];
-  const publicRows = publicCases(cases);
-  assert.match(publicRows[0].id, /^caso-[a-f0-9]{8}$/u);
-  assert.deepEqual(publicRows, publicCases(cases));
-  assert.doesNotMatch(JSON.stringify(publicRows), /cliente|privado|123/u);
-  assert.deepEqual({ ...publicRows[0], id: undefined }, { ...cases[0], id: undefined });
-});
-
-test('relatório versionado não expõe ids das revisões privadas', async () => {
+test('relatório versionado não contém chave nem hash por caso', async () => {
   const { readFile } = await import('node:fs/promises');
   const report = await readFile(new URL('../architecture/faq-regua/relatorio-aprendizado.json', import.meta.url), 'utf8');
-  assert.doesNotMatch(report, /contatos-0[347]|cliente-privado-123/u);
-  const { porCaso, porLicao } = JSON.parse(report).iniciais;
-  for (const row of [...porCaso, ...porLicao.flatMap(({ cases }) => cases)])
-    assert.match(row.id, /^caso-[a-f0-9]{8}$/u);
+  const parsed = JSON.parse(report);
+  assert.deepEqual(Object.keys(parsed).sort(), ['ajuste', 'guardadas', 'iniciais', 'licoes']);
+  assert.ok(parsed.licoes.every(({ id }) => /^L\d{3}$/u.test(id)));
+  assert.doesNotMatch(report, /porCaso|cases|caso-[a-f0-9]+|contatos-0[347]/u);
+  const { createHash } = await import('node:crypto');
+  for (const id of [...Array.from({ length: 99 }, (_, i) => `G${String(i + 1).padStart(2, '0')}`),
+    ...Array.from({ length: 99 }, (_, i) => `contatos-${String(i + 1).padStart(2, '0')}`)]) {
+    assert.doesNotMatch(report, new RegExp(createHash('sha256').update(`${id}:M5.79:caso-publico:v1`).digest('hex').slice(0, 8), 'u'));
+  }
 });
 
 test('lição não pode reproduzir id, seção ou título do feedback privado', () => {

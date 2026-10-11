@@ -1,13 +1,24 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { access, chmod, lstat, readFile, realpath, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 import { judgeEditorial, consolidateEditorialReadings, EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
 import { chooseHeldReview, validateCandidate, validateInitialLessons, firstJsonObject, loadFeedback,
-  resolveReviewSection, publicLearningReport, candidateRejectionReason, publicCases } from './aprender-licoes-core.mjs';
+  resolveReviewSection, publicLearningReport, candidateRejectionReason } from './aprender-licoes-core.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const dir = join(root, 'architecture/faq-regua');
+const repo = resolve(root, '..');
+const privateReportFile = process.env.LEARNING_PRIVATE_REPORT_FILE;
+if (!privateReportFile || !isAbsolute(privateReportFile))
+  throw new Error('LEARNING_PRIVATE_REPORT_FILE deve ser caminho absoluto fora do repo');
+const privateReport = resolve(privateReportFile);
+const privateParent = await realpath(dirname(privateReport));
+if (relative(repo, privateParent) === '' || !relative(repo, privateParent).startsWith('..'))
+  throw new Error('LEARNING_PRIVATE_REPORT_FILE deve ficar fora do repo');
+try {
+  if ((await lstat(privateReport)).isSymbolicLink()) throw new Error('LEARNING_PRIVATE_REPORT_FILE não aceita symlink');
+} catch (error) { if (error.code !== 'ENOENT') throw error; }
 const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 if (!(process.env.FEEDBACK_DIR || (process.env.CALIBRATION_NOTES_FILE && process.env.REVIEW_NOTES_FILE)) || !process.env.OPENAI_API_KEY)
   throw new Error('ambiente privado indisponível');
@@ -32,7 +43,9 @@ const privateDir = process.env.FEEDBACK_DIR || dirname(process.env.CALIBRATION_N
 const processedFile = join(privateDir, '.m5-79-processado.json');
 let processed;
 try { processed = await readJson(processedFile); } catch { processed = null; }
-if (processed?.sourceDigest === sourceDigest && !process.argv.includes('--force')) {
+let privateReportExists = false;
+try { await access(privateReport); privateReportExists = true; } catch { /* o relatório privado será gerado */ }
+if (processed?.sourceDigest === sourceDigest && privateReportExists && !process.argv.includes('--force')) {
   console.log(JSON.stringify(await readJson(join(dir, 'relatorio-aprendizado.json'))));
   process.exit(0);
 }
@@ -122,31 +135,35 @@ guide.licoes = initial.lessons;
 const results = [];
 const observations = [...initial.observations, ...rejectedCandidates];
 const acceptedExtras = [...initial.active];
-for (const candidate of candidates) {
+const nextLessonNumber = guide.licoes.length + 1;
+for (const [index, candidate] of candidates.entries()) {
+  const id = `L${String(nextLessonNumber + index).padStart(3, '0')}`;
   const result = await validateCandidate(held, (row, withLesson) => judge(row,
     withLesson ? [...acceptedExtras, candidate] : acceptedExtras));
-  const entry = { ...candidate, accepted: result.accepted, before: result.before, after: result.after };
+  const entry = { id, ...candidate, accepted: result.accepted, before: result.before, after: result.after,
+    cases: result.cases };
   results.push(entry);
   if (result.accepted) {
     acceptedExtras.push(candidate);
-    guide.licoes.push({ id: `L${String(guide.licoes.length + 1).padStart(3, '0')}`,
+    guide.licoes.push({ id,
     texto: candidate.texto, criterio: candidate.criterio, data: new Date().toISOString().slice(0, 10),
     origem: { classe: 'aprendida', tipo: 'calibração e revisão de página', contagem: adjustment.length },
     ganho: { concordancia: result.after.agreement - result.before.agreement,
       erroMedio: result.before.meanError - result.after.meanError, guardadas: held.length }, vetada: false,
     ativa: true, validada: true });
-  } else observations.push({ texto: candidate.texto, criterio: candidate.criterio, data: new Date().toISOString().slice(0, 10),
+  } else observations.push({ id, texto: candidate.texto, criterio: candidate.criterio, data: new Date().toISOString().slice(0, 10),
     motivo: 'não passou no conjunto guardado' });
 }
 const initialOverall = await validateCandidate(held, (row, withGuide) => judge(row,
   withGuide ? initial.active : []));
 await writeFile(join(dir, 'guia-aprendido.json'), `${JSON.stringify(guide, null, 2)}\n`);
 await writeFile(join(dir, 'observacoes-aprendizado.json'), `${JSON.stringify({ observacoes: observations }, null, 2)}\n`);
-const report = { guardadas: held.length, ajuste: adjustment.length,
-  iniciais: { antes: initialOverall.before, depois: initialOverall.after,
-    porCaso: publicCases(initialOverall.cases),
-    porLicao: initial.results.map((item) => ({ ...item, cases: publicCases(item.cases) })) },
-  ...publicLearningReport(results) };
+const report = publicLearningReport({ guardadas: held.length, ajuste: adjustment.length,
+  iniciais: initialOverall, lessons: initial.results, candidates: results });
+const detail = { guardadas: held.length, ajuste: adjustment.length, iniciais: initialOverall,
+  porLicao: initial.results, candidatas: results };
+await writeFile(privateReport, `${JSON.stringify(detail, null, 2)}\n`, { mode: 0o600 });
+await chmod(privateReport, 0o600);
 await writeFile(join(dir, 'relatorio-aprendizado.json'), `${JSON.stringify(report, null, 2)}\n`);
 await writeFile(processedFile, `${JSON.stringify({ sourceDigest })}\n`, { mode: 0o600 });
 console.log(JSON.stringify({ ...report, aceitasGeneralizadas: results.filter((r) => r.accepted).map(({ texto }) => texto),

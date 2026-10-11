@@ -169,19 +169,16 @@ export async function validateInitialLessons(lessons, held, runJudge) {
   return { lessons: updated, active, observations, results };
 }
 
-export function publicLearningReport(results) {
-  const accepted = results.filter((item) => item.accepted);
-  return { aceitas: accepted.length, recusadas: results.length - accepted.length,
-    concordanciaAntes: results.map((item) => item.before?.agreement ?? null),
-    concordanciaDepois: results.map((item) => item.after?.agreement ?? null),
-    totalGuardado: results.map((item) => item.after?.total ?? null),
-    erroMedioAntes: results.map((item) => item.before?.meanError ?? null),
-    erroMedioDepois: results.map((item) => item.after?.meanError ?? null) };
-}
-
-export function publicCases(cases) {
-  return cases.map(({ id, ...result }) => ({
-    id: `caso-${createHash('sha256').update(`${id}:M5.79:caso-publico:v1`).digest('hex').slice(0, 8)}`,
-    ...result,
-  }));
+export function publicLearningReport({ ajuste, guardadas, iniciais, lessons, candidates }) {
+  const aggregate = ({ before, after, cases }) => ({
+    acertosAntes: before.agreement,
+    acertosDepois: after.agreement,
+    regressoes: cases.filter((item) => item.before && !item.after).length,
+    erroMedioAntes: before.meanError,
+    erroMedioDepois: after.meanError,
+  });
+  return { ajuste, guardadas, iniciais: aggregate(iniciais),
+    licoes: [...lessons, ...candidates].map(({ id, accepted, ...result }) => ({
+      id, aceita: accepted, ...aggregate(result),
+    })) };
 }
