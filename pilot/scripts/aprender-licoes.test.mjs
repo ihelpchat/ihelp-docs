@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const { chooseHeldReview, validateCandidate, safeCandidate, publicLearningReport, resolveReviewSection,
-  validateInitialLessons, firstJsonObject, loadFeedback, candidateRejectionReason } =
+  validateInitialLessons, firstJsonObject, loadFeedback, candidateRejectionReason, splitQueueFeedback } =
   await import('./aprender-licoes-core.mjs').catch(() => ({}));
 import { editorialPrompt } from '../mcp/faq-editorial-judge.mjs';
 const { learnedWriterContract } = await import('../mcp/learned-editorial-guide.mjs').catch(() => ({}));
@@ -127,6 +127,39 @@ test('nova revisão entra no digest e no sorteio sem redistribuir casos antigos'
     assert.equal(second.review.at(-1).pagina, 'robos');
     assert.equal(chooseHeldReview(first.review[0].secao), chooseHeldReview(second.review[0].secao));
     assert.equal(typeof chooseHeldReview(second.review.at(-1).secao), 'boolean');
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('avaliação da fila entra no ajuste e no guardado com notas próprias', async () => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = await mkdtemp(join(tmpdir(), 'm579-fila-'));
+  try {
+    const before = await loadFeedback(dir);
+    const itens = [
+      { amostra: 'R1', modulo: 'Robôs', texto: '## Criar robô\nPasso novo.', notas: scores, comentario: 'Explicar o resultado.' },
+      { amostra: 'R6', modulo: 'Robôs', texto: '## Publicar robô\nPasso novo.',
+        notas: { ...scores, clareza: 2, entende_modulo: 'na' }, comentario: 'Falta clareza.' },
+    ];
+    await writeFile(join(dir, 'lote.json'), JSON.stringify({ tipo: 'avaliacao-fila', itens }));
+    const feedback = await loadFeedback(dir);
+    assert.notEqual(feedback.digest, before.digest);
+    const { adjustment, held } = splitQueueFeedback(feedback.queue);
+    assert.deepEqual(adjustment, [{ tipo: 'avaliação de fila', id: 'R1', modulo: 'Robôs',
+      pagina: itens[0].texto, notas: scores, comentario: itens[0].comentario }]);
+    assert.equal(held.length, 1);
+    assert.deepEqual(held[0], { id: 'R6', modulo: 'Robôs', pagina: itens[1].texto,
+      bruno: { aceite: false, notas: { ...scores, clareza: 2, entende_modulo: null }, defeitosGraves: [] } });
+    const result = await validateCandidate(held, async () => verdict(false, 2));
+    const report = publicLearningReport({ ajuste: adjustment.length, guardadas: held.length,
+      iniciais: result, lessons: [], candidates: [] });
+    assert.equal(report.guardadas, 1);
+    assert.equal(report.iniciais.acertosAntes, 1);
+    assert.equal(report.iniciais.erroMedioAntes, 0);
+    const acceptedWithNa = splitQueueFeedback([{ ...itens[1], amostra: 'R8',
+      notas: { ...scores, entende_modulo: 'na' } }]).held[0];
+    assert.equal(acceptedWithNa.bruno.aceite, true);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
