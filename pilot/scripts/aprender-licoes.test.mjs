@@ -78,10 +78,12 @@ test('candidata recusa identificadores sintéticos e quatro palavras privadas co
   const comments = ['Ana Beatriz da Empresa Aurora ligou para 11987654321. O caso exige conferir o botão azul antes de salvar.'];
   for (const texto of [
     'Use o caso de Ana Beatriz para orientar a pessoa.',
+    'Peça a Ana que confira o resultado antes de prosseguir.',
     'A Empresa Aurora deve conferir o resultado antes de salvar.',
     'Ligue para 11987654321 antes de explicar a tarefa.',
     'Escreva para ajuda@example.com antes de orientar.',
     'Use o identificador abc-12345 para localizar a página.',
+    'Use o identificador ABC123 para localizar a página.',
     'O caso exige conferir o botão antes de salvar.',
   ]) assert.equal(safeCandidate({ texto, criterio: 'clareza' }, comments), false, texto);
   assert.equal(safeCandidate({ texto: 'Explique o resultado observável da ação para orientar o próximo passo.',
