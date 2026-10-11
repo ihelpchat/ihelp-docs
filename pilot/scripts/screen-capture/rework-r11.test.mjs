@@ -19,9 +19,10 @@ async function withLoginFixture(mode, run) {
           const response = await fetch('/api/login?secret=${token}', { method: 'POST' });
           if (${JSON.stringify(mode)} === 'wrong') document.body.insertAdjacentHTML('beforeend', '<div role="alert">Senha incorreta para ${email} ${password}</div>');
           if (${JSON.stringify(mode)} === 'step') document.body.insertAdjacentHTML('beforeend', '<label>Código de confirmação<input></label><button>Continuar</button>');
+          if (${JSON.stringify(mode)} === 'session') document.body.insertAdjacentHTML('beforeend', '<div role="dialog"><h5>Usuário já conectado</h5><button>Sim, continuar</button></div>');
         };</script>`);
     } else if (request.url?.startsWith('/api/login')) {
-      response.writeHead(mode === 'server' ? 500 : mode === 'wrong' ? 401 : 200);
+      response.writeHead(mode === 'server' ? 500 : mode === 'wrong' ? 401 : mode === 'session' ? 409 : 200);
       response.end();
     } else {
       response.writeHead(404); response.end();
@@ -54,10 +55,20 @@ test('senha errada: URL de login sem barra dupla, alerta, HTTP 401 e log sem seg
   });
 });
 
-test('segundo passo de login: registra apenas rótulos novos e timeout', async () => {
+test('sessão já ativa para sem acionar force=true', async () => {
+  await withLoginFixture('session', async (page, baseUrl) => {
+    const error = await failedLogin(page, baseUrl);
+    assert.equal(error.diagnostic?.outcome, 'session');
+    assert.ok(error.diagnostic.buttons.includes('Sim, continuar'));
+    assert.equal(error.diagnostic.requests.length, 1);
+    assert.equal(error.diagnostic.requests[0].status, 409);
+  });
+});
+
+test('segundo passo de login: registra rótulos e para no 2FA', async () => {
   await withLoginFixture('step', async (page, baseUrl) => {
     const error = await failedLogin(page, baseUrl);
-    assert.equal(error.diagnostic?.outcome, 'timeout');
+    assert.equal(error.diagnostic?.outcome, '2fa');
     const log = captureFailureLog(error);
     assert.match(log, /Código de confirmação.*Continuar/iu);
     assert.doesNotMatch(log, /fixture@|fixture-password|fixture-token|secret=|https?:\/\//iu);
@@ -72,4 +83,37 @@ test('resposta 500 sem alerta: timeout e método, caminho e status no log', asyn
     assert.match(log, /POST \/api\/login 500/iu);
     assert.doesNotMatch(log, /fixture@|fixture-password|fixture-token|secret=|https?:\/\//iu);
   });
+});
+
+test('login Angular com 2FA para sem código e registra diagnóstico sanitizado', async () => {
+  const server = createServer((request, response) => {
+    if (request.url === '/login') {
+      response.setHeader('Content-Type', 'text/html');
+      response.end(`<form><input placeholder="E-mail" type="email"><input placeholder="Senha" type="password"><button>ENTRAR</button></form>
+        <script>document.querySelector('form').onsubmit = async event => {
+          event.preventDefault();
+          await fetch('/api/v2/configurations/users/login?force=false', {method:'POST'});
+          document.querySelector('form').outerHTML = '<form><h4>Insira o código que você recebeu</h4><input name="input0"><button>VALIDAR</button></form>';
+        };</script>`);
+    } else if (request.url === '/api/v2/configurations/users/login?force=false') {
+      response.writeHead(401); response.end();
+    } else { response.writeHead(404); response.end(); }
+  });
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  const browser = await launch();
+  try {
+    const page = await browser.newPage();
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    await assert.rejects(loginToQa(page, baseUrl, { email, password }, { timeoutMs: 2000 }), (error) => {
+      assert.equal(error.code, 'LOGIN_2FA', JSON.stringify(error.diagnostic));
+      assert.deepEqual(error.diagnostic.fields, [{ role: 'textbox', label: 'Código' }]);
+      assert.deepEqual(error.diagnostic.buttons, ['Validar']);
+      assert.equal(error.diagnostic.requests[0].status, 401);
+      assert.doesNotMatch(JSON.stringify(error.diagnostic), /fixture@|fixture-password|secret|force=false/iu);
+      return true;
+    });
+  } finally {
+    await browser.close(); server.closeAllConnections();
+    await new Promise((done) => server.close(done));
+  }
 });

@@ -47,6 +47,7 @@ class SanitizationError extends Error {}
 
 export function journeyFailureCategory(error) {
   const message = String(error?.message ?? '');
+  if (error?.code === 'API_NAO_DETECTADA') return 'api_nao_detectada';
   if (/sanitiza|máscara|mascara|sensitive/iu.test(message)) return 'sanitização';
   if (error?.code === 'QA_SESSION_ACTIVE' || /login|logado|credencia|sessão|senha|password/iu.test(message)) return 'login';
   if (/host|destino|URL|homologação deve/iu.test(message)) return 'host';

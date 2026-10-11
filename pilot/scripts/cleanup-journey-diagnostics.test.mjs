@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { cleanupJourneyDiagnostics } from './cleanup-journey-diagnostics.mjs';
+
+test('limpeza remove apenas os prints indicados e confirmações de outra empresa', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-cleanup-'));
+  const login = join(root, 'login');
+  const confirmations = join(root, 'confirmations');
+  await mkdir(login);
+  await mkdir(confirmations);
+  const ids = ['a'.repeat(64), 'b'.repeat(64)];
+  for (const id of [...ids, 'c'.repeat(64)]) await writeFile(join(login, `${id}.png`), id);
+  await writeFile(join(confirmations, 'wrong.json'), JSON.stringify({ mode: 'confirmacao', companyId: '1' }));
+  await writeFile(join(confirmations, 'right.json'), JSON.stringify({ mode: 'confirmacao', companyId: '42' }));
+  await writeFile(join(confirmations, 'journey.json'), JSON.stringify({ target: 'producao', companyId: '1' }));
+  const dry = await cleanupJourneyDiagnostics({ root, screenshotIds: ids, companyId: '42' });
+  assert.equal(dry.screenshots, 2);
+  assert.equal(dry.confirmations, 1);
+  assert.equal(await readFile(join(login, `${ids[0]}.png`), 'utf8'), ids[0]);
+  const applied = await cleanupJourneyDiagnostics({ root, screenshotIds: ids, companyId: '42', apply: true });
+  assert.deepEqual(applied, { screenshots: 2, confirmations: 1, applied: true });
+  await assert.rejects(readFile(join(login, `${ids[0]}.png`)), { code: 'ENOENT' });
+  await assert.rejects(readFile(join(login, `${ids[1]}.png`)), { code: 'ENOENT' });
+  await assert.rejects(readFile(join(confirmations, 'wrong.json')), { code: 'ENOENT' });
+  assert.equal(await readFile(join(login, `${'c'.repeat(64)}.png`), 'utf8'), 'c'.repeat(64));
+  assert.match(await readFile(join(confirmations, 'right.json'), 'utf8'), /"42"/u);
+  assert.match(await readFile(join(confirmations, 'journey.json'), 'utf8'), /producao/u);
+});
