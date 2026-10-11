@@ -61,10 +61,17 @@ export function splitQueueFeedback(items) {
       throw new Error('item de avaliacao-fila inválido');
     const notas = Object.fromEntries(EDITORIAL_CRITERIA.map((id) => [id,
       item.notas[id] === 'na' ? null : item.notas[id]]));
+    if (item.defeitosGraves !== undefined && (!Array.isArray(item.defeitosGraves)
+      || item.defeitosGraves.some((defect) => typeof defect !== 'string' || !defect.trim())))
+      throw new Error('defeitosGraves de avaliacao-fila inválido');
+    const defeitosGraves = item.defeitosGraves === undefined
+      ? EDITORIAL_CRITERIA.filter((criterion) => notas[criterion] === 0)
+      : [...new Set(item.defeitosGraves)];
     const id = item.amostra;
     if (chooseHeldReview(id)) held.push({ id, modulo: item.modulo, pagina: item.texto,
-      bruno: { aceite: EDITORIAL_CRITERIA.every((criterion) => notas[criterion] === null || notas[criterion] >= 3),
-        notas, defeitosGraves: [] } });
+      bruno: { aceite: defeitosGraves.length === 0
+        && EDITORIAL_CRITERIA.every((criterion) => notas[criterion] === null || notas[criterion] >= 3),
+        notas, defeitosGraves } });
     else adjustment.push({ tipo: 'avaliação de fila', id, modulo: item.modulo,
       pagina: item.texto, notas, comentario: item.comentario });
   }

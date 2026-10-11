@@ -163,6 +163,21 @@ test('avaliação da fila entra no ajuste e no guardado com notas próprias', as
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
+test('R6 com clareza zero é grave e o portão recusa lição que o aprova', async () => {
+  const item = { amostra: 'R6', modulo: 'Robôs', texto: '## Publicar robô',
+    notas: { ...scores, clareza: 0 }, comentario: 'Não dá para entender.' };
+  const row = splitQueueFeedback([item]).held[0];
+  assert.deepEqual(row.bruno.defeitosGraves, ['clareza']);
+  const improved = splitQueueFeedback([{ ...item, defeitosGraves: ['contradiz_evidencia'] }]).held[0];
+  assert.deepEqual(improved.bruno.defeitosGraves, ['contradiz_evidencia']);
+  const result = await validateCandidate([row, {
+    id: 'G01', bruno: { aceite: true, notas: scores, defeitosGraves: [] },
+  }], async (caseRow, withLesson) => caseRow.id === 'R6'
+    ? verdict(withLesson, withLesson ? 3 : 0) : verdict(withLesson));
+  assert.equal(result.after.severeApproved, 1);
+  assert.equal(result.accepted, false);
+});
+
 test('duas execuções sem feedback novo ignoram saídas privadas no digest', async () => {
   const { mkdtemp, writeFile, mkdir, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
