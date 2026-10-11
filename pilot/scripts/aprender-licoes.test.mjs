@@ -65,7 +65,8 @@ test('lições iniciais são validadas separadamente e só aprovadas ficam ativa
   const result = await validateInitialLessons(lessons, held, async (_row, active) => verdict(active.some((x) => x.id === 'L001')));
   assert.deepEqual(result.active.map((x) => x.id), ['L001']);
   assert.deepEqual(result.observations.map((x) => x.id), ['L002']);
-  assert.equal(result.lessons[1].vetada, true);
+  assert.equal(result.lessons[1].ativa, false);
+  assert.equal(result.lessons[1].vetada, false);
 });
 
 test('candidata não pode copiar comentário privado fictício', () => {
