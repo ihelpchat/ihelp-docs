@@ -23,5 +23,7 @@ test('fila inclui seção publicada nova e omite seção já revisada', async ()
     assert.deepEqual(await buildFeedbackQueue(content, feedback), queue);
     await writeFeedbackQueue(output, queue);
     assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), queue);
+    await assert.rejects(writeFeedbackQueue(new URL('arquivo-publico.json', import.meta.url).pathname, queue),
+      /fora do repositório público/u);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

@@ -6,6 +6,8 @@
 
 `origem.classe` distingue `regra-do-dono` de `aprendida`. O redator recebe regras do dono não vetadas e lições aprendidas ativas; o juiz recebe somente lições ativas. Uma candidata aprendida recusada fica apenas nas observações. `FEEDBACK_DIR` aponta para um diretório privado de arquivos JSON: cada arquivo contém uma revisão `{ pagina, secao, titulo, decisao, comentario }` ou coleções `secoes`/`amostras`. As páginas publicadas são localizadas pela origem da revisão; o digest inclui todos os arquivos de feedback e o texto localizado. Sem `FEEDBACK_DIR`, `CALIBRATION_NOTES_FILE` e `REVIEW_NOTES_FILE` preservam a execução anterior. O sorteio ajuste/guardado usa o id de cada caso, de modo que novos casos não redistribuem os antigos.
 
+As candidatas só usam palavras da rubrica, do `glossario-licoes.json`, das lições ativas do guia e de `vocabulario-licoes.json`. Palavras fora dessa lista são recusadas com motivo `vocabulário`, sem persistir o texto da candidata. O corpus de páginas não amplia a lista. Para gerar a fila privada de seções sem revisão, defina `FEEDBACK_DIR` e `FEEDBACK_QUEUE_FILE` fora do repositório e rode `node pilot/scripts/fila-calibracao.mjs` na raiz. O JSON contém `id`, `pagina`, `titulo` e `texto` das seções públicas, em ordem determinística.
+
 Estes artefatos fixam a pauta e a régua para as próximas entregas. `tarefas-ouro.json` é uma lista de resultados a provar pela M5.71, não um selo de que todos os comportamentos já foram observados. “E agora?” permanece hipótese até a jornada e o time confirmarem. O revisor verifica rastreabilidade e coerência dos artefatos; a nota editorial depende da avaliação cega do Bruno.
 
 ## Baseline de 29/09/2026

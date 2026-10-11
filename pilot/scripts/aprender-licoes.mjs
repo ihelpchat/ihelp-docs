@@ -3,8 +3,8 @@ import { dirname, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 import { judgeEditorial, consolidateEditorialReadings, EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
-import { chooseHeldReview, validateCandidate, validateInitialLessons, safeCandidate, firstJsonObject, loadFeedback,
-  resolveReviewSection, publicLearningReport } from './aprender-licoes-core.mjs';
+import { chooseHeldReview, validateCandidate, validateInitialLessons, firstJsonObject, loadFeedback,
+  resolveReviewSection, publicLearningReport, candidateRejectionReason } from './aprender-licoes-core.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const dir = join(root, 'architecture/faq-regua');
@@ -74,9 +74,14 @@ if (!privateCache.candidates) {
   privateCache.candidateVersion = 2;
   await saveCache();
 }
-const candidates = privateCache.candidates.slice(0, 2)
-  .filter((item) => safeCandidate(item, allComments))
-  .filter((item) => !guide.licoes.some((known) => known.texto.toLocaleLowerCase('pt-BR') === item.texto.toLocaleLowerCase('pt-BR')));
+const candidates = [];
+const rejectedCandidates = [];
+for (const item of privateCache.candidates.slice(0, 2)) {
+  const reason = candidateRejectionReason(item, allComments);
+  if (reason) rejectedCandidates.push({ motivo: reason });
+  else if (!guide.licoes.some((known) => known.texto.toLocaleLowerCase('pt-BR') === item.texto.toLocaleLowerCase('pt-BR')))
+    candidates.push(item);
+}
 
 async function judge(row, active) {
   const key = `${row.id}:${active.map((item) => item.id ?? item.texto).join('|')}:isolado-v2`;
@@ -114,7 +119,7 @@ async function judge(row, active) {
 const initial = await validateInitialLessons(guide.licoes, held, judge);
 guide.licoes = initial.lessons;
 const results = [];
-const observations = [...initial.observations];
+const observations = [...initial.observations, ...rejectedCandidates];
 const acceptedExtras = [...initial.active];
 for (const candidate of candidates) {
   const result = await validateCandidate(held, (row, withLesson) => judge(row,

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { EDITORIAL_CRITERIA } from '../mcp/faq-editorial-judge.mjs';
 
@@ -10,21 +10,23 @@ export function chooseHeldReview(id) {
 
 const normalized = (s) => String(s).normalize('NFKC').toLocaleLowerCase('pt-BR').replaceAll(/[^\p{L}\p{N}]+/gu, ' ').trim();
 const words = (s) => normalized(s).split(' ').filter(Boolean);
-let publicWords;
+let allowedWords;
 function vocabulary() {
-  if (publicWords) return publicWords;
+  if (allowedWords) return allowedWords;
   const pilot = resolve(import.meta.dirname, '..');
-  const roots = [join(pilot, 'content'), join(pilot, 'architecture/faq-regua')];
-  publicWords = new Set();
-  for (const root of roots) {
-    for (const file of readdirSync(root, { recursive: true })) {
-      // Rubrica, guia e glossário são públicos; outros artefatos da régua podem conter avaliações.
-      if (root.endsWith('faq-regua') && !/^(rubrica\.(?:json|md)|guia-aprendido\.json|glossario\.(?:json|md))$/iu.test(file)) continue;
-      if (!/\.(?:mdx?|json)$/iu.test(file)) continue;
-      for (const word of words(readFileSync(join(root, file), 'utf8'))) publicWords.add(word);
-    }
-  }
-  return publicWords;
+  const root = join(pilot, 'architecture/faq-regua');
+  const rubric = JSON.parse(readFileSync(join(root, 'rubrica.json'), 'utf8'));
+  const guide = JSON.parse(readFileSync(join(root, 'guia-aprendido.json'), 'utf8'));
+  const glossary = JSON.parse(readFileSync(join(root, 'glossario-licoes.json'), 'utf8'));
+  const editorial = JSON.parse(readFileSync(join(root, 'vocabulario-licoes.json'), 'utf8'));
+  allowedWords = new Set([
+    ...words(JSON.stringify(rubric)),
+    ...guide.licoes.filter(({ ativa, validada, vetada }) => ativa && validada && !vetada)
+      .flatMap(({ texto }) => words(texto)),
+    ...glossary.palavras.flatMap(words),
+    ...editorial.palavras.flatMap(words),
+  ]);
+  return allowedWords;
 }
 
 export async function loadFeedback(dir) {
@@ -59,29 +61,33 @@ export function firstJsonObject(output) {
   throw new SyntaxError('veredito JSON incompleto');
 }
 
-export function safeCandidate(candidate, comments) {
+export function candidateRejectionReason(candidate, comments) {
   if (!candidate || !EDITORIAL_CRITERIA.includes(candidate.criterio)
-    || typeof candidate.texto !== 'string' || candidate.texto.length < 24 || candidate.texto.length > 220) return false;
+    || typeof candidate.texto !== 'string' || candidate.texto.length < 24 || candidate.texto.length > 220) return 'formato';
   const text = normalized(candidate.texto);
-  const privateOnly = new Set(comments.flatMap(words).filter((word) => !vocabulary().has(word)));
-  if (words(candidate.texto).some((word) => privateOnly.has(word))) return false;
+  if (words(candidate.texto).some((word) => !vocabulary().has(word))) return 'vocabulário';
   // O destino é público. Candidatas com identificadores ou nomes próprios são recusadas.
   if (/[\w.+-]+@[\w.-]+\.[a-z]{2,}/iu.test(candidate.texto)
     || /\d{4,}/u.test(candidate.texto)
     || /(?:\+?\d[\d\s().-]*){10,}/u.test(candidate.texto)
     || /\b(?=[A-Za-z0-9]*[A-Za-z])(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{3,}\b/u.test(candidate.texto)
-    || /\b[\p{L}\p{N}]+[-_][\p{L}\p{N}]+\b/iu.test(candidate.texto)) return false;
+    || /\b[\p{L}\p{N}]+[-_][\p{L}\p{N}]+\b/iu.test(candidate.texto)) return 'privacidade';
   const privateNames = comments.flatMap((comment) => [...comment.matchAll(/\b\p{Lu}[\p{L}]+(?:\s+(?:da|de|do|dos|das))?\s+\p{Lu}[\p{L}]+\b/gu)]
     .map(([name]) => normalized(name)));
-  if (privateNames.some((name) => text.includes(name))) return false;
+  if (privateNames.some((name) => text.includes(name))) return 'privacidade';
   const privateProperWords = new Set(comments.flatMap((comment) => [...comment.matchAll(/\b\p{Lu}[\p{L}]{2,}\b/gu)]
     .map(([word]) => normalized(word))));
-  if (text.split(' ').some((word) => privateProperWords.has(word))) return false;
-  if (/\b\p{Lu}[\p{L}]+\s+\p{Lu}[\p{L}]+\b/gu.test(candidate.texto)) return false;
-  return comments.every((comment) => {
+  if (text.split(' ').some((word) => privateProperWords.has(word))) return 'privacidade';
+  if (/\b\p{Lu}[\p{L}]+\s+\p{Lu}[\p{L}]+\b/gu.test(candidate.texto)) return 'privacidade';
+  if (!comments.every((comment) => {
     const words = normalized(comment).split(' ');
     return !words.some((_, i) => i + 4 <= words.length && text.includes(words.slice(i, i + 4).join(' ')));
-  });
+  })) return 'privacidade';
+  return null;
+}
+
+export function safeCandidate(candidate, comments) {
+  return candidateRejectionReason(candidate, comments) === null;
 }
 
 export async function resolveReviewSection(review, dir) {
