@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -24,6 +24,28 @@ test('fila inclui seção publicada nova e omite seção já revisada', async ()
     await writeFeedbackQueue(output, queue);
     assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), queue);
     await assert.rejects(writeFeedbackQueue(new URL('arquivo-publico.json', import.meta.url).pathname, queue),
-      /fora do repositório público/u);
+      /fora do repo/u);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('fila recusa symlink para diretório do repo e symlink no arquivo de saída', async () => {
+  const internal = await mkdtemp(join(import.meta.dirname, '.m579-fila-interna-'));
+  const external = await mkdtemp(join(tmpdir(), 'm579-fila-externa-'));
+  try {
+    const alias = join(external, 'alias');
+    await symlink(internal, alias);
+    const { writeFeedbackQueue } = await import('./fila-calibracao.mjs');
+    await assert.rejects(writeFeedbackQueue(join(alias, 'fila.json'), []), /fora do repo/u);
+    assert.deepEqual(await readdir(internal), []);
+
+    const target = join(external, 'alvo.json');
+    const output = join(external, 'fila.json');
+    await writeFile(target, 'intacto');
+    await symlink(target, output);
+    await assert.rejects(writeFeedbackQueue(output, []), /não aceita symlink/u);
+    assert.equal(await readFile(target, 'utf8'), 'intacto');
+  } finally {
+    await rm(internal, { recursive: true, force: true });
+    await rm(external, { recursive: true, force: true });
+  }
 });
