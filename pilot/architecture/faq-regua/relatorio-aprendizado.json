@@ -4,9 +4,9 @@
   "iniciais": {
     "antes": {
       "total": 7,
-      "agreement": 3,
+      "agreement": 4,
       "severeApproved": 0,
-      "meanError": 1.0769230769230769
+      "meanError": 1.1538461538461537
     },
     "depois": {
       "total": 7,
@@ -15,26 +15,21 @@
       "meanError": 1.2307692307692308
     }
   },
-  "aceitas": 1,
+  "aceitas": 0,
   "recusadas": 1,
   "concordanciaAntes": [
-    3,
     3
   ],
   "concordanciaDepois": [
-    3,
-    3
+    2
   ],
   "totalGuardado": [
-    7,
     7
   ],
   "erroMedioAntes": [
-    1.2307692307692308,
-    1.1538461538461537
+    1.2307692307692308
   ],
   "erroMedioDepois": [
-    1.1538461538461537,
     1.1538461538461537
   ]
 }

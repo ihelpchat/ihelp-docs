@@ -11,8 +11,8 @@
         "contagem": 6
       },
       "ganho": {
-        "concordancia": 0,
-        "erroMedio": -0.15384615384615397,
+        "concordancia": -1,
+        "erroMedio": -0.0769230769230771,
         "guardadas": 7,
         "medicao": "pacote inicial; não isolada por lição"
       },
@@ -28,8 +28,8 @@
         "contagem": 6
       },
       "ganho": {
-        "concordancia": 0,
-        "erroMedio": -0.15384615384615397,
+        "concordancia": -1,
+        "erroMedio": -0.0769230769230771,
         "guardadas": 7,
         "medicao": "pacote inicial; não isolada por lição"
       },
@@ -45,8 +45,8 @@
         "contagem": 6
       },
       "ganho": {
-        "concordancia": 0,
-        "erroMedio": -0.15384615384615397,
+        "concordancia": -1,
+        "erroMedio": -0.0769230769230771,
         "guardadas": 7,
         "medicao": "pacote inicial; não isolada por lição"
       },
@@ -62,8 +62,8 @@
         "contagem": 6
       },
       "ganho": {
-        "concordancia": 0,
-        "erroMedio": -0.15384615384615397,
+        "concordancia": -1,
+        "erroMedio": -0.0769230769230771,
         "guardadas": 7,
         "medicao": "pacote inicial; não isolada por lição"
       },
@@ -79,8 +79,8 @@
         "contagem": 10
       },
       "ganho": {
-        "concordancia": 0,
-        "erroMedio": -0.15384615384615397,
+        "concordancia": -1,
+        "erroMedio": -0.0769230769230771,
         "guardadas": 7,
         "medicao": "pacote inicial; não isolada por lição"
       },
@@ -96,8 +96,8 @@
         "contagem": 10
       },
       "ganho": {
-        "concordancia": 0,
-        "erroMedio": -0.15384615384615397,
+        "concordancia": -1,
+        "erroMedio": -0.0769230769230771,
         "guardadas": 7,
         "medicao": "pacote inicial; não isolada por lição"
       },
@@ -113,8 +113,8 @@
         "contagem": 10
       },
       "ganho": {
-        "concordancia": 0,
-        "erroMedio": -0.15384615384615397,
+        "concordancia": -1,
+        "erroMedio": -0.0769230769230771,
         "guardadas": 7,
         "medicao": "pacote inicial; não isolada por lição"
       },
@@ -130,8 +130,8 @@
         "contagem": 10
       },
       "ganho": {
-        "concordancia": 0,
-        "erroMedio": -0.15384615384615397,
+        "concordancia": -1,
+        "erroMedio": -0.0769230769230771,
         "guardadas": 7,
         "medicao": "pacote inicial; não isolada por lição"
       },
@@ -147,26 +147,10 @@
         "contagem": 10
       },
       "ganho": {
-        "concordancia": 0,
-        "erroMedio": -0.15384615384615397,
+        "concordancia": -1,
+        "erroMedio": -0.0769230769230771,
         "guardadas": 7,
         "medicao": "pacote inicial; não isolada por lição"
-      },
-      "vetada": false
-    },
-    {
-      "id": "L010",
-      "texto": "Apresente recursos como disponíveis no uso normal, sem introduzir verificações ou etapas extras que não sejam necessárias para concluir a tarefa.",
-      "criterio": "tarefas_completas",
-      "data": "2026-10-11",
-      "origem": {
-        "tipo": "calibração e revisão de página",
-        "contagem": 13
-      },
-      "ganho": {
-        "concordancia": 0,
-        "erroMedio": 0.0769230769230771,
-        "guardadas": 7
       },
       "vetada": false
     }

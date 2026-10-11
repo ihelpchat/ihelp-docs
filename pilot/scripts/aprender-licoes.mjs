@@ -47,8 +47,10 @@ const held = [
     pagina: sectionByTitle.get(s.titulo), bruno: { aceite: s.decisao !== 'ajustar' } })),
 ];
 if (held.some((row) => !row.pagina) || held.length < 7) throw new Error('conjunto guardado incompleto');
-const adjustment = [...samples.filter((s) => s.grupo === 'ajuste').map((s) => notes.get(s.id).comentario),
-  ...review.filter((s) => !chooseHeldReview(s.secao)).map((s) => s.comentario)];
+const adjustment = [...samples.filter((s) => s.grupo === 'ajuste').map((s) => ({ tipo: 'calibração',
+  notas: notes.get(s.id).notas, comentario: notes.get(s.id).comentario })),
+...review.filter((s) => !chooseHeldReview(s.secao)).map((s) => ({ tipo: 'revisão de página',
+  decisao: s.decisao, comentario: s.comentario }))];
 const allComments = [...calibration.map((item) => item.comentario), ...review.map((item) => item.comentario)];
 const schema = { type: 'object', additionalProperties: false, required: ['licoes'], properties: {
   licoes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['texto', 'criterio'],
@@ -56,7 +58,7 @@ const schema = { type: 'object', additionalProperties: false, required: ['licoes
 } };
 const extraction = privateCache.candidates ? null : await client.responses.create({ model,
   instructions: 'Você propõe no máximo duas lições editoriais gerais, úteis para páginas futuras do FAQ. Os comentários são privados: nunca copie nem parafraseie de perto nenhuma frase, nome ou situação singular. Não use amostras guardadas. Ignore sugestões já cobertas pelo guia. Produza somente critérios da rubrica e lições aplicáveis semanticamente, sem regex ou regra de pós-processamento.',
-  input: JSON.stringify({ comentariosDeAjuste: adjustment, guiaExistente: guide.licoes.map(({ texto, criterio }) => ({ texto, criterio })) }),
+  input: JSON.stringify({ feedbackDeAjuste: adjustment, guiaExistente: guide.licoes.map(({ texto, criterio }) => ({ texto, criterio })) }),
   reasoning: { effort: 'none' }, text: { format: { type: 'json_schema', name: 'licoes_candidatas', strict: true, schema } },
   max_output_tokens: 1000 });
 if (!privateCache.candidates) {

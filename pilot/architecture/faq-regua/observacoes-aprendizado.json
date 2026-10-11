@@ -1,8 +1,8 @@
 {
   "observacoes": [
     {
-      "texto": "Ao explicar uma ação, descreva o que a pessoa poderá fazer com o resultado e diferencie conceitos relacionados quando isso ajudar a escolher o recurso adequado.",
-      "criterio": "utilidade_negocio",
+      "texto": "Apresente passos de conexão e configuração apenas quando forem necessários à tarefa; diferencie requisitos de conexão de ajustes opcionais e não acrescente etapas sem benefício claro para o objetivo da pessoa.",
+      "criterio": "tarefas_completas",
       "data": "2026-10-11",
       "motivo": "não passou no conjunto guardado"
     }
