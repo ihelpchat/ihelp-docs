@@ -132,7 +132,8 @@ try {
   const result = await submitContentPackage(root, [article('docs/contatos/novo', 'Novo guia'), article('docs/contatos/guia', 'Guia atualizado'), article('tutoriais/contatos/primeiro', 'Primeiro tutorial')], 'pull_request', 'user:tester', ['docs/contatos/antigo']);
   assert.equal(result.status, 'pull_request');
   assert.equal(pulls, 1);
-  assert.ok(mutations.some(({ method, file, payload }) => method === 'PUT' && file.endsWith('/guia.mdx') && payload.sha === 'sha-pilot/content/docs/docs/contatos/guia.mdx'));
+  assert.ok(mutations.some(({ method, file }) => method === 'PUT' && file.includes('/notices/guia-')), 'sem checkout da página existente, PR deve avisar');
+  assert.ok(!mutations.some(({ method, file }) => method === 'PUT' && file.endsWith('/guia.mdx')), 'sem histórico, página não pode ser sobrescrita');
   assert.ok(mutations.some(({ method, file, payload }) => method === 'DELETE' && file.endsWith('/antigo.mdx') && payload.sha));
   assert.deepEqual(JSON.parse(branch.get('pilot/content/docs/docs/contatos/meta.json')).pages, ['index', 'guia', 'novo']);
   assert.deepEqual(JSON.parse(branch.get('pilot/content/docs/tutoriais/contatos/meta.json')).pages, ['primeiro']);
@@ -150,7 +151,8 @@ try {
   assert.doesNotMatch(JSON.stringify(audit), /mock-token|Novo guia|artigo antigo/);
   const updated = await submitContentPackage(root, [realArticle], 'pull_request', 'user:tester');
   assert.equal(updated.status, 'pull_request', 'mesmo caminho de docs_update_article deve aceitar o artigo real');
-  assert.ok(mutations.some(({ method, file, payload }) => method === 'PUT' && file.endsWith('/api/crm/funis/listar-funis.mdx') && payload.sha === 'sha-pilot/content/docs/api/crm/funis/listar-funis.mdx'));
+  assert.ok(mutations.some(({ method, file }) => method === 'PUT' && file.includes('/notices/listar-funis-')), 'página legada sem marcador deve gerar aviso');
+  assert.ok(!mutations.some(({ method, file }) => method === 'PUT' && file.endsWith('/listar-funis.mdx')), 'página legada não pode ser sobrescrita');
   const deterministic = { branch: 'docs/deploy-guia-aaaaaaaaaaaaaaaa', base: 'integration/claricia-v2', draft: true,
     title: 'Revisar guia após deploy', body: 'SHAs implantados: front e back; revisão humana pendente.' };
   const firstPull = await submitContentPackage(root, [realArticle], 'pull_request', 'user:tester', [], deterministic);

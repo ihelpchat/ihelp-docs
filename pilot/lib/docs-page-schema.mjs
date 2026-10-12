@@ -7,6 +7,8 @@ export const docsPageSchema = pageSchema.extend({
   description: z.string().min(20),
   source: z.enum(['produto', 'suporte', 'api']),
   contentType: z.enum(['faq', 'tutorial', 'guia', 'referencia']),
+  manual: z.boolean().optional(),
+  mcpGeneratedSha: z.string().regex(/^[a-f0-9]{40}$/).optional(),
   guide: guideSchema.optional(),
   assistantAliases: z.array(z.string().min(2).max(120)).max(20).optional(),
   assistantKeywords: z.array(z.string().min(2).max(80)).max(30).optional(),
