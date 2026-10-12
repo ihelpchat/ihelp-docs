@@ -4,7 +4,8 @@ import * as production from './journey-production.mjs';
 import * as service from './journey-service.mjs';
 import * as runtime from './journey-runtime.mjs';
 import { screenshotForStep } from './screen-capture-manifest.mjs';
-import { chooseScreenshot } from '../scripts/screen-capture/capture.mjs';
+import { captureMaskedFrame, chooseScreenshot } from '../scripts/screen-capture/capture.mjs';
+import { launch } from '../scripts/visual/measure.mjs';
 import { reviewJourneyPrint } from '../scripts/review-journey-print.mjs';
 import { mkdtemp, mkdir, readFile, readdir, writeFile, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -104,8 +105,19 @@ test('print de lista sem filtro é recusado; print pendente não entra no build'
   assert.equal(typeof runtime.realCompanyScreenshotDecision, 'function');
   assert.equal(runtime.realCompanyScreenshotDecision({ path: '/contacts', url: 'https://front.example.test/contacts',
     searchValue: '' }).allowed, false);
-  assert.equal(runtime.realCompanyScreenshotDecision({ path: '/contacts', url: 'https://front.example.test/contacts',
-    searchValue: 'Teste FAQ' }).allowed, true);
+  const list = { path: '/contacts', url: 'https://front.example.test/contacts', searchValue: 'Teste FAQ' };
+  assert.equal(runtime.realCompanyScreenshotDecision({ ...list, rows: ['Cliente antigo'] }).allowed, false);
+  assert.equal(runtime.realCompanyScreenshotDecision({ ...list, filteredResponse: true,
+    networkIdle: true, rows: ['Cliente antigo'] }).allowed, false);
+  assert.equal(runtime.realCompanyScreenshotDecision({ ...list, filteredResponse: true,
+    networkIdle: true, rows: ['Teste FAQ Contato'] }).allowed, true);
+  assert.equal(runtime.realCompanyScreenshotDecision({ ...list, filteredResponse: true,
+    networkIdle: true, rows: [] }).allowed, true);
+  assert.equal(runtime.realCompanyScreenshotDecision({ ...list, filteredResponse: true,
+    networkIdle: false, rows: [] }).allowed, false);
+  for (const path of ['/bot', '/crm', '/campaigns', '/tasks']) {
+    assert.equal(runtime.realCompanyScreenshotDecision({ ...list, path, rows: ['Cliente antigo'] }).allowed, false);
+  }
   assert.equal(runtime.realCompanyScreenshotDecision({ path: '/contact/detail/record', ownItem: true }).allowed, true);
   assert.equal(runtime.realCompanyScreenshotDecision({ path: '/contact/detail/record', ownItem: false }).allowed, false);
   const entry = { page: 'contatos', step: 'criar', source: 'automatic', status: 'approved', aprovacao: 'pendente',
@@ -131,6 +143,27 @@ test('regente revisa print por id verificado, sem alterar outros registros', asy
     await assert.rejects(reviewJourneyPrint({ root, screenshotId: 'b'.repeat(64), decision: 'aprovado' }),
       /não encontrado/u);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('print real mascara telefone de teste, e-mail e canvas fora da lista', async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<main><div id="phone">20 7946 0001</div><div id="email">cliente@example.com</div><canvas id="canvas" width="120" height="30"></canvas></main>');
+    await page.evaluate(() => document.querySelector('canvas').getContext('2d').fillText('Cliente real', 5, 20));
+    const bytes = await captureMaskedFrame(page, [], { realCompany: true, testPhone: base.QA_PROD_TEST_PHONE });
+    const colors = await page.evaluate(async (png) => {
+      const image = new Image(); image.src = `data:image/png;base64,${png}`;
+      await image.decode();
+      const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+      const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
+      return ['phone', 'email', 'canvas'].map((id) => {
+        const rect = document.getElementById(id).getBoundingClientRect();
+        return [...ctx.getImageData(Math.floor(rect.x + 5), Math.floor(rect.y + 5), 1, 1).data].slice(0, 3);
+      });
+    }, bytes.toString('base64'));
+    assert.deepEqual(colors, [[226, 232, 240], [226, 232, 240], [226, 232, 240]]);
+  } finally { await browser.close(); }
 });
 
 test('jornada real persiste motivo do print omitido e máscara o telefone', async () => {
