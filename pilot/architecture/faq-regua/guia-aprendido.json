@@ -12,9 +12,9 @@
         "classe": "regra-do-dono"
       },
       "ganho": {
-        "concordancia": 0,
-        "erroMedio": 0,
-        "guardadas": 7,
+        "concordancia": 1,
+        "erroMedio": 0.1304347826086958,
+        "guardadas": 10,
         "medicao": "isolada por lição"
       },
       "vetada": false,
@@ -33,13 +33,13 @@
       },
       "ganho": {
         "concordancia": 0,
-        "erroMedio": 0.15384615384615397,
-        "guardadas": 7,
+        "erroMedio": 0.17391304347826098,
+        "guardadas": 10,
         "medicao": "isolada por lição"
       },
       "vetada": false,
       "validada": true,
-      "ativa": true
+      "ativa": false
     },
     {
       "id": "L003",
@@ -52,9 +52,9 @@
         "classe": "regra-do-dono"
       },
       "ganho": {
-        "concordancia": -1,
+        "concordancia": 0,
         "erroMedio": 0,
-        "guardadas": 7,
+        "guardadas": 10,
         "medicao": "isolada por lição"
       },
       "vetada": false,
@@ -72,9 +72,9 @@
         "classe": "regra-do-dono"
       },
       "ganho": {
-        "concordancia": -1,
-        "erroMedio": 0.07692307692307687,
-        "guardadas": 7,
+        "concordancia": 0,
+        "erroMedio": 0.04347826086956519,
+        "guardadas": 10,
         "medicao": "isolada por lição"
       },
       "vetada": false,
@@ -92,9 +92,9 @@
         "classe": "regra-do-dono"
       },
       "ganho": {
-        "concordancia": -1,
-        "erroMedio": 0.15384615384615374,
-        "guardadas": 7,
+        "concordancia": -2,
+        "erroMedio": 0.04347826086956519,
+        "guardadas": 10,
         "medicao": "isolada por lição"
       },
       "vetada": false,
@@ -112,9 +112,9 @@
         "classe": "regra-do-dono"
       },
       "ganho": {
-        "concordancia": -1,
-        "erroMedio": 0.15384615384615374,
-        "guardadas": 7,
+        "concordancia": 0,
+        "erroMedio": -0.04347826086956519,
+        "guardadas": 10,
         "medicao": "isolada por lição"
       },
       "vetada": false,
@@ -132,9 +132,9 @@
         "classe": "regra-do-dono"
       },
       "ganho": {
-        "concordancia": -1,
-        "erroMedio": 0.07692307692307687,
-        "guardadas": 7,
+        "concordancia": 0,
+        "erroMedio": 0.08695652173913038,
+        "guardadas": 10,
         "medicao": "isolada por lição"
       },
       "vetada": false,
@@ -153,8 +153,8 @@
       },
       "ganho": {
         "concordancia": -1,
-        "erroMedio": 0.07692307692307687,
-        "guardadas": 7,
+        "erroMedio": -0.04347826086956519,
+        "guardadas": 10,
         "medicao": "isolada por lição"
       },
       "vetada": false,
@@ -172,9 +172,9 @@
         "classe": "regra-do-dono"
       },
       "ganho": {
-        "concordancia": 0,
+        "concordancia": -1,
         "erroMedio": 0,
-        "guardadas": 7,
+        "guardadas": 10,
         "medicao": "isolada por lição"
       },
       "vetada": false,

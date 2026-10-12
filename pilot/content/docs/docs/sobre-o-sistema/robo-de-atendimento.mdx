@@ -12,7 +12,7 @@ assistantSuggestions: "Quero montar um menu com opções"
 
 ## O que é
 
-Um robô recebe novos atendimentos receptivos e segue um fluxo de blocos montado pela empresa. Pode mostrar opções e encaminhar a conversa para um departamento ou atendente. Ele segue esse fluxo; não responde livremente a qualquer pergunta.
+O robô de atendimento recebe uma nova conversa e segue os passos que você montou: mostra mensagens e opções ao cliente e pode encaminhá-lo para um departamento ou atendente. Por exemplo, você cria um menu com Agendamento e Financeiro; quando o cliente escolhe Agendamento, o robô segue o caminho que você ligou a essa opção. Ele segue os caminhos configurados; não responde livremente a qualquer pergunta.
 
 ## Para que serve
 
@@ -77,6 +77,8 @@ Para cada escolha chegar à equipe certa, [acrescente uma ação de encaminhamen
 
 ## Encaminhar uma escolha para a equipe
 
+Use esta função para encaminhar a conversa para um departamento ou para uma pessoa depois que o cliente escolher uma opção do menu.
+
 Tenha um robô com uma opção criada e um departamento ou atendente disponível.
 
 1. No editor, clique no **+** do caminho que deseja completar.
@@ -91,13 +93,13 @@ A escolha passa a seguir para o destino configurado quando o robô estiver publi
 
 ## Editar um robô
 
-Use esta opção para alterar um texto que deixou clientes confusos ou mudar um caminho do fluxo.
+Você pode editar o título, os blocos, as mensagens e os direcionamentos: qualquer configuração do fluxo. Por exemplo, se a opção **Agendamento** precisa levar a outro departamento, edite o destino desse caminho.
 
 1. Em **Robôs**, encontre o robô e escolha **Editar**.
 
 ![Robô na lista com a opção de editar](/img/help/xgGZHsOwvBfcc1UKCrCf.png)
 
-2. No editor, mude o título em **Digite o título do robô** ou abra o bloco que deseja alterar.
+2. No editor, mude o título em **Digite o título do robô**. Para mudar uma mensagem, abra o bloco e altere **Mensagem**. Para mudar um direcionamento, abra a **Ação** de **Encaminhar atendimento** e escolha o novo destino em **Selecione o departamento** ou **Selecione o atendente**.
 
 ![Editor mostrando os blocos do robô existente](/img/help/r9HbhN3Xfds5J4CkXT3u.png)
 
@@ -105,7 +107,9 @@ Use esta opção para alterar um texto que deixou clientes confusos ou mudar um 
 
 ![Editor de robô com a opção de salvar as alterações](/img/help/Fk0uq9BHjuPbxRkskXaK.png)
 
-Se o robô está publicado, **Salvar** já muda a versão em uso. Revise o texto e os destinos antes de salvar.
+Para conferir a edição, volte à lista, abra o robô e veja se a mudança aparece no fluxo.
+
+Se o robô ainda não foi publicado, **Salvar** guarda as alterações sem iniciar o atendimento. Se o robô está publicado, **Salvar** já muda a versão em uso para os novos atendimentos receptivos; não é preciso publicar de novo. Revise o texto e os destinos antes de salvar.
 
 ## Salvar e publicar o fluxo
 
@@ -124,3 +128,7 @@ Depois da publicação, **Salvar** uma edição já altera o fluxo em uso; não 
 **Todo contato passa pelo robô?** Não. Quando o contato tem um usuário [responsável definido](/docs/sobre-o-sistema/agenda-de-contatos#definir-o-responsavel-por-um-contato), a conversa vai direto para **Meus** dele.
 
 **O recado de fora do horário fica no robô?** Não. Ele fica em [Configurações > Departamentos](/docs/sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario).
+
+**Onde escolho quem recebe a conversa?** No caminho da opção desejada, abra **Ação** e **Encaminhar atendimento**. Use **Selecione o departamento** ou **Selecione o atendente**.
+
+**Como encontro um robô para editar?** Abra **Robôs**, use **Buscar robô** para procurar pelo título e escolha **Editar** no robô encontrado.

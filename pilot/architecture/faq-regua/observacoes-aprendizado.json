@@ -8,6 +8,13 @@
       "motivo": "não passou no conjunto guardado"
     },
     {
+      "id": "L002",
+      "texto": "Uma tarefa ensinada precisa chegar ao resultado observável, além de abrir o recurso.",
+      "criterio": "tarefas_completas",
+      "data": "2026-09-29",
+      "motivo": "não passou no conjunto guardado"
+    },
+    {
       "id": "L003",
       "texto": "Mantenha dúvidas da equipe, aprovação interna e limitações da prova fora da orientação pública.",
       "criterio": "clareza",
@@ -57,16 +64,10 @@
       "motivo": "não passou no conjunto guardado"
     },
     {
-      "texto": "Apresente cada recurso pelo que permite organizar ou fazer no trabalho, incluindo suas funções relacionadas sem reduzir a explicação a uma definição genérica.",
-      "criterio": "entende_modulo",
-      "data": "2026-10-11",
-      "motivo": "não passou no conjunto guardado"
+      "motivo": "vocabulário"
     },
     {
-      "texto": "Ao explicar uma configuração ou diferença entre recursos, esclareça o papel envolvido e o efeito prático, e indique materiais específicos para plataformas ou formatos alternativos quando disponíveis.",
-      "criterio": "casos_concretos",
-      "data": "2026-10-11",
-      "motivo": "não passou no conjunto guardado"
+      "motivo": "vocabulário"
     }
   ]
 }
