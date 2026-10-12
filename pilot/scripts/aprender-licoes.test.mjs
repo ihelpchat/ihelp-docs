@@ -336,7 +336,7 @@ test('guia versionado chega ao juiz e ao redator', () => {
 
 test('regra do dono inativa no juiz preserva o contrato do redator', () => {
   assert.doesNotMatch(editorialPrompt(), /Não leve dados, cenários ou instruções de ensaio/u);
-  assert.match(editorialPrompt(), /Uma tarefa ensinada precisa chegar ao resultado observável/u);
+  assert.doesNotMatch(editorialPrompt(), /Uma tarefa ensinada precisa chegar ao resultado observável/u);
   assert.match(learnedWriterContract(), /Não leve dados, cenários ou instruções de ensaio/u);
   assert.match(learnedWriterContract(), /Uma tarefa ensinada precisa chegar ao resultado observável/u);
 });
