@@ -15,7 +15,7 @@ const meaningful = (value) => words(value).filter((word) => word.length >= 3 && 
   .map(stem).filter((word) => word.length >= 3);
 const actions = JSON.parse(await readFile(new URL('../architecture/product-actions.json', import.meta.url), 'utf8'));
 const topicTerms = {
-  'importar-contatos': /\b(?:contatos?|importar|planilha)\b/u,
+  'importar-contatos': /\b(?:contatos?|importar|planilha|carteira)\b/u,
   'abrir-robos': /\b(?:robo|robos|chatbot)\b/u,
   'abrir-usuarios': /\b(?:usuario|usuarios|equipe|secretaria)\b/u,
   'abrir-canais': /\b(?:canal|canais|qr|conectar|reconectar)\b/u,
@@ -30,6 +30,8 @@ export function topicForQuestion(question) {
   const normalized = normalize(question);
   const matches = Object.entries(topicTerms).filter(([topic, pattern]) => {
     const match = normalized.match(pattern);
+    if (topic === 'importar-contatos' && match?.[0] === 'carteira'
+      && /\b(?:gupshup|creditos?|saldo|recibos?)\b/u.test(normalized)) return false;
     return Object.hasOwn(actions, topic) && match
       && !new RegExp(`\\b(?:nao|nem) (?:e |quero |sobre )?(?:uma? )?${match[0]}\\b`, 'u').test(normalized);
   });
