@@ -226,7 +226,8 @@ function checkedPath(page, step) {
 export function chooseScreenshot(manifest, page, step) {
   const matches = manifest.entries.filter((entry) => entry.page === page && entry.step === step);
   return matches.find((entry) => entry.source === 'upload' && entry.status === 'approved')
-    ?? matches.find((entry) => entry.source === 'automatic' && entry.status !== 'discarded' && entry.status !== 'pending') ?? null;
+    ?? matches.find((entry) => entry.source === 'automatic' && entry.status !== 'discarded' && entry.status !== 'pending'
+      && entry.aprovacao !== 'pendente' && entry.aprovacao !== 'recusado') ?? null;
 }
 
 export function masksCoverSensitive(sensitive, masks) {
