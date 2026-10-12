@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { copyFile, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { readArticle } from './editorial-standard.mjs';
@@ -28,6 +29,14 @@ for (const image of ['f38mHVPtRejfPf5R3kAO.png', 'ku0HJRsBFedSfM5IQbu3.png']) {
   await mkdir(join(root, 'public/img/help'), { recursive: true });
   await copyFile(join(sourceRoot, 'public/img/help', image), join(root, 'public/img/help', image));
 }
+const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+git('init', '-q');
+git('config', 'user.name', 'MCP Bot');
+git('config', 'user.email', 'mcp-bot@users.noreply.github.com');
+git('commit', '--allow-empty', '-qm', 'seed');
+const seedSha = git('rev-parse', 'HEAD');
+git('add', '-A');
+git('commit', '-qm', 'generated baseline');
 const mock = join(root, 'github-mock.mjs');
 await writeFile(mock, `import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -35,7 +44,7 @@ const root = process.env.DOCS_ROOT;
 globalThis.fetch = async (url, init = {}) => {
   const path = new URL(url).pathname;
   const method = init.method ?? 'GET';
-  if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: 'base-sha' } }) };
+  if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: process.env.MCP_TEST_BASE_SHA } }) };
   if (path.endsWith('/git/refs')) return { ok: true, json: async () => ({}) };
   if (path.endsWith('/pulls')) return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/123' }) };
   const file = decodeURIComponent(path.split('/contents/')[1] ?? '');
@@ -58,7 +67,7 @@ const transport = new StdioClientTransport({
   command: process.execPath,
   args: ['--import', mock, join(sourceRoot, 'mcp/server.mjs')],
   cwd: sourceRoot,
-  env: { ...process.env, DOCS_ROOT: root, GITHUB_TOKEN: 'mock-token', GITHUB_BASE_BRANCH: 'integration/claricia-v2' },
+  env: { ...process.env, DOCS_ROOT: root, GITHUB_TOKEN: 'mock-token', GITHUB_BASE_BRANCH: 'integration/claricia-v2', MCP_TEST_BASE_SHA: seedSha },
   stderr: 'pipe',
 });
 const client = new Client({ name: 'm5-01-roundtrip', version: '1.0.0' });
