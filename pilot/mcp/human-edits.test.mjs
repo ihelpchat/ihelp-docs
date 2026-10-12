@@ -78,6 +78,36 @@ const proposed = (f) => f.original.replace('Texto original.', 'Texto novo do pro
   assert.equal(real.status, 'conflict', 'mutação vermelha: ignorar histórico não pode retornar update');
 }
 {
+  const f = await fixture(base.replace('mcpGeneratedSha: SEED\n', ''));
+  const baseline = run(f.root, 'rev-parse', 'HEAD');
+  await writeFile(join(f.root, page), f.original.replace('title: Exemplo\n', `title: Exemplo\nmcpGeneratedSha: ${baseline}\n`));
+  run(f.root, '-c', 'user.name=Editor Humano', '-c', 'user.email=editor@example.test', 'commit', '-qam', 'adoption');
+  const current = await readFile(join(f.root, page), 'utf8');
+  const result = await reconcileHumanUpdate(f.root, page, current.replace('Texto original.', 'Texto novo do produto.'));
+  assert.equal(result.status, 'update', 'adoção declarada permite atualização');
+  assert.match(result.content, /Texto novo do produto/);
+  await human(f, current.replace('Texto livre.', 'Texto humano.'));
+  const merged = await reconcileHumanUpdate(f.root, page, current.replace('Texto original.', 'Texto novo do produto.'));
+  assert.equal(merged.status, 'update');
+  assert.match(merged.content, /Texto humano/);
+}
+{
+  const f = await fixture(base.replace('mcpGeneratedSha: SEED\n', ''));
+  const result = await reconcileHumanUpdate(f.root, page, f.original.replace('Texto original.', 'Texto novo do produto.'));
+  assert.equal(result.status, 'conflict', 'página nova sem marcador falha fechada');
+}
+for (const moduleName of ['Canais', 'Departamentos']) {
+  const source = base.replace('## Afetada', `## ${moduleName}`).replace('## Livre', '## Usuários');
+  const f = await fixture(source);
+  await human(f, f.original.replace('Texto livre.', 'Texto humano preservado.'));
+  const proposal = f.original.replace(`## ${moduleName}\n\nTexto original.`, `## ${moduleName}\n\nTexto original.\n\n### QR\n\nNovo passo.`);
+  const result = await reconcileHumanUpdate(f.root, page, proposal);
+  assert.equal(result.status, 'update');
+  assert.ok(result.content.indexOf(`## ${moduleName}`) < result.content.indexOf('### QR'));
+  assert.ok(result.content.indexOf('### QR') < result.content.indexOf('## Usuários'));
+  assert.ok(result.content.includes('## Usuários\n\nTexto humano preservado.'));
+}
+{
   const f = await fixture();
   await writeFile(join(f.root, '.git/shallow'), `${run(f.root, 'rev-parse', 'HEAD')}\n`);
   const result = await reconcileHumanUpdate(f.root, page, proposed(f));
