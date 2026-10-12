@@ -54,9 +54,8 @@ export async function reconcileHumanUpdate(root, path, proposed, expectedCurrent
   } catch { return unavailable(proposed); }
   const bot = ([, , email]) => email === MCP_GIT_AUTHOR.email;
   const generated = history.find(bot);
-  if (!generated) return unavailable(proposed);
   let generatedText;
-  try { generatedText = execFileSync('git', ['--no-pager', 'show', `${generated[0]}:${historicalPath}`],
+  try { generatedText = execFileSync('git', ['--no-pager', 'show', `${generated?.[0] ?? start}:${historicalPath}`],
     { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
   catch { return unavailable(proposed); }
   const humanCommits = history.filter((entry) => !bot(entry));
@@ -77,6 +76,14 @@ export async function reconcileHumanUpdate(root, path, proposed, expectedCurrent
     else merged.set(key, value);
   }
   const preserved = [...currentParts.keys()].filter((key) => !changes.some(([changed]) => changed === key));
-  return { status: 'update', content: [...merged.values()].join(''),
+  const proposedKeys = [...newParts.keys()];
+  const extraKeys = [...merged.keys()].filter((key) => !newParts.has(key));
+  const ordered = [...proposedKeys];
+  for (const key of extraKeys) {
+    const currentKeys = [...currentParts.keys()];
+    const next = currentKeys.slice(currentKeys.indexOf(key) + 1).find((candidate) => ordered.includes(candidate));
+    ordered.splice(next ? ordered.indexOf(next) : ordered.length, 0, key);
+  }
+  return { status: 'update', content: ordered.map((key) => merged.get(key)).filter((value) => value !== undefined).join(''),
     notice: `Edição humana detectada em ${path}. Seções preservadas byte a byte: ${preserved.join(', ')}.` };
 }

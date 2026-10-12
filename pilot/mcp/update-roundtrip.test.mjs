@@ -117,13 +117,17 @@ try {
     const parsed = docsPageSchema.safeParse(frontmatter);
     assert.equal(parsed.success, true, `${path}: MDX gerado falha no schema real da Central: ${parsed.success ? '' : parsed.error.message}`);
     for (const [key, value] of Object.entries(originalYaml)) {
+      if (key === 'mcpGeneratedSha') {
+        assert.equal(frontmatter[key], seedSha, `${path}: marcador deve apontar para a base da nova geração`);
+        continue;
+      }
       assert.deepEqual(frontmatter[key], value, `${path}: tipo YAML de ${key} mudou`);
     }
     const updated = join(root, 'content/docs', `${path}.mdx`);
     await writeFile(updated, rendered);
     const reread = await readArticle(root, path);
     for (const field of Object.keys(original).filter((key) => !['body', 'path', 'productActions'].includes(key))) {
-      assert.deepEqual(reread[field], original[field], `${path}: ${field} perdido`);
+      assert.deepEqual(reread[field], field === 'mcpGeneratedSha' ? seedSha : original[field], `${path}: ${field} perdido`);
     }
     assert.equal((rendered.match(/<ProductAction\b/g) ?? []).length, (original.body.match(/<ProductAction\b/g) ?? []).length, `${path}: ProductAction duplicado`);
     const meta = JSON.parse(await readFile(join(root, 'remote/pilot/content/docs', path.split('/').slice(0, -1).join('/'), 'meta.json')));

@@ -46,6 +46,10 @@ Para acrescentar um teste ao `mcp:test`, crie o arquivo `mcp/<nome>.test.mjs`; o
 - `npm run content:migrate`: importa somente rotas legadas ausentes e aplica a normalização editorial; nunca sobrescreve artigos já revisados.
 - `mcp`: servidor que permite à IA buscar, ler, auditar, validar e propor conteúdo.
 
+### Edição humana nas páginas do MCP
+
+`mcpGeneratedSha` no frontmatter registra o commit de referência da página. A adoção inicial é explícita e única: `node scripts/adotar-marcador-mcp.mjs` grava o SHA do último commit que tocou cada MDX ainda sem marcador em `content/docs`, exceto páginas com `manual: true`. O script é idempotente e só acrescenta uma linha ao frontmatter; o corpo permanece idêntico. Esse conteúdo atual passa a ser a versão gerada de referência. Qualquer commit posterior conta como edição humana, mesmo que use a mesma conta do agente. Uma página nova sem marcador falha fechada e pede revisão humana. `manual: true` impede toda reescrita automática.
+
 O build padrão gera export estático em `out`. Para GitHub Pages, use `NEXT_PUBLIC_BASE_PATH=/ihelp-docs npm run build`.
 
 ## Assistente GPT
