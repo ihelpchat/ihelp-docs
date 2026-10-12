@@ -257,7 +257,7 @@ export async function addUploadedScreenshot({ manifest, page, step, file, bytes,
   return manifest;
 }
 
-async function scanVisible(page) {
+async function scanVisible(page, { realCompany = false } = {}) {
   const items = [];
   for (const frame of page.frames()) {
     let offset = { x: 0, y: 0 };
@@ -269,7 +269,7 @@ async function scanVisible(page) {
         offset = { x: box.x, y: box.y };
       } catch { continue; }
     }
-    const found = await frame.evaluate(() => {
+    const found = await frame.evaluate(({ realCompany }) => {
     const items = [];
     const inDataRegion = (element) => Boolean(element.closest('tbody tr,[role="rowgroup"] [role="row"], [role="listitem"], [data-testid*="contact"], [data-testid*="conversation"], header [class*="profile"], header [class*="user"], [role="banner"] [class*="profile"], [role="banner"] [class*="user"]'));
     const add = (text, rects, reason, force = false, blockRect = null) => {
@@ -301,11 +301,11 @@ async function scanVisible(page) {
         add(element.value, element.getClientRects(), 'campo ou conteúdo dinâmico', true);
         add(element.placeholder, element.getClientRects(), 'texto não confirmado');
       }
-      for (const element of root.querySelectorAll('img,canvas,video')) if (inDataRegion(element))
+      for (const element of root.querySelectorAll('img,canvas,video,svg')) if (realCompany || inDataRegion(element))
         add('conteúdo dinâmico', element.getClientRects(), 'campo ou conteúdo dinâmico', true);
     }
     return items;
-    });
+    }, { realCompany });
     items.push(...found.map((item) => ({ ...item, rect: { ...item.rect,
       x: item.rect.x + offset.x, y: item.rect.y + offset.y },
       blockRect: item.blockRect && { ...item.blockRect,
@@ -338,9 +338,13 @@ function inVocabulary(text, vocabulary) {
   });
 }
 
-function masksForVisible(visible, vocabulary) {
+function masksForVisible(visible, vocabulary, { testPhone } = {}) {
+  const phoneDigits = String(testPhone ?? '').replace(/\D/gu, '');
   return visible.flatMap((item) => {
-    const sensitive = containsSensitiveData(item.text, { detectOpaque: true });
+    const digits = item.text.replace(/\D/gu, '');
+    const phoneVariant = phoneDigits.length >= 10 && digits.length >= 8
+      && (phoneDigits.includes(digits) || digits.includes(phoneDigits));
+    const sensitive = phoneVariant || containsSensitiveData(item.text, { detectOpaque: true });
     const known = inVocabulary(item.text, vocabulary) || item.context && inVocabulary(item.context, vocabulary);
     if (!sensitive && !item.force && known) return [];
     const area = item.blockRect ?? item.rect;
@@ -352,7 +356,7 @@ function masksForVisible(visible, vocabulary) {
   });
 }
 
-async function captureAttempt(page, cdp, rect, vocabulary, _destination, afterScreenshot) {
+async function captureAttempt(page, cdp, rect, vocabulary, options = {}, afterScreenshot) {
   let frozen = false;
   try {
     if (await page.locator('.react-flow__viewport').count()) await waitForStableScreen(page);
@@ -364,8 +368,8 @@ async function captureAttempt(page, cdp, rect, vocabulary, _destination, afterSc
       style.textContent = '*,*::before,*::after{animation-play-state:paused!important;transition:none!important;caret-color:transparent!important}';
       document.head.append(style);
     });
-    const visible = await scanVisible(page);
-    const mask = masksForVisible(visible, vocabulary);
+    const visible = await scanVisible(page, options);
+    const mask = masksForVisible(visible, vocabulary, options);
     const sensitive = [];
     for (const item of visible) {
       const isSensitive = containsSensitiveData(item.text, { detectOpaque: true });
@@ -402,8 +406,8 @@ async function captureAttempt(page, cdp, rect, vocabulary, _destination, afterSc
     if (rect && (rect.x < 5 || rect.y < 8 || rect.x + rect.width + 5 > width || rect.y + rect.height + 5 > height))
       return { failure: 'alvo fora da tela' };
     if (afterScreenshot) await afterScreenshot(page);
-    const after = await scanVisible(page);
-    const remaining = masksForVisible(after, vocabulary).map((item) => item);
+    const after = await scanVisible(page, options);
+    const remaining = masksForVisible(after, vocabulary, options).map((item) => item);
     if (visibleHash(visible) !== visibleHash(after) || !masksCoverSensitive(remaining, renderedMasks))
       return { failure: 'máscara não cobriu' };
     return { mask, bytes };
@@ -416,10 +420,10 @@ async function captureAttempt(page, cdp, rect, vocabulary, _destination, afterSc
   }
 }
 
-export async function captureMaskedFrame(page, vocabulary = []) {
+export async function captureMaskedFrame(page, vocabulary = [], options = {}) {
   const cdp = await page.context().newCDPSession(page);
   try {
-    const result = await captureAttempt(page, cdp, null, vocabulary, null);
+    const result = await captureAttempt(page, cdp, null, vocabulary, options);
     if (!result.bytes) {
       const error = new Error(result.failure ?? 'sanitização da imagem falhou');
       error.stage = result.failure?.includes('máscara') ? 'máscara' : 'screenshot';

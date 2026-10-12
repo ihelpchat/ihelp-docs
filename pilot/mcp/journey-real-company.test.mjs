@@ -166,6 +166,24 @@ test('print real mascara telefone de teste, e-mail e canvas fora da lista', asyn
   } finally { await browser.close(); }
 });
 
+test('lista renderizada não herda prova do campo enquanto mostra linhas antigas', async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<main><table><tbody><tr><td>Cliente antigo</td></tr></tbody></table></main>');
+    const list = { path: '/contacts', url: 'https://front.example.test/contacts', searchValue: 'Teste FAQ',
+      filteredResponse: true, networkIdle: true };
+    assert.equal(runtime.realCompanyScreenshotDecision({ ...list,
+      rows: await runtime.visibleRealCompanyRows(page) }).allowed, false);
+    await page.locator('tbody').evaluate((element) => { element.innerHTML = '<tr><td>Teste FAQ Contato 01</td></tr>'; });
+    assert.equal(runtime.realCompanyScreenshotDecision({ ...list,
+      rows: await runtime.visibleRealCompanyRows(page) }).allowed, true);
+    await page.locator('tbody').evaluate((element) => { element.innerHTML = ''; });
+    assert.equal(runtime.realCompanyScreenshotDecision({ ...list,
+      rows: await runtime.visibleRealCompanyRows(page) }).allowed, true);
+  } finally { await browser.close(); }
+});
+
 test('jornada real persiste motivo do print omitido e máscara o telefone', async () => {
   const root = await mkdtemp(join(tmpdir(), 'journey-real-'));
   const marker = 'abcdef12';

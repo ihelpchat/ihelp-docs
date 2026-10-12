@@ -1012,13 +1012,34 @@ export async function verifyImportedContacts({ names, lookup, timeoutMs = 30_000
   return { confirmed: false, observed: 'Contato importado não localizado de forma única', foundCount: found.size };
 }
 
-export function realCompanyScreenshotDecision({ path, url, searchValue, ownItem = false }) {
+export function realCompanyScreenshotDecision({ path, url, searchValue, ownItem = false,
+  filteredResponse = false, networkIdle = false, rows }) {
   if (/^\/(?:contact\/detail|bot)\/record\/?$/u.test(path) && ownItem) return { allowed: true };
   let filter = '';
   try { filter = new URL(url).searchParams.get('searchData') ?? ''; } catch { /* no URL proof */ }
-  if (/^\/(?:contacts?|bot)\/?$/u.test(path) && (filter.startsWith('Teste FAQ') ||
-    typeof searchValue === 'string' && searchValue.startsWith('Teste FAQ'))) return { allowed: true };
-  return { allowed: false, reason: 'tela sem item próprio ou filtro Teste FAQ comprovado' };
+  if (!/^\/(?:contacts?|bot|crm|campaigns?|tasks?|tarefas?)\/?$/iu.test(path))
+    return { allowed: false, reason: 'tela sem item próprio ou lista verificável' };
+  if (![filter, searchValue].some((value) => typeof value === 'string' && value.startsWith('Teste FAQ')))
+    return { allowed: false, reason: 'filtro Teste FAQ ausente' };
+  if (!filteredResponse) return { allowed: false, reason: 'resposta da lista filtrada não observada após digitação' };
+  if (!networkIdle) return { allowed: false, reason: 'rede não ficou ociosa após o filtro' };
+  if (!Array.isArray(rows)) return { allowed: false, reason: 'lista visível não verificada' };
+  if (rows.some((row) => !row.trim().startsWith('Teste FAQ')))
+    return { allowed: false, reason: 'linha visível sem prefixo Teste FAQ' };
+  return { allowed: true };
+}
+
+export async function visibleRealCompanyRows(page) {
+  return page.evaluate(() => {
+    const visible = (element) => element.getClientRects().length > 0
+      && getComputedStyle(element).visibility !== 'hidden';
+    const selectors = 'tbody tr,[role="rowgroup"] [role="row"],[role="listitem"],main [data-testid*="card"],main [data-testid*="Card"]';
+    const rows = [...document.querySelectorAll(selectors)].filter(visible);
+    const listExists = rows.length > 0 || [...document.querySelectorAll('table,[role="table"],[role="list"],main [data-testid*="list"],main [data-testid*="List"]')].some(visible)
+      || [...document.querySelectorAll('main *')].some((element) => visible(element)
+        && /^(?:nenhum resultado|nenhum registro|nenhum item|sem resultados)$/iu.test(element.textContent?.trim() ?? ''));
+    return listExists ? rows.map((row) => row.innerText?.replace(/\s+/gu, ' ').trim() ?? '') : null;
+  });
 }
 
 function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false }) {
@@ -1038,6 +1059,9 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
   let importCapture = null;
   let importResultMessage = null;
   let filteredContactsResponse = null;
+  let screenshotFilterAt = 0;
+  let screenshotFilteredResponse = null;
+  const screenshotRequestAt = new WeakMap();
   let filteredContactVerified = false;
   let verifiedExportSearchTerm = null;
   let searchProbe = null;
@@ -1112,6 +1136,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       importCapture = null;
       importResultMessage = null;
       filteredContactsResponse = null;
+      screenshotFilterAt = 0;
+      screenshotFilteredResponse = null;
       filteredContactVerified = false;
       verifiedExportSearchTerm = null;
       searchProbe = null;
@@ -1152,6 +1178,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       qaApi = null;
       page.on('request', (request) => {
         const url = new URL(request.url());
+        if (realCompany) screenshotRequestAt.set(request, Date.now());
         if (currentTask?.startsWith('robos.') && request.method() === 'PUT'
           && qaRequestDecision(url.href, target, env).allowed)
           botWriteProbe.push({ route: /\/bot\/[^/]+\/save\/?$/iu.test(url.pathname) ? 'save'
@@ -1191,6 +1218,13 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       if (!production) await context.route('**/*', guardedRoute);
       page.on('response', (response) => {
         const url = new URL(response.url());
+        if (realCompany && screenshotFilterAt && screenshotRequestAt.get(response.request()) >= screenshotFilterAt
+          && response.request().method() === 'GET'
+          && url.origin === qaApi?.origin && response.ok()
+          && /^\/api\/(?:v2\/)?(?:contacts?|bot|crm|campaigns?|tasks?|tarefas?)\/?$/iu.test(url.pathname)
+          && [...url.searchParams.values()].some((value) => value.startsWith('Teste FAQ')))
+          screenshotFilteredResponse = { at: Date.now(), filter: [...url.searchParams.values()]
+            .find((value) => value.startsWith('Teste FAQ')) };
         if (currentTask?.startsWith('robos.') && response.request().method() === 'PUT'
           && qaRequestDecision(url.href, target, env).allowed)
           botWriteProbe.push({ route: /\/bot\/[^/]+\/save\/?$/iu.test(url.pathname) ? 'save'
@@ -1423,13 +1457,25 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       let screenshotReason;
       if (realCompany) {
         const ownItem = [...createdRefs.contatos, ...createdRefs.robos].some((ref) => page.url().endsWith(`/${ref}`));
-        const searchValue = data.fields.find((field) => /buscar|pesquisar/iu.test(field.name))?.value;
-        const decision = realCompanyScreenshotDecision({ path, url: page.url(), searchValue, ownItem });
+        const searchValue = await page.evaluate(() => [...document.querySelectorAll('input')]
+          .filter((input) => input.getClientRects().length > 0
+            && /buscar|pesquisar/iu.test([input.placeholder, input.getAttribute('aria-label'),
+              input.labels?.[0]?.textContent].filter(Boolean).join(' ')))
+          .map((input) => input.value).find((value) => value.startsWith('Teste FAQ')) ?? null);
+        const filteredResponse = screenshotFilteredResponse?.at >= screenshotFilterAt
+          && screenshotFilteredResponse?.filter === searchValue;
+        let networkIdle = false;
+        if (filteredResponse) networkIdle = await page.waitForLoadState('networkidle', { timeout: 2_500 })
+          .then(() => true, () => false);
+        const rows = ownItem ? null : await visibleRealCompanyRows(page);
+        const decision = realCompanyScreenshotDecision({ path, url: page.url(), searchValue, ownItem,
+          filteredResponse, networkIdle, rows });
         if (!decision.allowed) screenshotReason = decision.reason;
       }
       try {
         for (let attempt = 0; attempt < 3 && !screenshotReason; attempt++) {
-          try { screenshot = await captureMaskedFrame(page, [...known]); break; }
+          try { screenshot = await captureMaskedFrame(page, [...known], realCompany
+            ? { realCompany: true, testPhone: env.QA_PROD_TEST_PHONE } : {}); break; }
           catch (error) {
             if (error.stage !== 'máscara' || attempt === 2) throw error;
             await waitForStableScreen(page);
@@ -1481,6 +1527,10 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
             && /^\/api\/(?:v2\/)?contacts\/?$/u.test(new URL(response.url()).pathname)
             && new URL(response.url()).searchParams.get('searchData') === action.value,
           { timeout: 15_000 }).catch(() => null);
+        }
+        if (realCompany && action.type === 'fill' && /buscar|pesquisar/iu.test(action.name ?? '')) {
+          screenshotFilterAt = Date.now();
+          screenshotFilteredResponse = null;
         }
         const importResponse = currentTask === 'contatos.importar' && action.type === 'click'
           && /^Importar$/iu.test(action.name)
