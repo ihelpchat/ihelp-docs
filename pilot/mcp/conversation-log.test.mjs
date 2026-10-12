@@ -32,11 +32,13 @@ assert.equal(conversationsRetentionDays({ CONVERSATIONS_RETENTION_DAYS: '3651' }
 const fakeOpenAI = createServer(async (request, response) => {
   let raw = '';
   for await (const chunk of request) raw += chunk;
-  const route = JSON.parse(raw).text?.format?.name === 'triagem_fechada';
+  const format = JSON.parse(raw).text?.format?.name;
+  const route = format === 'triagem_fechada';
   response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
     id: 'resp_test', object: 'response', created_at: 1, model: 'fixture-model', status: 'completed',
     output: [{ type: 'message', id: 'msg_test', status: 'completed', role: 'assistant',
-      content: [{ type: 'output_text', text: route ? '{"choice":"sem guia"}' : JSON.stringify({
+      content: [{ type: 'output_text', text: route ? '{"choice":"sem guia"}'
+        : format === 'seguranca_resposta' ? '{"mentionsSource":false,"unsupportedAction":false}' : JSON.stringify({
         answer: 'Não encontrei o guia.', sections: [], steps: [{ text: 'Fale com a equipe.' }], code: null,
         sources: [], suggestions: [], resolution: 'not_found', found: false,
       }), annotations: [] }] }], usage: { input_tokens: 1, output_tokens: 1 },
