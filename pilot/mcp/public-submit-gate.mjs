@@ -218,7 +218,8 @@ export async function assertPublicSubmit(root, items, deletes = [], { ignoreBase
     const baselineText = rendered.replace(reviewNote, '');
     const prior = published.get(article.path);
     const reviewOnly = baselineText !== rendered && prior && JSON.stringify(parseArticle(prior, article.path)) === JSON.stringify(parseArticle(baselineText, article.path));
-    const unchangedBaseline = !ignoreBaseline && (publishedBaseline[article.path] === createHash('sha256').update(baselineText).digest('hex') || reviewOnly);
+    const withoutMarker = baselineText.replace(/^---\n(mcpGeneratedSha: [a-f0-9]{40}\n)/u, '---\n');
+    const unchangedBaseline = !ignoreBaseline && (publishedBaseline[article.path] === createHash('sha256').update(withoutMarker).digest('hex') || reviewOnly);
     if (!unchangedBaseline) {
       for (const text of [article.title, article.description, article.body, ...(article.guide?.steps ?? []).map(({ text }) => text)]) checkInterfaceLabels(text, article.path);
     }
