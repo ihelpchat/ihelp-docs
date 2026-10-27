@@ -25,6 +25,8 @@ test('lista com estrutura desconhecida nunca é confundida com lista vazia', asy
       await page.setContent(html);
       assert.equal(await runtime.visibleRealCompanyRows(page), null, 'estrutura não verificável omite print');
     }
+    await page.setContent('<main><table><tbody><tr><td><input type="checkbox"></td><td><span aria-hidden="true">TF</span><span>Teste FAQ Contato</span></td><td>20 7946 0001</td></tr></tbody></table></main>');
+    assert.deepEqual(await runtime.visibleRealCompanyRows(page), ['Teste FAQ Contato 20 7946 0001'], 'avatar do front não é o nome da linha');
     await page.setContent('<main><h3>Nenhum resultado para os filtros aplicados</h3></main>');
     assert.deepEqual(await runtime.visibleRealCompanyRows(page), [], 'empty state conferido no front');
   } finally { await browser.close(); }
