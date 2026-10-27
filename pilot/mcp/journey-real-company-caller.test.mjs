@@ -25,7 +25,6 @@ async function withFront(t, options, consume) {
   let saved;
   let tag;
   let linked = false;
-  let detailVisits = 0;
   const token = () => 'fixture.' + Buffer.from(JSON.stringify({ userId: '3',
     businessId: saved && options.tokenCompany || '42' })).toString('base64url') + '.fixture';
   const server = createServer(async (req, res) => {
@@ -35,7 +34,7 @@ async function withFront(t, options, consume) {
       res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body));
     };
     if (url.pathname.startsWith('/api/')) {
-      if (req.method === 'DELETE') return json({}, 200);
+      if (req.method === 'DELETE') { setTimeout(() => json({}, 200), 25); return; }
       if (req.method === 'POST' && url.pathname === '/api/v2/contacts') {
         let body = ''; for await (const chunk of req) body += chunk;
         const part = name => new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]+)`, 'u').exec(body)?.[1];
@@ -48,6 +47,7 @@ async function withFront(t, options, consume) {
       if (req.method === 'POST' && url.pathname === '/api/v2/tags') {
         let body = ''; for await (const chunk of req) body += chunk;
         tag = { id: 33, nome: JSON.parse(body).nome };
+        linked = true;
         return json({ dados: tag }, 201);
       }
       if (req.method === 'POST' && url.pathname === '/api/v2/contactTags/17') { linked = true; return json({}); }
@@ -55,7 +55,7 @@ async function withFront(t, options, consume) {
       if (url.pathname.startsWith('/api/v2/contacts/details/')) return json({ dados: saved });
       if (url.pathname === '/api/v2/contacts') return json({ dados: url.searchParams.has('searchData')
         ? [saved] : [{ id: 99, idRef: 'unrelated-99', nome: 'Cliente fictício anterior' }] });
-      return json(url.pathname === '/api/v2/tags' ? [] : { dados: [] });
+      return json(url.pathname === '/api/v2/tags' ? tag ? [tag] : [] : { dados: [] });
     }
     const script = `
       const headers = { Authorization: ${JSON.stringify('Bearer ' + token())} };
@@ -65,24 +65,26 @@ async function withFront(t, options, consume) {
     if (url.pathname === '/login') html = `<input type="email"><input type="password"><button>Entrar</button>
       <script>document.querySelector('button').onclick = () => location.href = '/contact';</script>`;
     else if (url.pathname.startsWith('/contact/detail/')) {
-      detailVisits++;
       html = `<main><h1>Contatos</h1><div id="name"></div><div>${env.QA_PROD_TEST_PHONE}</div>
         ${options.tags ? '<button role="tab" id="tags">Tags</button><div id="tag-form" hidden><input role="combobox" placeholder="Buscar ou criar tag..."><div id="options"></div></div>' : ''}</main>
         <script>${script}
           // Initial loading render is replaced by the caller's reload; only that fresh read renders the record.
-          ${detailVisits % 2 === 0 ? `get('/contacts/details/' + location.pathname.split('/').pop()).then(data => {
+          if (performance.getEntriesByType('navigation')[0]?.type === 'reload') get('/contacts/details/' + location.pathname.split('/').pop()).then(data => {
             document.querySelector('#name').textContent = data.dados.nome;
-          });` : ''}
+          });
           ${options.tags ? `
             document.querySelector('#tags').onclick = () => { document.querySelector('#tag-form').hidden = false; };
             document.querySelector('[role=combobox]').oninput = event => {
               const name = event.target.value;
               const option = document.createElement('div'); option.setAttribute('role', 'option'); option.textContent = name;
               option.onclick = async () => {
-                const created = await fetch('/api/v2/tags?contactId=17', {method:'POST',
+                await fetch('/api/v2/tags?contactId=17', {method:'POST',
                   headers: {...headers, 'content-type':'application/json'}, body:JSON.stringify({nome:name})}).then(r => r.json());
+                // ContactInformations.handleCreateTag refreshes both lists, then reads the linked IDs again.
+                await Promise.all([get('/tags'), get('/contactTags/getContactsTagByContactId/17')]);
+                const links = await get('/contactTags/getContactsTagByContactId/17');
                 await fetch('/api/v2/contactTags/17', {method:'POST', headers: {...headers, 'content-type':'application/json'},
-                  body:JSON.stringify({contatoId:17, tagsId:created.dados.id})});
+                  body:JSON.stringify(links.map(row => ({contatoId:17, tagsId:row.tagsId})))});
               };
               document.querySelector('#options').replaceChildren(option);
             };
@@ -179,6 +181,9 @@ test('caller real nega lista sem filtro, captura lista filtrada pendente e limpa
     const entry = { page: 'contatos', step: 'buscar', source: 'automatic', status: 'approved', aprovacao: filtered.aprovacao,
       file: `/img/mcp/contatos/buscar.automatic.${filtered.screenshotId}.png`, sha256: filtered.screenshotId,
       bundleSha: 'a'.repeat(40), alt: 'Contatos' };
+    const approved = { version: 1, entries: [{ ...entry, aprovacao: 'aprovado' }] };
+    assert.ok(screenshotForStep(approved, 'contatos', 'buscar'), 'controle aprovado é publicável');
+    assert.ok(chooseScreenshot(approved, 'contatos', 'buscar'));
     assert.equal(screenshotForStep({ version: 1, entries: [entry] }, 'contatos', 'buscar'), null);
     assert.equal(chooseScreenshot({ version: 1, entries: [entry] }, 'contatos', 'buscar'), null);
     assert.deepEqual(records.cleanup.deleted, [{ kind: 'contact', id: 'created-17' }]);
