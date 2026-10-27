@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { runInNewContext } from 'node:vm';
+import { compileFunction } from 'node:vm';
 import { test } from 'node:test';
 import { parseDocument } from 'yaml';
 
@@ -24,16 +24,21 @@ function context(event, branch, labels = [], target = 'staging', enabled = 'true
 }
 
 // Evaluate the expressions from the parsed workflows, never a second copy of their policy.
+// These are trusted local expressions, not external code. Compile them once;
+// event selection is a functional contract, independent of host scheduling.
+const compiled = new Map();
 function evaluate(value, ctx) {
   if (value == null) return true;
   if (typeof value !== 'string') return value;
   const expression = value.replace(/^\$\{\{\s*|\s*\}\}$/g, '')
     .replaceAll('github.event.pull_request.labels.*.name', 'github.event.pull_request.labels.map(label => label.name)');
-  return runInNewContext(expression, {
+  const scope = {
     ...ctx, contains: (values, item) => values.includes(item),
     startsWith: (value, prefix) => value.startsWith(prefix), fromJSON: JSON.parse,
     always: () => true, success: () => true, failure: () => false, cancelled: () => false,
-  }, { timeout: 100 });
+  };
+  if (!compiled.has(expression)) compiled.set(expression, compileFunction(`return (${expression});`, Object.keys(scope)));
+  return compiled.get(expression)(...Object.values(scope));
 }
 
 function matches(branch, pattern) {
