@@ -11,6 +11,7 @@ import { runJourneys, fixtureValue, realCompanyFixture, cleanupCreatedItems, sel
 import { searchLocalProductContext } from './local-product-context.mjs';
 import { journeyTarget, productionConfig, productionPreflight } from './journey-production.mjs';
 import { containsSensitiveData } from './sensitive-data.mjs';
+import { areaWriteAllowed, areaWriteRules, areaPlans, areaFixtureValue, areaStageSafe, verifyAreaResult } from './journey-plans/index.mjs';
 import effectfulGetInventory from './production-effectful-gets.json' with { type: 'json' };
 
 const taskCatalog = new URL('../architecture/faq-regua/tarefas-ouro.json', import.meta.url);
@@ -232,6 +233,7 @@ const writeRules = {
   'robos.montar_menu': [{ method: 'PUT', path: /^\/bot\/([a-z0-9-]+)\/save\/?$/iu }],
   'robos.encaminhar': [{ method: 'PUT', path: /^\/bot\/([a-z0-9-]+)\/save\/?$/iu }],
   'robos.salvar': [{ method: 'PUT', path: /^\/bot\/([a-z0-9-]+)\/save\/?$/iu }],
+  ...areaWriteRules,
 };
 const forbiddenKeys = /(?:^|_)(?:enabled|send|schedule|typeSave|saveOrigin|webhook)(?:$|_)/iu;
 const inactiveState = (value) => value === false || value === 'inactive' || value === 'draft';
@@ -443,6 +445,8 @@ export function journeyRequestAllowed(request, { taskId, apiOrigin, generated = 
   fixedIds = {}, contactSnapshot } = {}) {
   const method = request.method().toUpperCase();
   if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return true;
+  if (['crm.', 'campanhas.', 'agendamentos.', 'tarefas.'].some((prefix) => taskId?.startsWith(prefix)))
+    return areaWriteAllowed(request, { taskId, apiOrigin, generated, createdIds, fixedIds });
   let path; let query;
   try {
     const url = new URL(request.url());
@@ -601,8 +605,8 @@ export function journeyVocabulary(facts, screenCode = []) {
       && !containsSensitiveData(value, { detectOpaque: true })))];
 }
 
-export async function observeJourneyDom(page, { vocabulary = [], generated = new Set() } = {}) {
-  const raw = await page.evaluate((selector) => {
+export async function observeJourneyDom(page, { vocabulary = [], generated = new Set(), selfId } = {}) {
+  const raw = await page.evaluate(({ selector, selfId }) => {
     const visible = (node) => Boolean(node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden');
     const compact = (value) => String(value ?? '').replace(/\s+/gu, ' ').trim().replace(/\s*\*$/u, '').slice(0, 180);
     const byId = (ids) => compact(ids.split(/\s+/u).map((id) => document.getElementById(id)?.textContent ?? '').join(' '));
@@ -632,13 +636,16 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
         ? 'Adicionar opção +'
       : node.tagName === 'BUTTON' && /^(?:Salvar|Publicar)$/iu.test(node.innerText?.trim() ?? '')
         ? node.innerText.trim()
+      // Chips do CRM: o label nomeia o grupo; o title identifica o alvo.
+      : node.tagName === 'BUTTON' && ['Estágio inicial', 'Responsável'].includes(visual(node))
+        && node.getAttribute('title') ? node.getAttribute('title')
       : node.getAttribute('aria-labelledby') && byId(node.getAttribute('aria-labelledby'))
       || node.labels?.[0]?.textContent || node.closest('label')?.textContent
       || node.getAttribute('aria-label') || visual(node)
       || (node.closest('[data-tooltip-content="Editar"]') && node.closest('dd')?.previousElementSibling?.textContent?.trim() === 'Proprietário do Contato'
         ? 'Editar Proprietário do Contato' : '')
       || node.closest('[data-tooltip-content]')?.getAttribute('data-tooltip-content')
-      || node.getAttribute('placeholder') || node.innerText);
+      || node.getAttribute('placeholder') || node.getAttribute('title') || node.innerText);
     const role = (node) => node.matches('div.rounded-xl.cursor-pointer,svg.cursor-pointer') ? 'button'
       : node.matches('[role="option"],[data-value]') ? 'option'
       : node.getAttribute('role') || ({ BUTTON: 'button', A: 'link', INPUT: node.type === 'checkbox' ? 'checkbox' : 'textbox',
@@ -659,13 +666,21 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
       value: 'value' in node ? node.value : null,
       defaultValue: 'defaultValue' in node ? node.defaultValue : null,
       phoneCountry: node.matches('select,[role="combobox"]') && Boolean(node.closest('.phoneInputWrapper,.PhoneInput,[class*="phoneInput" i]')?.querySelector('input[type="tel"]')),
+      sessionUser: Number.isSafeInteger(selfId) && selfId > 0
+        && node.getAttribute('data-value') === String(selfId),
       field: node.matches('input:not([type="hidden"]),textarea,select,[role="combobox"]') }] : []);
     const rows = [...document.querySelectorAll('tbody tr')].filter(visible).map((row) => compact(row.innerText));
-    return { controls, rows, title: document.title,
+    const listButton = document.querySelector('button[aria-label="Modo lista"]');
+    const cardButton = document.querySelector('button[aria-label="Modo card"]');
+    const campaignViewMode = listButton && cardButton && visible(listButton) && visible(cardButton)
+      ? listButton.classList.contains('bg-primary-50') && !cardButton.classList.contains('bg-primary-50') ? 'list'
+        : cardButton.classList.contains('bg-primary-50') && !listButton.classList.contains('bg-primary-50') ? 'card' : ''
+      : '';
+    return { controls, rows, campaignViewMode, title: document.title,
       messages: [...document.querySelectorAll('[role="alert"],[role="status"],[aria-live],[class*="toast" i],.error,[class*="text-red"]')]
         .filter(visible).map((node) => compact(node.textContent)).filter(Boolean),
       headings: [...document.querySelectorAll('h1,h2,h3')].filter(visible).map((node) => compact(node.textContent)).join(' | ').slice(0, 180) };
-  }, journeyControlSelector);
+  }, { selector: journeyControlSelector, selfId });
   const known = new Set([...vocabulary, 'Buscar contato...', 'Mais opções', 'Exportar Contatos', 'Importar Contatos']);
   const knownFolded = new Set([...known].map((value) => value.toLocaleLowerCase('pt-BR')));
   const targets = {};
@@ -673,6 +688,8 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
   const fields = [];
   let fieldNumber = 0;
   let optionNumber = 0;
+  let sessionUserOption = '';
+  const sessionMatches = raw.controls.filter((node) => node.role === 'option' && node.sessionUser);
   const repeated = new Map();
   for (const node of raw.controls) {
     const key = journeyTargetKey(node.role, node.name);
@@ -682,7 +699,10 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
   for (const node of raw.controls) {
     if (node.phoneCountry) continue;
     if (node.field) fieldNumber++;
-    if (node.role === 'option') optionNumber++;
+    if (node.role === 'option') {
+      optionNumber++;
+      if (sessionMatches.length === 1 && node.sessionUser) sessionUserOption = `opção ${optionNumber}`;
+    }
     let name = node.role === 'option' ? `opção ${optionNumber}` : node.name;
     if (node.role !== 'option' && repeated.get(journeyTargetKey(node.role, node.name)) > 1) {
       const regionKey = journeyTargetKey(node.role, `${name} (${node.region})`);
@@ -712,8 +732,9 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
   }
   return { controls, fields, messages: raw.messages.map((value) => known.has(value) ? value : '[conteúdo oculto]'),
     state: { headings: raw.headings.split(' | ').map((value) => known.has(value) ? value : '[conteúdo oculto]').join(' | '),
+      campaignViewMode: raw.campaignViewMode, sessionUserOption,
       visibleRows: String(raw.rows.length), generatedRows: String(raw.rows.filter((row) => [...generated].some((value) =>
-        /^Contato Exemplo/u.test(value) && row.includes(value))).length) },
+        /^(?:Contato|Card|Campanha|Tarefa) Exemplo/u.test(value) && row.includes(value))).length) },
     title: raw.title, targets };
 }
 
@@ -748,12 +769,13 @@ export async function coveringElement(page, selected) {
   }, selected);
 }
 
-export async function actJourneyAction(page, action, targets, { vocabulary = [], generated = new Set() } = {}) {
+export async function actJourneyAction(page, action, targets, { vocabulary = [], generated = new Set(), selfId } = {}) {
   const target = targets[journeyTargetKey(action.role, action.name)];
   const changed = () => Object.assign(new Error('alvo mudou; observe de novo'), { code: 'JOURNEY_TARGET_CHANGED' });
   if (!target) throw changed();
   const names = Object.keys(targets).map((key) => JSON.parse(key)[1]);
-  const fresh = await observeJourneyDom(page, { vocabulary: [...vocabulary, ...names], generated });
+  const fresh = await observeJourneyDom(page, { vocabulary: [...vocabulary, ...names], generated, selfId });
+  if (selfId != null && action.role === 'option' && fresh.state.sessionUserOption !== action.name) throw changed();
   const matches = fresh.controls.filter((control) => control.role === action.role && control.name === action.name);
   if (matches.length !== 1 || !matches[0].enabled || !fresh.targets[journeyTargetKey(action.role, action.name)]) throw changed();
   const selected = fresh.targets[journeyTargetKey(action.role, action.name)];
@@ -955,6 +977,8 @@ export function creationRefsForTask(taskId, refs, createdRef) {
 }
 
 export function journeyStartRoute(task, prepared) {
+  if (areaPlans[task.id]) return { crm: '/crm/pipeline', campanhas: '/campanhas',
+    agendamentos: '/agendamentos', tarefas: '/tarefas' }[task.modulo];
   if (task.id === 'contatos.cadastrar' || task.id === 'robos.criar'
     || task.id === 'contatos.importar' || task.id === 'contatos.exportar'
     || task.id === 'contatos.buscar' || task.id === 'robos.buscar')
@@ -1148,6 +1172,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
   const creationWaiters = new Set();
   const pendingPosts = new Set();
   const createdIds = new Set();
+  const areaIds = { card: new Set(), task: new Set(), campaign: new Set(), schedule: new Set(), scheduleDay: new Set() };
+  const areaNames = {};
   const production = env.QA_TARGET === 'producao';
   const fixtureFor = (kind, n = 1) => realCompany
     ? realCompanyFixture(kind, n, markerFor(), env.QA_PROD_TEST_PHONE)
@@ -1155,7 +1181,9 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
   const readIds = (name) => new Set(String(production ? '' : env[name] ?? '').split(',')
     .filter((value) => /^\d+$/u.test(value)).map(Number));
   const fixedIds = { department: readIds('CAPTURE_QA_DEPARTMENT_IDS'), user: readIds('CAPTURE_QA_USER_IDS'),
-    channel: readIds('CAPTURE_QA_CHANNEL_IDS'), tag: new Set(), company: readIds('CAPTURE_QA_COMPANY_IDS') };
+    channel: readIds('CAPTURE_QA_CHANNEL_IDS'), tag: new Set(), company: readIds('CAPTURE_QA_COMPANY_IDS'),
+    card: areaIds.card, campaign: areaIds.campaign, schedule: areaIds.schedule, scheduleDay: areaIds.scheduleDay,
+    stage: new Set(), funnel: new Set(), contact: new Set(), self: new Set() };
   const createdRefs = { contatos: new Set(), robos: new Set() };
   const createdForCleanup = [];
   const target = assertAllowedTarget(baseUrl, env, { allowProduction: true });
@@ -1178,7 +1206,9 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       fixturesMarker = markerFor();
       fixturesSet = new Set([fixturesMarker, ...['contactName', 'editedName', 'robotName', 'tagName', 'menuQuestion',
         'menuOption', 'departmentName', 'userName', 'email', 'phone']
-        .flatMap((kind) => Array.from({ length: 99 }, (_, i) => fixtureFor(kind, i + 1)))]);
+        .flatMap((kind) => Array.from({ length: 99 }, (_, i) => fixtureFor(kind, i + 1))),
+      ...['cardName', 'campaignName', 'noteText', 'taskName', 'editedTaskName']
+        .map((kind) => areaFixtureValue(kind, { marker: fixturesMarker })), ...Object.values(areaNames)]);
     }
     return fixturesSet;
   };
@@ -1278,6 +1308,24 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       if (!production) await context.route('**/*', guardedRoute);
       page.on('response', (response) => {
         const url = new URL(response.url());
+        if (response.ok() && url.origin === qaApi?.origin && response.request().method() === 'POST'
+          && (currentTask === 'crm.criar_card' && /^\/api\/(?:v2\/)?crm\/card\/?$/u.test(url.pathname)
+            || currentTask === 'tarefas.criar' && /^\/api\/(?:v2\/)?task\/?$/u.test(url.pathname))) {
+          const pending = response.json().then((body) => {
+            const row = body?.dados ?? body?.data ?? body;
+            const expected = currentTask === 'crm.criar_card'
+              ? areaFixtureValue('cardName', { marker: markerFor() })
+              : areaFixtureValue('taskName', { marker: markerFor() });
+            const id = Number(row?.id);
+            if (row?.title !== expected || !Number.isSafeInteger(id) || id <= 0) return;
+            createdIds.add(id);
+            areaIds[currentTask === 'crm.criar_card' ? 'card' : 'task'].add(id);
+            if (currentTask === 'tarefas.criar' && typeof row.idRef === 'string'
+              && /^[a-f0-9-]{36}$/iu.test(row.idRef)) createdIds.add(row.idRef);
+          }).catch(() => {});
+          pendingPosts.add(pending);
+          pending.finally(() => pendingPosts.delete(pending));
+        }
         if (currentTask?.startsWith('robos.') && response.request().method() === 'PUT'
           && qaRequestDecision(url.href, target, env).allowed)
           botWriteProbe.push({ route: /\/bot\/[^/]+\/save\/?$/iu.test(url.pathname) ? 'save'
@@ -1394,7 +1442,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         pending.finally(() => pendingPosts.delete(pending));
       });
       const route = journeyStartRoute(task, prepared);
-      await page.goto(new URL(route, target.url).href, { waitUntil: 'domcontentloaded' });
+      await page.goto(new URL(production ? '/contact' : route, target.url).href, { waitUntil: 'domcontentloaded' });
       qaApi = await settledJourneyApi(page, target, qaApi);
       if (!qaApi) throw new Error('API autenticada da homologação indisponível');
       if (production) assertProductionAccountHosts(target, qaApi.origin);
@@ -1408,8 +1456,10 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         if (company.status !== 200 || String(company.body?.dados?.id ?? '') !== account.companyId
           || account.companyId !== env.QA_PROD_COMPANY_ID) throw new Error('empresa divergente da sessão');
         productionReady = true;
+        if (route !== '/contact')
+          await page.goto(new URL(route, target.url).href, { waitUntil: 'domcontentloaded' });
       }
-      if (prepared.identity) {
+      if (prepared.identity && ['contatos', 'robos'].includes(task.modulo)) {
         const { refs, ids } = prepared.identity;
         if (!Array.isArray(refs) || refs.length !== 1 || !Array.isArray(ids)) throw new Error('identidade de cache inválida');
         const ref = task.modulo === 'robos' ? prepared.robotRef : refs[0];
@@ -1457,6 +1507,112 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       });
       for (const kind of ['department', 'channel', 'user', 'tag'])
         for (const id of loaded.fixedIds[kind]) fixedIds[kind].add(id);
+      const areaFixtureContext = {};
+      if (areaPlans[task.id]) {
+        const rows = (body) => {
+          const data = body?.dados ?? body?.data ?? body;
+          return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+        };
+        const fixtureRows = async (path) => {
+          const result = await authenticatedGet(path);
+          if (result.status !== 200) throw new Error('fixture de área indisponível');
+          return rows(result.body);
+        };
+        if (task.id === 'crm.criar_card') {
+          const self = Number(account.userId);
+          if (!Number.isSafeInteger(self) || self <= 0) throw new Error('usuário da sessão indisponível');
+          fixedIds.self.add(self);
+          const funnels = await fixtureRows('/crm/pipelines');
+          const safeStages = readIds('CAPTURE_QA_SAFE_CRM_STAGE_IDS');
+          let chosen;
+          for (const funnel of funnels.filter((row) => Number.isSafeInteger(row?.id) && row.id > 0
+            && ['owner', 'admin', 'edit'].includes(row.currentUserLevel))) {
+            const stages = await fixtureRows(`/crm/funnelstage/funnel/${funnel.id}`);
+            const candidates = stages.filter((row) => Number.isSafeInteger(row?.id)
+              && (production || safeStages.has(row.id)) && /^Etapa Exemplo \d{2}$/u.test(row?.title ?? ''));
+            if (!candidates.length) continue;
+            const rulesResponse = await authenticatedGet(`/crm/funnel/${funnel.id}/with-rules`);
+            if (rulesResponse.status !== 200) continue;
+            const rules = (rulesResponse.body?.dados ?? rulesResponse.body)?.rules;
+            for (const stage of candidates) {
+              const templatesResponse = await authenticatedGet(`/crm/stages/${stage.id}/task-templates`);
+              if (templatesResponse.status !== 200) continue;
+              const templates = templatesResponse.body?.dados ?? templatesResponse.body;
+              if (areaStageSafe(rules, templates)) { chosen = { funnel, stage }; break; }
+            }
+            if (chosen) break;
+          }
+          if (!chosen) throw new Error('etapa sem automação de preparo indisponível');
+          const { funnel, stage } = chosen;
+          fixedIds.funnel.add(funnel.id);
+          fixedIds.stage.add(stage.id);
+          areaFixtureContext.stageName = stage.title;
+          const contacts = await fixtureRows('/contacts');
+          const contact = contacts.find((row) => Number.isSafeInteger(row?.id)
+            && /^Contato Exemplo \d{2}(?: · [a-f0-9]{8})?$/u.test(row?.nome ?? '')
+            && /^\+?44\s?20\s?7946\s?0\d{3}$/u.test(row?.telefone ?? row?.numero ?? ''));
+          if (!contact) throw new Error('contato de preparo indisponível');
+          fixedIds.contact.add(contact.id);
+          areaFixtureContext.contactSearch = contact.nome;
+          areaFixtureContext.contactOption = 'opção 1';
+          const users = await fixtureRows('/configurations/users');
+          const sessionUser = users.find((row) => row.id === self);
+          const label = sessionUser?.nome;
+          if (!/^Atendente Exemplo \d{2}$/u.test(label ?? '')
+            || users.filter((row) => row.nome === label).length !== 1)
+            throw new Error('responsável fictício da sessão indisponível');
+          areaFixtureContext.selfLabel = label;
+        }
+        if (task.id === 'tarefas.criar') {
+          const self = Number(account.userId);
+          if (!Number.isSafeInteger(self) || self <= 0) throw new Error('usuário da sessão indisponível');
+          fixedIds.self.add(self);
+        }
+        if (task.modulo === 'crm' && task.id !== 'crm.criar_card' && areaIds.card.size !== 1)
+          throw new Error('card fictício de preparo indisponível');
+        if (task.modulo === 'tarefas' && task.id !== 'tarefas.criar' && areaIds.task.size !== 1)
+          throw new Error('tarefa fictícia de preparo indisponível');
+        if (task.modulo === 'campanhas') {
+          const campaigns = await fixtureRows('/marketing/campaigns?searchText=Campanha%20Exemplo%2001&page=1&limit=20');
+          const campaign = campaigns.find((row) => typeof row?.idRef === 'string'
+            && /^[a-z0-9-]{1,80}$/iu.test(row.idRef)
+            && /^Campanha Exemplo 01(?: · [a-f0-9]{8})?$/u.test(row?.titulo ?? ''));
+          if (!campaign) throw new Error('campanha fictícia de preparo indisponível');
+          areaIds.campaign.add(campaign.idRef);
+          areaFixtureContext.campaignName = campaign.titulo;
+          areaNames.campaignName = campaign.titulo;
+          fixturesMarker = undefined;
+        }
+        if (task.modulo === 'agendamentos') {
+          const now = new Date();
+          const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 3)).toISOString();
+          const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 2, 59, 59)).toISOString();
+          areaNames.scheduleRange = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+          const days = await fixtureRows(`/ScheduledMessages/calendar/amount-per-day?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+          const day = days.find((row) => Number.isInteger(row?.monthDay) && row.monthDay >= 1 && row.monthDay <= 31
+            && Number.isInteger(row?.amount) && row.amount > 0);
+          if (!day) throw new Error('agendamento de preparo indisponível');
+          areaIds.scheduleDay.add(day.monthDay);
+          areaFixtureContext.scheduleDay = String(day.monthDay);
+          const date = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(day.monthDay).padStart(2, '0')}`;
+          const schedules = await fixtureRows(`/ScheduledMessages/calendar/schedules/${date}`);
+          const schedule = schedules.find((row) => typeof row?.idRef === 'string'
+            && /^[a-z0-9-]{1,80}$/iu.test(row.idRef) && typeof row.sent === 'boolean'
+            && /^\+?44\s?20\s?7946\s?0\d{3}$/u.test(row.targetPhoneNumber ?? ''));
+          if (!schedule) throw new Error('agendamento de preparo indisponível');
+          areaIds.schedule.add(schedule.idRef);
+          areaNames.scheduleDate = date;
+        }
+        Object.assign(areaNames, areaFixtureContext);
+        fixturesMarker = undefined;
+        const route = areaPlans[task.id].startRoute;
+        if (route.includes(':id') || route.includes(':idRef')) {
+          const id = task.modulo === 'crm' ? [...areaIds.card][0]
+            : task.modulo === 'tarefas' ? [...areaIds.task][0] : [...areaIds.campaign][0];
+          const destination = route.replace(/:idRef|:id/gu, String(id));
+          await page.goto(new URL(destination, target.url).href, { waitUntil: 'domcontentloaded' });
+        }
+      }
       if (task.modulo === 'robos' && ['robos.montar_menu', 'robos.encaminhar', 'robos.salvar'].includes(task.id)) {
         const response = await authenticatedGet(`/bot/${prepared.robotRef}`);
         const bot = response.body?.dados?.bot ?? response.body?.dados ?? response.body;
@@ -1481,7 +1637,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         if (response.status !== 200 || !Array.isArray(response.body)) throw new Error('tags de preparo inválidas');
         beforeTagIds = new Set(response.body.map((row) => row?.tagsId).filter(Number.isSafeInteger));
       }
-      return { account, environmentBlocked, fixtures: [...loaded.fixtures, ...[
+      return { account, environmentBlocked, areaFixtureContext, fixtures: [...loaded.fixtures, ...[
         ['department', 'CAPTURE_QA_DEPARTMENT_IDS'], ['channel', 'CAPTURE_QA_CHANNEL_IDS'],
         ['user', 'CAPTURE_QA_USER_IDS']].filter(([, name]) => readIds(name).size).map(([kind, name]) =>
         ({ source: name, kind, ids: [...readIds(name)] }))] };
@@ -1492,9 +1648,12 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       catch (error) { error.stage = 'navegação'; throw error; }
       const actualPath = new URL(page.url()).pathname;
       const path = actualPath.replace(/^\/contact\/detail\/[^/]+$/u, '/contact/detail/record')
-        .replace(/^\/bot\/[^/]+$/u, '/bot/record');
+        .replace(/^\/bot\/[^/]+$/u, '/bot/record')
+        .replace(/^\/crm\/card\/[^/]+$/u, '/crm/card/record')
+        .replace(/^\/campanhas\/detalhe\/[^/]+$/u, '/campanhas/detalhe/record');
       let data;
-      try { data = await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures() }); }
+      try { data = await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures(),
+        selfId: currentTask === 'tarefas.criar' ? [...fixedIds.self][0] : undefined }); }
       catch (error) { error.stage = 'dom'; throw error; }
       if (currentTask === 'robos.montar_menu' && data.controls.some((item) => item.name === 'Menu de opções')) {
         menuProbe = await page.evaluate(() => {
@@ -1513,7 +1672,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
             const ownItem = [...createdRefs.contatos, ...createdRefs.robos].some(ref => page.url().endsWith(`/${ref}`));
             captured = realCompany
               ? await screenshotGuard.capture({ path, ownItem, vocabulary: [...known], testPhone: env.QA_PROD_TEST_PHONE })
-              : { screenshot: await captureMaskedFrame(page, [...known]) };
+              : { screenshot: await captureMaskedFrame(page, [...known, ...fixtures()]) };
             break;
           } catch (error) {
             if (error.stage !== 'máscara' || attempt === 2) throw error;
@@ -1592,7 +1751,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
           { timeout: 30_000 }).catch(() => null) : null;
         if (currentTask === 'contatos.cadastrar' && action.type === 'click' && action.name === 'Salvar')
           await page.waitForLoadState('networkidle', { timeout: 2_500 }).catch(() => {});
-        await actJourneyAction(page, action, observedTargets, { vocabulary: [...known], generated: fixtures() });
+        await actJourneyAction(page, action, observedTargets, { vocabulary: [...known], generated: fixtures(),
+          selfId: currentTask === 'tarefas.criar' ? [...fixedIds.self][0] : undefined });
         if (botSaveResponse) {
           botSaveStatus = (await botSaveResponse)?.status() ?? botSaveStatus;
           if (botSaveStatus >= 200 && botSaveStatus < 300) await botSaveReload;
@@ -1726,6 +1886,27 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
     },
     async verify(task, prepared, actions = []) {
       await Promise.all([...pendingPosts]);
+      if (areaPlans[task.id]) {
+        const plan = areaPlans[task.id];
+        const id = task.modulo === 'crm' ? [...areaIds.card][0]
+          : task.modulo === 'tarefas' ? [...areaIds.task][0]
+            : task.modulo === 'campanhas' ? [...areaIds.campaign][0] : null;
+        const path = plan.persisted.path.replace(/:date/gu, areaNames.scheduleDate ?? '')
+          .replace(/:idRef|:id/gu, String(id ?? ''));
+        if (path.includes('//') || path.endsWith('/') && plan.persisted.path.includes(':'))
+          return { confirmed: false, observed: 'referência fictícia ausente' };
+        const read = await authenticatedGet(path + (task.id === 'agendamentos.consultar_mes'
+          ? areaNames.scheduleRange ?? '' : ''));
+        const observed = task.id === 'campanhas.alternar_visualizacao'
+          ? await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures() }) : null;
+        const confirmed = verifyAreaResult(task.id, { ...read, method: 'GET',
+          url: new URL(`/api/v2${path}`, qaApi.origin).href },
+        { apiOrigin: qaApi.origin, createdIds, fixedIds, generated: fixtures(),
+          expectedValue: task.id === 'tarefas.editar'
+            ? areaFixtureValue('editedTaskName', { marker: markerFor() }) : undefined,
+          screen: observed });
+        return { confirmed, observed: confirmed ? 'Resultado fictício persistido' : 'Leitura posterior não confirmou' };
+      }
       if (task.id === 'contatos.buscar') return filteredContactVerified
         ? { confirmed: true, observed: 'Contato fictício localizado de forma única' }
         : { confirmed: false, observed: 'Contato fictício não localizado de forma única' };
@@ -1891,7 +2072,9 @@ export function cleanupDeleteAllowed(method, href, apiOrigin, items) {
     && (typeof item.id === 'string' && /^[a-z0-9-]{1,80}$/iu.test(item.id)
       || Number.isSafeInteger(item.id) && item.id > 0)));
 }
-const taskTitle = (path) => path.startsWith('/bot') ? 'Robôs' : 'Contatos';
+const taskTitle = (path) => path.startsWith('/bot') ? 'Robôs'
+  : path.startsWith('/crm') ? 'CRM' : path.startsWith('/campanhas') ? 'Campanhas'
+    : path.startsWith('/agendamentos') ? 'Agendamentos' : path.startsWith('/tarefas') ? 'Tarefas' : 'Contatos';
 
 const actionSchema = {
   type: 'object', additionalProperties: false,
@@ -2164,18 +2347,27 @@ export async function recordJourneys(module, selectedTasks, { env = process.env,
   const all = catalog.tarefas.filter((task) => task.modulo === module);
   if (!all.length || selectedTasks?.some((id) => !all.some((task) => task.id === id))) throw new Error('tarefas inválidas');
   const wanted = new Set(selectedTasks?.length ? selectedTasks : all.map((task) => task.id));
-  if ([...wanted].some((id) => id !== `${module}.${module === 'contatos' ? 'cadastrar' : 'criar'}`))
+  if (['contatos', 'robos'].includes(module)
+    && [...wanted].some((id) => id !== `${module}.${module === 'contatos' ? 'cadastrar' : 'criar'}`))
     wanted.add(`${module}.${module === 'contatos' ? 'cadastrar' : 'criar'}`);
+  if (module === 'crm' && [...wanted].some((id) => id !== 'crm.criar_card' && areaPlans[id]))
+    wanted.add('crm.criar_card');
+  if (module === 'tarefas' && [...wanted].some((id) => id !== 'tarefas.criar' && areaPlans[id]))
+    wanted.add('tarefas.criar');
   const tasks = all.filter((task) => wanted.has(task.id));
   let facts;
   const allowedScreenLabels = new Set();
   const loadFacts = async () => {
-    const found = await getProductContext(module === 'contatos' ? 'Contatos' : 'Robôs',
-      module === 'contatos' ? 'Contatos' : 'Robôs', { repositoryIds: ['frontend'] });
+    const label = { contatos: 'Contatos', robos: 'Robôs', crm: 'CRM', campanhas: 'Campanhas',
+      agendamentos: 'Agendamentos', tarefas: 'Tarefas' }[module];
+    if (!label) throw new Error('module ausente');
+    const found = await getProductContext(label, label, { repositoryIds: ['frontend'] });
     facts = found.code.find((item) => item.role === 'frontend' && item.available);
     if (!facts?.screenFacts?.length) throw new Error('fatos da tela indisponíveis');
     for (const value of [...journeyVocabulary(facts.screenFacts, facts.screenCode), ...journeyPlanLabels])
       allowedScreenLabels.add(value);
+    for (const task of tasks) for (const step of areaPlans[task.id]?.steps ?? [])
+      if (step.name) allowedScreenLabels.add(step.name);
   };
   await loadFacts();
   const frontSha = env.CAPTURE_FRONT_SHA ?? facts.ref;
@@ -2185,7 +2377,8 @@ export async function recordJourneys(module, selectedTasks, { env = process.env,
     if (!facts) await loadFacts();
     return makeBrowser({ baseUrl: qaUrl, env, markerFor,
       realCompany,
-      vocabulary: [...journeyVocabulary(facts.screenFacts, facts.screenCode), ...journeyPlanLabels] });
+      vocabulary: [...journeyVocabulary(facts.screenFacts, facts.screenCode), ...journeyPlanLabels,
+        ...tasks.flatMap((task) => areaPlans[task.id]?.steps?.map((step) => step.name).filter(Boolean) ?? [])] });
   });
   let liveModel;
   const lazyModel = model ?? { async decide(...args) { liveModel ??= makeModel(env, markerFor, realCompany); return liveModel.decide(...args); } };
