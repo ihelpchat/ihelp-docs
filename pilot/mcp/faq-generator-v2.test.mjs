@@ -246,3 +246,82 @@ test('headings estruturais sem afirmação dispensam prova, promessa continua bl
   ] }, evidence, providers);
   assert.equal(deceptive.status, 'precisa de revisão humana');
 });
+
+test('redator v2 incorpora o contrato aprendido sem perder o glossário nem os limites de evidência', () => {
+  const instructions = generator.faqWriterInstructions([]);
+  assert.match(instructions, /Contrato de lições editoriais aprendidas/u);
+  assert.match(instructions, /Glossário versionado do redator/u);
+  assert.match(instructions, /Não copie exemplos nem invente fatos do produto/u);
+});
+
+test('título com evidência explicitamente vazia não sai, mesmo com juiz favorável', async () => {
+  const result = await runFaqJudgment({ ...page, titleEvidenceIds: [] }, evidence, {
+    judgeFacts: async (claims) => claims.map(({ id }) => ({ id, status: 'sustentada', evidenceIds: ['J1'], reason: '' })),
+    judgeEditorial: async () => passing,
+  });
+  assert.equal(result.status, 'precisa de revisão humana');
+  assert.ok(result.diagnostic.includes('afirmação sem evidência: title'));
+  assert.equal(result.mdx, undefined);
+});
+
+test('passo não pode ser sustentado apenas por contexto de negócio', async () => {
+  const facts = [...evidence, { id: 'B1', type: 'negocio', text: 'A equipe organiza os clientes.' }];
+  const result = await runFaqJudgment(page, facts, {
+    judgeFacts: async (claims) => claims.map(({ id }) => ({ id, status: 'sustentada', evidenceIds: ['B1'], reason: '' })),
+    judgeEditorial: async () => passing,
+  });
+  assert.equal(result.status, 'precisa de revisão humana');
+  assert.ok(result.diagnostic.some((item) => item.includes('passo sem evidência do produto')));
+  assert.equal(result.mdx, undefined);
+});
+
+test('passo e efeito exigem vínculo e jornada concluída e confirmada da tarefa', async () => {
+  const providers = {
+    judgeFacts: async (claims) => claims.map(({ id }) => ({ id, status: 'sustentada', evidenceIds: ['J1'], reason: '' })),
+    judgeEditorial: async () => passing,
+  };
+  for (const kind of ['passo', 'depois']) {
+    for (const journey of [null, { status: 'bloqueada' }, { status: 'falhou' },
+      { status: 'pendente' }, { status: 'concluída', verification: { confirmed: false } }]) {
+      const plan = planFaqPage('contatos', [task], journey ? [{ task: task.id, ...journey }] : []);
+      const candidate = { ...page, sections: [{ ...page.sections[1], units: [
+        { text: 'O cadastro aparece na lista.', kind, evidenceIds: ['J1'] },
+      ] }] };
+      const result = await runFaqJudgment(candidate, evidence, providers, { plan });
+      assert.equal(result.approved, false, `${kind}: ${journey?.status ?? 'ausente'}`);
+      assert.equal(result.mdx, undefined);
+    }
+    const unlinked = { ...page, sections: [{ ...page.sections[1], taskId: null, units: [
+      { text: 'O cadastro aparece na lista.', kind, evidenceIds: ['J1'] },
+    ] }] };
+    const result = await runFaqJudgment(unlinked, evidence, providers);
+    assert.equal(result.approved, false, `${kind}: sem vínculo, mesmo sem pauta`);
+    assert.equal(result.mdx, undefined);
+  }
+});
+
+for (const module of ['contatos', 'robos']) test(`montagem julgada de ${module} preserva todas as frases aprovadas`, async () => {
+  const linkedTask = { id: `${module}.criar`, tarefa: 'Criar' };
+  const journey = { task: linkedTask.id, status: 'concluída', verification: { confirmed: true } };
+  const plan = planFaqPage(module, [linkedTask], [journey]);
+  const proof = [{ id: 'J1', type: 'jornada', task: linkedTask.id, status: 'concluída', text: 'O registro foi salvo.' }];
+  const candidate = { title: module === 'contatos' ? 'Contatos' : 'Robôs', titleEvidenceIds: ['J1'],
+    description: 'Consulte os registros da equipe.', descriptionEvidenceIds: ['J1'], sections: [
+      { heading: 'Criar registro', headingEvidenceIds: ['J1'], taskId: linkedTask.id, units: [
+        { text: 'A equipe consulta os registros.', kind: 'contexto', evidenceIds: ['J1'] },
+        { text: 'Clique em Salvar.', kind: 'passo', evidenceIds: ['J1'] },
+        { text: 'O registro aparece na lista.', kind: 'depois', evidenceIds: ['J1'] },
+      ] },
+    ] };
+  const result = await runFaqJudgment(candidate, proof, {
+    judgeFacts: async (claims) => claims.map(({ id }) => ({ id, status: 'sustentada', evidenceIds: ['J1'], reason: '' })),
+    judgeEditorial: async () => passing,
+  }, { plan });
+  assert.equal(result.status, 'aprovado', JSON.stringify(result.diagnostic));
+  assert.equal(result.preserved, true);
+  for (const text of [candidate.title, candidate.description, candidate.sections[0].heading,
+    ...candidate.sections[0].units.map(({ text }) => text)]) {
+    assert.ok(result.mdx.includes(text), text);
+    assert.ok(result.trace.some(({ claim }) => claim === text), text);
+  }
+});
