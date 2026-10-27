@@ -275,7 +275,7 @@ export const httpServer = createServer(async (request, response) => {
           question: rawBody.question, answer: [result.answer, ...(result.steps ?? []).map((step) => step.text)].join('\n'),
           resolution, guideId: resolvedStep?.guideId ?? result.guide?.guideId,
           stepId: resolvedStep?.stepId ?? result.guide?.stepId,
-          topic, action, issue,
+          topic, action, issue, businessContextUsed: result.businessContextUsed === true,
           offeredHuman: Boolean(result.actions?.some((item) => item.destination === 'support') || result.escalation),
           latencyMs: recordedAt - startedAt, model: result.model ?? process.env.OPENAI_MODEL ?? 'fixed',
         });

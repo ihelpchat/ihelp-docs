@@ -1,0 +1,94 @@
+{
+  "ajuste": 19,
+  "guardadas": 10,
+  "iniciais": {
+    "acertosAntes": 4,
+    "acertosDepois": 4,
+    "regressoes": 0,
+    "erroMedioAntes": 1.2608695652173914,
+    "erroMedioDepois": 1.2608695652173914
+  },
+  "licoes": [
+    {
+      "id": "L001",
+      "aceita": false,
+      "acertosAntes": 4,
+      "acertosDepois": 5,
+      "regressoes": 1,
+      "erroMedioAntes": 1.2608695652173914,
+      "erroMedioDepois": 1.1304347826086956
+    },
+    {
+      "id": "L002",
+      "aceita": false,
+      "acertosAntes": 4,
+      "acertosDepois": 4,
+      "regressoes": 1,
+      "erroMedioAntes": 1.2608695652173914,
+      "erroMedioDepois": 1.0869565217391304
+    },
+    {
+      "id": "L003",
+      "aceita": false,
+      "acertosAntes": 4,
+      "acertosDepois": 4,
+      "regressoes": 1,
+      "erroMedioAntes": 1.2608695652173914,
+      "erroMedioDepois": 1.2608695652173914
+    },
+    {
+      "id": "L004",
+      "aceita": false,
+      "acertosAntes": 4,
+      "acertosDepois": 4,
+      "regressoes": 1,
+      "erroMedioAntes": 1.2608695652173914,
+      "erroMedioDepois": 1.2173913043478262
+    },
+    {
+      "id": "L005",
+      "aceita": false,
+      "acertosAntes": 4,
+      "acertosDepois": 2,
+      "regressoes": 2,
+      "erroMedioAntes": 1.2608695652173914,
+      "erroMedioDepois": 1.2173913043478262
+    },
+    {
+      "id": "L006",
+      "aceita": false,
+      "acertosAntes": 4,
+      "acertosDepois": 4,
+      "regressoes": 0,
+      "erroMedioAntes": 1.2608695652173914,
+      "erroMedioDepois": 1.3043478260869565
+    },
+    {
+      "id": "L007",
+      "aceita": false,
+      "acertosAntes": 4,
+      "acertosDepois": 4,
+      "regressoes": 2,
+      "erroMedioAntes": 1.2608695652173914,
+      "erroMedioDepois": 1.173913043478261
+    },
+    {
+      "id": "L008",
+      "aceita": false,
+      "acertosAntes": 4,
+      "acertosDepois": 3,
+      "regressoes": 1,
+      "erroMedioAntes": 1.2608695652173914,
+      "erroMedioDepois": 1.3043478260869565
+    },
+    {
+      "id": "L009",
+      "aceita": false,
+      "acertosAntes": 4,
+      "acertosDepois": 3,
+      "regressoes": 1,
+      "erroMedioAntes": 1.2608695652173914,
+      "erroMedioDepois": 1.2608695652173914
+    }
+  ]
+}
