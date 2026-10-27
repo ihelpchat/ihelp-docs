@@ -1,20 +1,27 @@
 name: Product map
 
 on:
-  pull_request:
-    branches: [integration/claricia-v2]
+  workflow_call:
+    inputs:
+      fixtures_tested:
+        description: The caller already passed the complete MCP suite
+        type: boolean
+        default: false
+    secrets:
+      PRODUCT_READ_TOKEN:
+        required: false
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('pr-{0}-product-map', github.event.pull_request.number) || 'product-map-manual' }}
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}-product-map', github.event.pull_request.number) || format('product-map-{0}-{1}', github.ref, github.event_name) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   product-map:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(startsWith(github.ref, 'refs/heads/lote/') && vars.CI_LOTE_RUNS_ON || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,9 +32,13 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: docs/pilot/package-lock.json
-      - name: Install and prove fixture compatibility
+      - name: Install dependencies
         working-directory: docs/pilot
-        run: npm ci && node mcp/run-tests.mjs
+        run: npm ci
+      - name: Prove fixture compatibility when not already checked by caller
+        if: ${{ !inputs.fixtures_tested }}
+        working-directory: docs/pilot
+        run: node mcp/run-tests.mjs
       - name: Check read-only token availability
         id: token
         env:
@@ -54,5 +65,6 @@ jobs:
           persist-credentials: false
       - name: Compare real product with published guides
         if: steps.token.outputs.ready == 'true'
+        working-directory: .
         run: |
           node docs/pilot/scripts/product-map.mjs front back "$RUNNER_TEMP/product-map.json" --approved docs/pilot/product-map/approved.json
