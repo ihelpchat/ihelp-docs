@@ -48,7 +48,9 @@ async function withFront(t, options, consume) {
         let body = ''; for await (const chunk of req) body += chunk;
         tag = { id: 33, nome: JSON.parse(body).nome };
         linked = true;
-        return json({ dados: tag }, 201);
+        // TagsController.PostTags(contactId) returns ContactsTag, not the Tag entity.
+        return json({ dados: { id: 733, contatoId: options.tagContactId ?? 17,
+          tagsId: tag.id, empresaId: options.tagCompanyId ?? 42 } }, 200);
       }
       if (req.method === 'POST' && url.pathname === '/api/v2/contactTags/17') { linked = true; return json({}); }
       if (url.pathname === '/api/v2/contactTags/getContactsTagByContactId/17') return json(linked ? [{ tagsId: tag.id }] : []);
@@ -237,6 +239,19 @@ test('caller real captura ID da resposta de tag Teste FAQ e limpa tag antes do c
       ['/api/v2/tags/33', '/api/v2/contacts/created-17']);
   });
 });
+
+for (const [source, options] of [['contato', { tagContactId: 99 }], ['empresa', { tagCompanyId: 43 }]]) {
+  test(`caller real recusa resposta de tag com ${source} divergente`, async t => {
+    await withFront(t, { tags: true, ...options }, async ({ run, requests }) => {
+      const records = await run(['contatos.marcar_tags']);
+      assert.ok(requests.some(req => req.method === 'POST' && req.path === '/api/v2/tags'),
+        'a prova precisa alcançar a criação de tag');
+      assert.ok(records.cleanup.pending.some(item => item.kind === 'tag' && item.reason === 'id de resposta ausente'));
+      assert.deepEqual(records.cleanup.deleted.filter(item => item.kind === 'tag'), []);
+      assert.deepEqual(requests.filter(req => req.method === 'DELETE' && req.path.startsWith('/api/v2/tags/')), []);
+    });
+  });
+}
 
 for (const [source, options] of [['empresa', { company: 43 }], ['token', { tokenCompany: '43' }]]) {
   test(`caller real recusa cleanup com ${source} divergente após criação`, async t => {
