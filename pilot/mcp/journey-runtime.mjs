@@ -11,6 +11,7 @@ import { runJourneys, fixtureValue, realCompanyFixture, cleanupCreatedItems, sel
 import { searchLocalProductContext } from './local-product-context.mjs';
 import { journeyTarget, productionConfig, productionPreflight } from './journey-production.mjs';
 import { containsSensitiveData } from './sensitive-data.mjs';
+import { tagIdFromCreateResponse } from './journey-tag-response.mjs';
 import { areaWriteAllowed, areaWriteRules, areaPlans, areaFixtureValue, areaStageSafe, verifyAreaResult } from './journey-plans/index.mjs';
 import effectfulGetInventory from './production-effectful-gets.json' with { type: 'json' };
 
@@ -1374,7 +1375,10 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
             if (!fixtures().has(requested?.nome) || !/^(?:Teste FAQ )?Tag Exemplo /u.test(requested.nome)) return;
             const payload = await response.json().catch(() => null);
             const tag = payload?.dados ?? payload;
-            let id = tag?.nome === requested.nome || tag?.tagName === requested.nome ? tag.id : null;
+            const contactId = currentPrepared?.identity?.ids?.[0];
+            let id = tagIdFromCreateResponse(tag, { name: requested.nome, realCompany,
+              requestedId: requested.id, requestContactId: url.searchParams.get('contactId'),
+              expectedContactId: contactId, ownedContact: createdIds.has(contactId), companyId: env.QA_PROD_COMPANY_ID });
             if (!realCompany && (!Number.isSafeInteger(id) || id <= 0)) {
               const listed = await authenticatedGet('/tags').catch(() => null);
               const rows = Array.isArray(listed?.body) ? listed.body : listed?.body?.dados;
