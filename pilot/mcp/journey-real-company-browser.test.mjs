@@ -167,11 +167,12 @@ test('máscara existente cobre variantes do telefone, nomes e áreas opacas no P
     const values = ['+44 20 7946 0001', '442079460001', '(20) 7946-0001', '20 7946 0001', 'cliente@example.test', 'Nome Fictício'];
     await page.setContent('<main>' + values.map((value, i) => `<p id="v${i}" style="width:max-content">${value}</p>`).join('') +
       '<span id="avatar" aria-hidden="true" style="display:block;width:60px;height:30px;background:red">NF</span>' +
+      '<table><tbody><tr><td id="knownName">Contatos</td></tr></tbody></table>' +
       '<canvas id="canvas" width="120" height="30"></canvas>' +
       `<img id="image" width="120" height="30" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='30'%3E%3Crect width='120' height='30' fill='red'/%3E%3C/svg%3E">` +
       '<div id="background" style="width:120px;height:30px;background-image:linear-gradient(red,red)"></div></main>');
-    const png = await captureMaskedFrame(page, values.slice(0, 5), { realCompany: true, testPhone: phone });
-    const ids = [...values.map((_, i) => `v${i}`), 'avatar', 'canvas', 'image', 'background'];
+    const png = await captureMaskedFrame(page, [...values.slice(0, 5), 'Contatos'], { realCompany: true, testPhone: phone });
+    const ids = [...values.map((_, i) => `v${i}`), 'avatar', 'knownName', 'canvas', 'image', 'background'];
     const colors = await page.evaluate(async ({ png, ids }) => {
       const image = new Image(); image.src = 'data:image/png;base64,' + png; await image.decode();
       const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
