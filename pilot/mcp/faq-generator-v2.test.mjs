@@ -300,12 +300,12 @@ test('passo e efeito exigem vínculo e jornada concluída e confirmada da tarefa
   }
 });
 
-for (const module of ['contatos', 'robos']) test(`montagem julgada de ${module} preserva todas as frases aprovadas`, async () => {
-  const linkedTask = { id: `${module}.criar`, tarefa: 'Criar' };
+for (const faqModule of ['contatos', 'robos']) test(`montagem julgada de ${faqModule} preserva todas as frases aprovadas`, async () => {
+  const linkedTask = { id: `${faqModule}.criar`, tarefa: 'Criar' };
   const journey = { task: linkedTask.id, status: 'concluída', verification: { confirmed: true } };
-  const plan = planFaqPage(module, [linkedTask], [journey]);
+  const plan = planFaqPage(faqModule, [linkedTask], [journey]);
   const proof = [{ id: 'J1', type: 'jornada', task: linkedTask.id, status: 'concluída', text: 'O registro foi salvo.' }];
-  const candidate = { title: module === 'contatos' ? 'Contatos' : 'Robôs', titleEvidenceIds: ['J1'],
+  const candidate = { title: faqModule === 'contatos' ? 'Contatos' : 'Robôs', titleEvidenceIds: ['J1'],
     description: 'Consulte os registros da equipe.', descriptionEvidenceIds: ['J1'], sections: [
       { heading: 'Criar registro', headingEvidenceIds: ['J1'], taskId: linkedTask.id, units: [
         { text: 'A equipe consulta os registros.', kind: 'contexto', evidenceIds: ['J1'] },
