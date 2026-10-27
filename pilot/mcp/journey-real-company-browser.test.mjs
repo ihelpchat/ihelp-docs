@@ -10,8 +10,64 @@ import { runJourneys } from './journey-service.mjs';
 import { captureMaskedFrame } from '../scripts/screen-capture/capture.mjs';
 import { launch } from '../scripts/visual/measure.mjs';
 import { reviewJourneyPrint } from '../scripts/review-journey-print.mjs';
+import { containsSensitiveData } from './sensitive-data.mjs';
 
 const phone = '+44 20 7946 0001';
+
+for (const [name, html, values] of [
+  ['região dinâmica com nome igual ao vocabulário',
+    '<table><tbody><tr><td><span id="private">Contatos</span></td></tr></tbody></table>', ['Contatos']],
+  ['variantes curtas do telefone iguais ao vocabulário',
+    '<p><span id="private">79460001</span></p><p><span id="variant">079460001</span></p>', ['79460001', '079460001']],
+]) test(`PNG persistido mascara ${name}`, async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-pixel-witness-'));
+  let browser;
+  try {
+    browser = await launch();
+    const page = await browser.newPage({ viewport: { width: 500, height: 300 } });
+    await page.setContent('<main><h1>Contatos</h1>' + html + '</main>');
+    for (const value of values) assert.equal(containsSensitiveData(value, { detectOpaque: true }), false,
+      'testemunha não pode depender da detecção genérica de dado sensível');
+    const sample = bytes => page.evaluate(async png => {
+      const image = new Image(); image.src = 'data:image/png;base64,' + png; await image.decode();
+      const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+      const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
+      return [...document.querySelectorAll('#private,#variant')].map(element => {
+        const range = document.createRange(); range.selectNodeContents(element);
+        const rect = range.getBoundingClientRect();
+        const data = ctx.getImageData(Math.ceil(rect.x + 2), Math.ceil(rect.y + 2),
+          Math.floor(rect.width - 4), Math.floor(rect.height - 4)).data;
+        let masked = 0; let ink = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i] === 226 && data[i + 1] === 232 && data[i + 2] === 240 && data[i + 3] === 255) masked++;
+          if (data[i] < 100 && data[i + 1] < 100 && data[i + 2] < 100) ink++;
+        }
+        return { masked, ink, total: data.length / 4 };
+      });
+    }, bytes.toString('base64'));
+    const before = await sample(await page.screenshot({ type: 'png' }));
+    for (const value of before) { assert.ok(value.ink > 0); assert.equal(value.masked, 0); }
+    const bytes = await captureMaskedFrame(page, values, { realCompany: true, testPhone: phone });
+    const [record] = await runJourneys({ root, module: 'contatos', tasks: [{ id: 'contatos.cadastrar',
+      modulo: 'contatos', tarefa: 'Cadastrar', resultadoEsperadoObservavel: 'Contato fictício localizado' }],
+    frontSha: 'a'.repeat(40), profile: 'qa', realCompany: true, testPhone: phone, maxActionsPerTask: 1,
+    browser: { async open() {}, async close() {}, async observe() { return { title: 'Contatos',
+      path: '/contact/detail/record', controls: [], fields: [], messages: [], state: {},
+      screenshot: bytes, aprovacao: 'pendente' }; } }, model: { async decide() { return { type: 'finish' }; } } });
+    assert.equal(record.screens.length, 1);
+    const stored = JSON.parse(await readFile(join(root, 'contatos', `${record.task}.${record.cacheKey}.json`)));
+    assert.equal(stored.screens[0].aprovacao, 'pendente');
+    const persisted = await readFile(join(root, 'contatos', `${stored.screens[0].screenshotId}.png`));
+    assert.deepEqual(persisted, bytes);
+    for (const value of await sample(persisted)) {
+      assert.equal(value.masked, value.total, 'todos os pixels do texto persistido devem ter máscara opaca');
+      assert.equal(value.ink, 0, 'nenhuma letra ou dígito fica legível no arquivo');
+    }
+  } finally {
+    try { await browser?.close(); }
+    finally { await rm(root, { recursive: true, force: true }); }
+  }
+});
 
 test('guard.capture mascara pixels opacos retornados e persistidos pela jornada real', async () => {
   const root = await mkdtemp(join(tmpdir(), 'journey-integrated-mask-'));
