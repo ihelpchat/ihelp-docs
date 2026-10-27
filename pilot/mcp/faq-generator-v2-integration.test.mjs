@@ -227,3 +227,34 @@ for (const failure of ['invalid-count', 'invalid-json', 'incomplete', 'transport
     assert.ok(!JSON.stringify(result).includes(marker));
   });
 
+for (const stage of ['faq_page_v2', 'faq_facts_v2', 'faq_editorial_v2', 'faq_rewrite_v2'])
+  for (const category of ['resposta incompleta', 'JSON inválido', 'falha de comunicação'])
+    test(`diagnóstico seguro identifica categoria e etapa: ${stage}, ${category}`, async (t) => {
+      const marker = 'RAW_PRIVATE_ERROR_AND_RESPONSE';
+      const page = pageFor();
+      if (stage === 'faq_rewrite_v2') page.sections[0].units[0].text = 'Afirmação sem prova.';
+      const { result } = await fixture(t, { page,
+        factual: ({ text }) => text === 'Afirmação sem prova.' ? { status: 'a confirmar' } : {},
+        response: (request) => {
+          if (request.text.format.name !== stage) return;
+          if (category === 'falha de comunicação') throw new Error(marker);
+          return { usage, status: category === 'resposta incompleta' ? 'incomplete' : 'completed',
+            output_text: marker };
+        },
+      });
+      assert.equal(result.status, 'precisa de revisão humana');
+      assert.equal(result.partial, true);
+      assert.equal(result.mdx, undefined);
+      assert.deepEqual(result.diagnostic, [`${category}: ${stage}`]);
+      assert.ok(result.knownUsage.inputTokens >= 100 || category === 'falha de comunicação');
+      assert.ok(!JSON.stringify(result).includes(marker));
+    });
+
+test('diagnóstico seguro identifica validação do juiz sem devolver seu erro bruto', async (t) => {
+  const { result } = await fixture(t, { response: (request) => request.text.format.name === 'faq_facts_v2'
+    ? { usage, status: 'completed', output_text: JSON.stringify({ claims: [] }) } : undefined });
+  assert.equal(result.partial, true);
+  assert.deepEqual(result.diagnostic, ['resultado inválido: faq_facts_v2']);
+  assert.equal(result.costUsd, cost(5));
+});
+
