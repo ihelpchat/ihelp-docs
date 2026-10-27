@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { copyFile, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { readArticle } from './editorial-standard.mjs';
@@ -28,6 +29,14 @@ for (const image of ['f38mHVPtRejfPf5R3kAO.png', 'ku0HJRsBFedSfM5IQbu3.png']) {
   await mkdir(join(root, 'public/img/help'), { recursive: true });
   await copyFile(join(sourceRoot, 'public/img/help', image), join(root, 'public/img/help', image));
 }
+const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+git('init', '-q');
+git('config', 'user.name', 'MCP Bot');
+git('config', 'user.email', 'mcp-bot@users.noreply.github.com');
+git('commit', '--allow-empty', '-qm', 'seed');
+const seedSha = git('rev-parse', 'HEAD');
+git('add', '-A');
+git('commit', '-qm', 'generated baseline');
 const mock = join(root, 'github-mock.mjs');
 await writeFile(mock, `import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -35,7 +44,7 @@ const root = process.env.DOCS_ROOT;
 globalThis.fetch = async (url, init = {}) => {
   const path = new URL(url).pathname;
   const method = init.method ?? 'GET';
-  if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: 'base-sha' } }) };
+  if (path.includes('/git/ref/heads/')) return { ok: true, json: async () => ({ object: { sha: process.env.MCP_TEST_BASE_SHA } }) };
   if (path.endsWith('/git/refs')) return { ok: true, json: async () => ({}) };
   if (path.endsWith('/pulls')) return { ok: true, json: async () => ({ html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/123' }) };
   const file = decodeURIComponent(path.split('/contents/')[1] ?? '');
@@ -58,7 +67,7 @@ const transport = new StdioClientTransport({
   command: process.execPath,
   args: ['--import', mock, join(sourceRoot, 'mcp/server.mjs')],
   cwd: sourceRoot,
-  env: { ...process.env, DOCS_ROOT: root, GITHUB_TOKEN: 'mock-token', GITHUB_BASE_BRANCH: 'integration/claricia-v2' },
+  env: { ...process.env, DOCS_ROOT: root, GITHUB_TOKEN: 'mock-token', GITHUB_BASE_BRANCH: 'integration/claricia-v2', MCP_TEST_BASE_SHA: seedSha },
   stderr: 'pipe',
 });
 const client = new Client({ name: 'm5-01-roundtrip', version: '1.0.0' });
@@ -108,13 +117,17 @@ try {
     const parsed = docsPageSchema.safeParse(frontmatter);
     assert.equal(parsed.success, true, `${path}: MDX gerado falha no schema real da Central: ${parsed.success ? '' : parsed.error.message}`);
     for (const [key, value] of Object.entries(originalYaml)) {
+      if (key === 'mcpGeneratedSha') {
+        assert.equal(frontmatter[key], seedSha, `${path}: marcador deve apontar para a base da nova geração`);
+        continue;
+      }
       assert.deepEqual(frontmatter[key], value, `${path}: tipo YAML de ${key} mudou`);
     }
     const updated = join(root, 'content/docs', `${path}.mdx`);
     await writeFile(updated, rendered);
     const reread = await readArticle(root, path);
     for (const field of Object.keys(original).filter((key) => !['body', 'path', 'productActions'].includes(key))) {
-      assert.deepEqual(reread[field], original[field], `${path}: ${field} perdido`);
+      assert.deepEqual(reread[field], field === 'mcpGeneratedSha' ? seedSha : original[field], `${path}: ${field} perdido`);
     }
     assert.equal((rendered.match(/<ProductAction\b/g) ?? []).length, (original.body.match(/<ProductAction\b/g) ?? []).length, `${path}: ProductAction duplicado`);
     const meta = JSON.parse(await readFile(join(root, 'remote/pilot/content/docs', path.split('/').slice(0, -1).join('/'), 'meta.json')));
