@@ -14,7 +14,7 @@ const env = { QA_TARGET: 'producao', QA_PROD_ENABLED: 'true', QA_PROD_URL: origi
   QA_PROD_ALLOWED_HOSTS: 'front.example.test', QA_PROD_EMAIL: 'test@example.test',
   QA_PROD_PASSWORD: 'fictional', QA_PROD_COMPANY_ID: '42', QA_PROD_TEST_PHONE: '+44 20 7946 0001',
   CAPTURE_FRONT_SHA: 'a'.repeat(40) };
-const labels = ['Contatos', 'Adicionar Contato', 'Nome', 'Telefone', 'Salvar', 'Buscar contato...'];
+const labels = ['Contatos', 'Adicionar Contato', 'Nome', 'Telefone', 'Salvar', 'Buscar contato...', 'Tags'];
 
 // Exercise recordJourneys -> lazy browser -> makeBrowser, login and network policy unchanged.
 // Only the transport is redirected: route.fetch reaches loopback instead of a real account.
@@ -23,6 +23,8 @@ async function withFront(t, options, consume) {
   const requests = [];
   const browsers = [];
   let saved;
+  let tag;
+  let linked = false;
   let detailVisits = 0;
   const token = () => 'fixture.' + Buffer.from(JSON.stringify({ userId: '3',
     businessId: saved && options.tokenCompany || '42' })).toString('base64url') + '.fixture';
@@ -43,6 +45,13 @@ async function withFront(t, options, consume) {
         return json({ dados: saved }, 201);
       }
       if (url.pathname === '/api/v2/company') return json({ dados: { id: saved && options.company || 42 } });
+      if (req.method === 'POST' && url.pathname === '/api/v2/tags') {
+        let body = ''; for await (const chunk of req) body += chunk;
+        tag = { id: 33, nome: JSON.parse(body).nome };
+        return json({ dados: tag }, 201);
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v2/contactTags/17') { linked = true; return json({}); }
+      if (url.pathname === '/api/v2/contactTags/getContactsTagByContactId/17') return json(linked ? [{ tagsId: tag.id }] : []);
       if (url.pathname.startsWith('/api/v2/contacts/details/')) return json({ dados: saved });
       if (url.pathname === '/api/v2/contacts') return json({ dados: url.searchParams.has('searchData')
         ? [saved] : [{ id: 99, idRef: 'unrelated-99', nome: 'Cliente fictício anterior' }] });
@@ -57,12 +66,27 @@ async function withFront(t, options, consume) {
       <script>document.querySelector('button').onclick = () => location.href = '/contact';</script>`;
     else if (url.pathname.startsWith('/contact/detail/')) {
       detailVisits++;
-      html = `<main><h1>Contatos</h1><div id="name"></div><div>${env.QA_PROD_TEST_PHONE}</div></main>
+      html = `<main><h1>Contatos</h1><div id="name"></div><div>${env.QA_PROD_TEST_PHONE}</div>
+        ${options.tags ? '<button role="tab" id="tags">Tags</button><div id="tag-form" hidden><input role="combobox" placeholder="Buscar ou criar tag..."><div id="options"></div></div>' : ''}</main>
         <script>${script}
           // Initial loading render is replaced by the caller's reload; only that fresh read renders the record.
           ${detailVisits % 2 === 0 ? `get('/contacts/details/' + location.pathname.split('/').pop()).then(data => {
             document.querySelector('#name').textContent = data.dados.nome;
           });` : ''}
+          ${options.tags ? `
+            document.querySelector('#tags').onclick = () => { document.querySelector('#tag-form').hidden = false; };
+            document.querySelector('[role=combobox]').oninput = event => {
+              const name = event.target.value;
+              const option = document.createElement('div'); option.setAttribute('role', 'option'); option.textContent = name;
+              option.onclick = async () => {
+                const created = await fetch('/api/v2/tags?contactId=17', {method:'POST',
+                  headers: {...headers, 'content-type':'application/json'}, body:JSON.stringify({nome:name})}).then(r => r.json());
+                await fetch('/api/v2/contactTags/17', {method:'POST', headers: {...headers, 'content-type':'application/json'},
+                  body:JSON.stringify({contatoId:17, tagsId:created.dados.id})});
+              };
+              document.querySelector('#options').replaceChildren(option);
+            };
+          ` : ''}
         </script>`;
     }
     else html = `<main><h1>Contatos</h1><button id="add">Adicionar Contato</button>
@@ -187,6 +211,18 @@ test('caller real deixa resposta sem ID pendente, sem DELETE ou busca de nome pa
     assert.deepEqual(records.cleanup.deleted, []);
     assert.deepEqual(records.cleanup.pending, [{ kind: 'contact', reason: 'id de resposta ausente' }]);
     assert.deepEqual(requests.filter(req => req.method === 'DELETE' || req.search.includes('searchData')), []);
+  });
+});
+
+test('caller real captura ID da resposta de tag Teste FAQ e limpa tag antes do contato', async t => {
+  await withFront(t, { tags: true }, async ({ run, requests }) => {
+    const records = await run(['contatos.marcar_tags']);
+    assert.deepEqual(records.map(record => record.status), ['concluída', 'concluída'],
+      JSON.stringify(records.map(({ status, reason, blocked, verification }) => ({ status, reason, blocked, verification }))));
+    assert.deepEqual(records.cleanup.deleted, [{ kind: 'tag', id: 33 }, { kind: 'contact', id: 'created-17' }]);
+    assert.deepEqual(records.cleanup.pending, []);
+    assert.deepEqual(requests.filter(req => req.method === 'DELETE').map(req => req.path),
+      ['/api/v2/tags/33', '/api/v2/contacts/created-17']);
   });
 });
 
