@@ -19,6 +19,7 @@ test('lista com estrutura desconhecida nunca é confundida com lista vazia', asy
     for (const html of [
       '<main><div role="list"><div>Cliente antigo</div></div></main>',
       '<main><div role="list">Cliente antigo</div></main>',
+      '<main><div role="list"><div><div role="listitem">Teste FAQ Contato</div><article>Cliente antigo</article></div></div></main>',
       '<main><table><tbody><tr><td>Teste FAQ Contato</td></tr></tbody></table><div role="list"><div>Cliente antigo</div></div></main>',
       '<main><div data-testid="contactList"><article>Cliente antigo</article></div></main>',
     ]) {
