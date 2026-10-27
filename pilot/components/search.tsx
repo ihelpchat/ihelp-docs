@@ -115,7 +115,7 @@ export default function SearchDialog({ open, onOpenChange, counts }: SharedProps
     return out;
   }, [search, query.data]);
 
-  const visible = results.filter((result) => inTab(result.kind, tab)).slice(0, 12);
+  const visible = results.filter((result) => inTab(result.kind, tab)).slice(0, 16);
   const active = Math.min(selected, Math.max(0, visible.length - 1));
 
   const go = (result: Result | undefined) => {

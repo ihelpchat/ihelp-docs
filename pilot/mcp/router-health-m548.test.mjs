@@ -61,7 +61,7 @@ async function scenario(providerStatus, withKey = true, { spent = 0, retry = fal
   child.stderr.on('data', (chunk) => { stderr += chunk; });
   try {
     let response;
-    for (let attempt = 0; attempt < 100; attempt++) {
+    for (let attempt = 0; attempt < 300; attempt++) {
       try { response = await fetch(`http://127.0.0.1:${port}/health`); break; }
       catch { await new Promise((resolve) => setTimeout(resolve, 30)); }
     }

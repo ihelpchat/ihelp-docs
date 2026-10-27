@@ -88,7 +88,8 @@ test('generateContentPackage mantém as frases aprovadas do redator no artigo fi
       plan: { status: 'ready' }, client: { responses: { create: async (payload) => payload.text.format.name === 'juiz_faq'
         ? { model: 'fixture', output_text: JSON.stringify({ claims: JSON.parse(payload.input[1].content).claims.map(({ id }) =>
           ({ id, status: 'sustentada', reason: '', sourceMention: false })) }) }
-        : (writerCalls++, { model: 'fixture', output_text: JSON.stringify(reply) }) } },
+        : (assert.match(payload.input[0].content, /Contrato de lições editoriais aprendidas/u),
+          writerCalls++, { model: 'fixture', output_text: JSON.stringify(reply) }) } },
     });
   assert.equal(result.status, 'ready', JSON.stringify(result));
   const article = result.articles[0];

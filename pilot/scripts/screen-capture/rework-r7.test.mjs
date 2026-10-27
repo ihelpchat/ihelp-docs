@@ -16,15 +16,15 @@ test('Robôs: cada ocorrência de Adicionar bloco tem plano, manifesto e anexo n
   const fact = { kind: 'action', text: 'Adicionar bloco', route: '/bot', owner: 'fixture', sha };
   const plan = capturePlan({ page: 'robo-de-atendimento', module: 'Robôs', faqBody: body,
     coverage: [{ module: 'Robôs', productRoutes: ['/bot'] }], screenFacts: [fact] });
-  assert.equal(plan.length, 3);
-  assert.equal(new Set(plan.map((item) => item.step)).size, 3);
-  assert.deepEqual(plan.map((item) => body.split('\n')[item.line].match(/^\d+/u)?.[0]), ['5', '6', '7']);
+  assert.equal(plan.length, 4);
+  assert.equal(new Set(plan.map((item) => item.step)).size, plan.length);
+  assert.deepEqual(plan.map((item) => body.split('\n')[item.line].match(/^\d+/u)?.[0]), ['1', '3', '2', '4']);
   const manifest = { version: 1, entries: plan.map((item) => { const file = screenshotFile(item.page, item.step, 'automatic', Buffer.from('fixture'), 'png');
     return { ...item, source: 'automatic', masked: [], bundleSha: sha, file, sha256: file.split('.')[2] }; }) };
   const article = attachScreenshotsToArticle({ path: 'docs/robo-de-atendimento', body }, manifest, sha, [fact]);
   const lines = article.body.split('\n');
   for (const item of plan) {
-    const numbered = lines.findIndex((line) => line.startsWith(`${body.split('\n')[item.line].match(/^\d+/u)[0]}. `));
+    const numbered = lines.findIndex((line) => line === body.split('\n')[item.line]);
     assert.ok(numbered >= 0);
     assert.equal(lines[numbered + 2], `![${item.alt}](${manifest.entries.find((entry) => entry.step === item.step).file})`);
   }

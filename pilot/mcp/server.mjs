@@ -292,7 +292,7 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
 
   registerTool('gravar_jornada', {
     mutates: true,
-    description: 'Executa tarefas fictícias de Contatos ou Robôs na homologação e grava jornada privada sanitizada.',
+    description: 'Executa tarefas fictícias na homologação ou na conta de teste de produção após pré-voo.',
     inputSchema: z.strictObject({
       module: z.enum(['contatos', 'robos']),
       tasks: z.array(z.string().regex(/^(?:contatos|robos)\.[a-z_]+$/)).max(20).optional(),
@@ -308,6 +308,11 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'attempt' });
       const { recordJourneys } = await import('./journey-runtime.mjs');
       const records = await withJourneyGate(() => recordJourneys(module, tasks));
+      if (!Array.isArray(records)) {
+        await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target,
+          result: records?.mode === 'confirmacao' ? 'confirmation' : 'blocked' });
+        return textResult(records, records?.mode !== 'confirmacao');
+      }
       const { journeyCoverage } = await import('./journey-service.mjs');
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'success' });
       return textResult({ tasks: records.map(journeyTaskSummary),
@@ -316,7 +321,8 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       const { journeyFailureCategory, journeyFailureLog } = await import('./journey-service.mjs');
       console.error(journeyFailureLog(error));
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'failure' });
-      return textResult({ error: journeyFailureCategory(error), tasks: error?.results?.map(journeyTaskSummary) ?? [],
+      return textResult({ error: journeyFailureCategory(error), diagnostic: journeyFailureLog(error),
+        tasks: error?.results?.map(journeyTaskSummary) ?? [],
         elapsedMs: Date.now() - started }, true);
     } finally {
       const { clearJourneyProofCache } = await import('./journey-service.mjs');

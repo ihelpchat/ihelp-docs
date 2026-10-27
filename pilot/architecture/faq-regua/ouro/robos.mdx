@@ -1,0 +1,81 @@
+---
+title: Robôs: monte o primeiro atendimento
+description: Crie um robô, organize as opções e publique o fluxo de atendimento.
+---
+
+# Robôs
+
+## O que é
+
+Um robô recebe novos atendimentos receptivos e segue um fluxo de blocos montado pela empresa. Pode mostrar opções e encaminhar a conversa para um departamento ou atendente. Ele segue esse fluxo; não responde livremente a qualquer pergunta.
+
+## Para que serve
+
+Quando uma empresa recebe pedidos de agendamento e cobrança no mesmo número, o robô pode apresentar essas escolhas e levar cada conversa à equipe certa. Também pode responder uma dúvida frequente antes do encaminhamento. O fluxo começa a valer quando o robô é **publicado**. Contatos com [responsável definido](./contatos#definir-o-responsavel-por-um-contato) não passam pelo robô: suas conversas vão direto para **Meus** desse responsável.
+
+## Criar um robô
+
+Tenha acesso a **Robôs** e escolha o canal no qual ele deverá funcionar. Depois da criação, será preciso montar o fluxo.
+
+1. No menu, abra **Robôs** e clique em **Criar novo robô**.
+2. Em **Título do Robô**, escreva um nome que ajude a equipe a reconhecê-lo.
+3. Em **Canais**, escolha o número desejado e clique em **Adicionar robô**.
+
+O editor abre com o robô criado. Ele ainda está vazio e inativo; o próximo passo é [montar o fluxo](#montar-um-menu-de-opcoes).
+
+## Encontrar um robô
+
+Tenha um robô já criado.
+
+1. Abra **Robôs** no menu.
+2. Digite parte do título em **Buscar robô**. Se não lembrar o título, percorra a lista.
+3. Abra o robô encontrado para ver o fluxo e seu estado **Inativo** ou **Ativo**.
+
+## Montar um menu de opções
+
+Abra um robô criado. Pense em escolhas curtas, como “Agendamento” e “Financeiro”. Cada escolha precisa levar a outro bloco.
+
+1. No editor, partindo de **Iniciar Fluxo**, clique no **+** e abra **Adicionar bloco**.
+2. Escolha **Menu de opções**. Em **Bloco de pergunta**, escreva em **Mensagem** o que o cliente deverá escolher.
+3. Use **Adicione uma opção** para incluir cada resposta e conclua em **Adicionar bloco**.
+4. Ligue cada opção ao próximo bloco pelo **+**. Pode ser uma **Mensagem simples** ou uma **Ação**.
+5. Clique em **Salvar**.
+
+Para cada escolha chegar à equipe certa, [acrescente uma ação de encaminhamento](#encaminhar-uma-escolha-para-a-equipe). Se o robô já está publicado, **Salvar** muda o fluxo em uso.
+
+## Encaminhar uma escolha para a equipe
+
+Tenha um robô com uma opção criada e um departamento ou atendente disponível.
+
+1. No editor, clique no **+** do caminho que deseja completar.
+2. Em **Adicionar bloco**, escolha **Ação** e depois **Encaminhar atendimento**.
+3. Use **Selecione o departamento** para levar a conversa à equipe ou **Selecione o atendente** para escolher uma pessoa.
+4. Conclua em **Adicionar bloco** e clique em **Salvar**. Repita nos outros caminhos que precisarem de destino.
+
+A escolha passa a seguir para o destino configurado quando o robô estiver publicado. Se ele já está publicado, a alteração salva passa a valer no fluxo em uso.
+
+## Editar um robô
+
+Use esta opção para alterar um texto que deixou clientes confusos ou mudar um caminho do fluxo.
+
+1. Em **Robôs**, encontre o robô e escolha **Editar**.
+2. No editor, mude o título em **Digite o título do robô** ou abra o bloco que deseja alterar.
+3. Clique em **Salvar**.
+
+Se o robô está publicado, **Salvar** já muda a versão em uso. Revise o texto e os destinos antes de salvar.
+
+## Salvar e publicar o fluxo
+
+Em um robô que ainda não foi publicado, **Salvar** guarda os blocos e ligações sem iniciar o atendimento. Monte o fluxo, clique em **Salvar** e, quando estiver pronto para receber novos atendimentos receptivos, clique em **Publicar**. A partir daí, o robô passa a valer para esses novos atendimentos, exceto os de contatos com [responsável definido](./contatos#definir-o-responsavel-por-um-contato).
+
+Depois da publicação, **Salvar** uma edição já altera o fluxo em uso; não é necessário publicar de novo.
+
+## Dúvidas comuns
+
+**Criei o robô e ele já responde?** Não. Primeiro monte o fluxo e clique em **Publicar** para ele começar a valer nos novos atendimentos receptivos.
+
+**Salvar muda o que o cliente recebe?** Se o robô já foi publicado, sim: o fluxo salvo passa a ser usado. Antes da primeira publicação, **Salvar** apenas guarda o trabalho.
+
+**Todo contato passa pelo robô?** Não. Quando o contato tem um usuário [responsável definido](./contatos#definir-o-responsavel-por-um-contato), a conversa vai direto para **Meus** dele.
+
+**O recado de fora do horário fica no robô?** Não. Ele fica em [Configurações > Departamentos](/docs/sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario).

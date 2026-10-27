@@ -14,7 +14,7 @@ export function captureFailureCategory(error) {
 export function captureFailureLog(error, env = process.env) {
   const category = captureFailureCategory(error);
   const diagnostic = error?.diagnostic ?? error?.cause?.diagnostic;
-  const detail = diagnostic ? `outcome=${diagnostic.outcome} path=${diagnostic.path} messages=${diagnostic.messages.join(' | ')} requests=${diagnostic.requests.join(' | ')} failed=${(diagnostic.failed ?? []).join(' | ')} controls=${diagnostic.controls.join(' | ')}`
+  const detail = diagnostic ? `outcome=${diagnostic.outcome} path=${diagnostic.path} messages=${diagnostic.messages.join(' | ')} requests=${diagnostic.requests.map((entry) => typeof entry === 'string' ? entry : `${entry.method} ${entry.path} ${entry.status}`).join(' | ')} failed=${(diagnostic.failed ?? []).join(' | ')} controls=${diagnostic.controls.join(' | ')}`
     : String(error?.cause?.message ?? error?.message ?? '').split(/\r?\n/u, 1)[0];
   let safe = detail.split(/\r?\n/u, 1)[0]
     .replace(/\b(?:cookie|set-cookie|authorization)\s*[:=]\s*(?:Bearer\s+)?[^\s,;]+/giu, '[cabeçalho removido]')

@@ -1,0 +1,34 @@
+{
+  "versao": "M5.75-B-2",
+  "contatos": [
+    { "afirmacao": "agenda da empresa e consulta de dados, notas, tags e atendimentos", "evidencia": ["codigo:/contact", "codigo:ContactInformations", "codigo:ContactActivities", "contexto:contatos"] },
+    { "afirmacao": "buscar por nome ou telefone e limpar filtros", "evidencia": ["codigo:Buscar contato...", "codigo:Limpar filtros", "confirmado:responsável de produto"] },
+    { "afirmacao": "filtros por tag e, para administrador, departamento e usuário", "evidencia": ["codigo:Tag", "codigo:Departamento", "codigo:Usuário", "codigo:ContactToolbar"] },
+    { "afirmacao": "filtros restringem a lista exportada", "evidencia": ["codigo:ContactsList", "confirmado:responsável de produto"] },
+    { "afirmacao": "adicionar contato com nome e telefone mostra confirmação", "evidencia": ["codigo:Adicionar Contato", "codigo:Nome", "codigo:Telefone", "codigo:Contato criado com sucesso!", "jornada:contatos.cadastrar"] },
+    { "afirmacao": "editar dados do contato mostra confirmação", "evidencia": ["codigo:Editar contato", "codigo:Campo atualizado com sucesso!", "jornada:contatos.editar"] },
+    { "afirmacao": "selecionar ou criar tag no cadastro mostra confirmação", "evidencia": ["codigo:Buscar ou criar tag...", "codigo:Tag adicionada com sucesso!", "codigo:Tag criada e adicionada com sucesso!", "jornada:contatos.marcar_tags"] },
+    { "afirmacao": "adicionar tag no atendimento", "evidencia": ["codigo:Tags", "contexto:atendimento"] },
+    { "afirmacao": "definir usuário responsável mostra confirmação e encaminha conversas para Meus sem robô nem fila de novos", "evidencia": ["codigo:Definir proprietário", "codigo:Proprietário atualizado com sucesso!", "confirmado:responsável de produto"] },
+    { "afirmacao": "opção Somente departamento existe, sem efeito de roteamento afirmado", "evidencia": ["codigo:Somente departamento", "confirmado:responsável de produto"] },
+    { "afirmacao": "importação aceita CSV XLSX XLS, permite escolher cabeçalho e mapear colunas", "evidencia": ["codigo:ImportContactsModal", "codigo:Selecionar cabeçalho", "codigo:Mapear colunas", "confirmado:responsável de produto"] },
+    { "afirmacao": "Nome é coluna obrigatória na importação", "evidencia": ["codigo:SYSTEM_COLUMNS"] },
+    { "afirmacao": "importação mostra progresso e confirmação com quantidade importada", "evidencia": ["codigo:Importação em andamento...", "codigo:Importação concluída", "codigo:ImportProgressBar"] },
+    { "afirmacao": "exportar lista pelo menu gera arquivo com os filtros ativos", "evidencia": ["codigo:Exportar Contatos", "codigo:ContactsList", "confirmado:responsável de produto"] },
+    { "afirmacao": "agenda do celular não importa sozinha e vCard não é formato aceito", "evidencia": ["confirmado:responsável de produto", "codigo:ImportContactsModal"] }
+  ],
+  "robos": [
+    { "afirmacao": "robô atende novos receptivos por fluxo de blocos", "evidencia": ["codigo:/bot", "contexto:robos", "confirmado:responsável de produto"] },
+    { "afirmacao": "menu organiza escolhas e encaminhamento por assunto", "evidencia": ["codigo:Menu de opções", "codigo:Encaminhar atendimento", "jornada:robos.montar_menu"] },
+    { "afirmacao": "Publicar faz o robô valer para novos atendimentos receptivos exceto contatos com responsável definido", "evidencia": ["codigo:Publicar", "confirmado:responsável de produto"] },
+    { "afirmacao": "contato com usuário responsável não passa pelo robô e vai para Meus", "evidencia": ["confirmado:responsável de produto"] },
+    { "afirmacao": "criar robô com título e canal abre editor ainda inativo", "evidencia": ["codigo:Criar novo robô", "codigo:Título do Robô", "codigo:Canais", "codigo:Adicionar robô", "jornada:robos.criar"] },
+    { "afirmacao": "buscar robô pelo título e abrir fluxo", "evidencia": ["codigo:Buscar robô", "jornada:robos.buscar"] },
+    { "afirmacao": "montar menu com pergunta, opções, ligações e salvar", "evidencia": ["codigo:Adicionar bloco", "codigo:Menu de opções", "codigo:Mensagem", "codigo:Salvar", "jornada:robos.montar_menu"] },
+    { "afirmacao": "encaminhar a departamento ou atendente", "evidencia": ["codigo:Encaminhar atendimento", "codigo:Selecione o departamento", "codigo:Selecione o atendente", "jornada:robos.encaminhar"] },
+    { "afirmacao": "editar título ou bloco e salvar", "evidencia": ["codigo:Editar", "codigo:Digite o título do robô", "jornada:robos.editar"] },
+    { "afirmacao": "Salvar antes da primeira publicação guarda fluxo inativo", "evidencia": ["codigo:Salvar", "jornada:robos.salvar", "confirmado:responsável de produto"] },
+    { "afirmacao": "Salvar em robô publicado altera a versão em uso sem nova publicação", "evidencia": ["codigo:Salvar", "confirmado:responsável de produto"] },
+    { "afirmacao": "recado fora do horário é configurado em Configurações, na aba Departamentos, não no robô", "evidencia": ["contexto:robos", "contexto:configuracoes-departamentos", "codigo:DepartmentConfigExtras"] }
+  ]
+}

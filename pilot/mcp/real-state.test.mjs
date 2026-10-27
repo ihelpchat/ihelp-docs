@@ -1,11 +1,19 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import ts from 'typescript';
 import { answerQuestion } from './assistant-service.mjs';
 import { sanitizeWidgetContext, diagnoseState, diagnosticQuestion } from './real-state.mjs';
 import { freeAnswerClient } from './fixtures/free-answer-client.mjs';
 
-const root = new URL('../', import.meta.url).pathname;
+const projectRoot = new URL('../', import.meta.url).pathname;
+const root = await mkdtemp(join(tmpdir(), 'ihelp-real-state-'));
+await cp(join(projectRoot, 'architecture'), join(root, 'architecture'), { recursive: true });
+await cp(join(projectRoot, 'content'), join(root, 'content'), { recursive: true });
+// O contrato de oito passos usa uma fonte fixa; o FAQ publicado agora tem o roteiro v2.
+await cp(join(projectRoot, 'mcp/fixtures/assistant-quality-robot.mdx'),
+  join(root, 'content/docs/docs/sobre-o-sistema/robo-de-atendimento.mdx'));
 const robotPath = '/docs/sobre-o-sistema/robo-de-atendimento';
 const robotAction = { id: 'abrir-robos', label: 'Abrir a tela Robôs', route: '/bot', target: 'robots-create' };
 const source = { title: 'Robô de Atendimento', path: robotPath };
@@ -181,3 +189,4 @@ assert.match((await ask('não encontrei', { history: [
 ], widgetContext: { surface: 'app', module: 'campaigns' } })).answer, /Campanhas/, 'módulo seguro só ajuda quando objeto não foi informado');
 assert.doesNotMatch(diagnosticQuestion('não tenho permissão'), /Usuários/, 'sintoma sem objeto ou módulo não presume usuários');
 console.log('Estado real, guia e escalonamento: contratos passaram.');
+await rm(root, { recursive: true, force: true });

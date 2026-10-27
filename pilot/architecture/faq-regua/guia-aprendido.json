@@ -1,0 +1,185 @@
+{
+  "versao": 1,
+  "licoes": [
+    {
+      "id": "L001",
+      "texto": "Não leve dados, cenários ou instruções de ensaio para um procedimento destinado ao cliente.",
+      "criterio": "clareza",
+      "data": "2026-09-29",
+      "origem": {
+        "tipo": "calibração",
+        "contagem": 6,
+        "classe": "regra-do-dono"
+      },
+      "ganho": {
+        "concordancia": 1,
+        "erroMedio": 0.1304347826086958,
+        "guardadas": 10,
+        "medicao": "isolada por lição"
+      },
+      "vetada": false,
+      "validada": true,
+      "ativa": false
+    },
+    {
+      "id": "L002",
+      "texto": "Uma tarefa ensinada precisa chegar ao resultado observável, além de abrir o recurso.",
+      "criterio": "tarefas_completas",
+      "data": "2026-09-29",
+      "origem": {
+        "tipo": "calibração",
+        "contagem": 6,
+        "classe": "regra-do-dono"
+      },
+      "ganho": {
+        "concordancia": 0,
+        "erroMedio": 0.17391304347826098,
+        "guardadas": 10,
+        "medicao": "isolada por lição"
+      },
+      "vetada": false,
+      "validada": true,
+      "ativa": false
+    },
+    {
+      "id": "L003",
+      "texto": "Mantenha dúvidas da equipe, aprovação interna e limitações da prova fora da orientação pública.",
+      "criterio": "clareza",
+      "data": "2026-09-29",
+      "origem": {
+        "tipo": "calibração",
+        "contagem": 6,
+        "classe": "regra-do-dono"
+      },
+      "ganho": {
+        "concordancia": 0,
+        "erroMedio": 0,
+        "guardadas": 10,
+        "medicao": "isolada por lição"
+      },
+      "vetada": false,
+      "validada": true,
+      "ativa": false
+    },
+    {
+      "id": "L004",
+      "texto": "Explique a utilidade com uma situação de trabalho e uma decisão pertinente; controles isolados não bastam.",
+      "criterio": "utilidade_negocio",
+      "data": "2026-09-29",
+      "origem": {
+        "tipo": "calibração",
+        "contagem": 6,
+        "classe": "regra-do-dono"
+      },
+      "ganho": {
+        "concordancia": 0,
+        "erroMedio": 0.04347826086956519,
+        "guardadas": 10,
+        "medicao": "isolada por lição"
+      },
+      "vetada": false,
+      "validada": true,
+      "ativa": false
+    },
+    {
+      "id": "L005",
+      "texto": "Indique o efeito posterior de uma ação quando ele ajudar a pessoa a decidir o próximo passo.",
+      "criterio": "coerencia",
+      "data": "2026-10-01",
+      "origem": {
+        "tipo": "revisão de página",
+        "contagem": 10,
+        "classe": "regra-do-dono"
+      },
+      "ganho": {
+        "concordancia": -2,
+        "erroMedio": 0.04347826086956519,
+        "guardadas": 10,
+        "medicao": "isolada por lição"
+      },
+      "vetada": false,
+      "validada": true,
+      "ativa": false
+    },
+    {
+      "id": "L006",
+      "texto": "Nomeie papéis e áreas pelo vocabulário do produto, sem substituir o contexto da empresa por um ramo específico.",
+      "criterio": "clareza",
+      "data": "2026-10-01",
+      "origem": {
+        "tipo": "revisão de página",
+        "contagem": 10,
+        "classe": "regra-do-dono"
+      },
+      "ganho": {
+        "concordancia": 0,
+        "erroMedio": -0.04347826086956519,
+        "guardadas": 10,
+        "medicao": "isolada por lição"
+      },
+      "vetada": false,
+      "validada": true,
+      "ativa": false
+    },
+    {
+      "id": "L007",
+      "texto": "Conecte temas relacionados por um próximo passo útil, respeitando condições e alternativas comprovadas.",
+      "criterio": "coerencia",
+      "data": "2026-10-01",
+      "origem": {
+        "tipo": "revisão de página",
+        "contagem": 10,
+        "classe": "regra-do-dono"
+      },
+      "ganho": {
+        "concordancia": 0,
+        "erroMedio": 0.08695652173913038,
+        "guardadas": 10,
+        "medicao": "isolada por lição"
+      },
+      "vetada": false,
+      "validada": true,
+      "ativa": false
+    },
+    {
+      "id": "L008",
+      "texto": "Explique um caminho alternativo quando a ação principal não estiver disponível para a pessoa.",
+      "criterio": "tarefas_completas",
+      "data": "2026-10-01",
+      "origem": {
+        "tipo": "revisão de página",
+        "contagem": 10,
+        "classe": "regra-do-dono"
+      },
+      "ganho": {
+        "concordancia": -1,
+        "erroMedio": -0.04347826086956519,
+        "guardadas": 10,
+        "medicao": "isolada por lição"
+      },
+      "vetada": false,
+      "validada": true,
+      "ativa": false
+    },
+    {
+      "id": "L009",
+      "texto": "Oriente a pessoa diretamente sobre o que fazer, sem atribuir a ela avisos abstratos de responsabilidade.",
+      "criterio": "clareza",
+      "data": "2026-10-01",
+      "origem": {
+        "tipo": "revisão de página",
+        "contagem": 10,
+        "classe": "regra-do-dono"
+      },
+      "ganho": {
+        "concordancia": -1,
+        "erroMedio": 0,
+        "guardadas": 10,
+        "medicao": "isolada por lição"
+      },
+      "vetada": false,
+      "validada": true,
+      "ativa": false
+    }
+  ]
+}

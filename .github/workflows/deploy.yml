@@ -2,8 +2,9 @@ name: Validate and publish docs and Claricia
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'lote/**']
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
     inputs:
       target:
@@ -22,7 +23,8 @@ concurrency:
 jobs:
   build:
     name: Build Next.js + Fumadocs
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
+    runs-on: ${{ fromJSON(startsWith(github.ref, 'refs/heads/lote/') && vars.CI_LOTE_RUNS_ON || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,19 +62,19 @@ jobs:
         run: npm run qa:ui
         working-directory: pilot
         env:
-          CHROME_PATH: /usr/bin/google-chrome
+          CHROME_PATH: ${{ runner.os == 'macOS' && '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' || '/usr/bin/google-chrome' }}
           NEXT_PUBLIC_BASE_PATH: /ihelp-docs
       - name: Check guide journey in Chrome
         run: npm run qa:guide
         working-directory: pilot
         env:
-          CHROME_PATH: /usr/bin/google-chrome
+          CHROME_PATH: ${{ runner.os == 'macOS' && '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' || '/usr/bin/google-chrome' }}
           NEXT_PUBLIC_BASE_PATH: /ihelp-docs
       - name: Prove guide fixture in Chrome
         run: npm run qa:guide-proof
         working-directory: pilot
         env:
-          CHROME_PATH: /usr/bin/google-chrome
+          CHROME_PATH: ${{ runner.os == 'macOS' && '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' || '/usr/bin/google-chrome' }}
       - name: Keep private guide proof briefly
         if: always()
         uses: actions/upload-artifact@v4
@@ -82,16 +84,26 @@ jobs:
           retention-days: 1
           if-no-files-found: ignore
       - name: Check assistant legibility
-        run: CHROME_PATH=/usr/bin/google-chrome NEXT_PUBLIC_BASE_PATH=/ihelp-docs npm run qa:assistant && CHROME_PATH=/usr/bin/google-chrome NEXT_PUBLIC_BASE_PATH=/ihelp-docs node scripts/visual/assistant-legibility.test.mjs
+        run: NEXT_PUBLIC_BASE_PATH=/ihelp-docs npm run qa:assistant && NEXT_PUBLIC_BASE_PATH=/ihelp-docs node scripts/visual/assistant-legibility.test.mjs
         working-directory: pilot
+        env:
+          CHROME_PATH: ${{ runner.os == 'macOS' && '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' || '/usr/bin/google-chrome' }}
       - name: Deploy disabled
-        if: vars.CLARICIA_DEPLOY_ENABLED != 'true' && github.event_name != 'pull_request'
+        if: vars.CLARICIA_DEPLOY_ENABLED != 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
         run: "echo 'pendente: deploy da Claricia desativado (CLARICIA_DEPLOY_ENABLED)'"
+
+  product-map:
+    needs: build
+    uses: ./.github/workflows/product-map.yml
+    with:
+      fixtures_tested: true
+    secrets:
+      PRODUCT_READ_TOKEN: ${{ secrets.PRODUCT_READ_TOKEN }}
 
   release-build:
     name: Build release for selected environment
     needs: build
-    if: github.event_name != 'pull_request' && vars.CLARICIA_DEPLOY_ENABLED == 'true'
+    if: github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') && vars.CLARICIA_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'staging' }}
     steps:
@@ -154,7 +166,7 @@ jobs:
   deploy-service:
     name: Deploy Claricia and check versions
     needs: release-build
-    if: github.event_name != 'pull_request' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CLARICIA_DEPLOY_ENABLED == 'true'
+    if: github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') && vars.CLARICIA_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'staging' }}
     steps:
@@ -191,7 +203,7 @@ jobs:
   deploy-docs-staging:
     name: Deploy staging docs and check content SHA
     needs: [release-build, deploy-service]
-    if: (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'staging')) && vars.CLARICIA_DEPLOY_ENABLED == 'true'
+    if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.target == 'staging')) && vars.CLARICIA_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: staging
     steps:
