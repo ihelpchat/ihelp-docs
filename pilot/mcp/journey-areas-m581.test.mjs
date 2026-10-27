@@ -48,8 +48,8 @@ test('plano determinístico usa alvo presente e não conclui sem verificação p
     { type: 'click', role: 'button', name: 'Nova Tarefa', value: null });
   assert.equal(nextAreaAction('tarefas.criar', { controls: [], fields: [] }, [], () => 'Tarefa Exemplo 01'), null);
   const read = { status: 200, method: 'GET', url: 'https://api.example.test/api/v2/task' };
-  assert.equal(verifyAreaResult('tarefas.criar', { ...read, body: [{ id: 11, title: 'Tarefa Exemplo 01' }] },
-    { createdIds: new Set([11]), generated: new Set(['Tarefa Exemplo 01']) }), true);
+  assert.equal(verifyAreaResult('tarefas.criar', { ...read, body: [{ id: 11, title: 'Tarefa Exemplo 01', assigneeUserId: 3 }] },
+    { fixedIds: { self: new Set([3]) }, createdIds: new Set([11]), generated: new Set(['Tarefa Exemplo 01']) }), true);
   assert.equal(verifyAreaResult('tarefas.criar', { ...read, body: [] },
     { createdIds: new Set([11]), generated: new Set(['Tarefa Exemplo 01']) }), false);
   assert.equal(verifyAreaResult('tarefas.criar', { ...read, url: 'https://api.example.test/api/v2/contacts',
@@ -208,7 +208,7 @@ test('runtime aceita as quatro áreas, executa plano e só conclui após verify'
       controls: plan.steps.filter((step) => step.type === 'click').map((step) => ({ role: step.role,
         name: step.name ?? areaFixtureContext[step.nameFrom], enabled: true })),
       fields: plan.steps.filter((step) => step.type === 'fill').map((step) => ({ role: step.role, name: step.name,
-        value: null, required: false })), messages: [], state: {}, screenshot: Buffer.from('masked-png') }; },
+        value: null, required: false })), messages: [], state: { sessionUserOption: 'opção 1' }, screenshot: Buffer.from('masked-png') }; },
       async act() {}, async verify() { verified++; return { confirmed: false, observed: 'leitura não confirmou' }; },
       async close() {} };
     try {
