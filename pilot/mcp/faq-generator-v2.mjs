@@ -10,6 +10,7 @@ import { configuredJourneyIdentity } from './journey-runtime.mjs';
 import { containsSensitiveData } from './sensitive-data.mjs';
 import { validateFaqMdx } from './faq-mdx-safety.mjs';
 import { mentionsSource } from './source-mention.mjs';
+import { learnedWriterContract } from './learned-editorial-guide.mjs';
 
 const modules = new Set(['contatos', 'robos']);
 const rates = { 'gpt-6-astra': [10, 50], 'gpt-6-sol': [2, 10], 'gpt-6-luna': [0.10, 0.50] };
@@ -139,6 +140,9 @@ export async function runFaqJudgment(page, evidence, providers, { plan } = {}) {
       if (!verdict || verdict.status !== 'sustentada' || (!linked && !isStructuralHeading(claim))
         || mentionsSource(claim.text))
         diagnostic.push(`${claim.id}: ${verdict?.status ?? 'sem julgamento'}: ${verdict?.reason ?? 'sem evidência válida'}`);
+      if (claim.kind === 'passo' && !verdict?.evidenceIds?.some((id) => evidence.some((item) =>
+        item.id === id && ['front', 'jornada'].includes(item.type))))
+        diagnostic.push(`${claim.id}: passo sem evidência do produto`);
       const afterAnchor = claim.kind === 'depois' ? claim.evidenceIds?.find((id) => evidence.some((item) =>
         item.id === id && item.type === 'jornada' && item.task === claim.taskId && item.status === 'concluída')) : null;
       const afterProof = claim.kind === 'depois' && verdict?.evidenceIds?.some((id) => evidence.some((item) =>
@@ -223,7 +227,7 @@ export function faqWriterInput(plan, tasks, evidence, screenshots) {
 }
 
 export function faqWriterInstructions(rules) {
-  return `Escreva a página INTEIRA em português para clientes iniciantes. Regras: ${rules.join('\n')}
+  return `Escreva a página INTEIRA em português para clientes iniciantes. ${learnedWriterContract()} Regras: ${rules.join('\n')}
   Glossário versionado do redator: ${JSON.stringify(FAQ_WRITER_GLOSSARY)}. Use os termos preferidos na prosa, preservando rótulos literais de controles do produto. Nunca transforme a mecânica da verificação em instrução ao cliente. A conclusão da tarefa é apenas um fato estruturado; detalhes de como a equipe a confirmou não são evidência de texto para a página.
   Use somente evidenceIds existentes. Dê evidência também para title, description (ou null) e cada heading; textos de links e legendas também serão julgados. Para cada tarefa concluída, escreva o resultado do produto que a conclusão estruturada confirma em uma unidade kind depois com o ID da jornada; explique o efeito da ação para a pessoa, sem descrever como a equipe verificou. Apoie detalhes no estado visível, nas mensagens e nos controles oferecidos. Se esse estado não mostrar um detalhe, não o invente. O que acontece depois deve agregar ao leitor. Não numere o texto de unidades kind passo: a montagem numera os passos. Imagens mascaradas são referência visual; não publique sem aprovação. Se tarefa estiver sem jornada, escreva somente contexto sustentado pelos fatos do front, sem passo ou efeito. Inclua O que é, Para que serve, casos concretos sustentados por evidência e um guia por tarefa; não suponha uso de WhatsApp ou CRM sem evidência. Ordene as tarefas pela pauta. Em cada guia, dê contexto, passos e efeito no mesmo fluxo; não substitua uma ação por referência a outro guia. Evite repetir a mesma orientação em guias diferentes. Faça a página seguir uma sequência lógica do uso inicial ao resultado. Cada frase deve ser uma unidade com evidência. Não mencione fonte, ensaio, staging nem pendência interna na página.`;
 }
