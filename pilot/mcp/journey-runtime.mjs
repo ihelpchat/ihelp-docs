@@ -1040,7 +1040,7 @@ export async function visibleRealCompanyRows(page) {
     // A present container with unknown children is not evidence of an empty list.
     if (containers.some(container => [...container.childNodes].some(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim())
       || [...container.children].filter(visible).some(child =>
-      child.textContent.trim() && !rows.some(row => child === row || child.contains(row))
+      child.textContent.trim() && !rows.some(row => child === row)
       && !empty(child.textContent)))) return null;
     const listExists = rows.length > 0 || containers.length > 0
       || [...document.querySelectorAll('main *')].some(element => visible(element) && empty(element.textContent ?? ''));
