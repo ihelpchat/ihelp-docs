@@ -10,6 +10,8 @@ export const articleSchema = z.strictObject({
   source: z.enum(['produto', 'suporte', 'api']),
   contentType: z.enum(['faq', 'tutorial', 'guia', 'referencia']),
   body: z.string(),
+  manual: z.boolean().optional(),
+  mcpGeneratedSha: z.string().regex(/^[a-f0-9]{40}$/).optional(),
   guide: guideSchema.optional(),
   tangoUrl: z.string().url().optional(),
   productActions: z.array(z.strictObject({

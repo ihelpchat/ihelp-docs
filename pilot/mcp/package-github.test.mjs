@@ -85,6 +85,7 @@ const base = new Map([
 ]);
 const branch = new Map(base);
 const mutations = [];
+const requests = [];
 const originalFetch = globalThis.fetch;
 const originalToken = process.env.GITHUB_TOKEN;
 process.env.GITHUB_TOKEN = 'mock-token';
@@ -95,6 +96,8 @@ globalThis.fetch = async (url, init = {}) => {
   const parsed = new URL(url);
   const path = parsed.pathname;
   const method = init.method ?? 'GET';
+  requests.push({ path, method });
+  if (/\/pulls\/\d+$/u.test(path) && method === 'PATCH') return { ok: true, json: async () => ({}) };
   if (path.endsWith('/pulls') && method === 'GET') {
     const head = parsed.searchParams.get('head')?.split(':').at(-1);
     return { ok: true, json: async () => deterministicPulls.has(head) ? [deterministicPulls.get(head)] : [] };
@@ -104,7 +107,7 @@ globalThis.fetch = async (url, init = {}) => {
   if (path.endsWith('/pulls')) {
     pulls += 1;
     const request = JSON.parse(init.body);
-    const result = { html_url: `https://github.com/ihelpchat/ihelp-docs/pull/${pulls}` };
+    const result = { html_url: `https://github.com/ihelpchat/ihelp-docs/pull/${pulls}`, number: pulls, body: request.body };
     deterministicPulls.set(request.head, result);
     return { ok: true, json: async () => result };
   }
@@ -132,7 +135,8 @@ try {
   const result = await submitContentPackage(root, [article('docs/contatos/novo', 'Novo guia'), article('docs/contatos/guia', 'Guia atualizado'), article('tutoriais/contatos/primeiro', 'Primeiro tutorial')], 'pull_request', 'user:tester', ['docs/contatos/antigo']);
   assert.equal(result.status, 'pull_request');
   assert.equal(pulls, 1);
-  assert.ok(mutations.some(({ method, file, payload }) => method === 'PUT' && file.endsWith('/guia.mdx') && payload.sha === 'sha-pilot/content/docs/docs/contatos/guia.mdx'));
+  assert.ok(mutations.some(({ method, file }) => method === 'PUT' && file.includes('/notices/guia-')), 'sem checkout da página existente, PR deve avisar');
+  assert.ok(!mutations.some(({ method, file }) => method === 'PUT' && file.endsWith('/guia.mdx')), 'sem histórico, página não pode ser sobrescrita');
   assert.ok(mutations.some(({ method, file, payload }) => method === 'DELETE' && file.endsWith('/antigo.mdx') && payload.sha));
   assert.deepEqual(JSON.parse(branch.get('pilot/content/docs/docs/contatos/meta.json')).pages, ['index', 'guia', 'novo']);
   assert.deepEqual(JSON.parse(branch.get('pilot/content/docs/tutoriais/contatos/meta.json')).pages, ['primeiro']);
@@ -150,7 +154,8 @@ try {
   assert.doesNotMatch(JSON.stringify(audit), /mock-token|Novo guia|artigo antigo/);
   const updated = await submitContentPackage(root, [realArticle], 'pull_request', 'user:tester');
   assert.equal(updated.status, 'pull_request', 'mesmo caminho de docs_update_article deve aceitar o artigo real');
-  assert.ok(mutations.some(({ method, file, payload }) => method === 'PUT' && file.endsWith('/api/crm/funis/listar-funis.mdx') && payload.sha === 'sha-pilot/content/docs/api/crm/funis/listar-funis.mdx'));
+  assert.ok(mutations.some(({ method, file }) => method === 'PUT' && file.includes('/notices/listar-funis-')), 'página legada sem marcador deve gerar aviso');
+  assert.ok(!mutations.some(({ method, file }) => method === 'PUT' && file.endsWith('/listar-funis.mdx')), 'página legada não pode ser sobrescrita');
   const deterministic = { branch: 'docs/deploy-guia-aaaaaaaaaaaaaaaa', base: 'integration/claricia-v2', draft: true,
     title: 'Revisar guia após deploy', body: 'SHAs implantados: front e back; revisão humana pendente.' };
   const firstPull = await submitContentPackage(root, [realArticle], 'pull_request', 'user:tester', [], deterministic);
@@ -161,6 +166,16 @@ try {
   assert.equal(repeatPull.reused, true, 'busca a PR pela branch determinística');
   assert.equal(pulls, opened, 'evento repetido não abre outra PR');
   assert.equal(mutations.length, written, 'evento repetido não reescreve conteúdo');
+  const beforeUnsafeRetry = requests.length;
+  await assert.rejects(submitContentPackage(root, [realArticle], 'pull_request', 'user:tester', [],
+    { ...deterministic, body: 'GITHUB_TOKEN=ABCDEFGHIJKLMNOPQRSTUVWX' }), /credencial/iu,
+  'retry de PR existente deve rejeitar credencial antes de consultar ou escrever no GitHub');
+  assert.equal(requests.length, beforeUnsafeRetry, 'retry inseguro precisa causar zero requests');
+  const safeRetry = await submitContentPackage(root, [realArticle], 'pull_request', 'user:tester', [],
+    { ...deterministic, body: 'Revisão editorial atualizada após novo deploy.' });
+  assert.equal(safeRetry.reused, true);
+  assert.ok(requests.some(({ path, method }) => /\/pulls\/\d+$/u.test(path) && method === 'PATCH'),
+    'retry com metadados públicos continua atualizando a PR existente');
   await assert.rejects(submitContentPackage(root, [], 'pull_request', 'user:tester', ['docs/contatos/inexistente']), /não encontrado/i);
   const failed = (await readFile(join(root, '.audit/docs-submissions.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
   assert.deepEqual(failed.slice(-2).map(({ result }) => result), ['attempt', 'failure']);
