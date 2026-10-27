@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 import tasksCatalog from '../architecture/faq-regua/tarefas-ouro.json' with { type: 'json' };
 import { getIhelpContext } from './product-context-service.mjs';
 import { loadBusinessContext, judgeClaims, splitClaims } from './faq-editorial.mjs';
@@ -29,8 +30,9 @@ const factSchema = object({ claims: { type: 'array', items: object({ id: { type:
   reason: { type: 'string' }, sourceMention: { type: 'boolean' },
   evidenceIds: { type: 'array', items: { type: 'string' } },
 }) } });
-const usageOf = (response) => ({ inputTokens: response?.usage?.input_tokens ?? 0,
-  outputTokens: response?.usage?.output_tokens ?? 0 });
+const tokenCount = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+const usageOf = (response) => ({ inputTokens: tokenCount(response?.usage?.input_tokens),
+  outputTokens: tokenCount(response?.usage?.output_tokens) });
 const sumUsage = (a, b) => ({ inputTokens: a.inputTokens + (b.inputTokens ?? 0),
   outputTokens: a.outputTokens + (b.outputTokens ?? 0) });
 
@@ -123,12 +125,16 @@ export async function runFaqJudgment(page, evidence, providers, { plan } = {}) {
   for (;;) {
     const claims = publishedFields(current).flatMap((field) => splitClaims(field.text).filter((text) =>
       field.field.includes('.units[') ? !text.endsWith('?') : true).map((text) =>
-      ({ text, evidenceIds: field.evidenceIds, kind: field.kind, taskId: field.taskId,
+      ({ text, evidenceIds: field.evidenceIds, kind: field.kind ?? 'metadado', taskId: field.taskId ?? null,
+        taskStatus: field.taskId ? plan?.tasks.find(({ id }) => id === field.taskId)?.status ?? 'sem jornada' : 'sem vínculo',
         field: field.field })))
       .map((unit, index) => ({ ...unit, id: `c${index + 1}` }));
-    const [facts, editorial] = await Promise.all([
+    const judgments = await Promise.allSettled([
       providers.judgeFacts(claims, current, evidence), providers.judgeEditorial(current, evidence),
     ]);
+    const failed = judgments.find(({ status }) => status === 'rejected');
+    if (failed) throw failed.reason;
+    const [facts, editorial] = judgments.map(({ value }) => value);
     usage = sumUsage(sumUsage(usage, facts.usage ?? {}), editorial.usage ?? {});
     const verdicts = Array.isArray(facts) ? facts : facts.claims;
     const diagnostic = preflight(current, evidence, plan);
@@ -166,7 +172,10 @@ export async function runFaqJudgment(page, evidence, providers, { plan } = {}) {
       && row.status === 'sustentada')) diagnostic.push(`não verificável: ${item}`);
     const body = assembleFaqPage(current);
     const mdx = `${faqFrontmatter(current)}${body}\n`;
-    const losses = publishedFields(current).filter(({ text }) => !mdx.includes(text)).map(({ text }) => text);
+    const metadata = parseYaml(mdx.slice(4, mdx.indexOf('\n---\n', 4)));
+    const losses = publishedFields(current).filter(({ field, text }) => field === 'description'
+      ? metadata.description !== text : field.startsWith('description.')
+        ? !metadata.description?.includes(text) : !body.includes(text)).map(({ text }) => text);
     diagnostic.push(...losses.map((text) => `perda na montagem: ${text}`));
     try { validateFaqMdx(body); } catch (error) { diagnostic.push(`MDX: ${error.message}`); }
     if (!diagnostic.length) return { approved: true, status: 'aprovado', mdx, page: current, trace,
@@ -210,9 +219,14 @@ export function projectFaqEvidence(plan, journeys, context, business) {
   return evidence;
 }
 
-async function modelResponse(client, model, name, schema, input) {
-  const result = await client.responses.create({ model, store: false, reasoning: { effort: 'medium' },
-    max_output_tokens: 16000, text: { format: { type: 'json_schema', name, strict: true, schema } }, input });
+async function modelResponse(client, model, name, schema, input, recordUsage) {
+  let result;
+  try {
+    result = await client.responses.create({ model, store: false, reasoning: { effort: 'medium' },
+      max_output_tokens: 16000, text: { format: { type: 'json_schema', name, strict: true, schema } }, input });
+  } catch (error) { recordUsage(null); throw error; }
+  // A paid response still counts if status, JSON or a later judge validation fails.
+  recordUsage(result);
   if (result.status !== 'completed') throw new Error(`resposta incompleta: ${name}`);
   return { value: JSON.parse(result.output_text), usage: usageOf(result) };
 }
@@ -263,60 +277,78 @@ export async function generateFaqV2(root, module, { client = new OpenAI(),
     readFile(join(root, 'architecture/faq-regua', name), 'utf8')));
   const prompt = faqWriterInput(plan, tasks, evidence, screenshots);
   const instructions = faqWriterInstructions(rules);
-  const draft = await modelResponse(client, model, 'faq_page_v2', pageSchema, [
-    { role: 'developer', content: instructions },
-    { role: 'user', content: [{ type: 'input_text', text: prompt }, ...imageItems] },
-  ]);
-  let costUsage = draft.usage;
-  const providers = {
-    judgeFacts: async (claims, _page, facts) => {
-      const section = { oQueE: [], paraQueServe: [], casosDeUso: [],
-        passos: [], duvidas: [], erros: claims.map((item) => ({ text: item.text })) };
-      const judged = await judgeClaims(section, { request: { module }, business }, async (items) => {
-        const result = await modelResponse(client, model, 'faq_facts_v2', factSchema, [
-          { role: 'developer', content: 'Julgue cada afirmação do produto usando somente evidências. Responda cada id uma vez, em ordem. Para sustentada, informe os IDs exatos que a sustentam. Jornada bloqueada não prova funcionamento. O campo estruturado concluida não sustenta frases sobre o modo de verificação, como reabrir, comparar, identificar ou confirmar persistência; é necessária observação visível do produto. Caso a frase cite fontes internas, sourceMention=true. Não reescreva.' },
-          { role: 'user', content: JSON.stringify({ claims: items, evidence: publicEvidence(facts) }) },
-        ]);
-        costUsage = sumUsage(costUsage, result.usage);
-        return result.value;
-      });
-      return judged.verdicts.map((item) => ({ id: item.id, status: item.status,
-        evidenceIds: item.evidenceIds ?? [], reason: item.reason, sourceMention: item.sourceMention }));
-    },
-    judgeEditorial: async (page, facts) => {
-      const readings = [];
-      for (let i = 0; i < 3; i++) readings.push(await judgeEditorial({ pagina: renderPage(page), modulo: module,
-        tipo: 'pagina', evidencias: { front: facts.filter((item) => item.type === 'front'),
-          negocio: facts.filter((item) => item.type === 'negocio'),
-          jornadas: facts.filter((item) => item.type === 'jornada') } },
-      async ({ instructions: judgePrompt, input, schema }) => {
-        const result = await modelResponse(client, model, 'faq_editorial_v2', schema, [
-          { role: 'developer', content: judgePrompt }, { role: 'user', content: input },
-        ]);
-        costUsage = sumUsage(costUsage, result.usage);
-        return { output_text: JSON.stringify(result.value), usage: { input_tokens: result.usage.inputTokens,
-          output_tokens: result.usage.outputTokens } };
-      }));
-      return { ...consolidateEditorialReadings(readings),
-        comments: readings.map((reading) => reading.comentario) };
-    },
-    rewrite: async (page, report) => {
-      const result = await modelResponse(client, model, 'faq_rewrite_v2', pageSchema, [
-        { role: 'developer', content: `${instructions}\nReescreva a página inteira UMA vez. Preserve fatos sustentados e corrija apenas o diagnóstico. Não invente passos.` },
-        { role: 'user', content: JSON.stringify({ page, report, plan, evidence: publicEvidence(evidence) }) },
-      ]);
-      costUsage = sumUsage(costUsage, result.usage);
-      return result.value;
-    },
+  const knownUsage = { inputTokens: 0, outputTokens: 0 };
+  let usageUnavailable = false, corrections = 0;
+  const recordUsage = (response) => {
+    for (const [key, count] of Object.entries(usageOf(response))) {
+      if (count === null) usageUnavailable = true;
+      else knownUsage[key] += count;
+    }
   };
-  const result = await runFaqJudgment(draft.value, evidence, providers, { plan });
-  const [inputRate, outputRate] = rates[model] ?? [0, 0];
-  const costUsd = Number(((costUsage.inputTokens * inputRate + costUsage.outputTokens * outputRate) / 1e6).toFixed(6));
-  const mdx = result.mdx;
-  if (mdx && containsSensitiveData(mdx, { detectOpaque: true })) return { status: 'precisa de revisão humana',
-    diagnostic: ['conteúdo sensível na página'], model, costUsd, corrections: result.corrections };
-  return { status: result.status, module, ...(mdx ? { mdx } : {}), screenshots,
-    trace: result.trace, editorial: result.editorial, diagnostic: result.diagnostic ?? [],
-    reviewTasks: plan.reviewTasks, corrections: result.corrections, preserved: result.preserved,
-    model, costUsd, usage: costUsage };
+  const price = Object.hasOwn(rates, model) ? rates[model] : null;
+  const accounting = () => ({ model, knownUsage: { ...knownUsage },
+    usage: usageUnavailable ? { inputTokens: null, outputTokens: null } : { ...knownUsage },
+    costUsd: price && !usageUnavailable
+      ? Number(((knownUsage.inputTokens * price[0] + knownUsage.outputTokens * price[1]) / 1e6).toFixed(6)) : null,
+    costDiagnostic: [...(!price ? ['preço do modelo indisponível'] : []),
+      ...(usageUnavailable ? ['consumo indisponível em uma ou mais chamadas'] : [])] });
+  const requestModel = (name, schema, input) => modelResponse(client, model, name, schema, input, recordUsage);
+  try {
+    const draft = await requestModel('faq_page_v2', pageSchema, [
+      { role: 'developer', content: instructions },
+      { role: 'user', content: [{ type: 'input_text', text: prompt }, ...imageItems] },
+    ]);
+    const providers = {
+      judgeFacts: async (claims, _page, facts) => {
+        const section = { oQueE: [], paraQueServe: [], casosDeUso: [],
+          passos: [], duvidas: [], erros: claims.map((item) => ({ ...item })) };
+        const judged = await judgeClaims(section, { request: { module }, business }, async (items) => {
+          const result = await requestModel('faq_facts_v2', factSchema, [
+            { role: 'developer', content: 'Julgue cada afirmação do produto usando somente evidências. Responda cada id uma vez, em ordem. Para sustentada, informe os IDs exatos que a sustentam. Julgue se o texto é instrução, procedimento ou efeito independentemente do kind escolhido pelo redator, inclusive em título, descrição, heading, link ou legenda. Use taskId, taskStatus e a pauta para identificar a tarefa real. Instrução ou procedimento sem jornada concluída da própria tarefa, ou sem vínculo com tarefa, deve ficar a confirmar; rótulos do front não provam sequência nem funcionamento. Renomear kind para contexto ou omitir taskId não dispensa jornada. Contexto editorial e fatos não procedurais legítimos podem ser sustentados pelos fatos do front, mantendo tarefas sem jornada na conferência do time. Jornada bloqueada não prova funcionamento. O campo estruturado concluida não sustenta frases sobre o modo de verificação, como reabrir, comparar, identificar ou confirmar persistência; é necessária observação visível do produto. Caso a frase cite fontes internas, sourceMention=true. Não reescreva.' },
+            { role: 'user', content: JSON.stringify({ claims: items, evidence: publicEvidence(facts),
+              plan: { module: plan.module, tasks: plan.tasks.map(({ id, title, status }) => ({ id, title, status })) } }) },
+          ]);
+          return result.value;
+        });
+        return judged.verdicts.map((item) => ({ id: item.id, status: item.status,
+          evidenceIds: item.evidenceIds ?? [], reason: item.reason, sourceMention: item.sourceMention }));
+      },
+      judgeEditorial: async (page, facts) => {
+        const readings = [];
+        for (let i = 0; i < 3; i++) readings.push(await judgeEditorial({ pagina: renderPage(page), modulo: module,
+          tipo: 'pagina', evidencias: { front: facts.filter((item) => item.type === 'front'),
+            negocio: facts.filter((item) => item.type === 'negocio'),
+            jornadas: facts.filter((item) => item.type === 'jornada') } },
+        async ({ instructions: judgePrompt, input, schema }) => {
+          const result = await requestModel('faq_editorial_v2', schema, [
+            { role: 'developer', content: judgePrompt }, { role: 'user', content: input },
+          ]);
+          return { output_text: JSON.stringify(result.value), usage: { input_tokens: result.usage.inputTokens,
+            output_tokens: result.usage.outputTokens } };
+        }));
+        return { ...consolidateEditorialReadings(readings),
+          comments: readings.map((reading) => reading.comentario) };
+      },
+      rewrite: async (page, report) => {
+        corrections++;
+        const result = await requestModel('faq_rewrite_v2', pageSchema, [
+          { role: 'developer', content: `${instructions}\nReescreva a página inteira UMA vez. Preserve fatos sustentados e corrija apenas o diagnóstico. Não invente passos.` },
+          { role: 'user', content: JSON.stringify({ page, report, plan, evidence: publicEvidence(evidence) }) },
+        ]);
+        return result.value;
+      },
+    };
+    const result = await runFaqJudgment(draft.value, evidence, providers, { plan });
+    const mdx = result.mdx;
+    if (mdx && containsSensitiveData(mdx, { detectOpaque: true })) return { status: 'precisa de revisão humana',
+      diagnostic: ['conteúdo sensível na página'], module, ...accounting(), corrections: result.corrections };
+    return { status: result.status, module, ...(mdx ? { mdx } : {}), screenshots,
+      trace: result.trace, editorial: result.editorial, diagnostic: result.diagnostic ?? [],
+      reviewTasks: plan.reviewTasks, corrections: result.corrections, preserved: result.preserved,
+      ...accounting() };
+  } catch {
+    return { status: 'precisa de revisão humana', module, partial: true,
+      diagnostic: ['falha na geração ou julgamento'], screenshots, reviewTasks: plan.reviewTasks,
+      corrections, ...accounting() };
+  }
 }
