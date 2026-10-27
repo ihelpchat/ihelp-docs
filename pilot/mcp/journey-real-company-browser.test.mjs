@@ -6,11 +6,87 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import * as runtime from './journey-runtime.mjs';
+import { runJourneys } from './journey-service.mjs';
 import { captureMaskedFrame } from '../scripts/screen-capture/capture.mjs';
 import { launch } from '../scripts/visual/measure.mjs';
 import { reviewJourneyPrint } from '../scripts/review-journey-print.mjs';
 
 const phone = '+44 20 7946 0001';
+
+test('guard.capture mascara pixels opacos retornados e persistidos pela jornada real', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'journey-integrated-mask-'));
+  const path = '/contact/detail/record';
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<main><h1>Contatos</h1><canvas id="private" width="300" height="60"></canvas></main>');
+  });
+  let browser;
+  try {
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    browser = await launch();
+    const page = await browser.newPage({ viewport: { width: 500, height: 300 } });
+    await page.goto(origin + path);
+    await page.evaluate(() => {
+      const ctx = document.getElementById('private').getContext('2d');
+      ctx.fillStyle = 'red'; ctx.fillRect(0, 0, 300, 60);
+      ctx.fillStyle = 'black'; ctx.font = '16px sans-serif';
+      ctx.fillText('Nome Fictício 02079460001', 8, 30);
+    });
+    // Decode the actual PNG, including the text area, rather than inspecting DOM overlays.
+    const pixels = png => page.evaluate(async png => {
+      const image = new Image(); image.src = 'data:image/png;base64,' + png; await image.decode();
+      const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+      const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
+      const rect = document.getElementById('private').getBoundingClientRect();
+      const data = ctx.getImageData(rect.x + 4, rect.y + 4, rect.width - 8, rect.height - 8).data;
+      const counts = { red: 0, black: 0, masked: 0, total: data.length / 4 };
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] === 255 && data[i + 1] === 0 && data[i + 2] === 0) counts.red++;
+        if (data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0) counts.black++;
+        if (data[i] === 226 && data[i + 1] === 232 && data[i + 2] === 240 && data[i + 3] === 255) counts.masked++;
+      }
+      return counts;
+    }, png.toString('base64'));
+    const unmasked = await pixels(await page.screenshot({ type: 'png' }));
+    assert.ok(unmasked.red > 0 && unmasked.black > 0, 'controle sem máscara contém fundo e texto fictício visíveis');
+    assert.equal(unmasked.masked, 0);
+
+    const guard = runtime.createRealCompanyScreenshotGuard(page, () => origin);
+    let captured;
+    // Only the observation adapter is local: capture, sanitization, hashing and persistence are real.
+    // The outer finally owns the browser and HTTP server, including failures inside the consumer.
+    const [record] = await runJourneys({ root, module: 'contatos',
+      tasks: [{ id: 'contatos.cadastrar', modulo: 'contatos', tarefa: 'Cadastrar',
+        resultadoEsperadoObservavel: 'Contato fictício localizado' }],
+      frontSha: 'a'.repeat(40), profile: 'qa', realCompany: true, testPhone: phone,
+      cacheConfig: { qaTarget: 'producao' }, maxActionsPerTask: 1,
+      browser: { async open() {}, async close() {}, async observe() {
+        captured = await guard.capture({ path, ownItem: true, vocabulary: ['Contatos'], testPhone: phone });
+        return { title: 'Contatos', path, controls: [], fields: [], messages: [], state: {}, ...captured };
+      } }, model: { async decide() { return { type: 'finish' }; } } });
+    assert.ok(Buffer.isBuffer(captured.screenshot), 'captura não pode ser omitida');
+    assert.equal(captured.aprovacao, 'pendente');
+    assert.equal(record.screens.length, 1);
+    const stored = JSON.parse(await readFile(join(root, 'contatos', `${record.task}.${record.cacheKey}.json`), 'utf8'));
+    const screen = stored.screens[0];
+    assert.equal(screen.aprovacao, 'pendente');
+    assert.equal(screen.screenshotId, createHash('sha256').update(captured.screenshot).digest('hex'));
+    const persisted = await readFile(join(root, 'contatos', `${screen.screenshotId}.png`));
+    assert.deepEqual(persisted, captured.screenshot, 'consumidor persiste os bytes devolvidos pelo guard');
+    const returnedPixels = await pixels(captured.screenshot);
+    assert.equal(returnedPixels.masked, unmasked.total, 'PNG retornado pelo guard mascara canvas e texto fictício fora da lista');
+    const persistedPixels = await pixels(persisted);
+    assert.equal(persistedPixels.masked, unmasked.total, 'PNG persistido pela jornada mantém a máscara integral');
+  } finally {
+    try { await browser?.close(); }
+    finally {
+      server.closeAllConnections();
+      try { await new Promise(resolve => server.close(resolve)); }
+      finally { await rm(root, { recursive: true, force: true }); }
+    }
+  }
+});
 
 test('lista com estrutura desconhecida nunca é confundida com lista vazia', async () => {
   const browser = await launch();
