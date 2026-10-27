@@ -50,6 +50,8 @@ Para acrescentar um teste ao `mcp:test`, crie o arquivo `mcp/<nome>.test.mjs`; o
 
 `mcpGeneratedSha` no frontmatter registra o commit de referência da página. A adoção inicial é explícita e única: `node scripts/adotar-marcador-mcp.mjs` grava o SHA do último commit que tocou cada MDX ainda sem marcador em `content/docs`, exceto páginas com `manual: true`. O script é idempotente e só acrescenta uma linha ao frontmatter; o corpo permanece idêntico. Esse conteúdo atual passa a ser a versão gerada de referência. Qualquer commit posterior conta como edição humana, mesmo que use a mesma conta do agente. Uma página nova sem marcador falha fechada e pede revisão humana. `manual: true` impede toda reescrita automática.
 
+As gravações automáticas usam `MCP_GIT_AUTHOR`. Quando há commits de outra autoria após o marcador, cada seção alterada nesses commits continua protegida nos próximos ciclos, mesmo que um commit intermediário do MCP tenha preservado seu texto. O marcador permanece na referência original enquanto esse histórico for necessário; a proposta não pode avançá-lo. Mudanças em outras seções continuam permitidas. Se faltar um commit, pai ou blob necessário para recuperar a proveniência, a atualização gera conflito e pede revisão humana, sem reescrever a página.
+
 O build padrão gera export estático em `out`. Para GitHub Pages, use `NEXT_PUBLIC_BASE_PATH=/ihelp-docs npm run build`.
 
 ## Assistente GPT

@@ -48,26 +48,46 @@ export async function reconcileHumanUpdate(root, path, proposed, expectedCurrent
     git(root, 'cat-file', '-e', `${start}^{commit}`);
     git(root, 'merge-base', '--is-ancestor', start, 'HEAD');
     head = git(root, 'rev-parse', 'HEAD');
-    history = git(root, 'log', '--format=%H%x00%an%x00%ae', `${start}..HEAD`, '--', `:(top)${gitPath}`)
+    history = git(root, 'log', '--full-history', '--topo-order', '--format=%H%x00%an%x00%ae%x00%P', `${start}..HEAD`, '--', `:(top)${gitPath}`)
       .split('\n').filter(Boolean).map((line) => line.split('\0'));
     historicalPath = gitPath;
   } catch { return unavailable(proposed); }
   const bot = ([, , email]) => email === MCP_GIT_AUTHOR.email;
   const generated = history.find(bot);
+  const textAt = (commit) => execFileSync('git', ['--no-pager', 'show', `${commit}:${historicalPath}`],
+    { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   let generatedText;
-  try { generatedText = execFileSync('git', ['--no-pager', 'show', `${generated?.[0] ?? start}:${historicalPath}`],
-    { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
+  try { generatedText = textAt(generated?.[0] ?? start); }
   catch { return unavailable(proposed); }
   const humanCommits = history.filter((entry) => !bot(entry));
   if (!humanCommits.length) return { status: 'update', content: withMarker(proposed, head), notice: '' };
   let oldParts; let currentParts; let newParts;
-  try { oldParts = sections(generatedText); currentParts = sections(current); newParts = sections(proposed); }
+  const humanSections = new Map();
+  try {
+    oldParts = sections(generatedText); currentParts = sections(current); newParts = sections(proposed);
+    // O último blob do bot pode conter contribuições humanas preservadas.
+    // Conserve a referência anterior à primeira contribuição de cada seção.
+    for (const [sha, , , parents] of [...humanCommits].reverse()) {
+      if (!parents) return unavailable(proposed);
+      const editedParts = sections(textAt(sha));
+      for (const parent of parents.split(' ')) {
+        const parentParts = sections(textAt(parent));
+        for (const key of new Set([...parentParts.keys(), ...editedParts.keys()])) {
+          if (comparable(key, parentParts.get(key)) !== comparable(key, editedParts.get(key)) && !humanSections.has(key)) {
+            humanSections.set(key, parentParts.get(key));
+          }
+        }
+      }
+    }
+  }
   catch { return unavailable(proposed); }
-  const changes = [...new Set([...oldParts.keys(), ...newParts.keys()])]
-    .filter((key) => comparable(key, newParts.get(key)) !== comparable(key, oldParts.get(key))
+  const reference = (key) => humanSections.has(key) ? humanSections.get(key) : oldParts.get(key);
+  const changes = [...new Set([...oldParts.keys(), ...newParts.keys(), ...humanSections.keys()])]
+    .filter((key) => comparable(key, newParts.get(key)) !== comparable(key, reference(key))
       && comparable(key, newParts.get(key)) !== comparable(key, currentParts.get(key)))
     .map((key) => [key, newParts.get(key)]);
-  const conflicts = changes.filter(([key]) => comparable(key, currentParts.get(key)) !== comparable(key, oldParts.get(key)));
+  const conflicts = changes.filter(([key]) => humanSections.has(key)
+    || comparable(key, currentParts.get(key)) !== comparable(key, oldParts.get(key)));
   if (conflicts.length) return { status: 'conflict', content: null,
     notice: `Edição humana na seção afetada de ${path}. Página preservada; decisão necessária.\n\n${conflicts.map(([key, proposal]) => `${key}\n\nVersão humana:\n${currentParts.get(key) ?? '(seção ausente)'}\nVersão proposta:\n${proposal ?? '(seção removida)'}`).join('\n')}` };
   const merged = new Map(currentParts);
@@ -84,6 +104,6 @@ export async function reconcileHumanUpdate(root, path, proposed, expectedCurrent
     const next = currentKeys.slice(currentKeys.indexOf(key) + 1).find((candidate) => ordered.includes(candidate));
     ordered.splice(next ? ordered.indexOf(next) : ordered.length, 0, key);
   }
-  return { status: 'update', content: ordered.map((key) => merged.get(key)).filter((value) => value !== undefined).join(''),
+  return { status: 'update', content: withMarker(ordered.map((key) => merged.get(key)).filter((value) => value !== undefined).join(''), start),
     notice: `Edição humana detectada em ${path}. Seções preservadas byte a byte: ${preserved.join(', ')}.` };
 }
