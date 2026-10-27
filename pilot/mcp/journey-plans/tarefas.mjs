@@ -4,7 +4,7 @@ export const taskPlans = {
   'tarefas.buscar': { startRoute: '/tarefas', steps: [fill('Buscar título', 'taskName')],
     persisted: { method: 'GET', path: '/task', field: 'title', value: 'generated' } },
   'tarefas.criar': { startRoute: '/tarefas', steps: [click('button', 'Nova Tarefa'),
-    fill('Título', 'taskName'), click('combobox', 'Selecione o responsável'),
+    fill('Título', 'taskName'), click('combobox', 'Responsável'),
     { type: 'click', role: 'option', nameFrom: 'selfOption' }, click('button', 'Salvar')],
     persisted: { method: 'GET', path: '/task', field: 'title', value: 'generated' } },
   'tarefas.editar': { startRoute: '/tarefas?task=:id', steps: [fill('Título', 'editedTaskName'), click('button', 'Salvar')],

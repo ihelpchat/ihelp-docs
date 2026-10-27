@@ -94,16 +94,21 @@ export function areaWriteAllowed(request, context = {}) {
 export function nextAreaAction(id, screen, actions, fixtureFor) {
   const plan = areaPlans[id];
   if (!plan) return null;
-  const label = (step) => step.nameFrom ? String(fixtureFor(step.nameFrom)) : step.name;
+  const label = (step) => step.nameFrom === 'selfOption' ? screen.state?.sessionUserOption
+    : step.nameFrom ? String(fixtureFor(step.nameFrom)) : step.name;
   const matches = (step, name) => ['scheduleDay', 'campaignName', 'stageName'].includes(step.nameFrom)
     ? name === label(step) || name.startsWith(`${label(step)} `)
     : step.nameFrom === 'selfLabel' ? name === label(step) || name.endsWith(` ${label(step)}`)
       : name === label(step);
-  const done = (step) => actions.some((action) => action.type === step.type
+  const done = (step) => step.nameFrom === 'selfOption'
+    ? actions.some((action, index) => action.type === 'click' && action.role === 'option'
+      && actions.slice(0, index).some((earlier) => earlier.role === 'combobox' && earlier.name === 'Responsável'))
+    : actions.some((action) => action.type === step.type
     && action.role === step.role && matches(step, action.name)
     && (step.type !== 'fill' || action.value === fixtureFor(step.value)));
   const step = plan.steps.find((item) => !done(item));
   if (!step) return { type: 'finish', role: null, name: null, value: null };
+  if (step.nameFrom === 'selfOption' && !/^opção [1-9]\d{0,2}$/u.test(label(step) ?? '')) return null;
   const target = step.type === 'fill'
     ? screen.fields?.find((item) => item.role === step.role && matches(step, item.name))
     : screen.controls?.find((item) => item.enabled && item.role === step.role && matches(step, item.name));
@@ -128,7 +133,9 @@ export function verifyAreaResult(id, response, context = {}) {
   const rows = Array.isArray(payload) ? payload : object(payload) ? [payload] : [];
   const { field, value, idField = 'id', idSource = 'createdIds' } = plan.persisted;
   const allowedIds = idSource === 'createdIds' ? context.createdIds : context.fixedIds?.[idSource];
+  const selfField = id === 'tarefas.criar' ? 'assigneeUserId' : id === 'crm.criar_card' ? 'responsibleId' : null;
   return rows.filter((row) => object(row) && owns(allowedIds, row[idField])
+    && (!selfField || owns(context.fixedIds?.self, row[selfField]))
     && (value === 'generated' ? fromGenerator(context, row[field])
       : value === 'expected' ? fromGenerator(context, context.expectedValue)
         && row[field] === context.expectedValue

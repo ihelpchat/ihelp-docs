@@ -522,8 +522,8 @@ export function journeyVocabulary(facts, screenCode = []) {
       && !containsSensitiveData(value, { detectOpaque: true })))];
 }
 
-export async function observeJourneyDom(page, { vocabulary = [], generated = new Set() } = {}) {
-  const raw = await page.evaluate((selector) => {
+export async function observeJourneyDom(page, { vocabulary = [], generated = new Set(), selfId } = {}) {
+  const raw = await page.evaluate(({ selector, selfId }) => {
     const visible = (node) => Boolean(node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden');
     const compact = (value) => String(value ?? '').replace(/\s+/gu, ' ').trim().replace(/\s*\*$/u, '').slice(0, 180);
     const byId = (ids) => compact(ids.split(/\s+/u).map((id) => document.getElementById(id)?.textContent ?? '').join(' '));
@@ -553,6 +553,9 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
         ? 'Adicionar opção +'
       : node.tagName === 'BUTTON' && /^(?:Salvar|Publicar)$/iu.test(node.innerText?.trim() ?? '')
         ? node.innerText.trim()
+      // Chips do CRM: o label nomeia o grupo; o title identifica o alvo.
+      : node.tagName === 'BUTTON' && ['Estágio inicial', 'Responsável'].includes(visual(node))
+        && node.getAttribute('title') ? node.getAttribute('title')
       : node.getAttribute('aria-labelledby') && byId(node.getAttribute('aria-labelledby'))
       || node.labels?.[0]?.textContent || node.closest('label')?.textContent
       || node.getAttribute('aria-label') || visual(node)
@@ -580,6 +583,8 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
       value: 'value' in node ? node.value : null,
       defaultValue: 'defaultValue' in node ? node.defaultValue : null,
       phoneCountry: node.matches('select,[role="combobox"]') && Boolean(node.closest('.phoneInputWrapper,.PhoneInput,[class*="phoneInput" i]')?.querySelector('input[type="tel"]')),
+      sessionUser: Number.isSafeInteger(selfId) && selfId > 0
+        && node.getAttribute('data-value') === String(selfId),
       field: node.matches('input:not([type="hidden"]),textarea,select,[role="combobox"]') }] : []);
     const rows = [...document.querySelectorAll('tbody tr')].filter(visible).map((row) => compact(row.innerText));
     const listButton = document.querySelector('button[aria-label="Modo lista"]');
@@ -592,7 +597,7 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
       messages: [...document.querySelectorAll('[role="alert"],[role="status"],[aria-live],[class*="toast" i],.error,[class*="text-red"]')]
         .filter(visible).map((node) => compact(node.textContent)).filter(Boolean),
       headings: [...document.querySelectorAll('h1,h2,h3')].filter(visible).map((node) => compact(node.textContent)).join(' | ').slice(0, 180) };
-  }, journeyControlSelector);
+  }, { selector: journeyControlSelector, selfId });
   const known = new Set([...vocabulary, 'Buscar contato...', 'Mais opções', 'Exportar Contatos', 'Importar Contatos']);
   const knownFolded = new Set([...known].map((value) => value.toLocaleLowerCase('pt-BR')));
   const targets = {};
@@ -600,6 +605,8 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
   const fields = [];
   let fieldNumber = 0;
   let optionNumber = 0;
+  let sessionUserOption = '';
+  const sessionMatches = raw.controls.filter((node) => node.role === 'option' && node.sessionUser);
   const repeated = new Map();
   for (const node of raw.controls) {
     const key = journeyTargetKey(node.role, node.name);
@@ -609,7 +616,10 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
   for (const node of raw.controls) {
     if (node.phoneCountry) continue;
     if (node.field) fieldNumber++;
-    if (node.role === 'option') optionNumber++;
+    if (node.role === 'option') {
+      optionNumber++;
+      if (sessionMatches.length === 1 && node.sessionUser) sessionUserOption = `opção ${optionNumber}`;
+    }
     let name = node.role === 'option' ? `opção ${optionNumber}` : node.name;
     if (node.role !== 'option' && repeated.get(journeyTargetKey(node.role, node.name)) > 1) {
       const regionKey = journeyTargetKey(node.role, `${name} (${node.region})`);
@@ -639,7 +649,7 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
   }
   return { controls, fields, messages: raw.messages.map((value) => known.has(value) ? value : '[conteúdo oculto]'),
     state: { headings: raw.headings.split(' | ').map((value) => known.has(value) ? value : '[conteúdo oculto]').join(' | '),
-      campaignViewMode: raw.campaignViewMode,
+      campaignViewMode: raw.campaignViewMode, sessionUserOption,
       visibleRows: String(raw.rows.length), generatedRows: String(raw.rows.filter((row) => [...generated].some((value) =>
         /^(?:Contato|Card|Campanha|Tarefa) Exemplo/u.test(value) && row.includes(value))).length) },
     title: raw.title, targets };
@@ -676,12 +686,13 @@ export async function coveringElement(page, selected) {
   }, selected);
 }
 
-export async function actJourneyAction(page, action, targets, { vocabulary = [], generated = new Set() } = {}) {
+export async function actJourneyAction(page, action, targets, { vocabulary = [], generated = new Set(), selfId } = {}) {
   const target = targets[journeyTargetKey(action.role, action.name)];
   const changed = () => Object.assign(new Error('alvo mudou; observe de novo'), { code: 'JOURNEY_TARGET_CHANGED' });
   if (!target) throw changed();
   const names = Object.keys(targets).map((key) => JSON.parse(key)[1]);
-  const fresh = await observeJourneyDom(page, { vocabulary: [...vocabulary, ...names], generated });
+  const fresh = await observeJourneyDom(page, { vocabulary: [...vocabulary, ...names], generated, selfId });
+  if (selfId != null && action.role === 'option' && fresh.state.sessionUserOption !== action.name) throw changed();
   const matches = fresh.controls.filter((control) => control.role === action.role && control.name === action.name);
   if (matches.length !== 1 || !matches[0].enabled || !fresh.targets[journeyTargetKey(action.role, action.name)]) throw changed();
   const selected = fresh.targets[journeyTargetKey(action.role, action.name)];
@@ -1345,13 +1356,18 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
           fixedIds.contact.add(contact.id);
           areaFixtureContext.contactSearch = contact.nome;
           areaFixtureContext.contactOption = 'opção 1';
-          areaFixtureContext.selfLabel = 'Atendente Exemplo 01';
+          const users = await fixtureRows('/configurations/users');
+          const sessionUser = users.find((row) => row.id === self);
+          const label = sessionUser?.nome;
+          if (!/^Atendente Exemplo \d{2}$/u.test(label ?? '')
+            || users.filter((row) => row.nome === label).length !== 1)
+            throw new Error('responsável fictício da sessão indisponível');
+          areaFixtureContext.selfLabel = label;
         }
         if (task.id === 'tarefas.criar') {
           const self = Number(account.userId);
           if (!Number.isSafeInteger(self) || self <= 0) throw new Error('usuário da sessão indisponível');
           fixedIds.self.add(self);
-          areaFixtureContext.selfOption = 'opção 1';
         }
         if (task.modulo === 'crm' && task.id !== 'crm.criar_card' && areaIds.card.size !== 1)
           throw new Error('card fictício de preparo indisponível');
@@ -1437,7 +1453,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
         .replace(/^\/crm\/card\/[^/]+$/u, '/crm/card/record')
         .replace(/^\/campanhas\/detalhe\/[^/]+$/u, '/campanhas/detalhe/record');
       let data;
-      try { data = await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures() }); }
+      try { data = await observeJourneyDom(page, { vocabulary: [...known], generated: fixtures(),
+        selfId: currentTask === 'tarefas.criar' ? [...fixedIds.self][0] : undefined }); }
       catch (error) { error.stage = 'dom'; throw error; }
       if (currentTask === 'robos.montar_menu' && data.controls.some((item) => item.name === 'Menu de opções')) {
         menuProbe = await page.evaluate(() => {
@@ -1529,7 +1546,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor }) {
           { timeout: 30_000 }).catch(() => null) : null;
         if (currentTask === 'contatos.cadastrar' && action.type === 'click' && action.name === 'Salvar')
           await page.waitForLoadState('networkidle', { timeout: 2_500 }).catch(() => {});
-        await actJourneyAction(page, action, observedTargets, { vocabulary: [...known], generated: fixtures() });
+        await actJourneyAction(page, action, observedTargets, { vocabulary: [...known], generated: fixtures(),
+          selfId: currentTask === 'tarefas.criar' ? [...fixedIds.self][0] : undefined });
         if (botSaveResponse) {
           botSaveStatus = (await botSaveResponse)?.status() ?? botSaveStatus;
           if (botSaveStatus >= 200 && botSaveStatus < 300) await botSaveReload;
