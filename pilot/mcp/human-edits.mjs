@@ -70,12 +70,13 @@ export async function reconcileHumanUpdate(root, path, proposed, expectedCurrent
     for (const [sha, , , parents] of [...humanCommits].reverse()) {
       if (!parents) return unavailable(proposed);
       const editedParts = sections(textAt(sha));
-      for (const parent of parents.split(' ')) {
-        const parentParts = sections(textAt(parent));
-        for (const key of new Set([...parentParts.keys(), ...editedParts.keys()])) {
-          if (comparable(key, parentParts.get(key)) !== comparable(key, editedParts.get(key)) && !humanSections.has(key)) {
-            humanSections.set(key, parentParts.get(key));
-          }
+      const parentParts = parents.split(' ').map((parent) => sections(textAt(parent)));
+      // Conteúdo idêntico ao de algum pai foi herdado, não criado no merge.
+      // A contribuição humana desse pai já foi registrada no seu próprio commit.
+      for (const key of new Set([...editedParts.keys(), ...parentParts.flatMap((parts) => [...parts.keys()])])) {
+        if (!humanSections.has(key) && parentParts.every((parts) =>
+          comparable(key, parts.get(key)) !== comparable(key, editedParts.get(key)))) {
+          humanSections.set(key, parentParts[0].get(key));
         }
       }
     }
