@@ -293,7 +293,7 @@ async function scanVisible(page, { realCompany = false } = {}) {
         const profile = Boolean(element.closest('header [class*="profile"], header [class*="user"], [role="banner"] [class*="profile"], [role="banner"] [class*="user"]'));
         const first = items.length;
         add(node.textContent, range.getClientRects(), inDataRegion(element) ? 'campo ou conteúdo dinâmico' : 'texto não confirmado',
-          profile, element.closest('.react-flow__node')?.getBoundingClientRect());
+          profile || realCompany && inDataRegion(element), element.closest('.react-flow__node')?.getBoundingClientRect());
         const tab = element.closest('a,[role="tab"]');
         if (tab) for (const item of items.slice(first)) item.context = tab.innerText;
       }
