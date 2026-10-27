@@ -132,8 +132,9 @@ test('captura integra requisição observada, filtro digitado e DOM local', asyn
         const busy = f.pending();
         const request = f.page.evaluate(() => fetch('/busy').then(r => r.json()));
         const entry = await busy;
-        assert.equal((await f.capture()).screenshot, null, 'rede não ociosa');
-        entry.reply(); await request;
+        try {
+          assert.equal((await f.capture()).screenshot, null, 'rede não ociosa');
+        } finally { entry.reply(); await request; }
       } finally { await f.page.close(); }
     });
   } finally {
