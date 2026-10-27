@@ -38,7 +38,8 @@ for (const file of await walk(contentRoot)) {
     }
     valid++;
   } catch (error) {
-    assert.equal(baseline[path], createHash('sha256').update(raw).digest('hex'), `${path}: falha nova no gate: ${error.message}`);
+    const content = raw.replace(/^---\n(mcpGeneratedSha: [a-f0-9]{40}\n)/u, '---\n');
+    assert.equal(baseline[path], createHash('sha256').update(content).digest('hex'), `${path}: falha nova no gate: ${error.message}`);
     stillFailing.add(path);
   }
 }

@@ -13,6 +13,8 @@ import { assertPublicSubmit } from './public-submit-gate.mjs';
 import { finalizeSecurityResponse } from './security-review.mjs';
 import { loadScreenshotManifest, screenshotReviewBody, screenshotVersionWarnings } from './screen-capture-manifest.mjs';
 import { searchLocalProductContext } from './local-product-context.mjs';
+import { MCP_GIT_AUTHOR, reconcileHumanUpdate } from './human-edits.mjs';
+import { createHash } from 'node:crypto';
 
 const SOURCES = new Set(['produto', 'suporte', 'api']);
 const CONTENT_TYPES = new Set(['faq', 'tutorial', 'guia', 'referencia']);
@@ -397,9 +399,8 @@ function safeArticleList(articles, deletes = []) {
   return upserts;
 }
 
-async function createPackagePullRequest(items, deletes, actor, beforePull, options = {}) {
+async function createPackagePullRequest(root, items, deletes, actor, beforePull, options = {}) {
   const { imagesUsedByArticles } = await import('./screen-capture-service.mjs');
-  const screenshots = await imagesUsedByArticles(items.map(({ article }) => article));
   const manifest = await loadScreenshotManifest();
   const screenshotWarnings = [];
   for (const { article } of items) {
@@ -419,7 +420,7 @@ async function createPackagePullRequest(items, deletes, actor, beforePull, optio
   const marked = items.filter(({ article }) => article.body.includes('<AConfirmar>'));
   const warnedBody = marked.length ? `${baseBody}\n\n## Pendências a confirmar\n\n${marked.map(({ article }) => `- ${article.path}: contém afirmações marcadas como a confirmar; revisão humana obrigatória antes da publicação.`).join('\n')}` : baseBody;
   const versionBody = screenshotReviewBody(warnedBody, [...new Set(screenshotWarnings)]);
-  const body = options.securityWarnings?.length ? `${versionBody}\n\n## Atenção de segurança\n\n${options.securityWarnings.map((warning) => `- ${warning}`).join('\n')}` : versionBody;
+  let body = options.securityWarnings?.length ? `${versionBody}\n\n## Atenção de segurança\n\n${options.securityWarnings.map((warning) => `- ${warning}`).join('\n')}` : versionBody;
   rejectSensitive(`${title}\n${body}`);
   const branch = options.branch ?? `docs/ia-pacote-${Date.now()}`;
   if (options.branch && !/^docs\/deploy-[a-z0-9-]+-[a-f0-9]{16}$/.test(branch)) throw new SubmitArticleError('INVALID_BRANCH', 'Branch determinística inválida');
@@ -441,6 +442,24 @@ async function createPackagePullRequest(items, deletes, actor, beforePull, optio
     if (deletes.includes(path) && !previous) throw new SubmitArticleError('ARTICLE_NOT_FOUND', `Artigo não encontrado: ${path}`);
     previousByPath.set(path, previous);
   }
+  const protectedItems = [];
+  const humanNotices = [];
+  for (const item of items) {
+    const previous = previousByPath.get(item.article.path);
+    if (!previous) {
+      protectedItems.push({ ...item, rendered: item.rendered.replace(/^mcpGeneratedSha:.*\n/m, '')
+        .replace(/^---\n/, `---\nmcpGeneratedSha: ${ref.object.sha}\n`) });
+      continue;
+    }
+    const remoteCurrent = Buffer.from(previous.content.replaceAll('\n', ''), 'base64').toString('utf8');
+    const result = await reconcileHumanUpdate(root, `content/docs/${item.article.path}.mdx`, item.rendered, remoteCurrent);
+    if (result.notice) humanNotices.push({ path: item.article.path, status: result.status, notice: result.notice });
+    if (result.status === 'update') protectedItems.push({ ...item, rendered: result.content });
+  }
+  items = protectedItems;
+  const screenshots = await imagesUsedByArticles(items.map(({ article }) => article));
+  if (humanNotices.length) body += `\n\n## Edições humanas\n\n${humanNotices.map(({ notice }) => notice).join('\n\n')}`;
+  rejectSensitive(`${title}\n${body}`);
   try { await githubRequest(`/repos/${owner}/${repo}/git/refs`, { method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: ref.object.sha }) }); }
   catch (error) {
     existing = await existingPull();
@@ -462,9 +481,19 @@ async function createPackagePullRequest(items, deletes, actor, beforePull, optio
     const previous = previousByPath.get(article.path);
     await githubRequest(`/repos/${owner}/${repo}/contents/${filePath}`, {
       method: 'PUT',
-      body: JSON.stringify({ message: `docs: atualiza ${article.title}`, content: Buffer.from(rendered).toString('base64'), branch, ...(previous ? { sha: previous.sha } : {}) }),
+      body: JSON.stringify({ message: `docs: atualiza ${article.title}`, content: Buffer.from(rendered).toString('base64'), branch,
+        author: MCP_GIT_AUTHOR, committer: MCP_GIT_AUTHOR,
+        ...(previous ? { sha: previous.sha } : {}) }),
     });
     remember(article.path, 'upsert');
+  }
+  for (const notice of humanNotices.filter((entry) => entry.status !== 'update')) {
+    const filePath = `pilot/mcp/notices/${basename(notice.path)}-${createHash('sha256').update(notice.path).digest('hex').slice(0, 12)}.md`;
+    const content = `# Revisão humana necessária\n\nPágina: ${notice.path}\n\n${notice.notice}\n`;
+    const previous = await githubRequest(fileAt(filePath, branch), {}, true);
+    await githubRequest(`/repos/${owner}/${repo}/contents/${filePath}`, { method: 'PUT',
+      body: JSON.stringify({ message: `docs: avisa conflito em ${notice.path}`,
+        content: Buffer.from(content).toString('base64'), branch, ...(previous ? { sha: previous.sha } : {}) }) });
   }
   for (const image of screenshots) {
     const previous = await githubRequest(fileAt(image.file, branch), {}, true);
@@ -549,7 +578,7 @@ export async function submitContentPackage(root, articles, mode = 'draft', reque
       }
       result = { status: 'draft', articles: drafts, ...gate };
     } else if (mode === 'pull_request') {
-      result = { ...await createPackagePullRequest(items, deletes, actor, (branch) => auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'external_request', reference: branch }), { ...draftOptions, securityWarnings: gate.securityWarnings }), ...gate };
+      result = { ...await createPackagePullRequest(root, items, deletes, actor, (branch) => auditOperation(root, { actor, operation, mode: auditMode, target: targets, result: 'external_request', reference: branch }), { ...draftOptions, securityWarnings: gate.securityWarnings }), ...gate };
     } else {
       throw new SubmitArticleError('INVALID_MODE', 'mode deve ser draft ou pull_request');
     }
