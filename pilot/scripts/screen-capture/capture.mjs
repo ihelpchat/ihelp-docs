@@ -301,8 +301,12 @@ async function scanVisible(page, { realCompany = false } = {}) {
         add(element.value, element.getClientRects(), 'campo ou conteúdo dinâmico', true);
         add(element.placeholder, element.getClientRects(), 'texto não confirmado');
       }
-      for (const element of root.querySelectorAll('img,canvas,video,svg')) if (realCompany || inDataRegion(element))
+      const opaque = 'img,canvas,video,svg' + (realCompany ? ',[role="img"],[aria-hidden="true"]' : '');
+      for (const element of root.querySelectorAll(opaque)) if (realCompany || inDataRegion(element))
         add('conteúdo dinâmico', element.getClientRects(), 'campo ou conteúdo dinâmico', true);
+      if (realCompany) for (const element of root.querySelectorAll('*'))
+        if (getComputedStyle(element).backgroundImage !== 'none')
+          add('conteúdo dinâmico', element.getClientRects(), 'campo ou conteúdo dinâmico', true);
     }
     return items;
     }, { realCompany });
