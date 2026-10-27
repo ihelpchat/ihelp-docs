@@ -149,7 +149,8 @@ async function withFront(t, options, consume) {
       preflight: async () => ({ mode: 'ready', companyId: '42', realCompany: true }),
       getProductContext: async () => ({ code: [{ role: 'frontend', available: true, ref: 'a'.repeat(40),
         screenFacts: labels.map(text => ({ text })), screenCode: [] }] }),
-      ...(options.unownedDetail ? { model: { async decide() { return { type: 'finish' }; } } } : {}),
+      // Stop after one observation through a refused decision, without executing a browser action.
+      ...(options.unownedDetail ? { model: { async decide() { return { type: 'press' }; } } } : {}),
     });
     await consume({ run, root, requests });
   } finally {
@@ -186,7 +187,8 @@ test('caller real nega lista sem filtro, captura lista filtrada pendente e limpa
     assert.ok(chooseScreenshot(approved, 'contatos', 'buscar'));
     assert.equal(screenshotForStep({ version: 1, entries: [entry] }, 'contatos', 'buscar'), null);
     assert.equal(chooseScreenshot({ version: 1, entries: [entry] }, 'contatos', 'buscar'), null);
-    assert.deepEqual(records.cleanup.deleted, [{ kind: 'contact', id: 'created-17' }]);
+    assert.deepEqual(records.cleanup.deleted, [{ kind: 'contact', id: 'created-17' }],
+      'limpeza deve apagar exatamente o ID da resposta');
     assert.deepEqual(records.cleanup.pending, []);
     assert.deepEqual(requests.filter(req => req.method === 'DELETE'),
       [{ method: 'DELETE', path: '/api/v2/contacts/created-17', search: '' }]);
@@ -198,9 +200,11 @@ test('caller real nega lista sem filtro, captura lista filtrada pendente e limpa
 test('caller real nega ficha de registro que não pertence à execução', async t => {
   await withFront(t, { unownedDetail: true }, async ({ run, requests }) => {
     const [record] = await run(['contatos.cadastrar']);
+    assert.equal(record.status, 'bloqueada');
+    assert.equal(record.reason, 'ação proibida');
     assert.equal(record.screens.length, 1);
     assert.equal(record.screens[0].path, '/contact/detail/record');
-    assert.equal(record.screens[0].screenshotId, null);
+    assert.equal(record.screens[0].screenshotId, null, 'ficha alheia não pode gerar print no caller');
     assert.match(record.screens[0].screenshotReason, /sem item próprio/u);
     assert.deepEqual(requests.filter(req => req.method === 'DELETE'), []);
   });
@@ -222,6 +226,9 @@ test('caller real deixa resposta sem ID pendente, sem DELETE ou busca de nome pa
 test('caller real captura ID da resposta de tag Teste FAQ e limpa tag antes do contato', async t => {
   await withFront(t, { tags: true }, async ({ run, requests }) => {
     const records = await run(['contatos.marcar_tags']);
+    assert.equal(records[0].status, 'concluída', 'cadastro precisa concluir antes da prova de tag');
+    assert.equal(records[1].tagProbe?.createdTagIdCaptured, true,
+      'ID da tag deve vir da resposta antes do vínculo');
     assert.deepEqual(records.map(record => record.status), ['concluída', 'concluída'],
       JSON.stringify(records.map(({ status, reason, blocked, verification }) => ({ status, reason, blocked, verification }))));
     assert.deepEqual(records.cleanup.deleted, [{ kind: 'tag', id: 33 }, { kind: 'contact', id: 'created-17' }]);
@@ -236,7 +243,7 @@ for (const [source, options] of [['empresa', { company: 43 }], ['token', { token
     await withFront(t, options, async ({ run, requests }) => {
       const records = await run(['contatos.cadastrar']);
       assert.equal(records[0].status, 'concluída');
-      assert.deepEqual(records.cleanup.deleted, []);
+      assert.deepEqual(records.cleanup.deleted, [], 'empresa ou token divergente nunca autoriza limpeza');
       assert.deepEqual(records.cleanup.pending, [{ kind: 'contact', id: 'created-17', reason: 'limpeza indisponível' }]);
       assert.deepEqual(requests.filter(req => req.method === 'DELETE'), [], 'empresa divergente nunca autoriza DELETE');
     });
