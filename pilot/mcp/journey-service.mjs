@@ -122,7 +122,8 @@ export async function cleanupCreatedItems(items, remove) {
     try { await remove(item); deleted.push({ kind: item.kind, id: item.id }); }
     catch { pending.push({ kind: item.kind, id: item.id, reason: 'remoção não confirmada' }); }
   }
-  return { created: items.map(({ kind, id }) => ({ kind, id: Number.isSafeInteger(id) ? id : null })), deleted, pending };
+  return { created: items.map(({ kind, id }) => ({ kind, id: Number.isSafeInteger(id)
+    || typeof id === 'string' && /^[a-z0-9-]{1,80}$/iu.test(id) ? id : null })), deleted, pending };
 }
 export function selectedRobotChannel(actions) {
   let selected = null;

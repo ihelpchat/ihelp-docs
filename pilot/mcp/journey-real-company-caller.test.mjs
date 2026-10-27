@@ -234,6 +234,8 @@ test('caller real captura ID da resposta de tag Teste FAQ e limpa tag antes do c
     assert.deepEqual(records.map(record => record.status), ['concluída', 'concluída'],
       JSON.stringify(records.map(({ status, reason, blocked, verification }) => ({ status, reason, blocked, verification }))));
     assert.deepEqual(records.cleanup.deleted, [{ kind: 'tag', id: 33 }, { kind: 'contact', id: 'created-17' }]);
+    assert.deepEqual(records.cleanup.created, [{ kind: 'tag', id: 33 }, { kind: 'contact', id: 'created-17' }],
+      'relatório deve preservar os IDs das respostas desta execução');
     assert.deepEqual(records.cleanup.pending, []);
     assert.deepEqual(requests.filter(req => req.method === 'DELETE').map(req => req.path),
       ['/api/v2/tags/33', '/api/v2/contacts/created-17']);
