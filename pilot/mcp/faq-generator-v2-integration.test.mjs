@@ -258,3 +258,24 @@ test('diagnóstico seguro identifica validação do juiz sem devolver seu erro b
   assert.equal(result.costUsd, cost(5));
 });
 
+test('diagnóstico seguro mantém falha inesperada genérica, sem detalhes internos', async (t) => {
+  const { result } = await fixture(t, { response: (request) => request.text.format.name === 'faq_page_v2'
+    ? { usage, status: 'completed', output_text: JSON.stringify({ ...pageFor(), sections: null }) } : undefined });
+  assert.equal(result.status, 'precisa de revisão humana');
+  assert.equal(result.partial, true);
+  assert.equal(result.mdx, undefined);
+  assert.deepEqual(result.diagnostic, ['falha na geração ou julgamento']);
+  assert.deepEqual(result.knownUsage, { inputTokens: 100, outputTokens: 20 });
+});
+
+test('diagnóstico seguro identifica validação do juiz editorial', async (t) => {
+  const { result } = await fixture(t, { response: (request) => request.text.format.name === 'faq_editorial_v2'
+    ? { usage, status: 'completed', output_text: JSON.stringify({ ...editorial, notas: {} }) } : undefined });
+  assert.equal(result.status, 'precisa de revisão humana');
+  assert.equal(result.partial, true);
+  assert.equal(result.mdx, undefined);
+  assert.deepEqual(result.diagnostic, ['resultado inválido: faq_editorial_v2']);
+  assert.deepEqual(result.knownUsage, { inputTokens: 300, outputTokens: 60 });
+  assert.equal(result.costUsd, cost(3));
+});
+
