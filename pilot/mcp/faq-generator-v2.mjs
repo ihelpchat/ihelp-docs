@@ -219,16 +219,34 @@ export function projectFaqEvidence(plan, journeys, context, business) {
   return evidence;
 }
 
+class FaqGenerationError extends Error {
+  constructor(stage, category) { super(`${category}: ${stage}`); }
+}
+
+async function judgeSafely(stage, action) {
+  try { return await action(); } catch (error) {
+    if (error instanceof FaqGenerationError) throw error;
+    throw new FaqGenerationError(stage, 'resultado inválido');
+  }
+}
+
 async function modelResponse(client, model, name, schema, input, recordUsage) {
   let result;
   try {
     result = await client.responses.create({ model, store: false, reasoning: { effort: 'medium' },
       max_output_tokens: 16000, text: { format: { type: 'json_schema', name, strict: true, schema } }, input });
-  } catch (error) { recordUsage(null); throw error; }
+  } catch {
+    recordUsage(null);
+    throw new FaqGenerationError(name, 'falha de comunicação');
+  }
   // A paid response still counts if status, JSON or a later judge validation fails.
   recordUsage(result);
-  if (result.status !== 'completed') throw new Error(`resposta incompleta: ${name}`);
-  return { value: JSON.parse(result.output_text), usage: usageOf(result) };
+  if (result.status !== 'completed') throw new FaqGenerationError(name, 'resposta incompleta');
+  let value;
+  try { value = JSON.parse(result.output_text); } catch {
+    throw new FaqGenerationError(name, 'JSON inválido');
+  }
+  return { value, usage: usageOf(result) };
 }
 const publicEvidence = (evidence) => evidence.map(({ id, type, task, status, text }) =>
   ({ id, type, task, status, text, ...(type === 'jornada' ? { concluida: status === 'concluída' } : {}) }));
@@ -299,7 +317,7 @@ export async function generateFaqV2(root, module, { client = new OpenAI(),
       { role: 'user', content: [{ type: 'input_text', text: prompt }, ...imageItems] },
     ]);
     const providers = {
-      judgeFacts: async (claims, _page, facts) => {
+      judgeFacts: async (claims, _page, facts) => judgeSafely('faq_facts_v2', async () => {
         const section = { oQueE: [], paraQueServe: [], casosDeUso: [],
           passos: [], duvidas: [], erros: claims.map((item) => ({ ...item })) };
         const judged = await judgeClaims(section, { request: { module }, business }, async (items) => {
@@ -312,8 +330,8 @@ export async function generateFaqV2(root, module, { client = new OpenAI(),
         });
         return judged.verdicts.map((item) => ({ id: item.id, status: item.status,
           evidenceIds: item.evidenceIds ?? [], reason: item.reason, sourceMention: item.sourceMention }));
-      },
-      judgeEditorial: async (page, facts) => {
+      }),
+      judgeEditorial: async (page, facts) => judgeSafely('faq_editorial_v2', async () => {
         const readings = [];
         for (let i = 0; i < 3; i++) readings.push(await judgeEditorial({ pagina: renderPage(page), modulo: module,
           tipo: 'pagina', evidencias: { front: facts.filter((item) => item.type === 'front'),
@@ -328,7 +346,7 @@ export async function generateFaqV2(root, module, { client = new OpenAI(),
         }));
         return { ...consolidateEditorialReadings(readings),
           comments: readings.map((reading) => reading.comentario) };
-      },
+      }),
       rewrite: async (page, report) => {
         corrections++;
         const result = await requestModel('faq_rewrite_v2', pageSchema, [
@@ -346,9 +364,10 @@ export async function generateFaqV2(root, module, { client = new OpenAI(),
       trace: result.trace, editorial: result.editorial, diagnostic: result.diagnostic ?? [],
       reviewTasks: plan.reviewTasks, corrections: result.corrections, preserved: result.preserved,
       ...accounting() };
-  } catch {
+  } catch (error) {
     return { status: 'precisa de revisão humana', module, partial: true,
-      diagnostic: ['falha na geração ou julgamento'], screenshots, reviewTasks: plan.reviewTasks,
+      diagnostic: [error instanceof FaqGenerationError ? error.message : 'falha na geração ou julgamento'],
+      screenshots, reviewTasks: plan.reviewTasks,
       corrections, ...accounting() };
   }
 }
