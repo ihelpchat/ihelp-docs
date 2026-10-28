@@ -538,9 +538,12 @@ const backgroundDeniedGets = new Map([
   ['/api/v2/sync/calls', new Set(['xhr', 'fetch'])],
   ['/api/v2/sync/basic-infos', new Set(['xhr', 'fetch'])],
 ]);
+const preflightDiagnosticMethods = new Set(['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE']);
+const preflightDiagnosticTypes = new Set(['document', 'stylesheet', 'image', 'media', 'font', 'script',
+  'texttrack', 'xhr', 'fetch', 'eventsource', 'websocket', 'manifest', 'other']);
 
 export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdPartyDenied, onBlocked,
-  onBackgroundDenied, ...context }) {
+  onBackgroundDenied, onPreflightDenied, ...context }) {
   const request = route.request();
   if (qaStaticCdnAllowed(request, target, env)) return route.fallback();
   let url;
@@ -561,7 +564,12 @@ export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdP
   if (target.mode === 'producao' && !context.productionReady?.()) {
     if (productionPreflightRequestAllowed(method, path, {
       url: request.url(), resourceType: request.resourceType?.(), target })) return route.fallback();
-    onBlocked({ allowed: false, reason: 'pré-voo ausente', task: context.taskId });
+    if (typeof onPreflightDenied === 'function') {
+      const type = request.resourceType?.();
+      onPreflightDenied({ reason: 'pré-voo ausente',
+        method: preflightDiagnosticMethods.has(method) ? method : 'OTHER',
+        resourceType: preflightDiagnosticTypes.has(type) ? type : 'other' });
+    } else onBlocked({ allowed: false, reason: 'pré-voo ausente', task: context.taskId });
     return route.abort();
   }
   if (target.mode === 'producao' && ['GET', 'HEAD'].includes(method)
@@ -1177,6 +1185,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
   let blockedWrite = null;
   let thirdPartyDenied = {};
   let backgroundDenied = {};
+  let preflightDenied = {};
   let observedTargets = {};
   let creationCapture = null;
   let creationPostStarted = false;
@@ -1288,6 +1297,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       creationResults.length = 0;
       thirdPartyDenied = {};
       backgroundDenied = {};
+      preflightDenied = {};
       lastDownload = null;
       browser = await launch();
       context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
@@ -1303,6 +1313,10 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         taskId: currentTask, generated: fixtures(), createdIds, fixedIds, contactSnapshot,
         onBlocked: (decision) => { blockedWrite = decision; },
         onBackgroundDenied: ({ path }) => { backgroundDenied[path] = (backgroundDenied[path] ?? 0) + 1; },
+        onPreflightDenied: ({ method, resourceType }) => {
+          const key = `${method}:${resourceType}`;
+          preflightDenied[key] = (preflightDenied[key] ?? 0) + 1;
+        },
       });
       if (production) await context.route('**/*', guardedRoute);
       page = await context.newPage();
@@ -2042,6 +2056,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
               robotRef: identity.refs[0], robotId: checked.recordId } : {} };
     },
     diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, backgroundDenied: { ...backgroundDenied },
+      preflightDenied: { ...preflightDenied },
       creationCapture, searchProbe, ownerProbe, apiError,
       menuProbe, botWriteProbe, tagProbe: currentTask === 'contatos.marcar_tags' ? { createdTagIdCaptured: [...createdIds].some((id) =>
         Number.isSafeInteger(id) && !fixedIds.tag.has(id) && id !== currentPrepared?.identity?.ids?.[0]),
