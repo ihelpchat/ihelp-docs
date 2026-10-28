@@ -97,6 +97,12 @@ async function withFront(t, options, consume) {
       <input placeholder="Buscar contato..."><table><tbody></tbody></table>
       <form hidden><label>Nome<input name="nome"></label><label>Telefone<input name="telefone"></label><button>Salvar</button></form></main>
       <script>${script}
+        ${options.backgroundGets ? `
+          new EventSource('/api/v2/notifications/sse/connect?access_token=fixture-secret');
+          new EventSource('/api/v2/crm/sse/connect?access_token=fixture-secret');
+          get('/sync/calls').catch(() => {});
+          get('/sync/basic-infos').catch(() => {});
+        ` : ''}
         const render = data => { document.querySelector('tbody').innerHTML = data.dados.map(row => '<tr><td>' + row.nome + '</td></tr>').join(''); };
         get('/contacts?page=1&limit=1').then(render);
         document.querySelector('#add').onclick = () => { document.querySelector('form').hidden = false; };
@@ -165,6 +171,26 @@ async function withFront(t, options, consume) {
     }
   }
 }
+
+test('caller real mantém GETs automáticos abortados e conclui apenas o contato próprio', async t => {
+  await withFront(t, { backgroundGets: true }, async ({ run, requests }) => {
+    const records = await run(['contatos.cadastrar']);
+    assert.deepEqual(records.map(({ status }) => status), ['concluída'],
+      JSON.stringify(records.map(({ status, reason, blocked, backgroundDenied }) =>
+        ({ status, reason, blocked, backgroundDenied }))));
+    const paths = ['/api/v2/notifications/sse/connect', '/api/v2/crm/sse/connect',
+      '/api/v2/sync/calls', '/api/v2/sync/basic-infos'];
+    for (const path of paths) {
+      assert.ok(records[0].backgroundDenied[path] >= 1, `negação precisa ficar registrada: ${path}`);
+      assert.equal(requests.some((request) => request.path === path), false,
+        `GET com efeito não pode alcançar o servidor: ${path}`);
+    }
+    assert.equal(requests.filter(({ method, path }) => method === 'POST' && path === '/api/v2/contacts').length, 1);
+    assert.deepEqual(records.cleanup.deleted, [{ kind: 'contact', id: 'created-17' }]);
+    assert.deepEqual(records.cleanup.pending, []);
+    assert.equal(JSON.stringify(records[0].backgroundDenied).includes('fixture-secret'), false);
+  });
+});
 
 test('caller real nega lista sem filtro, captura lista filtrada pendente e limpa só ID da resposta', async t => {
   await withFront(t, { filterDebounceMs: 500 }, async ({ run, root, requests }) => {
