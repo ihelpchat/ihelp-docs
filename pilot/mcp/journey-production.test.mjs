@@ -115,6 +115,25 @@ test('CDN de interface só aceita GET estático em produção, sem credenciais',
   assert.deepEqual(denied, {});
 });
 
+test('betaapp aceita somente sua API refactor explícita sem relaxar os demais hosts', () => {
+  const betaEnv = { ...env, QA_PROD_URL: 'https://betaapp.ihelpchat.com',
+    QA_PROD_ALLOWED_HOSTS: 'betaapp.ihelpchat.com,apiv3refactor.ihelpchat.com' };
+  const target = productionConfig(betaEnv).target;
+  assert.doesNotThrow(() => assertAllowedTarget(betaEnv.QA_PROD_URL, betaEnv, { allowProduction: true }));
+  assert.equal(qaRequestDecision('https://apiv3refactor.ihelpchat.com/api/v2/company', target, betaEnv).allowed, true);
+  assert.equal(qaRequestDecision('https://apiv3.ihelpchat.com/api/v2/company', target, betaEnv).allowed, false);
+  for (const config of [{ ...betaEnv, QA_PROD_URL: env.QA_PROD_URL,
+    QA_PROD_ALLOWED_HOSTS: 'front.example.test,apiv3refactor.ihelpchat.com' },
+  { ...betaEnv, QA_PROD_ALLOWED_HOSTS: 'betaapp.ihelpchat.com,apiv3refactorevil.ihelpchat.com' },
+  { ...betaEnv, QA_PROD_ALLOWED_HOSTS: 'betaapp.ihelpchat.com,apiv3refactor.ihelpchat.com,app.ihelpchat.com' }]) {
+    assert.throws(() => productionConfig(config), /hosts de produção/u);
+    assert.throws(() => assertAllowedTarget(config.QA_PROD_URL, config, { allowProduction: true }), /recusado/u);
+    assert.equal(qaRequestDecision('https://apiv3refactor.ihelpchat.com/api/v2/company', {
+      mode: 'producao', url: config.QA_PROD_URL, allowedHosts: config.QA_PROD_ALLOWED_HOSTS.split(','),
+    }, config).allowed, false);
+  }
+});
+
 test('betaapp carrega somente os scripts compartilhados explícitos, sem ampliar hosts da conta', async () => {
   const betaEnv = { ...env, QA_PROD_URL: 'https://betaapp.ihelpchat.com',
     QA_PROD_ALLOWED_HOSTS: 'betaapp.ihelpchat.com,apiv3.ihelpchat.com' };
