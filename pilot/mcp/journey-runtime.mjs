@@ -63,6 +63,12 @@ async function navigateJourneyAfterLogin(page, target, currentApi, path) {
   await page.goto(new URL(path, target.url).href, { waitUntil: 'domcontentloaded' });
   return settledJourneyApi(page, target, authenticated ?? currentApi());
 }
+export function createJourneyNavigation(page, target, fixtureApi = () => null) {
+  // Production callers cannot substitute an in-flight request or a bounded log
+  // buffer for the successful response observed before login has finished.
+  const confirmedApi = target.mode === 'producao' ? observeSuccessfulJourneyApi(page, target) : fixtureApi;
+  return (path) => navigateJourneyAfterLogin(page, target, confirmedApi, path);
+}
 
 const diagnosticSegments = new Set(['api', 'v2', 'v3', 'login', 'contact', 'contacts', 'company',
   'configurations', 'users', 'channels', 'channel', 'connect-status', 'bot', 'automation', 'webhook',
@@ -100,14 +106,9 @@ export function createProductionApiObserver(target, env = process.env) {
     response(response) {
       const request = response.request();
       const entry = pending.get(request);
-      if (!entry) return;
-      entry.status = response.status();
-      if (!entry.bearer || entry.status < 200 || entry.status >= 400) return;
-      try {
-        const url = new URL(request.url());
-        if (url.pathname.startsWith('/api/') && qaRequestDecision(url.href, target, env).allowed)
-          api = { origin: url.origin, authorization: request.headers().authorization };
-      } catch { /* no API candidate */ }
+      if (entry) entry.status = response.status();
+      const candidate = successfulJourneyApi(response, target);
+      if (candidate && qaRequestDecision(response.url(), target, env).allowed) api = candidate;
     },
     failed(request, guard) {
       const entry = pending.get(request);
@@ -1288,7 +1289,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       page = await context.newPage();
       screenshotGuard = realCompany ? createRealCompanyScreenshotGuard(page, () => qaApi?.origin) : null;
       qaApi = null;
-      const settledApi = production ? observeSuccessfulJourneyApi(page, target) : () => qaApi;
+      const navigate = createJourneyNavigation(page, target, () => qaApi);
       page.on('request', (request) => {
         const url = new URL(request.url());
         if (currentTask?.startsWith('robos.') && request.method() === 'PUT'
@@ -1467,7 +1468,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         pending.finally(() => pendingPosts.delete(pending));
       });
       const route = journeyStartRoute(task, prepared);
-      qaApi = await navigateJourneyAfterLogin(page, target, settledApi, production ? '/contact' : route);
+      qaApi = await navigate(production ? '/contact' : route);
       if (!qaApi) throw new Error('API autenticada da homologação indisponível');
       if (production) assertProductionAccountHosts(target, qaApi.origin);
       let account;
@@ -2060,11 +2061,9 @@ export async function cleanupProductionCreatedItems({ env, target, items }) {
       return route.abort();
     });
     const page = await context.newPage();
-    const observer = createProductionApiObserver(target, env);
-    page.on('request', observer.request);
-    page.on('response', observer.response);
+    const navigate = createJourneyNavigation(page, target);
     await loginToQa(page, target.url, journeyCredentials(env), { timeoutMs: 15000, productionDiagnostics: true });
-    const api = await navigateJourneyAfterLogin(page, target, observer.api, '/contact');
+    const api = await navigate('/contact');
     assertProductionAccountHosts(target, api?.origin);
     const claims = JSON.parse(Buffer.from(api.authorization.slice(7).split('.')[1], 'base64url').toString('utf8'));
     const companyHref = new URL('/api/v2/company', api.origin).href;
@@ -2222,6 +2221,7 @@ export async function browserProductionPreflight(env = process.env,
       return route.abort();
     });
     const page = await context.newPage();
+    const navigate = createJourneyNavigation(page, target);
     const observer = createProductionApiObserver(target, env);
     page.on('request', observer.request);
     page.on('response', observer.response);
@@ -2237,7 +2237,7 @@ export async function browserProductionPreflight(env = process.env,
       console.error(`gravar_jornada: diagnóstico: ${JSON.stringify(result)}`);
       return result;
     }
-    const api = await navigateJourneyAfterLogin(page, target, observer.api, '/contact');
+    const api = await navigate('/contact');
     if (!api) {
       const result = { mode: 'bloqueado', reason: 'api_nao_detectada', diagnostic: observer.diagnostic() };
       console.error(`gravar_jornada: diagnóstico: ${JSON.stringify(result)}`);
@@ -2288,7 +2288,7 @@ export async function authenticatedJourneyIdentity(env) {
     });
     const page = await context.newPage();
     let api;
-    const settledApi = env.QA_TARGET === 'producao' ? observeSuccessfulJourneyApi(page, target) : () => api;
+    const navigate = createJourneyNavigation(page, target, () => api);
     page.on('request', (request) => {
       const url = new URL(request.url());
       const authorization = request.headers().authorization;
@@ -2296,7 +2296,7 @@ export async function authenticatedJourneyIdentity(env) {
         && qaRequestDecision(url.href, target, env).allowed) api = { origin: url.origin, authorization };
     });
     await loginToQa(page, target.url, journeyCredentials(env), { timeoutMs: 15000 });
-    api = await navigateJourneyAfterLogin(page, target, settledApi, '/contact');
+    api = await navigate('/contact');
     if (!api) throw new Error('identidade autenticada indisponível');
     if (env.QA_TARGET === 'producao') assertProductionAccountHosts(target, api.origin);
     const claims = JSON.parse(Buffer.from(api.authorization.slice(7).split('.')[1], 'base64url').toString('utf8'));
