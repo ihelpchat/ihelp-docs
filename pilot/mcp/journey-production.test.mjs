@@ -96,6 +96,93 @@ test('pré-voo preserva a inicialização autenticada antes de navegar e bloquei
   }
 });
 
+function startupPage() {
+  const handlers = new Map(); let pending;
+  const page = { gotos: [], waits: [], resolutions: 0,
+    on(event, handler) { handlers.set(event, [...handlers.get(event) ?? [], handler]); },
+    emit(event, value) {
+      for (const handler of handlers.get(event) ?? []) handler(value);
+      if (event === 'response' && pending?.predicate(value)) {
+        page.resolutions++; const resolve = pending.resolve; pending = null; resolve(value);
+      }
+    },
+    async goto(url) { page.gotos.push(url); },
+    waitForResponse(predicate, options) {
+      page.waits.push(options.timeout);
+      return new Promise(resolve => { pending = { predicate, resolve }; });
+    },
+  };
+  return page;
+}
+function startupResponse(url = 'https://api.example.test/api/v2/company', status = 200,
+  authorization = 'Bearer valid.fixture.token') {
+  const request = { url: () => url, method: () => 'GET', headers: () => ({ authorization }) };
+  return { url: () => url, status: () => status, request: () => request };
+}
+
+test('navegação compartilhada de produção ignora request e aguarda response confirmada', async () => {
+  const page = startupPage(); const valid = startupResponse();
+  const requestCandidate = { origin: 'https://api.example.test', authorization: 'Bearer valid.fixture.token' };
+  const navigate = runtime.createJourneyNavigation(page, productionConfig(env).target, () => requestCandidate);
+  page.emit('request', valid.request());
+  const navigation = navigate('/contact');
+  try {
+    assert.deepEqual(page.waits, [30_000], 'request iniciada não pode ser usada como resposta confirmada');
+    assert.deepEqual(page.gotos, []);
+    for (const response of [startupResponse('https://outside.example.test/api/v2/company'),
+      startupResponse(undefined, 401), startupResponse(undefined, 200, 'Bearer undefined'),
+      startupResponse(undefined, 200, 'Bearer null')]) {
+      page.emit('response', response);
+      assert.equal(page.resolutions, 0);
+      assert.deepEqual(page.gotos, []);
+    }
+    page.emit('response', valid);
+    assert.deepEqual(await navigation, requestCandidate);
+    assert.deepEqual(page.gotos, ['https://front.example.test/contact']);
+  } finally {
+    page.emit('response', valid);
+    await navigation.catch(() => {});
+  }
+});
+
+test('navegação compartilhada preserva response anterior após estáticos e Bearer inválido', async () => {
+  const page = startupPage(); const valid = startupResponse();
+  const navigate = runtime.createJourneyNavigation(page, productionConfig(env).target);
+  for (let index = 0; index < 100; index++) {
+    const response = startupResponse(`https://front.example.test/static/${index}.js`, 200, '');
+    page.emit('request', response.request()); page.emit('response', response);
+  }
+  page.emit('request', valid.request()); page.emit('response', valid);
+  page.emit('response', startupResponse(undefined, 200, 'Bearer undefined'));
+  const navigation = navigate('/contact');
+  try {
+    assert.deepEqual(page.waits, [], 'response válida anterior não depende do buffer de diagnóstico');
+    assert.deepEqual(await navigation, { origin: 'https://api.example.test', authorization: 'Bearer valid.fixture.token' });
+    assert.equal(page.gotos.length, 1);
+  } finally { page.emit('response', valid); await navigation.catch(() => {}); }
+});
+
+test('navegação compartilhada sem response falha fechada mesmo com candidato de request', async () => {
+  const page = startupPage();
+  page.waitForResponse = async (_predicate, options) => { page.waits.push(options.timeout); throw new Error('timeout'); };
+  const navigate = runtime.createJourneyNavigation(page, productionConfig(env).target,
+    () => ({ origin: 'https://api.example.test', authorization: 'Bearer valid.fixture.token' }));
+  assert.equal(await navigate('/contact'), null);
+  assert.deepEqual(page.waits, [30_000]);
+  assert.deepEqual(page.gotos, []);
+});
+
+test('navegação compartilhada de homologação lê a API que surge durante goto', async () => {
+  for (const expected of [null, { origin: 'https://api.example.test', authorization: 'Bearer valid.fixture.token' }]) {
+    const page = startupPage(); let api = null;
+    page.goto = async url => { page.gotos.push(url); api = expected; };
+    const navigate = runtime.createJourneyNavigation(page, { local: false, url: 'https://front.example.test' }, () => api);
+    assert.deepEqual(await navigate('/contact'), expected);
+    assert.equal(page.gotos.length, 1);
+    assert.deepEqual(page.waits, []);
+  }
+});
+
 test('produção requer chave geral e somente hosts explícitos da conta', () => {
   assert.throws(() => productionConfig({ ...env, QA_PROD_ENABLED: 'false' }), /produção desabilitada/u);
   const cfg = productionConfig(env);
