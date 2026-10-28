@@ -67,9 +67,23 @@ test('SSE com tipo incorreto, HEAD e POST não recebem tratamento de tráfego au
   }
 });
 
-test('requisição automática antes do pré-voo continua bloqueando a tarefa', async () => {
+test('GET automático antes do pré-voo continua abortado e reportado sem contaminar a ação', async () => {
   for (const [path, type] of background) {
     const result = await guard(path, type, { ready: false });
+    assert.deepEqual(result.outcomes, ['abort']);
+    assert.deepEqual(result.blocked, []);
+    assert.deepEqual(result.denied, [{ method: 'GET', path, reason: 'GET com efeito negado' }]);
+  }
+});
+
+test('pré-voo continua obrigatório para POST, HEAD, GET desconhecido e caller sem diagnóstico', async () => {
+  for (const [path, type, options] of [
+    [background[0][0], 'eventsource', { method: 'POST' }],
+    [background[0][0], 'eventsource', { method: 'HEAD' }],
+    ['/api/v2/bot/opencall-contacts', 'xhr', {}],
+    [background[0][0], 'eventsource', { report: false }],
+  ]) {
+    const result = await guard(path, type, { ...options, ready: false });
     assert.deepEqual(result.outcomes, ['abort']);
     assert.equal(result.blocked[0]?.reason, 'pré-voo ausente');
     assert.deepEqual(result.denied, []);
