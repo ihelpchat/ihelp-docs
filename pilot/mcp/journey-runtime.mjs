@@ -29,7 +29,7 @@ export function assertProductionAccountHosts(target, apiOrigin) {
     || !target.allowedHosts.includes(new URL(target.url).hostname)
     || !target.allowedHosts.includes(api.hostname)) throw new Error('hosts da conta divergentes');
 }
-async function settledJourneyApi(page, target, current) {
+async function settledJourneyApi(page, target, current, timeoutMs = 10_000) {
   if (target.mode !== 'producao') return current;
   if (current && target.allowedHosts.includes(new URL(current.origin).hostname)) return current;
   try {
@@ -38,10 +38,19 @@ async function settledJourneyApi(page, target, current) {
       return target.allowedHosts.includes(url.hostname) && url.pathname.startsWith('/api/')
         && entry.status() >= 200 && entry.status() < 400
         && /^Bearer \S+$/iu.test(entry.request().headers().authorization ?? '');
-    }, { timeout: 10_000 });
+    }, { timeout: timeoutMs });
     return { origin: new URL(response.url()).origin,
       authorization: response.request().headers().authorization };
   } catch { return null; }
+}
+async function navigateJourneyAfterLogin(page, target, currentApi, path) {
+  // A hard navigation can cancel the app's post-login boot before its first
+  // authenticated response. Wait for that response while the login page settles.
+  const authenticated = target.mode === 'producao'
+    ? await settledJourneyApi(page, target, currentApi(), 30_000) : null;
+  if (target.mode === 'producao' && !authenticated) return null;
+  await page.goto(new URL(path, target.url).href, { waitUntil: 'domcontentloaded' });
+  return settledJourneyApi(page, target, authenticated ?? currentApi());
 }
 
 const diagnosticSegments = new Set(['api', 'v2', 'v3', 'login', 'contact', 'contacts', 'company',
@@ -1446,8 +1455,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         pending.finally(() => pendingPosts.delete(pending));
       });
       const route = journeyStartRoute(task, prepared);
-      await page.goto(new URL(production ? '/contact' : route, target.url).href, { waitUntil: 'domcontentloaded' });
-      qaApi = await settledJourneyApi(page, target, qaApi);
+      qaApi = await navigateJourneyAfterLogin(page, target, () => qaApi, production ? '/contact' : route);
       if (!qaApi) throw new Error('API autenticada da homologação indisponível');
       if (production) assertProductionAccountHosts(target, qaApi.origin);
       let account;
@@ -2044,8 +2052,7 @@ export async function cleanupProductionCreatedItems({ env, target, items }) {
     page.on('request', observer.request);
     page.on('response', observer.response);
     await loginToQa(page, target.url, journeyCredentials(env), { timeoutMs: 15000, productionDiagnostics: true });
-    await page.goto(new URL('/contact', target.url).href, { waitUntil: 'domcontentloaded' });
-    const api = await settledJourneyApi(page, target, observer.api());
+    const api = await navigateJourneyAfterLogin(page, target, observer.api, '/contact');
     assertProductionAccountHosts(target, api?.origin);
     const claims = JSON.parse(Buffer.from(api.authorization.slice(7).split('.')[1], 'base64url').toString('utf8'));
     const companyHref = new URL('/api/v2/company', api.origin).href;
@@ -2218,8 +2225,7 @@ export async function browserProductionPreflight(env = process.env,
       console.error(`gravar_jornada: diagnóstico: ${JSON.stringify(result)}`);
       return result;
     }
-    await page.goto(new URL('/contact', target.url).href, { waitUntil: 'domcontentloaded' });
-    const api = await settledJourneyApi(page, target, observer.api());
+    const api = await navigateJourneyAfterLogin(page, target, observer.api, '/contact');
     if (!api) {
       const result = { mode: 'bloqueado', reason: 'api_nao_detectada', diagnostic: observer.diagnostic() };
       console.error(`gravar_jornada: diagnóstico: ${JSON.stringify(result)}`);
@@ -2277,8 +2283,7 @@ export async function authenticatedJourneyIdentity(env) {
         && qaRequestDecision(url.href, target, env).allowed) api = { origin: url.origin, authorization };
     });
     await loginToQa(page, target.url, journeyCredentials(env), { timeoutMs: 15000 });
-    await page.goto(new URL('/contact', target.url).href, { waitUntil: 'domcontentloaded' });
-    api = await settledJourneyApi(page, target, api);
+    api = await navigateJourneyAfterLogin(page, target, () => api, '/contact');
     if (!api) throw new Error('identidade autenticada indisponível');
     if (env.QA_TARGET === 'producao') assertProductionAccountHosts(target, api.origin);
     const claims = JSON.parse(Buffer.from(api.authorization.slice(7).split('.')[1], 'base64url').toString('utf8'));
