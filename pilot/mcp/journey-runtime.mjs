@@ -530,7 +530,17 @@ export function journeyWriteDecision(request, context = {}) {
       ? { keyPath: invalidRobotPath(body, path.split('/')[2], context.generated ?? new Set(),
         context.createdIds ?? new Set(), context.fixedIds ?? {}) } : {}) };
 }
-export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdPartyDenied, onBlocked, ...context }) {
+// The app starts these requests independently of the contact/robot action.
+// They remain aborted; reporting them separately must never authorize the request.
+const backgroundDeniedGets = new Map([
+  ['/api/v2/notifications/sse/connect', new Set(['eventsource'])],
+  ['/api/v2/crm/sse/connect', new Set(['eventsource'])],
+  ['/api/v2/sync/calls', new Set(['xhr', 'fetch'])],
+  ['/api/v2/sync/basic-infos', new Set(['xhr', 'fetch'])],
+]);
+
+export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdPartyDenied, onBlocked,
+  onBackgroundDenied, ...context }) {
   const request = route.request();
   if (qaStaticCdnAllowed(request, target, env)) return route.fallback();
   let url;
@@ -542,6 +552,12 @@ export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdP
   }
   const method = request.method().toUpperCase();
   const path = url.pathname + url.search;
+  if (target.mode === 'producao' && method === 'GET' && typeof onBackgroundDenied === 'function'
+    && backgroundDeniedGets.get(url.pathname)?.has(request.resourceType?.())
+    && productionEffectfulGetDenied(url.pathname)) {
+    onBackgroundDenied({ method, path: url.pathname, reason: 'GET com efeito negado' });
+    return route.abort();
+  }
   if (target.mode === 'producao' && !context.productionReady?.()) {
     if (productionPreflightRequestAllowed(method, path, {
       url: request.url(), resourceType: request.resourceType?.(), target })) return route.fallback();
@@ -1160,6 +1176,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
   let lastDownload;
   let blockedWrite = null;
   let thirdPartyDenied = {};
+  let backgroundDenied = {};
   let observedTargets = {};
   let creationCapture = null;
   let creationPostStarted = false;
@@ -1270,6 +1287,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       beforeTagIds = new Set();
       creationResults.length = 0;
       thirdPartyDenied = {};
+      backgroundDenied = {};
       lastDownload = null;
       browser = await launch();
       context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
@@ -1284,6 +1302,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         productionReady: () => productionReady,
         taskId: currentTask, generated: fixtures(), createdIds, fixedIds, contactSnapshot,
         onBlocked: (decision) => { blockedWrite = decision; },
+        onBackgroundDenied: ({ path }) => { backgroundDenied[path] = (backgroundDenied[path] ?? 0) + 1; },
       });
       if (production) await context.route('**/*', guardedRoute);
       page = await context.newPage();
@@ -2022,7 +2041,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
             : checked.confirmed && task.id === 'robos.criar' ? { robot: name,
               robotRef: identity.refs[0], robotId: checked.recordId } : {} };
     },
-    diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, creationCapture, searchProbe, ownerProbe, apiError,
+    diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, backgroundDenied: { ...backgroundDenied },
+      creationCapture, searchProbe, ownerProbe, apiError,
       menuProbe, botWriteProbe, tagProbe: currentTask === 'contatos.marcar_tags' ? { createdTagIdCaptured: [...createdIds].some((id) =>
         Number.isSafeInteger(id) && !fixedIds.tag.has(id) && id !== currentPrepared?.identity?.ids?.[0]),
         tagWriteStatus, tagLinkStatus } : null }; },
