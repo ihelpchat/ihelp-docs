@@ -1721,8 +1721,9 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       }
       try {
         const beforeUrl = page.url();
-        if (['contatos.buscar', 'contatos.exportar'].includes(currentTask) && action.type === 'fill'
-          && /buscar contato/iu.test(action.name ?? '')) {
+        const contactSearch = ['contatos.buscar', 'contatos.exportar'].includes(currentTask) && action.type === 'fill'
+          && /buscar contato/iu.test(action.name ?? '');
+        if (contactSearch) {
           verifiedExportSearchTerm = null;
           filteredContactsResponse = page.waitForResponse((response) => response.request().method() === 'GET'
             && /^\/api\/(?:v2\/)?contacts\/?$/u.test(new URL(response.url()).pathname)
@@ -1757,6 +1758,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
           await page.waitForLoadState('networkidle', { timeout: 2_500 }).catch(() => {});
         await actJourneyAction(page, action, observedTargets, { vocabulary: [...known], generated: fixtures(),
           selfId: currentTask === 'tarefas.criar' ? [...fixedIds.self][0] : undefined });
+        // The next observation captures evidence before searchAction verifies the result.
+        if (contactSearch) await filteredContactsResponse;
         if (botSaveResponse) {
           botSaveStatus = (await botSaveResponse)?.status() ?? botSaveStatus;
           if (botSaveStatus >= 200 && botSaveStatus < 300) await botSaveReload;
