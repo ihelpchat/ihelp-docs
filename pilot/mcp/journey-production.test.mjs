@@ -231,6 +231,35 @@ test('betaapp carrega somente os scripts compartilhados explícitos, sem ampliar
   assert.equal(result, 'denied');
 });
 
+test('observador mantém API autenticada fora do limite de diagnósticos', () => {
+  const observer = createProductionApiObserver(productionConfig(env).target, env);
+  const request = (url, authorization) => ({ url: () => url, method: () => 'GET',
+    headers: () => ({ ...(authorization ? { authorization } : {}) }) });
+  const respond = (input) => {
+    observer.request(input);
+    observer.response({ request: () => input, url: input.url, status: () => 200 });
+  };
+  for (let index = 0; index < 100; index++) respond(request(`https://front.example.test/static/${index}.js`));
+  respond(request('https://api.example.test/api/v2/company', 'Bearer valid.fixture.token'));
+  assert.deepEqual(observer.api(), { origin: 'https://api.example.test', authorization: 'Bearer valid.fixture.token' });
+  assert.equal(observer.diagnostic().requests.length, 100);
+});
+
+test('observador mantém última API válida ao receber Bearer ausente', () => {
+  const observer = createProductionApiObserver(productionConfig(env).target, env);
+  const respond = (authorization) => {
+    const input = { url: () => 'https://api.example.test/api/v2/company', method: () => 'GET',
+      headers: () => ({ authorization }) };
+    observer.request(input);
+    observer.response({ request: () => input, url: input.url, status: () => 200 });
+  };
+  respond('Bearer valid.fixture.token');
+  for (const authorization of ['Bearer undefined', 'Bearer null']) {
+    respond(authorization);
+    assert.equal(observer.api()?.authorization, 'Bearer valid.fixture.token');
+  }
+});
+
 test('requisição sem resposta registra motivo sanitizado da falha', () => {
   const observer = createProductionApiObserver(productionConfig(env).target, env);
   const request = { url: () => 'https://front.example.test/private?token=secret',
