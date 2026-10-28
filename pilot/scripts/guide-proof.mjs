@@ -97,6 +97,11 @@ const productionHost = (host) => host === 'ihelpchat.com' || host === 'ihelpchat
 const productionStaticCdns = new Set(['stackpath.bootstrapcdn.com', 'use.fontawesome.com',
   'cdn.tiny.cloud', 'fonts.googleapis.com', 'fonts.gstatic.com']);
 const staticResourceTypes = new Set(['script', 'stylesheet', 'font', 'image']);
+// betaapp's public import map and login HTML load these shared scripts from app.
+// This is a static resource exception; app remains outside the account hosts.
+const betaSharedScripts = new Set(['runtime.min.js', 'jquery-3.3.1.slim.min.js', 'popper.min.js',
+  'import-map-overrides.js', 'system.min.js', 'amd.min.js', 'react.production.min.js',
+  'react-dom.production.min.js', 'single-spa.min.js'].map((name) => `/javascripts/hidden-dist-js/${name}`));
 export function qaStaticCdnAllowed(request, target, env = process.env) {
   if (target.mode !== 'producao' || env.QA_TARGET !== 'producao' || env.QA_PROD_ENABLED !== 'true'
     || request.method().toUpperCase() !== 'GET'
@@ -105,8 +110,11 @@ export function qaStaticCdnAllowed(request, target, env = process.env) {
   let url;
   try { url = new URL(request.url()); } catch { return false; }
   const headers = request.headers();
+  const betaSharedScript = new URL(target.url).origin === 'https://betaapp.ihelpchat.com'
+    && url.hostname === 'app.ihelpchat.com' && request.resourceType?.() === 'script'
+    && !url.search && !url.hash && betaSharedScripts.has(url.pathname);
   return url.protocol === 'https:' && !url.port && !url.username && !url.password
-    && productionStaticCdns.has(url.hostname)
+    && (productionStaticCdns.has(url.hostname) || betaSharedScript)
     && !Object.keys(headers).some((key) => /^(authorization|cookie|proxy-authorization)$/iu.test(key));
 }
 
