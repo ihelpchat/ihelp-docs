@@ -317,7 +317,7 @@ test('diagnóstico do login guarda só host, padrão de caminho, Bearer e status
     method: () => 'GET', headers: () => ({ authorization: bearer, cookie }),
   };
   observer.request(request);
-  observer.response({ request: () => request, status: () => 200 });
+  observer.response({ request: () => request, url: request.url, status: () => 200 });
   observer.loginFinished({ url: () => 'https://front.example.test/contact/98765?cookie=secret-cookie-value' });
   const diagnostic = observer.diagnostic();
   assert.equal(observer.api()?.origin, 'https://api.example.test');
@@ -356,7 +356,7 @@ for (const [label, url, headers, status] of [
   const observer = createProductionApiObserver(productionConfig(env).target, env);
   const request = { url: () => url, method: () => 'GET', headers: () => headers };
   observer.request(request);
-  observer.response({ request: () => request, status: () => status });
+  observer.response({ request: () => request, url: request.url, status: () => status });
   assert.equal(observer.api(), null);
   assert.equal(observer.diagnostic().requests[0].status, status);
 });
@@ -376,7 +376,7 @@ test('host do front também pode ser API quando recebe resposta Bearer autentica
   const request = { url: () => 'https://front.example.test/api/v2/company', method: () => 'GET',
     headers: () => ({ authorization: 'Bearer secret-authorization-value' }) };
   observer.request(request);
-  observer.response({ request: () => request, status: () => 200 });
+  observer.response({ request: () => request, url: request.url, status: () => 200 });
   assert.equal(observer.api()?.origin, target.url);
   assert.doesNotThrow(() => assertProductionAccountHosts(target, observer.api()?.origin));
 });
