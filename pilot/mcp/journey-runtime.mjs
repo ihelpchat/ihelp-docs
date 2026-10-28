@@ -29,19 +29,45 @@ export function assertProductionAccountHosts(target, apiOrigin) {
     || !target.allowedHosts.includes(new URL(target.url).hostname)
     || !target.allowedHosts.includes(api.hostname)) throw new Error('hosts da conta divergentes');
 }
-async function settledJourneyApi(page, target, current) {
-  if (target.mode !== 'producao') return current;
-  if (current && target.allowedHosts.includes(new URL(current.origin).hostname)) return current;
+function successfulJourneyApi(response, target) {
   try {
-    const response = await page.waitForResponse((entry) => {
-      const url = new URL(entry.url());
-      return target.allowedHosts.includes(url.hostname) && url.pathname.startsWith('/api/')
-        && entry.status() >= 200 && entry.status() < 400
-        && /^Bearer \S+$/iu.test(entry.request().headers().authorization ?? '');
-    }, { timeout: 10_000 });
-    return { origin: new URL(response.url()).origin,
-      authorization: response.request().headers().authorization };
+    const url = new URL(response.url());
+    const authorization = response.request().headers().authorization;
+    return target.allowedHosts.includes(url.hostname) && url.pathname.startsWith('/api/')
+      && response.status() >= 200 && response.status() < 400
+      && /^Bearer (?!undefined$|null$)\S+$/iu.test(authorization ?? '')
+      ? { origin: url.origin, authorization } : null;
   } catch { return null; }
+}
+function observeSuccessfulJourneyApi(page, target) {
+  let api = null;
+  page.on('response', (response) => { api = successfulJourneyApi(response, target) ?? api; });
+  return () => api;
+}
+async function settledJourneyApi(page, target, current, timeoutMs = 10_000) {
+  if (target.mode !== 'producao') return current;
+  if (current && target.allowedHosts.includes(new URL(current.origin).hostname)
+    && /^Bearer (?!undefined$|null$)\S+$/iu.test(current.authorization ?? '')) return current;
+  try {
+    const response = await page.waitForResponse((entry) => Boolean(successfulJourneyApi(entry, target)),
+      { timeout: timeoutMs });
+    return successfulJourneyApi(response, target);
+  } catch { return null; }
+}
+async function navigateJourneyAfterLogin(page, target, currentApi, path) {
+  // A hard navigation can cancel the app's post-login boot before its first
+  // authenticated response. Wait for that response while the login page settles.
+  const authenticated = target.mode === 'producao'
+    ? await settledJourneyApi(page, target, currentApi(), 30_000) : null;
+  if (target.mode === 'producao' && !authenticated) return null;
+  await page.goto(new URL(path, target.url).href, { waitUntil: 'domcontentloaded' });
+  return settledJourneyApi(page, target, authenticated ?? currentApi());
+}
+export function createJourneyNavigation(page, target, fixtureApi = () => null) {
+  // Production callers cannot substitute an in-flight request or a bounded log
+  // buffer for the successful response observed before login has finished.
+  const confirmedApi = target.mode === 'producao' ? observeSuccessfulJourneyApi(page, target) : fixtureApi;
+  return (path) => navigateJourneyAfterLogin(page, target, confirmedApi, path);
 }
 
 const diagnosticSegments = new Set(['api', 'v2', 'v3', 'login', 'contact', 'contacts', 'company',
@@ -80,14 +106,9 @@ export function createProductionApiObserver(target, env = process.env) {
     response(response) {
       const request = response.request();
       const entry = pending.get(request);
-      if (!entry) return;
-      entry.status = response.status();
-      if (!entry.bearer || entry.status < 200 || entry.status >= 400) return;
-      try {
-        const url = new URL(request.url());
-        if (url.pathname.startsWith('/api/') && qaRequestDecision(url.href, target, env).allowed)
-          api = { origin: url.origin, authorization: request.headers().authorization };
-      } catch { /* no API candidate */ }
+      if (entry) entry.status = response.status();
+      const candidate = successfulJourneyApi(response, target);
+      if (candidate && qaRequestDecision(response.url(), target, env).allowed) api = candidate;
     },
     failed(request, guard) {
       const entry = pending.get(request);
@@ -509,7 +530,17 @@ export function journeyWriteDecision(request, context = {}) {
       ? { keyPath: invalidRobotPath(body, path.split('/')[2], context.generated ?? new Set(),
         context.createdIds ?? new Set(), context.fixedIds ?? {}) } : {}) };
 }
-export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdPartyDenied, onBlocked, ...context }) {
+// The app starts these requests independently of the contact/robot action.
+// They remain aborted; reporting them separately must never authorize the request.
+const backgroundDeniedGets = new Map([
+  ['/api/v2/notifications/sse/connect', new Set(['eventsource'])],
+  ['/api/v2/crm/sse/connect', new Set(['eventsource'])],
+  ['/api/v2/sync/calls', new Set(['xhr', 'fetch'])],
+  ['/api/v2/sync/basic-infos', new Set(['xhr', 'fetch'])],
+]);
+
+export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdPartyDenied, onBlocked,
+  onBackgroundDenied, ...context }) {
   const request = route.request();
   if (qaStaticCdnAllowed(request, target, env)) return route.fallback();
   let url;
@@ -521,6 +552,12 @@ export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdP
   }
   const method = request.method().toUpperCase();
   const path = url.pathname + url.search;
+  if (target.mode === 'producao' && method === 'GET' && typeof onBackgroundDenied === 'function'
+    && backgroundDeniedGets.get(url.pathname)?.has(request.resourceType?.())
+    && productionEffectfulGetDenied(url.pathname)) {
+    onBackgroundDenied({ method, path: url.pathname, reason: 'GET com efeito negado' });
+    return route.abort();
+  }
   if (target.mode === 'producao' && !context.productionReady?.()) {
     if (productionPreflightRequestAllowed(method, path, {
       url: request.url(), resourceType: request.resourceType?.(), target })) return route.fallback();
@@ -1139,6 +1176,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
   let lastDownload;
   let blockedWrite = null;
   let thirdPartyDenied = {};
+  let backgroundDenied = {};
   let observedTargets = {};
   let creationCapture = null;
   let creationPostStarted = false;
@@ -1249,6 +1287,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       beforeTagIds = new Set();
       creationResults.length = 0;
       thirdPartyDenied = {};
+      backgroundDenied = {};
       lastDownload = null;
       browser = await launch();
       context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
@@ -1263,11 +1302,13 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         productionReady: () => productionReady,
         taskId: currentTask, generated: fixtures(), createdIds, fixedIds, contactSnapshot,
         onBlocked: (decision) => { blockedWrite = decision; },
+        onBackgroundDenied: ({ path }) => { backgroundDenied[path] = (backgroundDenied[path] ?? 0) + 1; },
       });
       if (production) await context.route('**/*', guardedRoute);
       page = await context.newPage();
       screenshotGuard = realCompany ? createRealCompanyScreenshotGuard(page, () => qaApi?.origin) : null;
       qaApi = null;
+      const navigate = createJourneyNavigation(page, target, () => qaApi);
       page.on('request', (request) => {
         const url = new URL(request.url());
         if (currentTask?.startsWith('robos.') && request.method() === 'PUT'
@@ -1446,8 +1487,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         pending.finally(() => pendingPosts.delete(pending));
       });
       const route = journeyStartRoute(task, prepared);
-      await page.goto(new URL(production ? '/contact' : route, target.url).href, { waitUntil: 'domcontentloaded' });
-      qaApi = await settledJourneyApi(page, target, qaApi);
+      qaApi = await navigate(production ? '/contact' : route);
       if (!qaApi) throw new Error('API autenticada da homologação indisponível');
       if (production) assertProductionAccountHosts(target, qaApi.origin);
       let account;
@@ -2001,7 +2041,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
             : checked.confirmed && task.id === 'robos.criar' ? { robot: name,
               robotRef: identity.refs[0], robotId: checked.recordId } : {} };
     },
-    diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, creationCapture, searchProbe, ownerProbe, apiError,
+    diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, backgroundDenied: { ...backgroundDenied },
+      creationCapture, searchProbe, ownerProbe, apiError,
       menuProbe, botWriteProbe, tagProbe: currentTask === 'contatos.marcar_tags' ? { createdTagIdCaptured: [...createdIds].some((id) =>
         Number.isSafeInteger(id) && !fixedIds.tag.has(id) && id !== currentPrepared?.identity?.ids?.[0]),
         tagWriteStatus, tagLinkStatus } : null }; },
@@ -2040,12 +2081,9 @@ export async function cleanupProductionCreatedItems({ env, target, items }) {
       return route.abort();
     });
     const page = await context.newPage();
-    const observer = createProductionApiObserver(target, env);
-    page.on('request', observer.request);
-    page.on('response', observer.response);
+    const navigate = createJourneyNavigation(page, target);
     await loginToQa(page, target.url, journeyCredentials(env), { timeoutMs: 15000, productionDiagnostics: true });
-    await page.goto(new URL('/contact', target.url).href, { waitUntil: 'domcontentloaded' });
-    const api = await settledJourneyApi(page, target, observer.api());
+    const api = await navigate('/contact');
     assertProductionAccountHosts(target, api?.origin);
     const claims = JSON.parse(Buffer.from(api.authorization.slice(7).split('.')[1], 'base64url').toString('utf8'));
     const companyHref = new URL('/api/v2/company', api.origin).href;
@@ -2203,6 +2241,7 @@ export async function browserProductionPreflight(env = process.env,
       return route.abort();
     });
     const page = await context.newPage();
+    const navigate = createJourneyNavigation(page, target);
     const observer = createProductionApiObserver(target, env);
     page.on('request', observer.request);
     page.on('response', observer.response);
@@ -2218,8 +2257,7 @@ export async function browserProductionPreflight(env = process.env,
       console.error(`gravar_jornada: diagnóstico: ${JSON.stringify(result)}`);
       return result;
     }
-    await page.goto(new URL('/contact', target.url).href, { waitUntil: 'domcontentloaded' });
-    const api = await settledJourneyApi(page, target, observer.api());
+    const api = await navigate('/contact');
     if (!api) {
       const result = { mode: 'bloqueado', reason: 'api_nao_detectada', diagnostic: observer.diagnostic() };
       console.error(`gravar_jornada: diagnóstico: ${JSON.stringify(result)}`);
@@ -2270,6 +2308,7 @@ export async function authenticatedJourneyIdentity(env) {
     });
     const page = await context.newPage();
     let api;
+    const navigate = createJourneyNavigation(page, target, () => api);
     page.on('request', (request) => {
       const url = new URL(request.url());
       const authorization = request.headers().authorization;
@@ -2277,8 +2316,7 @@ export async function authenticatedJourneyIdentity(env) {
         && qaRequestDecision(url.href, target, env).allowed) api = { origin: url.origin, authorization };
     });
     await loginToQa(page, target.url, journeyCredentials(env), { timeoutMs: 15000 });
-    await page.goto(new URL('/contact', target.url).href, { waitUntil: 'domcontentloaded' });
-    api = await settledJourneyApi(page, target, api);
+    api = await navigate('/contact');
     if (!api) throw new Error('identidade autenticada indisponível');
     if (env.QA_TARGET === 'producao') assertProductionAccountHosts(target, api.origin);
     const claims = JSON.parse(Buffer.from(api.authorization.slice(7).split('.')[1], 'base64url').toString('utf8'));
