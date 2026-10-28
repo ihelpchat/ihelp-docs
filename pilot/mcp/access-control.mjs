@@ -5,7 +5,7 @@ export const requestIdentity = new AsyncLocalStorage();
 const actorCalls = new Map();
 const actorPattern = /^(?:user|service):[a-z0-9][a-z0-9_-]{2,63}$/;
 const toolMutations = new Map();
-const privateTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package']);
+const privateTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_generate_faq_v2']);
 
 export function registerToolPolicy(name, { mutates }) {
   if (typeof mutates !== 'boolean') throw new Error(`${name} deve declarar mutates`);
