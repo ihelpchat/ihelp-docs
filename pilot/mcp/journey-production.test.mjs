@@ -63,7 +63,7 @@ test('pré-voo preserva a inicialização autenticada antes de navegar e bloquei
         if (!authenticated || initializationCancelled) throw new Error('initialization unavailable');
         assert.equal(predicate(response('https://outside.example.test')), false);
         assert.equal(predicate(response('https://api.example.test', 401)), false);
-        assert.equal(predicate(response('https://api.example.test', 200, undefined)), false);
+        assert.equal(predicate(response('https://api.example.test', 200, null)), false);
         assert.equal(predicate(response()), true);
         ready = true;
         return response();
@@ -204,7 +204,9 @@ test('betaapp carrega somente os scripts compartilhados explícitos, sem ampliar
   }
   const script = prefix + scripts[0];
   for (const input of [request(script, 'POST'), request(script, 'GET', 'fetch'),
-    request(script, 'GET', 'document'), request(script, 'GET', 'script', { Cookie: 'session=secret' }),
+    request(script, 'GET', 'document'), request(script, 'GET', 'stylesheet'), request(script, 'GET', 'font'),
+    request(script, 'GET', 'image'), request(script.replace('app.ihelpchat.com', 'outside.example.test')),
+    request(script, 'GET', 'script', { Cookie: 'session=secret' }),
     request(script, 'GET', 'script', { Authorization: 'Bearer secret' }),
     request(script, 'GET', 'script', { 'Proxy-Authorization': 'secret' }),
     request(script + '?token=secret'), request(script + '#fragment'),
@@ -217,12 +219,13 @@ test('betaapp carrega somente os scripts compartilhados explícitos, sem ampliar
   assert.equal(qaStaticCdnAllowed(request(script), productionConfig(env).target, env), false);
   let handler;
   await installQaNetworkGuard({ async route(_pattern, callback) { handler = callback; } }, target, betaEnv);
-  let fetched = false; let result;
+  let fetched = false; let result; let fetchOptions;
   await handler({ request: () => request(script), fetch: async options => {
-    fetched = true; assert.equal(options.maxRedirects, 0);
+    fetched = true; fetchOptions = options;
     return { headers: () => ({ location: 'https://app.ihelpchat.com/api/v2/company' }) };
   }, fulfill: async () => { result = 'allowed'; }, abort: async () => { result = 'denied'; } });
   assert.equal(fetched, true);
+  assert.equal(fetchOptions.maxRedirects, 0);
   assert.equal(result, 'denied');
 });
 
