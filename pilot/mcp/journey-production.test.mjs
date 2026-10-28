@@ -115,6 +115,51 @@ test('CDN de interface só aceita GET estático em produção, sem credenciais',
   assert.deepEqual(denied, {});
 });
 
+test('betaapp carrega somente os scripts compartilhados explícitos, sem ampliar hosts da conta', async () => {
+  const betaEnv = { ...env, QA_PROD_URL: 'https://betaapp.ihelpchat.com',
+    QA_PROD_ALLOWED_HOSTS: 'betaapp.ihelpchat.com,apiv3.ihelpchat.com' };
+  const target = productionConfig(betaEnv).target;
+  const prefix = 'https://app.ihelpchat.com/javascripts/hidden-dist-js/';
+  const scripts = ['runtime.min.js', 'jquery-3.3.1.slim.min.js', 'popper.min.js',
+    'import-map-overrides.js', 'system.min.js', 'amd.min.js', 'react.production.min.js',
+    'react-dom.production.min.js', 'single-spa.min.js'];
+  const request = (url, method = 'GET', type = 'script', headers = {}) => ({
+    url: () => url, method: () => method, resourceType: () => type, headers: () => headers,
+  });
+  for (const script of scripts) {
+    const input = request(prefix + script);
+    assert.equal(qaStaticCdnAllowed(input, target, betaEnv), true, script);
+    assert.equal(qaRequestDecision(input.url(), target, betaEnv).allowed, false);
+    let outcome;
+    await handleJourneyRoute({ request: () => input, fallback: async () => { outcome = 'allowed'; },
+      abort: async () => { outcome = 'denied'; } }, { target, env: betaEnv,
+      thirdPartyDenied: {}, productionReady: () => false, taskId: 'contatos.cadastrar' });
+    assert.equal(outcome, 'allowed');
+  }
+  const script = prefix + scripts[0];
+  for (const input of [request(script, 'POST'), request(script, 'GET', 'fetch'),
+    request(script, 'GET', 'document'), request(script, 'GET', 'script', { Cookie: 'session=secret' }),
+    request(script, 'GET', 'script', { Authorization: 'Bearer secret' }),
+    request(script, 'GET', 'script', { 'Proxy-Authorization': 'secret' }),
+    request(script + '?token=secret'), request(script + '#fragment'),
+    request(prefix + 'unlisted.js'), request(prefix + 'runtime.min.js/extra'),
+    request(prefix + '%72untime.min.js'), request('https://app.ihelpchat.com/api/v2/company'),
+    request('https://app.ihelpchat.com/login'), request(script.replace('https:', 'http:')),
+    request(script.replace('app.ihelpchat.com', 'app.ihelpchat.com:8443')),
+    request(script.replace('app.ihelpchat.com', 'user:pass@app.ihelpchat.com'))])
+    assert.equal(qaStaticCdnAllowed(input, target, betaEnv), false, input.url());
+  assert.equal(qaStaticCdnAllowed(request(script), productionConfig(env).target, env), false);
+  let handler;
+  await installQaNetworkGuard({ async route(_pattern, callback) { handler = callback; } }, target, betaEnv);
+  let fetched = false; let result;
+  await handler({ request: () => request(script), fetch: async options => {
+    fetched = true; assert.equal(options.maxRedirects, 0);
+    return { headers: () => ({ location: 'https://app.ihelpchat.com/api/v2/company' }) };
+  }, fulfill: async () => { result = 'allowed'; }, abort: async () => { result = 'denied'; } });
+  assert.equal(fetched, true);
+  assert.equal(result, 'denied');
+});
+
 test('requisição sem resposta registra motivo sanitizado da falha', () => {
   const observer = createProductionApiObserver(productionConfig(env).target, env);
   const request = { url: () => 'https://front.example.test/private?token=secret',
