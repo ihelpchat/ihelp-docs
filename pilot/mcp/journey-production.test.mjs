@@ -64,6 +64,8 @@ test('pré-voo preserva a inicialização autenticada antes de navegar e bloquei
         assert.equal(predicate(response('https://outside.example.test')), false);
         assert.equal(predicate(response('https://api.example.test', 401)), false);
         assert.equal(predicate(response('https://api.example.test', 200, null)), false);
+        assert.equal(predicate(response('https://api.example.test', 200, 'Bearer undefined')), false);
+        assert.equal(predicate(response('https://api.example.test', 200, 'Bearer null')), false);
         assert.equal(predicate(response()), true);
         ready = true;
         return response();

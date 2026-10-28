@@ -29,18 +29,29 @@ export function assertProductionAccountHosts(target, apiOrigin) {
     || !target.allowedHosts.includes(new URL(target.url).hostname)
     || !target.allowedHosts.includes(api.hostname)) throw new Error('hosts da conta divergentes');
 }
+function successfulJourneyApi(response, target) {
+  try {
+    const url = new URL(response.url());
+    const authorization = response.request().headers().authorization;
+    return target.allowedHosts.includes(url.hostname) && url.pathname.startsWith('/api/')
+      && response.status() >= 200 && response.status() < 400
+      && /^Bearer (?!undefined$|null$)\S+$/iu.test(authorization ?? '')
+      ? { origin: url.origin, authorization } : null;
+  } catch { return null; }
+}
+function observeSuccessfulJourneyApi(page, target) {
+  let api = null;
+  page.on('response', (response) => { api = successfulJourneyApi(response, target) ?? api; });
+  return () => api;
+}
 async function settledJourneyApi(page, target, current, timeoutMs = 10_000) {
   if (target.mode !== 'producao') return current;
-  if (current && target.allowedHosts.includes(new URL(current.origin).hostname)) return current;
+  if (current && target.allowedHosts.includes(new URL(current.origin).hostname)
+    && /^Bearer (?!undefined$|null$)\S+$/iu.test(current.authorization ?? '')) return current;
   try {
-    const response = await page.waitForResponse((entry) => {
-      const url = new URL(entry.url());
-      return target.allowedHosts.includes(url.hostname) && url.pathname.startsWith('/api/')
-        && entry.status() >= 200 && entry.status() < 400
-        && /^Bearer \S+$/iu.test(entry.request().headers().authorization ?? '');
-    }, { timeout: timeoutMs });
-    return { origin: new URL(response.url()).origin,
-      authorization: response.request().headers().authorization };
+    const response = await page.waitForResponse((entry) => Boolean(successfulJourneyApi(entry, target)),
+      { timeout: timeoutMs });
+    return successfulJourneyApi(response, target);
   } catch { return null; }
 }
 async function navigateJourneyAfterLogin(page, target, currentApi, path) {
@@ -1277,6 +1288,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       page = await context.newPage();
       screenshotGuard = realCompany ? createRealCompanyScreenshotGuard(page, () => qaApi?.origin) : null;
       qaApi = null;
+      const settledApi = production ? observeSuccessfulJourneyApi(page, target) : () => qaApi;
       page.on('request', (request) => {
         const url = new URL(request.url());
         if (currentTask?.startsWith('robos.') && request.method() === 'PUT'
@@ -1455,7 +1467,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         pending.finally(() => pendingPosts.delete(pending));
       });
       const route = journeyStartRoute(task, prepared);
-      qaApi = await navigateJourneyAfterLogin(page, target, () => qaApi, production ? '/contact' : route);
+      qaApi = await navigateJourneyAfterLogin(page, target, settledApi, production ? '/contact' : route);
       if (!qaApi) throw new Error('API autenticada da homologação indisponível');
       if (production) assertProductionAccountHosts(target, qaApi.origin);
       let account;
@@ -2276,6 +2288,7 @@ export async function authenticatedJourneyIdentity(env) {
     });
     const page = await context.newPage();
     let api;
+    const settledApi = env.QA_TARGET === 'producao' ? observeSuccessfulJourneyApi(page, target) : () => api;
     page.on('request', (request) => {
       const url = new URL(request.url());
       const authorization = request.headers().authorization;
@@ -2283,7 +2296,7 @@ export async function authenticatedJourneyIdentity(env) {
         && qaRequestDecision(url.href, target, env).allowed) api = { origin: url.origin, authorization };
     });
     await loginToQa(page, target.url, journeyCredentials(env), { timeoutMs: 15000 });
-    api = await navigateJourneyAfterLogin(page, target, () => api, '/contact');
+    api = await navigateJourneyAfterLogin(page, target, settledApi, '/contact');
     if (!api) throw new Error('identidade autenticada indisponível');
     if (env.QA_TARGET === 'producao') assertProductionAccountHosts(target, api.origin);
     const claims = JSON.parse(Buffer.from(api.authorization.slice(7).split('.')[1], 'base64url').toString('utf8'));
