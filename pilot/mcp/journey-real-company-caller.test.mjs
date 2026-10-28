@@ -102,7 +102,7 @@ async function withFront(t, options, consume) {
         document.querySelector('#add').onclick = () => { document.querySelector('form').hidden = false; };
         document.querySelector('[placeholder]').oninput = event => {
           clearTimeout(window.timer); const value = event.target.value;
-          window.timer = setTimeout(() => get('/contacts?searchData=' + encodeURIComponent(value)).then(render), 50);
+          window.timer = setTimeout(() => get('/contacts?searchData=' + encodeURIComponent(value)).then(render), ${options.filterDebounceMs ?? 50});
         };
         document.querySelector('form').onsubmit = async event => {
           event.preventDefault();
@@ -167,7 +167,7 @@ async function withFront(t, options, consume) {
 }
 
 test('caller real nega lista sem filtro, captura lista filtrada pendente e limpa só ID da resposta', async t => {
-  await withFront(t, {}, async ({ run, root, requests }) => {
+  await withFront(t, { filterDebounceMs: 500 }, async ({ run, root, requests }) => {
     const records = await run(['contatos.buscar']);
     assert.deepEqual(records.map(record => record.status), ['concluída', 'concluída'],
       JSON.stringify({ records: records.map(({ status, reason, blocked, verification, creationCapture }) =>
