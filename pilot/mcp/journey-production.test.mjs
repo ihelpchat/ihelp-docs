@@ -47,6 +47,53 @@ test('diagnóstico de login em produção e confirmação não captura nem grava
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('pré-voo preserva a inicialização autenticada antes de navegar e bloqueia sem API', async () => {
+  for (const authenticated of [true, false]) {
+    let ready = false; let initializationCancelled = false; let navigations = 0; let closed = false; let reads = 0;
+    const authorization = `Bearer test.${Buffer.from(JSON.stringify({ businessId: '42' })).toString('base64url')}.test`;
+    const response = (origin = 'https://api.example.test', status = 200, bearer = authorization) => ({
+      url: () => `${origin}/api/v2/company`, status: () => status,
+      request: () => ({ headers: () => ({ authorization: bearer }) }),
+    });
+    const page = {
+      on() {}, url: () => 'https://front.example.test/atendimento',
+      async goto() { navigations++; if (!ready) initializationCancelled = true; },
+      async waitForResponse(predicate, options) {
+        assert.ok(options.timeout > 0 && options.timeout <= 30_000);
+        if (!authenticated || initializationCancelled) throw new Error('initialization unavailable');
+        assert.equal(predicate(response('https://outside.example.test')), false);
+        assert.equal(predicate(response('https://api.example.test', 401)), false);
+        assert.equal(predicate(response('https://api.example.test', 200, undefined)), false);
+        assert.equal(predicate(response()), true);
+        ready = true;
+        return response();
+      },
+      async evaluate(_callback, { href }) {
+        reads++;
+        const url = new URL(href);
+        return read(url.pathname.replace(/^\/api\/v2/u, '') + url.search);
+      },
+    };
+    const browser = { async newContext() { return { async route() {}, async newPage() { return page; } }; },
+      async close() { closed = true; } };
+    const result = await runtime.browserProductionPreflight({ ...env, QA_PROD_COMPANY_ID: '42' }, {
+      launchBrowser: async () => browser, login: async () => ({}),
+    });
+    if (authenticated) {
+      assert.equal(result.mode, 'ready', result.reason);
+      assert.equal(initializationCancelled, false);
+      assert.equal(navigations, 1);
+      assert.ok(reads > 0);
+    } else {
+      assert.equal(result.mode, 'bloqueado');
+      assert.equal(result.reason, 'api_nao_detectada');
+      assert.equal(navigations, 0);
+      assert.equal(reads, 0);
+    }
+    assert.equal(closed, true);
+  }
+});
+
 test('produção requer chave geral e somente hosts explícitos da conta', () => {
   assert.throws(() => productionConfig({ ...env, QA_PROD_ENABLED: 'false' }), /produção desabilitada/u);
   const cfg = productionConfig(env);
