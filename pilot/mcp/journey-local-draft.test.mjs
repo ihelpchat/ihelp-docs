@@ -63,6 +63,7 @@ test('prova local fecha para outra conta, robô, tarefa, estado, origem, alvo e 
       { origin: 'https://other.example.test' }, { companyId: '43' }, { selected: null },
       { robot: { ...proof.robot, status: true } }, { robot: { ...proof.robot, status: null } },
       { robot: { ...proof.robot, title: 'Outro título' } },
+      { robot: { ...proof.robot, idRef: 'other-1' } },
       { robot: { ...proof.robot, empresaId: 43 } }, { robot: null },
     ]) assert.equal(await (runtime.localRobotDraftAllowed?.(page, send, { ...proof, ...change }) ?? false), false);
     await page.locator('textarea').fill('texto não autorizado');
@@ -84,6 +85,31 @@ test('a prova é refeita depois do scroll e pode impedir o clique sem alterar o 
       },
     }), { code: 'JOURNEY_TARGET_CHANGED' });
     assert.equal(checks, 1);
+    assert.equal(await page.evaluate(() => window.composed), undefined);
+    assert.equal(writes(), 0);
+  });
+});
+
+test('retry após toast revalida o rascunho alterado pelo fechamento da sobreposição', async () => {
+  await withEditor(async (page, proof, observed, vocabulary, writes) => {
+    await page.evaluate(() => {
+      const cover = document.createElement('div');
+      cover.setAttribute('role', 'alert');
+      cover.style.cssText = 'position:fixed;inset:0;z-index:9999';
+      cover.textContent = 'Fixture overlay'; document.body.append(cover);
+      document.addEventListener('keydown', event => {
+        if (event.key !== 'Escape') return;
+        cover.remove(); document.querySelector('textarea').value = 'contexto mudou';
+      }, { once: true });
+    });
+    const decisions = [];
+    await assert.rejects(runtime.actJourneyAction(page, send, observed.targets, { vocabulary, generated,
+      beforeClick: async selected => {
+        const allowed = await runtime.localRobotDraftAllowed(page, send, { ...proof, selected });
+        decisions.push(allowed); return allowed;
+      },
+    }), { code: 'JOURNEY_TARGET_CHANGED' });
+    assert.deepEqual(decisions, [true, false]);
     assert.equal(await page.evaluate(() => window.composed), undefined);
     assert.equal(writes(), 0);
   });
