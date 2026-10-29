@@ -653,7 +653,8 @@ export function journeyVocabulary(facts, screenCode = []) {
 
 export async function observeJourneyDom(page, { vocabulary = [], generated = new Set(), selfId } = {}) {
   const raw = await page.evaluate(({ selector, selfId }) => {
-    const visible = (node) => Boolean(node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden');
+    const visible = (node) => Boolean(!node.closest('[inert],[aria-hidden="true"]')
+      && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden');
     const compact = (value) => String(value ?? '').replace(/\s+/gu, ' ').trim().replace(/\s*\*$/u, '').slice(0, 180);
     const byId = (ids) => compact(ids.split(/\s+/u).map((id) => document.getElementById(id)?.textContent ?? '').join(' '));
     const visualLabel = (node) => {
