@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { chromium } from 'playwright-core';
 import { recordJourneys } from './journey-runtime.mjs';
 
-test('caller Robôs aguarda controles após hidratação antes de clicar', async t => {
+for (const modal of [false, true]) test(`caller Robôs aguarda controles após hidratação${modal ? ' e observa o modal com fundo inerte' : ''}`, async t => {
   const origin = 'https://front.example.test';
   const root = await mkdtemp(join(tmpdir(), 'robot-caller-ready-'));
   const requests = [], browsers = [];
@@ -32,7 +32,15 @@ test('caller Robôs aguarda controles após hidratação antes de clicar', async
           window.requestAnimationFrame = callback => frame(time => {
             if (++count === 8) {
               document.querySelector('main').innerHTML = '<input placeholder="Buscar robô"><button id="create">Criar novo robô</button>';
-              document.querySelector('#create').onclick = () => console.log('fixture-robot-create-opened');
+              document.querySelector('#create').onclick = () => {
+                console.log('fixture-robot-create-opened');
+                if (${modal}) {
+                  document.querySelector('main').inert = true;
+                  const dialog = document.createElement('section'); dialog.setAttribute('role', 'dialog');
+                  dialog.innerHTML = '<input placeholder="Digite o título do robô">';
+                  document.body.append(dialog);
+                }
+              };
             }
             callback(time);
           });

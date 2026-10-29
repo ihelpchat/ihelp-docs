@@ -52,3 +52,30 @@ test('controle visível correto libera a captura, sem alterar a chamada sem requ
     assert.equal((await waitForStableScreen(page)).stable, true);
   } finally { await page.close(); }
 });
+
+test('criação reconhece o campo do modal quando a busca ao fundo fica inerte', async () => {
+  const page = await browser.newPage();
+  try {
+    await page.setContent('<main inert><input placeholder="Buscar robô"></main><section role="dialog"><input placeholder="Digite o título do robô"></section>');
+    assert.equal((await waitForStableScreen(page, {
+      readyControl: runtime.journeyReadinessControl('robos.criar', '/bot'),
+    })).stable, true);
+  } finally { await page.close(); }
+});
+
+test('campo fora de modal, modal oculto ou inerte não substitui a busca; outras tarefas preservam o requisito', async () => {
+  const page = await browser.newPage();
+  try {
+    for (const [task, body] of [
+      ['robos.criar', '<input placeholder="Digite o título do robô">'],
+      ['robos.criar', '<section role="dialog" hidden><input placeholder="Digite o título do robô"></section>'],
+      ['robos.criar', '<section role="dialog" inert><input placeholder="Digite o título do robô"></section>'],
+      ['robos.buscar', '<section role="dialog"><input placeholder="Digite o título do robô"></section>'],
+    ]) {
+      await page.setContent(`<main inert><input placeholder="Buscar robô"></main>${body}`);
+      await assert.rejects(waitForStableScreen(page, {
+        readyControl: runtime.journeyReadinessControl(task, '/bot'),
+      }), /tela não estabilizou: controle inicial indisponível/u);
+    }
+  } finally { await page.close(); }
+});
