@@ -444,6 +444,10 @@ export async function waitForStableScreen(page) {
     const deadline = performance.now() + 4_000;
     let previous = null;
     let frames = 0;
+    const loading = () => [...document.querySelectorAll('svg')].some((element) =>
+      element.getClientRects().length && !element.closest('[inert]')
+      && getComputedStyle(element).visibility !== 'hidden'
+      && /^(?:carregando|loading)(?:\.{3}|…)?$/iu.test(element.querySelector('title')?.textContent?.trim() ?? ''));
     while (performance.now() < deadline) {
       await new Promise((done) => requestAnimationFrame(done));
       const active = document.getAnimations().some((animation) => animation.playState === 'running'
@@ -455,10 +459,11 @@ export async function waitForStableScreen(page) {
             getComputedStyle(element).transform];
         });
       const position = JSON.stringify(boxes);
-      frames = !active && position === previous ? frames + 1 : 0;
+      frames = !active && !loading() && position === previous ? frames + 1 : 0;
       if (frames >= 2) return { stable: true };
       previous = position;
     }
+    if (loading()) return { stable: false, condition: 'carregamento' };
     const animations = document.getAnimations().filter((animation) => animation.playState === 'running');
     if (animations.length && animations.every((animation) => animation.effect?.getComputedTiming().iterations === Infinity))
       return { stable: true, limit: 'animações infinitas' };
