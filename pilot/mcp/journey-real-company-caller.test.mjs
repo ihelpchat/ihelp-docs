@@ -22,6 +22,9 @@ async function withFront(t, options, consume) {
   const root = await mkdtemp(join(tmpdir(), 'journey-real-caller-'));
   const requests = [];
   const browsers = [];
+  let modelFallbacks = 0;
+  const trackModelFallbacks = options.inactiveBackground === true || options.formattedPhone === true;
+  const runEnv = options.formattedPhone ? { ...env, QA_PROD_TEST_PHONE: '+1 202 555 0100' } : env;
   let saved;
   let tag;
   let linked = false;
@@ -39,11 +42,14 @@ async function withFront(t, options, consume) {
         let body = ''; for await (const chunk of req) body += chunk;
         const part = name => new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]+)`, 'u').exec(body)?.[1];
         const contact = JSON.parse(part('contato'));
+        if (options.formattedPhone) assert.equal(contact.contatoTelefones[0].numero,
+          runEnv.QA_PROD_TEST_PHONE.replace(/\D/gu, ''));
         saved = { id: 17, ...(options.noId ? {} : { idRef: 'created-17' }), nome: contact.nome,
-          telefone: env.QA_PROD_TEST_PHONE };
+          telefone: runEnv.QA_PROD_TEST_PHONE };
         return json({ dados: saved }, 201);
       }
-      if (url.pathname === '/api/v2/company') return json({ dados: { id: saved && options.company || 42 } });
+      if (url.pathname === '/api/v2/company') return json({ dados: {
+        id: options.initialCompany ?? (saved && options.company || 42) } });
       if (req.method === 'POST' && url.pathname === '/api/v2/tags') {
         let body = ''; for await (const chunk of req) body += chunk;
         tag = { id: 33, nome: JSON.parse(body).nome };
@@ -65,9 +71,10 @@ async function withFront(t, options, consume) {
     `;
     let html;
     if (url.pathname === '/login') html = `<input type="email"><input type="password"><button>Entrar</button>
-      <script>document.querySelector('button').onclick = () => location.href = '/contact';</script>`;
+      <script>document.querySelector('button').onclick = () => location.href = '${options.preflightRequests
+    ? '/contact?bootstrap=1' : '/contact'}';</script>`;
     else if (url.pathname.startsWith('/contact/detail/')) {
-      html = `<main><h1>Contatos</h1><div id="name"></div><div>${env.QA_PROD_TEST_PHONE}</div>
+      html = `<main><h1>Contatos</h1><div id="name"></div><div>${runEnv.QA_PROD_TEST_PHONE}</div>
         ${options.tags ? '<button role="tab" id="tags">Tags</button><div id="tag-form" hidden><input role="combobox" placeholder="Buscar ou criar tag..."><div id="options"></div></div>' : ''}</main>
         <script>${script}
           // Initial loading render is replaced by the caller's reload; only that fresh read renders the record.
@@ -93,13 +100,35 @@ async function withFront(t, options, consume) {
           ` : ''}
         </script>`;
     }
-    else html = `<main><h1>Contatos</h1><button id="add">Adicionar Contato</button>
+    else html = `<main>${options.inactiveBackground ? '<section id="background">' : ''}<h1>Contatos</h1><button id="add">Adicionar Contato</button>
       <input placeholder="Buscar contato..."><table><tbody></tbody></table>
+      ${options.inactiveBackground ? '<input type="checkbox">'.repeat(24) + '</section>' : ''}
       <form hidden><label>Nome<input name="nome"></label><label>Telefone<input name="telefone"></label><button>Salvar</button></form></main>
       <script>${script}
+        ${options.backgroundGets ? `
+          new EventSource('/api/v2/notifications/sse/connect?access_token=fixture-secret');
+          new EventSource('/api/v2/crm/sse/connect?access_token=fixture-secret');
+          get('/sync/calls').catch(() => {});
+          get('/sync/basic-infos').catch(() => {});
+        ` : ''}
         const render = data => { document.querySelector('tbody').innerHTML = data.dados.map(row => '<tr><td>' + row.nome + '</td></tr>').join(''); };
-        get('/contacts?page=1&limit=1').then(render);
-        document.querySelector('#add').onclick = () => { document.querySelector('form').hidden = false; };
+        const loadContacts = () => get('/contacts?page=1&limit=1').then(render);
+        ${options.preflightRequests ? `
+          if (location.search === '?bootstrap=1') {
+            Promise.allSettled([
+              get('/contacts?page=1&limit=20'),
+              fetch('/api/v2/startup/blocked', {method:'POST', headers, body:'fixture-secret'}),
+              fetch('/api/v2/contacts/unrelated-99', {method:'DELETE', headers}),
+            ]).then(loadContacts);
+          } else loadContacts();
+        ` : 'loadContacts();'}
+        document.querySelector('#add').onclick = () => { document.querySelector('form').hidden = false;
+          ${options.inactiveBackground ? "document.querySelector('#background').setAttribute('inert', ''); document.querySelector('#background').setAttribute('aria-hidden', 'true');" : ''}
+        };
+        ${options.formattedPhone ? `
+          const phoneInput = document.querySelector('[name=telefone]'); phoneInput.type = 'tel';
+          phoneInput.oninput = () => { phoneInput.value = '+1 (202) 555-0100'; phoneInput.defaultValue = phoneInput.value; };
+        ` : ''}
         document.querySelector('[placeholder]').oninput = event => {
           clearTimeout(window.timer); const value = event.target.value;
           window.timer = setTimeout(() => get('/contacts?searchData=' + encodeURIComponent(value)).then(render), ${options.filterDebounceMs ?? 50});
@@ -108,7 +137,7 @@ async function withFront(t, options, consume) {
           event.preventDefault();
           const form = new FormData(); form.set('contato', JSON.stringify({
             nome: document.querySelector('[name=nome]').value,
-            contatoTelefones: [{numero: document.querySelector('[name=telefone]').value, tipoTelefone: 1}]
+            contatoTelefones: [{numero: document.querySelector('[name=telefone]').value${options.formattedPhone ? ".replace(/\\D/gu, '')" : ''}, tipoTelefone: 1}]
           }));
           await fetch('/api/v2/contacts', {method:'POST', headers, body:form});
         };
@@ -144,17 +173,19 @@ async function withFront(t, options, consume) {
     });
     const realFetch = globalThis.fetch;
     fetchMock = t.mock.method(globalThis, 'fetch', (url, options) => {
+      if (trackModelFallbacks && String(url) !== origin) modelFallbacks++;
       assert.equal(String(url), origin, 'probe só consulta o front falso');
       return realFetch(local, options);
     });
-    const run = tasks => recordJourneys('contatos', tasks, { root, env,
+    const run = tasks => recordJourneys('contatos', tasks, { root, env: trackModelFallbacks
+      ? { ...runEnv, CAPTURE_AGENT_MODEL: 'fixture-local', OPENAI_API_KEY: 'fictional' } : runEnv,
       preflight: async () => ({ mode: 'ready', companyId: '42', realCompany: true }),
       getProductContext: async () => ({ code: [{ role: 'frontend', available: true, ref: 'a'.repeat(40),
         screenFacts: labels.map(text => ({ text })), screenCode: [] }] }),
       // Stop after one observation through a refused decision, without executing a browser action.
       ...(options.unownedDetail ? { model: { async decide() { return { type: 'press' }; } } } : {}),
     });
-    await consume({ run, root, requests });
+    await consume({ run, root, requests, modelFallbackCount: () => modelFallbacks });
   } finally {
     try { await Promise.all(browsers.map(browser => browser.close())); }
     finally {
@@ -165,6 +196,78 @@ async function withFront(t, options, consume) {
     }
   }
 }
+
+test('caller real salva telefone reservado que o formulário reformatou', async t => {
+  await withFront(t, { formattedPhone: true }, async ({ run, requests, modelFallbackCount }) => {
+    const records = await run(['contatos.cadastrar']);
+    assert.deepEqual(records.map(({ status }) => status), ['concluída'],
+      JSON.stringify(records.map(({ status, reason }) => ({ status, reason }))));
+    assert.equal(requests.filter(({ method, path }) => method === 'POST' && path === '/api/v2/contacts').length, 1);
+    assert.deepEqual(records.cleanup.deleted, [{ kind: 'contact', id: 'created-17' }]);
+    assert.deepEqual(records.cleanup.pending, []);
+    assert.equal(modelFallbackCount(), 0);
+  });
+});
+
+test('caller real conclui contato com tabela inativa atrás do formulário', async t => {
+  await withFront(t, { inactiveBackground: true }, async ({ run, requests, modelFallbackCount }) => {
+    const records = await run(['contatos.cadastrar']);
+    assert.deepEqual(records.map(({ status }) => status), ['concluída'],
+      JSON.stringify(records.map(({ status, reason, actionError }) => ({ status, reason, actionError }))));
+    assert.ok(records[0].actions.some(a => a.type === 'fill' && a.name === 'Nome'));
+    assert.ok(records[0].actions.some(a => a.type === 'fill' && a.name === 'Telefone'));
+    assert.equal(requests.filter(({ method, path }) => method === 'POST' && path === '/api/v2/contacts').length, 1);
+    assert.deepEqual(records.cleanup.deleted, [{ kind: 'contact', id: 'created-17' }]);
+    assert.deepEqual(records.cleanup.pending, []);
+    assert.equal(modelFallbackCount(), 0, 'o plano usa os campos ativos sem recorrer ao modelo');
+  });
+});
+
+test('caller real mantém GETs automáticos abortados e conclui apenas o contato próprio', async t => {
+  await withFront(t, { backgroundGets: true }, async ({ run, requests }) => {
+    const records = await run(['contatos.cadastrar']);
+    assert.deepEqual(records.map(({ status }) => status), ['concluída'],
+      JSON.stringify(records.map(({ status, reason, blocked, backgroundDenied }) =>
+        ({ status, reason, blocked, backgroundDenied }))));
+    const paths = ['/api/v2/notifications/sse/connect', '/api/v2/crm/sse/connect',
+      '/api/v2/sync/calls', '/api/v2/sync/basic-infos'];
+    for (const path of paths) {
+      assert.ok(records[0].backgroundDenied[path] >= 1, `negação precisa ficar registrada: ${path}`);
+      assert.equal(requests.some((request) => request.path === path), false,
+        `GET com efeito não pode alcançar o servidor: ${path}`);
+    }
+    assert.equal(requests.filter(({ method, path }) => method === 'POST' && path === '/api/v2/contacts').length, 1);
+    assert.deepEqual(records.cleanup.deleted, [{ kind: 'contact', id: 'created-17' }]);
+    assert.deepEqual(records.cleanup.pending, []);
+    assert.equal(JSON.stringify(records[0].backgroundDenied).includes('fixture-secret'), false);
+  });
+});
+
+test('caller real mantém inicialização negada sem contaminar contato próprio', async t => {
+  await withFront(t, { preflightRequests: true }, async ({ run, requests }) => {
+    const records = await run(['contatos.cadastrar']);
+    assert.deepEqual(records.map(({ status }) => status), ['concluída'],
+      JSON.stringify(records.map(({ status, reason, blocked, preflightDenied }) =>
+        ({ status, reason, blocked, preflightDenied }))));
+    for (const key of ['GET:fetch', 'POST:fetch', 'DELETE:fetch'])
+      assert.ok(records[0].preflightDenied?.[key] >= 1, `negação precisa ficar registrada: ${key}`);
+    assert.equal(requests.some(({ path, search }) => path === '/api/v2/contacts' && search.includes('limit=20')), false);
+    assert.equal(requests.some(({ path }) => ['/api/v2/startup/blocked', '/api/v2/contacts/unrelated-99'].includes(path)), false);
+    assert.equal(requests.filter(({ method, path }) => method === 'POST' && path === '/api/v2/contacts').length, 1);
+    assert.deepEqual(records.cleanup.deleted, [{ kind: 'contact', id: 'created-17' }]);
+    assert.deepEqual(records.cleanup.pending, []);
+  });
+});
+
+test('caller real impede cadastro se empresa divergir após inicialização negada', async t => {
+  await withFront(t, { preflightRequests: true, initialCompany: 43 }, async ({ run, requests }) => {
+    const records = await run(['contatos.cadastrar']);
+    assert.notEqual(records[0].status, 'concluída');
+    assert.equal(records[0].actions.length, 0);
+    assert.equal(requests.filter(({ method }) => ['POST', 'DELETE', 'PATCH', 'PUT'].includes(method)).length, 0);
+    assert.deepEqual(records.cleanup, { created: [], deleted: [], pending: [] });
+  });
+});
 
 test('caller real nega lista sem filtro, captura lista filtrada pendente e limpa só ID da resposta', async t => {
   await withFront(t, { filterDebounceMs: 500 }, async ({ run, root, requests }) => {
