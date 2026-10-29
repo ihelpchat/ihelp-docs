@@ -790,11 +790,61 @@ export async function installJourneyTooltipStyle(page) {
   await page.addStyleTag({ content: '[role="tooltip"], .react-tooltip, [data-tooltip-id][role="tooltip"] { pointer-events: none !important; }' });
 }
 
+export async function createJourneyContext(browser) {
+  const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true,
+    viewport: { width: 1920, height: 1080 } });
+  await context.addInitScript(() => {
+    const install = () => {
+      const style = document.createElement('style');
+      style.textContent = '[role="tooltip"], .react-tooltip { pointer-events: none !important; }';
+      document.documentElement.append(style);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
+    else install();
+  });
+  return context;
+}
+
+export function journeyReadinessControl(taskId, path) {
+  if (!taskId?.startsWith('robos.')) return null;
+  if (path === '/bot') return { selector: 'input[placeholder="Buscar robô"]' };
+  if (/^\/bot\/[a-z0-9-]+$/iu.test(path)) return { selector: 'a', text: 'Fluxo de Robô' };
+  return null;
+}
+
+// This button composes local BotFlow state; it never authorizes a network send.
+export async function localRobotDraftAllowed(page, action, proof = {}) {
+  const { taskId, origin, robotRef, robotTitle, companyId, robot, owned, selected, generated } = proof;
+  if (action?.type !== 'click' || action.role !== 'button' || action.name !== 'Enviar mensagem'
+    || action.value !== null || taskId !== 'robos.montar_menu' || owned !== true
+    || !/^[a-z0-9-]{1,80}$/iu.test(robotRef ?? '') || !robotTitle?.startsWith('Teste FAQ ')
+    || !generated?.has(robotTitle) || !companyId || robot?.idRef !== robotRef
+    || robot.title !== robotTitle || robot.status !== false || String(robot.empresaId) !== String(companyId)
+    || selected?.selector !== journeyControlSelector || !Number.isSafeInteger(selected.index) || selected.index < 0)
+    return false;
+  const url = new URL(page.url());
+  if (url.protocol !== 'https:' || url.origin !== origin || url.pathname !== `/bot/${robotRef}`) return false;
+  return page.evaluate(({ selected, robotTitle, values }) => {
+    const target = document.querySelectorAll(selected.selector)[selected.index];
+    const sidebar = target?.closest('.custom-height-sidebar');
+    const titles = sidebar?.querySelectorAll('input[placeholder="Título da mensagem"]');
+    const texts = target?.parentElement?.querySelectorAll('textarea');
+    const visible = node => Boolean(node?.getClientRects().length && !node.closest('[inert]')
+      && getComputedStyle(node).visibility !== 'hidden');
+    if (!target?.matches('button') || target.textContent?.trim() || !target.querySelector('svg')
+      || !visible(target) || target.disabled || target.getAttribute('aria-disabled') === 'true'
+      || titles?.length !== 1 || texts?.length !== 1 || !visible(titles[0]) || !visible(texts[0])
+      || !sidebar.contains(texts[0]) || !document.body.innerText.includes(robotTitle)) return false;
+    const value = texts[0].value;
+    return value.startsWith('Teste FAQ ') && titles[0].value === value && values.includes(value);
+  }, { selected, robotTitle, values: [...generated] });
+}
+
 export function journeyActionCategory(error) {
   const message = String(error?.message ?? '');
   if (/not enabled|disabled/iu.test(message)) return 'desabilitado';
-  if (/not visible|hidden|outside of the viewport/iu.test(message)) return 'invisível';
   if (/intercepts pointer events|receives pointer events/iu.test(message)) return 'coberto';
+  if (/not visible|hidden|outside of the viewport/iu.test(message)) return 'invisível';
   if (/not stable|unstable/iu.test(message)) return 'instável';
   if (/detached|not attached/iu.test(message)) return 'desanexado';
   return 'tempo';
@@ -817,7 +867,7 @@ export async function coveringElement(page, selected) {
   }, selected);
 }
 
-export async function actJourneyAction(page, action, targets, { vocabulary = [], generated = new Set(), selfId } = {}) {
+export async function actJourneyAction(page, action, targets, { vocabulary = [], generated = new Set(), selfId, beforeClick } = {}) {
   const target = targets[journeyTargetKey(action.role, action.name)];
   const changed = () => Object.assign(new Error('alvo mudou; observe de novo'), { code: 'JOURNEY_TARGET_CHANGED' });
   if (!target) throw changed();
@@ -839,7 +889,11 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
   try {
     if (action.type === 'click') {
       await locator.scrollIntoViewIfNeeded({ timeout: 4_000 });
-      try { return await locator.click({ timeout: 4_000 }); }
+      const click = async () => {
+        if (beforeClick && !await beforeClick(selected)) throw changed();
+        return locator.click({ timeout: 4_000 });
+      };
+      try { return await click(); }
       catch (firstError) {
         if (journeyActionCategory(firstError) !== 'coberto') throw firstError;
         const cover = await coveringElement(page, selected).catch(() => null);
@@ -847,7 +901,7 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
         if (cover?.backdrop || cover?.toast || cover?.fixedOverlay) {
           await page.waitForTimeout(500);
           await locator.scrollIntoViewIfNeeded({ timeout: 4_000 });
-          try { return await locator.click({ timeout: 4_000 }); }
+          try { return await click(); }
           catch (error) { error.coveredBy = await coveringElement(page, selected).catch(() => cover); throw error; }
         }
         firstError.coveredBy = cover;
@@ -1181,6 +1235,7 @@ export function createRealCompanyScreenshotGuard(page, apiOrigin) {
 function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false }) {
   let browser; let context; let page;
   let qaApi;
+  let account;
   let currentTask;
   let currentPrepared;
   let lastDownload;
@@ -1262,12 +1317,28 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
     }
     return fixturesSet;
   };
+  const localDraftContext = async (action, targets = observedTargets) => {
+    const robotRef = currentPrepared?.robotRef;
+    if (!realCompany || currentTask !== 'robos.montar_menu' || action.type !== 'click'
+      || action.role !== 'button' || action.name !== 'Enviar mensagem' || action.value !== null
+      || !createdRefs.robos.has(robotRef)
+      || !createdForCleanup.some(item => item.kind === 'robot' && item.id === robotRef))
+      return { localRobotDraft: false };
+    const response = await authenticatedGet(`/bot/${robotRef}`);
+    const robot = response.body?.dados?.bot ?? response.body?.dados ?? response.body;
+    const localRobotDraft = response.status === 200 && await localRobotDraftAllowed(page, action, {
+      taskId: currentTask, origin: target.url, robotRef, robotTitle: currentPrepared.robot,
+      companyId: account?.companyId, robot, owned: true,
+      selected: targets[journeyTargetKey(action.role, action.name)], generated: fixtures() });
+    return { localRobotDraft };
+  };
   return {
     async open(task, prepared) {
       productionReady = !production;
       taskStartedAt = Date.now();
       currentTask = task.id;
       currentPrepared = prepared;
+      account = null;
       blockedWrite = null;
       observedTargets = {};
       creationCapture = null;
@@ -1302,12 +1373,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       preflightDenied = {};
       lastDownload = null;
       browser = await launch();
-      context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
-      await context.addInitScript(() => {
-        const style = document.createElement('style');
-        style.textContent = '[role="tooltip"], .react-tooltip { pointer-events: none !important; }';
-        document.documentElement.append(style);
-      });
+      context = await createJourneyContext(browser);
       await installQaNetworkGuard(context, target, env);
       const guardedRoute = (route) => handleJourneyRoute(route, {
         apiOrigin: qaApi?.origin, target, env, thirdPartyDenied,
@@ -1506,7 +1572,6 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       qaApi = await navigate(production ? '/contact' : route);
       if (!qaApi) throw new Error('API autenticada da homologação indisponível');
       if (production) assertProductionAccountHosts(target, qaApi.origin);
-      let account;
       try {
         const claims = JSON.parse(Buffer.from(qaApi.authorization.slice(7).split('.')[1], 'base64url').toString('utf8'));
         account = { userId: String(claims.userId ?? ''), companyId: String(claims.businessId ?? '') };
@@ -1704,7 +1769,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
     },
     async observe() {
       let stability;
-      try { stability = await waitForStableScreen(page); }
+      try { stability = await waitForStableScreen(page, {
+        readyControl: journeyReadinessControl(currentTask, new URL(page.url()).pathname) }); }
       catch (error) { error.stage = 'navegação'; throw error; }
       const actualPath = new URL(page.url()).pathname;
       const path = actualPath.replace(/^\/contact\/detail\/[^/]+$/u, '/contact/detail/record')
@@ -1744,6 +1810,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       const { targets: _targets, ...safeData } = data;
       return { ...safeData, path, ...captured, screenshot: captured?.screenshot ?? null };
     },
+    async policyContext(action) { return localDraftContext(action); },
     async act(action) {
       if (production) {
         if (!productionReady) throw new Error('pré-voo de produção ausente');
@@ -1812,8 +1879,12 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
           { timeout: 30_000 }).catch(() => null) : null;
         if (currentTask === 'contatos.cadastrar' && action.type === 'click' && action.name === 'Salvar')
           await page.waitForLoadState('networkidle', { timeout: 2_500 }).catch(() => {});
+        const beforeClick = realCompany && action.name === 'Enviar mensagem' ? async selected => {
+          const result = await localDraftContext(action, { [journeyTargetKey(action.role, action.name)]: selected });
+          return result.localRobotDraft;
+        } : undefined;
         await actJourneyAction(page, action, observedTargets, { vocabulary: [...known], generated: fixtures(),
-          selfId: currentTask === 'tarefas.criar' ? [...fixedIds.self][0] : undefined });
+          selfId: currentTask === 'tarefas.criar' ? [...fixedIds.self][0] : undefined, beforeClick });
         // The next observation captures evidence before searchAction verifies the result.
         if (contactSearch) await filteredContactsResponse;
         if (botSaveResponse) {
@@ -2181,6 +2252,7 @@ export function makeLazyJourneyBrowser(createBrowser) {
   return {
     async open(...args) { liveBrowser ??= await createBrowser(); return liveBrowser.open(...args); },
     async observe(...args) { return liveBrowser.observe(...args); },
+    async policyContext(...args) { return liveBrowser.policyContext?.(...args); },
     async act(...args) { return liveBrowser.act(...args); },
     async exportAction(...args) { return liveBrowser.exportAction?.(...args); },
     async searchAction(...args) { return liveBrowser.searchAction?.(...args); },

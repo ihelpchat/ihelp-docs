@@ -73,6 +73,22 @@ test('prova local fecha para outra conta, robô, tarefa, estado, origem, alvo e 
   });
 });
 
+test('a prova é refeita depois do scroll e pode impedir o clique sem alterar o rascunho', async () => {
+  await withEditor(async (page, proof, observed, vocabulary, writes) => {
+    let checks = 0;
+    await assert.rejects(runtime.actJourneyAction(page, send, observed.targets, { vocabulary, generated,
+      beforeClick: async selected => {
+        checks++;
+        await page.locator('textarea').fill('contexto mudou');
+        return runtime.localRobotDraftAllowed(page, send, { ...proof, selected });
+      },
+    }), { code: 'JOURNEY_TARGET_CHANGED' });
+    assert.equal(checks, 1);
+    assert.equal(await page.evaluate(() => window.composed), undefined);
+    assert.equal(writes(), 0);
+  });
+});
+
 test('browser lazy delega a prova local ao browser da execução', async () => {
   let checked = 0;
   const lazy = runtime.makeLazyJourneyBrowser(async () => ({ async open() {},
