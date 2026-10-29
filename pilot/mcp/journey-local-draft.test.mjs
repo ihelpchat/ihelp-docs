@@ -34,7 +34,7 @@ async function withEditor(run) {
       const request = route.request();
       if (request.method() !== 'GET') { writes++; return route.abort(); }
       if (request.resourceType() !== 'document') return route.abort();
-      return route.fulfill({ contentType: 'text/html', body: `<h1>${title}</h1><div class="custom-height-sidebar"><input placeholder="Título da mensagem" value="${message}"><div><textarea>${message}</textarea><button onclick="window.composed=document.querySelector('textarea').value"><svg width="20" height="20"><rect width="20" height="20"/></svg></button></div></div>` });
+      return route.fulfill({ contentType: 'text/html; charset=utf-8', body: `<h1>${title}</h1><div class="custom-height-sidebar"><input placeholder="Título da mensagem" value="${message}"><div><textarea>${message}</textarea><button onclick="window.composed=document.querySelector('textarea').value"><svg width="20" height="20"><rect width="20" height="20"/></svg></button></div></div>` });
     });
     const page = await context.newPage(); await page.goto('https://qa.example.test/bot/own-1');
     const vocabulary = ['Enviar mensagem', 'Título da mensagem'];
