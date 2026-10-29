@@ -23,7 +23,8 @@ async function withFront(t, options, consume) {
   const requests = [];
   const browsers = [];
   let modelFallbacks = 0;
-  const trackModelFallbacks = options.inactiveBackground === true;
+  const trackModelFallbacks = options.inactiveBackground === true || options.formattedPhone === true;
+  const runEnv = options.formattedPhone ? { ...env, QA_PROD_TEST_PHONE: '+1 202 555 0100' } : env;
   let saved;
   let tag;
   let linked = false;
@@ -41,8 +42,10 @@ async function withFront(t, options, consume) {
         let body = ''; for await (const chunk of req) body += chunk;
         const part = name => new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]+)`, 'u').exec(body)?.[1];
         const contact = JSON.parse(part('contato'));
+        if (options.formattedPhone) assert.equal(contact.contatoTelefones[0].numero,
+          runEnv.QA_PROD_TEST_PHONE.replace(/\D/gu, ''));
         saved = { id: 17, ...(options.noId ? {} : { idRef: 'created-17' }), nome: contact.nome,
-          telefone: env.QA_PROD_TEST_PHONE };
+          telefone: runEnv.QA_PROD_TEST_PHONE };
         return json({ dados: saved }, 201);
       }
       if (url.pathname === '/api/v2/company') return json({ dados: {
@@ -71,7 +74,7 @@ async function withFront(t, options, consume) {
       <script>document.querySelector('button').onclick = () => location.href = '${options.preflightRequests
     ? '/contact?bootstrap=1' : '/contact'}';</script>`;
     else if (url.pathname.startsWith('/contact/detail/')) {
-      html = `<main><h1>Contatos</h1><div id="name"></div><div>${env.QA_PROD_TEST_PHONE}</div>
+      html = `<main><h1>Contatos</h1><div id="name"></div><div>${runEnv.QA_PROD_TEST_PHONE}</div>
         ${options.tags ? '<button role="tab" id="tags">Tags</button><div id="tag-form" hidden><input role="combobox" placeholder="Buscar ou criar tag..."><div id="options"></div></div>' : ''}</main>
         <script>${script}
           // Initial loading render is replaced by the caller's reload; only that fresh read renders the record.
@@ -122,6 +125,10 @@ async function withFront(t, options, consume) {
         document.querySelector('#add').onclick = () => { document.querySelector('form').hidden = false;
           ${options.inactiveBackground ? "document.querySelector('#background').setAttribute('inert', ''); document.querySelector('#background').setAttribute('aria-hidden', 'true');" : ''}
         };
+        ${options.formattedPhone ? `
+          const phoneInput = document.querySelector('[name=telefone]'); phoneInput.type = 'tel';
+          phoneInput.oninput = () => { phoneInput.value = '+1 (202) 555-0100'; phoneInput.defaultValue = phoneInput.value; };
+        ` : ''}
         document.querySelector('[placeholder]').oninput = event => {
           clearTimeout(window.timer); const value = event.target.value;
           window.timer = setTimeout(() => get('/contacts?searchData=' + encodeURIComponent(value)).then(render), ${options.filterDebounceMs ?? 50});
@@ -130,7 +137,7 @@ async function withFront(t, options, consume) {
           event.preventDefault();
           const form = new FormData(); form.set('contato', JSON.stringify({
             nome: document.querySelector('[name=nome]').value,
-            contatoTelefones: [{numero: document.querySelector('[name=telefone]').value, tipoTelefone: 1}]
+            contatoTelefones: [{numero: document.querySelector('[name=telefone]').value${options.formattedPhone ? ".replace(/\\D/gu, '')" : ''}, tipoTelefone: 1}]
           }));
           await fetch('/api/v2/contacts', {method:'POST', headers, body:form});
         };
@@ -170,8 +177,8 @@ async function withFront(t, options, consume) {
       assert.equal(String(url), origin, 'probe só consulta o front falso');
       return realFetch(local, options);
     });
-    const run = tasks => recordJourneys('contatos', tasks, { root, env: options.inactiveBackground
-      ? { ...env, CAPTURE_AGENT_MODEL: 'fixture-local', OPENAI_API_KEY: 'fictional' } : env,
+    const run = tasks => recordJourneys('contatos', tasks, { root, env: trackModelFallbacks
+      ? { ...runEnv, CAPTURE_AGENT_MODEL: 'fixture-local', OPENAI_API_KEY: 'fictional' } : runEnv,
       preflight: async () => ({ mode: 'ready', companyId: '42', realCompany: true }),
       getProductContext: async () => ({ code: [{ role: 'frontend', available: true, ref: 'a'.repeat(40),
         screenFacts: labels.map(text => ({ text })), screenCode: [] }] }),
@@ -189,6 +196,18 @@ async function withFront(t, options, consume) {
     }
   }
 }
+
+test('caller real salva telefone reservado que o formulário reformatou', async t => {
+  await withFront(t, { formattedPhone: true }, async ({ run, requests, modelFallbackCount }) => {
+    const records = await run(['contatos.cadastrar']);
+    assert.deepEqual(records.map(({ status }) => status), ['concluída'],
+      JSON.stringify(records.map(({ status, reason }) => ({ status, reason }))));
+    assert.equal(requests.filter(({ method, path }) => method === 'POST' && path === '/api/v2/contacts').length, 1);
+    assert.deepEqual(records.cleanup.deleted, [{ kind: 'contact', id: 'created-17' }]);
+    assert.deepEqual(records.cleanup.pending, []);
+    assert.equal(modelFallbackCount(), 0);
+  });
+});
 
 test('caller real conclui contato com tabela inativa atrás do formulário', async t => {
   await withFront(t, { inactiveBackground: true }, async ({ run, requests, modelFallbackCount }) => {
