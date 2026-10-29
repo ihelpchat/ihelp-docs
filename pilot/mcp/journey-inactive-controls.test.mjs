@@ -1,13 +1,16 @@
-import test from 'node:test';
+import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { launch } from '../scripts/visual/measure.mjs';
 import { observeJourneyDom, actJourneyAction } from './journey-runtime.mjs';
 
 const vocabulary = ['Nome', 'Telefone', 'Salvar', 'Excluir'];
+let browser;
+before(async () => { browser = await launch(); });
+after(async () => { await browser?.close(); });
 async function withPage(run) {
-  const browser = await launch();
-  try { await run(await browser.newPage()); }
-  finally { await browser.close(); }
+  const page = await browser.newPage();
+  try { await run(page); }
+  finally { await page.close(); }
 }
 
 for (const inactive of ['inert', 'aria-hidden="true"']) {
