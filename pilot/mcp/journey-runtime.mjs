@@ -935,7 +935,7 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
 }
 
 export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, expectedValue, expectedExtra,
-  screenTimeoutMs = 10_000, getPersisted, fixtureIds = {}, beforeEventRefs = new Set(), requiredEventRefs = null,
+  screenTimeoutMs = 10_000, getPersisted, fixtureFor = fixtureValue, fixtureIds = {}, beforeEventRefs = new Set(), requiredEventRefs = null,
   saveStatus = null, beforeLastChange = null, taskStartedAt = null }) {
   if (refs.length !== 1 || !/^[a-z0-9-]{1,80}$/iu.test(refs[0]))
     return { confirmed: false, observed: 'ref' };
@@ -1026,7 +1026,7 @@ export async function verifyUniqueRecord({ page, task, refs, targetUrl, name, ex
       recordId = persisted.id;
     }
     const generated = new Set(['menuQuestion', 'menuOption', 'tagName'].flatMap((kind) =>
-      Array.from({ length: 99 }, (_, index) => fixtureValue(kind, index + 1))));
+      Array.from({ length: 99 }, (_, index) => fixtureFor(kind, index + 1))));
     const fresh = events.filter((event) => !beforeEventRefs.has(event.idRef));
     if (['robos.montar_menu', 'robos.encaminhar', 'robos.salvar'].includes(task.id)
       && !(saveStatus >= 200 && saveStatus < 300))
@@ -1891,7 +1891,11 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         if (contactSearch) await filteredContactsResponse;
         if (botSaveResponse) {
           botSaveStatus = (await botSaveResponse)?.status() ?? botSaveStatus;
-          if (botSaveStatus >= 200 && botSaveStatus < 300) await botSaveReload;
+          if (botSaveStatus >= 200 && botSaveStatus < 300) {
+            await botSaveReload;
+            // Reload completes before React mounts the saved flow. Keep the capture stability guard unchanged.
+            await page.locator('.react-flow__viewport').waitFor({ state: 'visible', timeout: 20_000 });
+          }
         }
         if (ownerResponse) await ownerResponse;
         if (tagResponse) {
@@ -2087,7 +2091,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         await page.waitForURL(new RegExp(`/bot/${refs[0]}/?$`, 'u'), { timeout: 5_000 }).catch(() => {});
       const checked = await verifyUniqueRecord({ page, task, refs,
         targetUrl: target.url, name, expectedValue, expectedExtra,
-        fixtureIds: fixedIds, beforeEventRefs: beforeBotEventRefs,
+        fixtureFor, fixtureIds: fixedIds, beforeEventRefs: beforeBotEventRefs,
         saveStatus: botSaveStatus, beforeLastChange: beforeBotLastChange, taskStartedAt,
         requiredEventRefs: task.id === 'robos.salvar' ? sessionFlowEventRefs : null,
         getPersisted: task.modulo === 'robos' ? authenticatedGet : undefined });
