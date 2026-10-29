@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fixtureValue, plannedJourneyAction } from './journey-service.mjs';
+import { fixtureValue, plannedJourneyAction, realCompanyFixture } from './journey-service.mjs';
 import { verifyUniqueRecord } from './journey-runtime.mjs';
 
 const ref = 'owned-ref';
@@ -21,6 +21,46 @@ const verify = (id, events, labels = [], extra = {}) => verifyUniqueRecord({ pag
   getPersisted: async () => ({ status: 200, body: { dados: { id: 4, idRef: ref, title, status: false,
     dateLastChange: afterSave, botEvents: events } } }),
   ...extra });
+
+const realFixture = (kind, n = 1) => realCompanyFixture(kind, n, '1234abcd', '+44 20 7946 0001');
+const realTitle = realFixture('robotName');
+const realMenu = { ...menu, message: realFixture('menuQuestion'), botReactionRules:
+  menu.botReactionRules.map((rule, index) => ({ ...rule, message: realFixture('menuOption', index + 1) })) };
+const realMessage = { idRef: 'one-ref', type: 0, messages: [{ type: 0, message: realFixture('menuOption', 1) }] };
+const verifyReal = (id, events, extra = {}) => verifyUniqueRecord({
+  page: { ...page(), getByText: value => ({ count: async () => Number(value === realTitle || value === 'Menu de opções') }) },
+  task: { id, modulo: 'robos' }, refs: [ref], targetUrl: 'https://qa.example.test', name: realTitle,
+  expectedValue: realTitle, fixtureFor: realFixture, fixtureIds: { department: new Set([2]), user: new Set([3]) },
+  beforeEventRefs: new Set(), requiredEventRefs: new Set(['one-ref']), saveStatus: 200,
+  beforeLastChange: beforeSave, taskStartedAt: Date.parse('2026-09-30T12:00:01.000Z'),
+  getPersisted: async () => ({ status: 200, body: { dados: { id: 4, idRef: ref, title: realTitle, status: false,
+    dateLastChange: afterSave, botEvents: events } } }), ...extra,
+});
+
+test('menu real reconhece exatamente o catálogo Teste FAQ persistido com destinos válidos', async () => {
+  const events = [realMenu, realMessage, { ...realMessage, idRef: 'two-ref' }];
+  assert.equal((await verifyReal('robos.montar_menu', events)).confirmed, true);
+  assert.equal((await verifyReal('robos.montar_menu', [realMenu, realMessage])).observed, 'menu: destino');
+  assert.equal((await verifyReal('robos.montar_menu', events, { saveStatus: 500 })).observed, 'salvar: PUT');
+});
+
+test('salvar real reconhece mensagem Teste FAQ e exige os refs desta execução', async () => {
+  assert.equal((await verifyReal('robos.salvar', [realMessage])).confirmed, true);
+  assert.equal((await verifyReal('robos.salvar', [realMessage], { requiredEventRefs: new Set(['ausente']) })).confirmed, false);
+});
+
+test('menu real recusa catálogo legado sem prefixo e texto arbitrário', async () => {
+  for (const message of [fixtureValue('menuQuestion'), 'Texto não gerado']) {
+    const events = [{ ...realMenu, message }, realMessage, { ...realMessage, idRef: 'two-ref' }];
+    assert.equal((await verifyReal('robos.montar_menu', events)).observed, 'menu: mensagem');
+  }
+});
+
+test('salvar real recusa mensagem legada e telefone mesmo pertencendo a outra fixture', async () => {
+  for (const message of [fixtureValue('menuOption', 1), realFixture('phone')]) {
+    assert.equal((await verifyReal('robos.salvar', [{ ...realMessage, messages: [{ type: 0, message }] }])).observed, 'salvar: blocos');
+  }
+});
 
 test('menu exige pergunta, duas opções do gerador e destinos existentes', async () => {
   const events = [menu, { idRef: 'one-ref', type: 0 }, { idRef: 'two-ref', type: 0 }];
