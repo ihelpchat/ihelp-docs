@@ -159,7 +159,7 @@ async function withFlowCaller(t, flowMode, consume) {
 for (const mode of ['delayed', 'missing']) test(`caller real preserva catálogo Teste FAQ e exige fluxo após salvar: ${mode}`, async t => {
   await withFlowCaller(t, mode, async ({ records, requests, composed }) => {
     assert.equal(records[0].status, 'concluída', JSON.stringify(records[0]));
-    assert.equal(composed.length, 2, 'duas mensagens locais compõem o menu antes do PUT');
+    assert.equal(composed.length, 2, JSON.stringify(records.map(({task,status,reason,actions,actionError,observeError})=>({task,status,reason,actions,actionError,observeError}))));
     assert.deepEqual(requests.filter(r => r.method !== 'GET'), [
       {method:'POST',path:'/api/v2/bot'}, {method:'PUT',path:'/api/v2/bot/own-17/save'}, {method:'DELETE',path:'/api/v2/bot/own-17'},
     ], 'só POST próprio inativo, PUT próprio e DELETE do mesmo registro');
