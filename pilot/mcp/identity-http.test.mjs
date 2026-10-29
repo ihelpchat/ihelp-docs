@@ -44,6 +44,9 @@ try {
   const deniedPrivateRead = await writer.callTool({ name: 'docs_product_context', arguments: { topic: 'atendimento', module: 'atendimento', requestedBy: 'user:writer-http' } });
   assert.equal(deniedPrivateRead.isError, true);
   assert.match(deniedPrivateRead.content[0].text, /forbidden/);
+  const deniedGenerator = await writer.callTool({ name: 'docs_generate_faq_v2', arguments: { module: 'contatos', requestedBy: 'user:writer-http' } });
+  assert.equal(deniedGenerator.isError, true);
+  assert.match(deniedGenerator.content[0].text, /forbidden/);
   const forged = await writer.callTool({ name: 'docs_delete_article', arguments: { path: 'docs/teste/ausente', mode: 'draft', requestedBy: 'user:reader-http' } });
   assert.equal(forged.isError, true);
   assert.match(forged.content[0].text, /requestedBy/);

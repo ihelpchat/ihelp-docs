@@ -29,19 +29,45 @@ export function assertProductionAccountHosts(target, apiOrigin) {
     || !target.allowedHosts.includes(new URL(target.url).hostname)
     || !target.allowedHosts.includes(api.hostname)) throw new Error('hosts da conta divergentes');
 }
-async function settledJourneyApi(page, target, current) {
-  if (target.mode !== 'producao') return current;
-  if (current && target.allowedHosts.includes(new URL(current.origin).hostname)) return current;
+function successfulJourneyApi(response, target) {
   try {
-    const response = await page.waitForResponse((entry) => {
-      const url = new URL(entry.url());
-      return target.allowedHosts.includes(url.hostname) && url.pathname.startsWith('/api/')
-        && entry.status() >= 200 && entry.status() < 400
-        && /^Bearer \S+$/iu.test(entry.request().headers().authorization ?? '');
-    }, { timeout: 10_000 });
-    return { origin: new URL(response.url()).origin,
-      authorization: response.request().headers().authorization };
+    const url = new URL(response.url());
+    const authorization = response.request().headers().authorization;
+    return target.allowedHosts.includes(url.hostname) && url.pathname.startsWith('/api/')
+      && response.status() >= 200 && response.status() < 400
+      && /^Bearer (?!undefined$|null$)\S+$/iu.test(authorization ?? '')
+      ? { origin: url.origin, authorization } : null;
   } catch { return null; }
+}
+function observeSuccessfulJourneyApi(page, target) {
+  let api = null;
+  page.on('response', (response) => { api = successfulJourneyApi(response, target) ?? api; });
+  return () => api;
+}
+async function settledJourneyApi(page, target, current, timeoutMs = 10_000) {
+  if (target.mode !== 'producao') return current;
+  if (current && target.allowedHosts.includes(new URL(current.origin).hostname)
+    && /^Bearer (?!undefined$|null$)\S+$/iu.test(current.authorization ?? '')) return current;
+  try {
+    const response = await page.waitForResponse((entry) => Boolean(successfulJourneyApi(entry, target)),
+      { timeout: timeoutMs });
+    return successfulJourneyApi(response, target);
+  } catch { return null; }
+}
+async function navigateJourneyAfterLogin(page, target, currentApi, path) {
+  // A hard navigation can cancel the app's post-login boot before its first
+  // authenticated response. Wait for that response while the login page settles.
+  const authenticated = target.mode === 'producao'
+    ? await settledJourneyApi(page, target, currentApi(), 30_000) : null;
+  if (target.mode === 'producao' && !authenticated) return null;
+  await page.goto(new URL(path, target.url).href, { waitUntil: 'domcontentloaded' });
+  return settledJourneyApi(page, target, authenticated ?? currentApi());
+}
+export function createJourneyNavigation(page, target, fixtureApi = () => null) {
+  // Production callers cannot substitute an in-flight request or a bounded log
+  // buffer for the successful response observed before login has finished.
+  const confirmedApi = target.mode === 'producao' ? observeSuccessfulJourneyApi(page, target) : fixtureApi;
+  return (path) => navigateJourneyAfterLogin(page, target, confirmedApi, path);
 }
 
 const diagnosticSegments = new Set(['api', 'v2', 'v3', 'login', 'contact', 'contacts', 'company',
@@ -80,14 +106,9 @@ export function createProductionApiObserver(target, env = process.env) {
     response(response) {
       const request = response.request();
       const entry = pending.get(request);
-      if (!entry) return;
-      entry.status = response.status();
-      if (!entry.bearer || entry.status < 200 || entry.status >= 400) return;
-      try {
-        const url = new URL(request.url());
-        if (url.pathname.startsWith('/api/') && qaRequestDecision(url.href, target, env).allowed)
-          api = { origin: url.origin, authorization: request.headers().authorization };
-      } catch { /* no API candidate */ }
+      if (entry) entry.status = response.status();
+      const candidate = successfulJourneyApi(response, target);
+      if (candidate && qaRequestDecision(response.url(), target, env).allowed) api = candidate;
     },
     failed(request, guard) {
       const entry = pending.get(request);
@@ -509,7 +530,20 @@ export function journeyWriteDecision(request, context = {}) {
       ? { keyPath: invalidRobotPath(body, path.split('/')[2], context.generated ?? new Set(),
         context.createdIds ?? new Set(), context.fixedIds ?? {}) } : {}) };
 }
-export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdPartyDenied, onBlocked, ...context }) {
+// The app starts these requests independently of the contact/robot action.
+// They remain aborted; reporting them separately must never authorize the request.
+const backgroundDeniedGets = new Map([
+  ['/api/v2/notifications/sse/connect', new Set(['eventsource'])],
+  ['/api/v2/crm/sse/connect', new Set(['eventsource'])],
+  ['/api/v2/sync/calls', new Set(['xhr', 'fetch'])],
+  ['/api/v2/sync/basic-infos', new Set(['xhr', 'fetch'])],
+]);
+const preflightDiagnosticMethods = new Set(['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE']);
+const preflightDiagnosticTypes = new Set(['document', 'stylesheet', 'image', 'media', 'font', 'script',
+  'texttrack', 'xhr', 'fetch', 'eventsource', 'websocket', 'manifest', 'other']);
+
+export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdPartyDenied, onBlocked,
+  onBackgroundDenied, onPreflightDenied, ...context }) {
   const request = route.request();
   if (qaStaticCdnAllowed(request, target, env)) return route.fallback();
   let url;
@@ -521,10 +555,21 @@ export async function handleJourneyRoute(route, { apiOrigin, target, env, thirdP
   }
   const method = request.method().toUpperCase();
   const path = url.pathname + url.search;
+  if (target.mode === 'producao' && method === 'GET' && typeof onBackgroundDenied === 'function'
+    && backgroundDeniedGets.get(url.pathname)?.has(request.resourceType?.())
+    && productionEffectfulGetDenied(url.pathname)) {
+    onBackgroundDenied({ method, path: url.pathname, reason: 'GET com efeito negado' });
+    return route.abort();
+  }
   if (target.mode === 'producao' && !context.productionReady?.()) {
     if (productionPreflightRequestAllowed(method, path, {
       url: request.url(), resourceType: request.resourceType?.(), target })) return route.fallback();
-    onBlocked({ allowed: false, reason: 'pré-voo ausente', task: context.taskId });
+    if (typeof onPreflightDenied === 'function') {
+      const type = request.resourceType?.();
+      onPreflightDenied({ reason: 'pré-voo ausente',
+        method: preflightDiagnosticMethods.has(method) ? method : 'OTHER',
+        resourceType: preflightDiagnosticTypes.has(type) ? type : 'other' });
+    } else onBlocked({ allowed: false, reason: 'pré-voo ausente', task: context.taskId });
     return route.abort();
   }
   if (target.mode === 'producao' && ['GET', 'HEAD'].includes(method)
@@ -608,7 +653,8 @@ export function journeyVocabulary(facts, screenCode = []) {
 
 export async function observeJourneyDom(page, { vocabulary = [], generated = new Set(), selfId } = {}) {
   const raw = await page.evaluate(({ selector, selfId }) => {
-    const visible = (node) => Boolean(node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden');
+    const visible = (node) => Boolean(!node.closest('[inert]')
+      && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden');
     const compact = (value) => String(value ?? '').replace(/\s+/gu, ' ').trim().replace(/\s*\*$/u, '').slice(0, 180);
     const byId = (ids) => compact(ids.split(/\s+/u).map((id) => document.getElementById(id)?.textContent ?? '').join(' '));
     const visualLabel = (node) => {
@@ -723,13 +769,14 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
     const item = { role: node.role, name, enabled: node.enabled, checked: node.checked };
     controls.push(item);
     targets[journeyTargetKey(node.role, name)] = { index: node.index, selector: journeyControlSelector };
+    const generatedValue = generated.has(node.value) ? node.value
+      : node.type === 'tel' ? [...generated].find((value) => /^\+?[0-9 ()-]{10,22}$/u.test(value)
+        && value.replace(/\D/gu, '') === String(node.value).replace(/\D/gu, '')) ?? null : null;
     if (node.field) fields.push({ role: node.role, name, required: node.required,
       filled: node.value != null && String(node.value).trim().length > 0
-        && (generated.has(node.value) || String(node.value) !== String(node.defaultValue ?? ''))
+        && (generatedValue !== null || String(node.value) !== String(node.defaultValue ?? ''))
         && !(node.type === 'tel' && /^\+?\d{1,3}$/u.test(String(node.value).trim())),
-      value: generated.has(node.value) ? node.value
-        : node.type === 'tel' ? [...generated].find((value) => /^\+44 20 7946 0\d{3}$/u.test(value)
-          && value.replace(/\D/gu, '') === String(node.value).replace(/\D/gu, '')) ?? null : null });
+      value: generatedValue });
   }
   return { controls, fields, messages: raw.messages.map((value) => known.has(value) ? value : '[conteúdo oculto]'),
     state: { headings: raw.headings.split(' | ').map((value) => known.has(value) ? value : '[conteúdo oculto]').join(' | '),
@@ -743,11 +790,63 @@ export async function installJourneyTooltipStyle(page) {
   await page.addStyleTag({ content: '[role="tooltip"], .react-tooltip, [data-tooltip-id][role="tooltip"] { pointer-events: none !important; }' });
 }
 
+export async function createJourneyContext(browser) {
+  const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true,
+    viewport: { width: 1920, height: 1080 } });
+  await context.addInitScript(() => {
+    const install = () => {
+      const style = document.createElement('style');
+      style.textContent = '[role="tooltip"], .react-tooltip { pointer-events: none !important; }';
+      document.documentElement.append(style);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
+    else install();
+  });
+  return context;
+}
+
+export function journeyReadinessControl(taskId, path) {
+  if (!taskId?.startsWith('robos.')) return null;
+  if (path === '/bot') return { selector: taskId === 'robos.criar'
+    ? 'input[placeholder="Buscar robô"], [role="dialog"] input[placeholder="Digite o título do robô"]'
+    : 'input[placeholder="Buscar robô"]' };
+  if (/^\/bot\/[a-z0-9-]+$/iu.test(path)) return { selector: 'a', text: 'Fluxo de Robô' };
+  return null;
+}
+
+// This button composes local BotFlow state; it never authorizes a network send.
+export async function localRobotDraftAllowed(page, action, proof = {}) {
+  const { taskId, origin, robotRef, robotTitle, companyId, robot, owned, selected, generated } = proof;
+  if (action?.type !== 'click' || action.role !== 'button' || action.name !== 'Enviar mensagem'
+    || action.value !== null || taskId !== 'robos.montar_menu' || owned !== true
+    || !/^[a-z0-9-]{1,80}$/iu.test(robotRef ?? '') || !robotTitle?.startsWith('Teste FAQ ')
+    || !generated?.has(robotTitle) || !companyId || robot?.idRef !== robotRef
+    || robot.title !== robotTitle || robot.status !== false || String(robot.empresaId) !== String(companyId)
+    || selected?.selector !== journeyControlSelector || !Number.isSafeInteger(selected.index) || selected.index < 0)
+    return false;
+  const url = new URL(page.url());
+  if (url.protocol !== 'https:' || url.origin !== origin || url.pathname !== `/bot/${robotRef}`) return false;
+  return page.evaluate(({ selected, robotTitle, values }) => {
+    const target = document.querySelectorAll(selected.selector)[selected.index];
+    const sidebar = target?.closest('.custom-height-sidebar');
+    const titles = sidebar?.querySelectorAll('input[placeholder="Título da mensagem"]');
+    const texts = target?.parentElement?.querySelectorAll('textarea');
+    const visible = node => Boolean(node?.getClientRects().length && !node.closest('[inert]')
+      && getComputedStyle(node).visibility !== 'hidden');
+    if (!target?.matches('button') || target.textContent?.trim() || !target.querySelector('svg')
+      || !visible(target) || target.disabled || target.getAttribute('aria-disabled') === 'true'
+      || titles?.length !== 1 || texts?.length !== 1 || !visible(titles[0]) || !visible(texts[0])
+      || !sidebar.contains(texts[0]) || !document.body.innerText.includes(robotTitle)) return false;
+    const value = texts[0].value;
+    return value.startsWith('Teste FAQ ') && titles[0].value === value && values.includes(value);
+  }, { selected, robotTitle, values: [...generated] });
+}
+
 export function journeyActionCategory(error) {
   const message = String(error?.message ?? '');
   if (/not enabled|disabled/iu.test(message)) return 'desabilitado';
-  if (/not visible|hidden|outside of the viewport/iu.test(message)) return 'invisível';
   if (/intercepts pointer events|receives pointer events/iu.test(message)) return 'coberto';
+  if (/not visible|hidden|outside of the viewport/iu.test(message)) return 'invisível';
   if (/not stable|unstable/iu.test(message)) return 'instável';
   if (/detached|not attached/iu.test(message)) return 'desanexado';
   return 'tempo';
@@ -770,7 +869,7 @@ export async function coveringElement(page, selected) {
   }, selected);
 }
 
-export async function actJourneyAction(page, action, targets, { vocabulary = [], generated = new Set(), selfId } = {}) {
+export async function actJourneyAction(page, action, targets, { vocabulary = [], generated = new Set(), selfId, beforeClick } = {}) {
   const target = targets[journeyTargetKey(action.role, action.name)];
   const changed = () => Object.assign(new Error('alvo mudou; observe de novo'), { code: 'JOURNEY_TARGET_CHANGED' });
   if (!target) throw changed();
@@ -792,7 +891,11 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
   try {
     if (action.type === 'click') {
       await locator.scrollIntoViewIfNeeded({ timeout: 4_000 });
-      try { return await locator.click({ timeout: 4_000 }); }
+      const click = async () => {
+        if (beforeClick && !await beforeClick(selected)) throw changed();
+        return locator.click({ timeout: 4_000 });
+      };
+      try { return await click(); }
       catch (firstError) {
         if (journeyActionCategory(firstError) !== 'coberto') throw firstError;
         const cover = await coveringElement(page, selected).catch(() => null);
@@ -800,7 +903,7 @@ export async function actJourneyAction(page, action, targets, { vocabulary = [],
         if (cover?.backdrop || cover?.toast || cover?.fixedOverlay) {
           await page.waitForTimeout(500);
           await locator.scrollIntoViewIfNeeded({ timeout: 4_000 });
-          try { return await locator.click({ timeout: 4_000 }); }
+          try { return await click(); }
           catch (error) { error.coveredBy = await coveringElement(page, selected).catch(() => cover); throw error; }
         }
         firstError.coveredBy = cover;
@@ -1134,11 +1237,14 @@ export function createRealCompanyScreenshotGuard(page, apiOrigin) {
 function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false }) {
   let browser; let context; let page;
   let qaApi;
+  let account;
   let currentTask;
   let currentPrepared;
   let lastDownload;
   let blockedWrite = null;
   let thirdPartyDenied = {};
+  let backgroundDenied = {};
+  let preflightDenied = {};
   let observedTargets = {};
   let creationCapture = null;
   let creationPostStarted = false;
@@ -1213,12 +1319,28 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
     }
     return fixturesSet;
   };
+  const localDraftContext = async (action, targets = observedTargets) => {
+    const robotRef = currentPrepared?.robotRef;
+    if (!realCompany || currentTask !== 'robos.montar_menu' || action.type !== 'click'
+      || action.role !== 'button' || action.name !== 'Enviar mensagem' || action.value !== null
+      || !createdRefs.robos.has(robotRef)
+      || !createdForCleanup.some(item => item.kind === 'robot' && item.id === robotRef))
+      return { localRobotDraft: false };
+    const response = await authenticatedGet(`/bot/${robotRef}`);
+    const robot = response.body?.dados?.bot ?? response.body?.dados ?? response.body;
+    const localRobotDraft = response.status === 200 && await localRobotDraftAllowed(page, action, {
+      taskId: currentTask, origin: target.url, robotRef, robotTitle: currentPrepared.robot,
+      companyId: account?.companyId, robot, owned: true,
+      selected: targets[journeyTargetKey(action.role, action.name)], generated: fixtures() });
+    return { localRobotDraft };
+  };
   return {
     async open(task, prepared) {
       productionReady = !production;
       taskStartedAt = Date.now();
       currentTask = task.id;
       currentPrepared = prepared;
+      account = null;
       blockedWrite = null;
       observedTargets = {};
       creationCapture = null;
@@ -1249,25 +1371,28 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       beforeTagIds = new Set();
       creationResults.length = 0;
       thirdPartyDenied = {};
+      backgroundDenied = {};
+      preflightDenied = {};
       lastDownload = null;
       browser = await launch();
-      context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
-      await context.addInitScript(() => {
-        const style = document.createElement('style');
-        style.textContent = '[role="tooltip"], .react-tooltip { pointer-events: none !important; }';
-        document.documentElement.append(style);
-      });
+      context = await createJourneyContext(browser);
       await installQaNetworkGuard(context, target, env);
       const guardedRoute = (route) => handleJourneyRoute(route, {
         apiOrigin: qaApi?.origin, target, env, thirdPartyDenied,
         productionReady: () => productionReady,
         taskId: currentTask, generated: fixtures(), createdIds, fixedIds, contactSnapshot,
         onBlocked: (decision) => { blockedWrite = decision; },
+        onBackgroundDenied: ({ path }) => { backgroundDenied[path] = (backgroundDenied[path] ?? 0) + 1; },
+        onPreflightDenied: ({ method, resourceType }) => {
+          const key = `${method}:${resourceType}`;
+          preflightDenied[key] = (preflightDenied[key] ?? 0) + 1;
+        },
       });
       if (production) await context.route('**/*', guardedRoute);
       page = await context.newPage();
       screenshotGuard = realCompany ? createRealCompanyScreenshotGuard(page, () => qaApi?.origin) : null;
       qaApi = null;
+      const navigate = createJourneyNavigation(page, target, () => qaApi);
       page.on('request', (request) => {
         const url = new URL(request.url());
         if (currentTask?.startsWith('robos.') && request.method() === 'PUT'
@@ -1446,11 +1571,9 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
         pending.finally(() => pendingPosts.delete(pending));
       });
       const route = journeyStartRoute(task, prepared);
-      await page.goto(new URL(production ? '/contact' : route, target.url).href, { waitUntil: 'domcontentloaded' });
-      qaApi = await settledJourneyApi(page, target, qaApi);
+      qaApi = await navigate(production ? '/contact' : route);
       if (!qaApi) throw new Error('API autenticada da homologação indisponível');
       if (production) assertProductionAccountHosts(target, qaApi.origin);
-      let account;
       try {
         const claims = JSON.parse(Buffer.from(qaApi.authorization.slice(7).split('.')[1], 'base64url').toString('utf8'));
         account = { userId: String(claims.userId ?? ''), companyId: String(claims.businessId ?? '') };
@@ -1648,7 +1771,8 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
     },
     async observe() {
       let stability;
-      try { stability = await waitForStableScreen(page); }
+      try { stability = await waitForStableScreen(page, {
+        readyControl: journeyReadinessControl(currentTask, new URL(page.url()).pathname) }); }
       catch (error) { error.stage = 'navegação'; throw error; }
       const actualPath = new URL(page.url()).pathname;
       const path = actualPath.replace(/^\/contact\/detail\/[^/]+$/u, '/contact/detail/record')
@@ -1688,6 +1812,7 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
       const { targets: _targets, ...safeData } = data;
       return { ...safeData, path, ...captured, screenshot: captured?.screenshot ?? null };
     },
+    async policyContext(action) { return localDraftContext(action); },
     async act(action) {
       if (production) {
         if (!productionReady) throw new Error('pré-voo de produção ausente');
@@ -1756,8 +1881,12 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
           { timeout: 30_000 }).catch(() => null) : null;
         if (currentTask === 'contatos.cadastrar' && action.type === 'click' && action.name === 'Salvar')
           await page.waitForLoadState('networkidle', { timeout: 2_500 }).catch(() => {});
+        const beforeClick = realCompany && action.name === 'Enviar mensagem' ? async selected => {
+          const result = await localDraftContext(action, { [journeyTargetKey(action.role, action.name)]: selected });
+          return result.localRobotDraft;
+        } : undefined;
         await actJourneyAction(page, action, observedTargets, { vocabulary: [...known], generated: fixtures(),
-          selfId: currentTask === 'tarefas.criar' ? [...fixedIds.self][0] : undefined });
+          selfId: currentTask === 'tarefas.criar' ? [...fixedIds.self][0] : undefined, beforeClick });
         // The next observation captures evidence before searchAction verifies the result.
         if (contactSearch) await filteredContactsResponse;
         if (botSaveResponse) {
@@ -2001,7 +2130,9 @@ function makeBrowser({ baseUrl, env, vocabulary, markerFor, realCompany = false 
             : checked.confirmed && task.id === 'robos.criar' ? { robot: name,
               robotRef: identity.refs[0], robotId: checked.recordId } : {} };
     },
-    diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, creationCapture, searchProbe, ownerProbe, apiError,
+    diagnostics() { return { thirdPartyDenied: { ...thirdPartyDenied }, backgroundDenied: { ...backgroundDenied },
+      preflightDenied: { ...preflightDenied },
+      creationCapture, searchProbe, ownerProbe, apiError,
       menuProbe, botWriteProbe, tagProbe: currentTask === 'contatos.marcar_tags' ? { createdTagIdCaptured: [...createdIds].some((id) =>
         Number.isSafeInteger(id) && !fixedIds.tag.has(id) && id !== currentPrepared?.identity?.ids?.[0]),
         tagWriteStatus, tagLinkStatus } : null }; },
@@ -2040,12 +2171,9 @@ export async function cleanupProductionCreatedItems({ env, target, items }) {
       return route.abort();
     });
     const page = await context.newPage();
-    const observer = createProductionApiObserver(target, env);
-    page.on('request', observer.request);
-    page.on('response', observer.response);
+    const navigate = createJourneyNavigation(page, target);
     await loginToQa(page, target.url, journeyCredentials(env), { timeoutMs: 15000, productionDiagnostics: true });
-    await page.goto(new URL('/contact', target.url).href, { waitUntil: 'domcontentloaded' });
-    const api = await settledJourneyApi(page, target, observer.api());
+    const api = await navigate('/contact');
     assertProductionAccountHosts(target, api?.origin);
     const claims = JSON.parse(Buffer.from(api.authorization.slice(7).split('.')[1], 'base64url').toString('utf8'));
     const companyHref = new URL('/api/v2/company', api.origin).href;
@@ -2126,6 +2254,7 @@ export function makeLazyJourneyBrowser(createBrowser) {
   return {
     async open(...args) { liveBrowser ??= await createBrowser(); return liveBrowser.open(...args); },
     async observe(...args) { return liveBrowser.observe(...args); },
+    async policyContext(...args) { return liveBrowser.policyContext?.(...args); },
     async act(...args) { return liveBrowser.act(...args); },
     async exportAction(...args) { return liveBrowser.exportAction?.(...args); },
     async searchAction(...args) { return liveBrowser.searchAction?.(...args); },
@@ -2203,6 +2332,7 @@ export async function browserProductionPreflight(env = process.env,
       return route.abort();
     });
     const page = await context.newPage();
+    const navigate = createJourneyNavigation(page, target);
     const observer = createProductionApiObserver(target, env);
     page.on('request', observer.request);
     page.on('response', observer.response);
@@ -2218,8 +2348,7 @@ export async function browserProductionPreflight(env = process.env,
       console.error(`gravar_jornada: diagnóstico: ${JSON.stringify(result)}`);
       return result;
     }
-    await page.goto(new URL('/contact', target.url).href, { waitUntil: 'domcontentloaded' });
-    const api = await settledJourneyApi(page, target, observer.api());
+    const api = await navigate('/contact');
     if (!api) {
       const result = { mode: 'bloqueado', reason: 'api_nao_detectada', diagnostic: observer.diagnostic() };
       console.error(`gravar_jornada: diagnóstico: ${JSON.stringify(result)}`);
@@ -2270,6 +2399,7 @@ export async function authenticatedJourneyIdentity(env) {
     });
     const page = await context.newPage();
     let api;
+    const navigate = createJourneyNavigation(page, target, () => api);
     page.on('request', (request) => {
       const url = new URL(request.url());
       const authorization = request.headers().authorization;
@@ -2277,8 +2407,7 @@ export async function authenticatedJourneyIdentity(env) {
         && qaRequestDecision(url.href, target, env).allowed) api = { origin: url.origin, authorization };
     });
     await loginToQa(page, target.url, journeyCredentials(env), { timeoutMs: 15000 });
-    await page.goto(new URL('/contact', target.url).href, { waitUntil: 'domcontentloaded' });
-    api = await settledJourneyApi(page, target, api);
+    api = await navigate('/contact');
     if (!api) throw new Error('identidade autenticada indisponível');
     if (env.QA_TARGET === 'producao') assertProductionAccountHosts(target, api.origin);
     const claims = JSON.parse(Buffer.from(api.authorization.slice(7).split('.')[1], 'base64url').toString('utf8'));
