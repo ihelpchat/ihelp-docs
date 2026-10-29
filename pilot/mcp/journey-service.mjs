@@ -787,6 +787,8 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       } finally {
         const diagnostics = browser.diagnostics?.() ?? {};
         record.thirdPartyDenied = diagnostics.thirdPartyDenied ?? {};
+        record.backgroundDenied = diagnostics.backgroundDenied ?? {};
+        record.preflightDenied = diagnostics.preflightDenied ?? {};
         if (diagnostics.searchProbe) record.searchProbe = diagnostics.searchProbe;
         if (diagnostics.apiError && ['contatos.buscar', 'contatos.exportar', 'contatos.definir_responsavel', 'contatos.importar'].includes(task.id)) {
           record.apiError = diagnostics.apiError;
