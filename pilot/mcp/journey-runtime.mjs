@@ -769,13 +769,14 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
     const item = { role: node.role, name, enabled: node.enabled, checked: node.checked };
     controls.push(item);
     targets[journeyTargetKey(node.role, name)] = { index: node.index, selector: journeyControlSelector };
+    const generatedValue = generated.has(node.value) ? node.value
+      : node.type === 'tel' ? [...generated].find((value) => /^\+?[0-9 ()-]{10,22}$/u.test(value)
+        && value.replace(/\D/gu, '') === String(node.value).replace(/\D/gu, '')) ?? null : null;
     if (node.field) fields.push({ role: node.role, name, required: node.required,
       filled: node.value != null && String(node.value).trim().length > 0
-        && (generated.has(node.value) || String(node.value) !== String(node.defaultValue ?? ''))
+        && (generatedValue !== null || String(node.value) !== String(node.defaultValue ?? ''))
         && !(node.type === 'tel' && /^\+?\d{1,3}$/u.test(String(node.value).trim())),
-      value: generated.has(node.value) ? node.value
-        : node.type === 'tel' ? [...generated].find((value) => /^\+44 20 7946 0\d{3}$/u.test(value)
-          && value.replace(/\D/gu, '') === String(node.value).replace(/\D/gu, '')) ?? null : null });
+      value: generatedValue });
   }
   return { controls, fields, messages: raw.messages.map((value) => known.has(value) ? value : '[conteúdo oculto]'),
     state: { headings: raw.headings.split(' | ').map((value) => known.has(value) ? value : '[conteúdo oculto]').join(' | '),
