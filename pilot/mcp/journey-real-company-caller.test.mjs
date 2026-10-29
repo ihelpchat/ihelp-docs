@@ -95,8 +95,9 @@ async function withFront(t, options, consume) {
           ` : ''}
         </script>`;
     }
-    else html = `<main><h1>Contatos</h1><button id="add">Adicionar Contato</button>
+    else html = `<main>${options.inactiveBackground ? '<section id="background">' : ''}<h1>Contatos</h1><button id="add">Adicionar Contato</button>
       <input placeholder="Buscar contato..."><table><tbody></tbody></table>
+      ${options.inactiveBackground ? '<input type="checkbox">'.repeat(24) + '</section>' : ''}
       <form hidden><label>Nome<input name="nome"></label><label>Telefone<input name="telefone"></label><button>Salvar</button></form></main>
       <script>${script}
         ${options.backgroundGets ? `
@@ -116,7 +117,9 @@ async function withFront(t, options, consume) {
             ]).then(loadContacts);
           } else loadContacts();
         ` : 'loadContacts();'}
-        document.querySelector('#add').onclick = () => { document.querySelector('form').hidden = false; };
+        document.querySelector('#add').onclick = () => { document.querySelector('form').hidden = false;
+          ${options.inactiveBackground ? "document.querySelector('#background').setAttribute('inert', ''); document.querySelector('#background').setAttribute('aria-hidden', 'true');" : ''}
+        };
         document.querySelector('[placeholder]').oninput = event => {
           clearTimeout(window.timer); const value = event.target.value;
           window.timer = setTimeout(() => get('/contacts?searchData=' + encodeURIComponent(value)).then(render), ${options.filterDebounceMs ?? 50});
@@ -170,6 +173,9 @@ async function withFront(t, options, consume) {
         screenFacts: labels.map(text => ({ text })), screenCode: [] }] }),
       // Stop after one observation through a refused decision, without executing a browser action.
       ...(options.unownedDetail ? { model: { async decide() { return { type: 'press' }; } } } : {}),
+      ...(options.inactiveBackground ? { model: { async decide() {
+        throw new Error('fixture: o plano determinístico precisa enxergar os campos ativos');
+      } } } : {}),
     });
     await consume({ run, root, requests });
   } finally {
@@ -182,6 +188,19 @@ async function withFront(t, options, consume) {
     }
   }
 }
+
+test('caller real conclui contato com tabela inativa atrás do formulário', async t => {
+  await withFront(t, { inactiveBackground: true }, async ({ run, requests }) => {
+    const records = await run(['contatos.cadastrar']);
+    assert.deepEqual(records.map(({ status }) => status), ['concluída'],
+      JSON.stringify(records.map(({ status, reason, actionError }) => ({ status, reason, actionError }))));
+    assert.ok(records[0].actions.some(a => a.type === 'fill' && a.name === 'Nome'));
+    assert.ok(records[0].actions.some(a => a.type === 'fill' && a.name === 'Telefone'));
+    assert.equal(requests.filter(({ method, path }) => method === 'POST' && path === '/api/v2/contacts').length, 1);
+    assert.deepEqual(records.cleanup.deleted, [{ kind: 'contact', id: 'created-17' }]);
+    assert.deepEqual(records.cleanup.pending, []);
+  });
+});
 
 test('caller real mantém GETs automáticos abortados e conclui apenas o contato próprio', async t => {
   await withFront(t, { backgroundGets: true }, async ({ run, requests }) => {
