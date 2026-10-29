@@ -1,7 +1,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { launch } from '../visual/measure.mjs';
-import { waitForStableScreen } from './capture.mjs';
+import { launch } from '../scripts/visual/measure.mjs';
+import { waitForStableScreen } from '../scripts/screen-capture/capture.mjs';
 
 let browser;
 before(async () => { browser = await launch(); });
