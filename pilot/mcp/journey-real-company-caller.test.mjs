@@ -22,6 +22,8 @@ async function withFront(t, options, consume) {
   const root = await mkdtemp(join(tmpdir(), 'journey-real-caller-'));
   const requests = [];
   const browsers = [];
+  let modelFallbacks = 0;
+  const trackModelFallbacks = options.inactiveBackground === true;
   let saved;
   let tag;
   let linked = false;
@@ -164,20 +166,19 @@ async function withFront(t, options, consume) {
     });
     const realFetch = globalThis.fetch;
     fetchMock = t.mock.method(globalThis, 'fetch', (url, options) => {
+      if (trackModelFallbacks && String(url) !== origin) modelFallbacks++;
       assert.equal(String(url), origin, 'probe só consulta o front falso');
       return realFetch(local, options);
     });
-    const run = tasks => recordJourneys('contatos', tasks, { root, env,
+    const run = tasks => recordJourneys('contatos', tasks, { root, env: options.inactiveBackground
+      ? { ...env, CAPTURE_AGENT_MODEL: 'fixture-local', OPENAI_API_KEY: 'fictional' } : env,
       preflight: async () => ({ mode: 'ready', companyId: '42', realCompany: true }),
       getProductContext: async () => ({ code: [{ role: 'frontend', available: true, ref: 'a'.repeat(40),
         screenFacts: labels.map(text => ({ text })), screenCode: [] }] }),
       // Stop after one observation through a refused decision, without executing a browser action.
       ...(options.unownedDetail ? { model: { async decide() { return { type: 'press' }; } } } : {}),
-      ...(options.inactiveBackground ? { model: { async decide() {
-        throw new Error('fixture: o plano determinístico precisa enxergar os campos ativos');
-      } } } : {}),
     });
-    await consume({ run, root, requests });
+    await consume({ run, root, requests, modelFallbackCount: () => modelFallbacks });
   } finally {
     try { await Promise.all(browsers.map(browser => browser.close())); }
     finally {
@@ -190,7 +191,7 @@ async function withFront(t, options, consume) {
 }
 
 test('caller real conclui contato com tabela inativa atrás do formulário', async t => {
-  await withFront(t, { inactiveBackground: true }, async ({ run, requests }) => {
+  await withFront(t, { inactiveBackground: true }, async ({ run, requests, modelFallbackCount }) => {
     const records = await run(['contatos.cadastrar']);
     assert.deepEqual(records.map(({ status }) => status), ['concluída'],
       JSON.stringify(records.map(({ status, reason, actionError }) => ({ status, reason, actionError }))));
@@ -199,6 +200,7 @@ test('caller real conclui contato com tabela inativa atrás do formulário', asy
     assert.equal(requests.filter(({ method, path }) => method === 'POST' && path === '/api/v2/contacts').length, 1);
     assert.deepEqual(records.cleanup.deleted, [{ kind: 'contact', id: 'created-17' }]);
     assert.deepEqual(records.cleanup.pending, []);
+    assert.equal(modelFallbackCount(), 0, 'o plano usa os campos ativos sem recorrer ao modelo');
   });
 });
 
