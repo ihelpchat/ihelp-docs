@@ -7,13 +7,13 @@ import { tmpdir } from 'node:os';
 import { chromium } from 'playwright-core';
 import { recordJourneys } from './journey-runtime.mjs';
 
-async function withDraftCaller(t, changedOnScroll, consume) {
+async function withDraftCaller(t, changedBeforeClick, consume) {
   const origin = 'https://front.example.test';
   const root = await mkdtemp(join(tmpdir(), 'robot-draft-caller-'));
   const requests = [], browsers = [], composed = [];
   const authorization = 'Bearer fixture.' + Buffer.from(JSON.stringify({ userId: '3', businessId: '42' }))
     .toString('base64url') + '.fixture';
-  let bot;
+  let bot, draftReady = false, guardReads = 0;
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, origin);
     requests.push({ method: req.method, path: url.pathname });
@@ -28,7 +28,15 @@ async function withDraftCaller(t, changedOnScroll, consume) {
       }
       if (req.method === 'DELETE') return json({});
       if (url.pathname === '/api/v2/company') return json({ dados: { id: 42 } });
-      if (url.pathname === '/api/v2/bot/own-17') return json({ dados: { bot } });
+      if (url.pathname === '/api/v2/bot/own-17') {
+        const snapshot = structuredClone(bot);
+        if (draftReady) {
+          guardReads++;
+          // The first authorization sees the inactive snapshot. Its next read must see this change.
+          if (changedBeforeClick) bot.status = true;
+        }
+        return json({ dados: { bot: snapshot } });
+      }
       if (url.pathname === '/api/v2/configurations/channels') return json({ dados: [{ id: 1 }] });
       if (url.pathname === '/api/v2/tags') return json([]);
       return json({ dados: [] });
@@ -57,8 +65,8 @@ async function withDraftCaller(t, changedOnScroll, consume) {
       const sidebar=document.querySelector('section');let additions=0;
       const choices=()=>{sidebar.innerHTML='<button id="menu">Menu de opções</button><button id="simple">Mensagem simples</button>';
         document.querySelector('#menu').onclick=()=>{sidebar.innerHTML='<input placeholder="Mensagem de onboarding"><input placeholder="Mensagem"><button id="option">Adicionar opção +</button><div id="options"></div>';document.querySelector('#option').onclick=()=>{const input=document.createElement('input');input.placeholder='Adicione uma opção';document.querySelector('#options').append(input);};};
-        document.querySelector('#simple').onclick=()=>{sidebar.innerHTML='<input placeholder="Título da mensagem"><div id="composer" ${changedOnScroll ? 'style="height:120px;overflow:auto"' : ''}><textarea></textarea>${changedOnScroll ? '<div style="height:800px"></div>' : ''}<button id="compose"><svg width="20" height="20"><rect width="20" height="20"/></svg></button></div>';
-          ${changedOnScroll ? "document.querySelector('#composer').addEventListener('scroll',()=>{document.querySelector('textarea').value='contexto mudou';},{once:true});" : ''}
+        document.querySelector('#simple').onclick=()=>{sidebar.innerHTML='<input placeholder="Título da mensagem"><div><textarea></textarea><button id="compose"><svg width="20" height="20"><rect width="20" height="20"/></svg></button></div>';
+          document.querySelector('textarea').oninput=()=>console.log('fixture-draft-ready');
           document.querySelector('#compose').onclick=()=>{console.log('fixture-composed:'+document.querySelector('textarea').value);document.querySelector('#add').remove();sidebar.replaceChildren();};
         };
       };
@@ -78,6 +86,7 @@ async function withDraftCaller(t, changedOnScroll, consume) {
       t.mock.method(browser, 'newContext', async (...options) => {
         const context = await newContext(...options);
         context.on('page', page => page.on('console', msg => {
+          if (msg.text() === 'fixture-draft-ready') draftReady = true;
           if (msg.text().startsWith('fixture-composed:')) composed.push(msg.text().slice('fixture-composed:'.length));
         }));
         const register = context.route.bind(context);
@@ -113,7 +122,7 @@ async function withDraftCaller(t, changedOnScroll, consume) {
       getProductContext: async () => ({ code: [{ role: 'frontend', available: true, ref: 'a'.repeat(40),
         screenFacts: labels.map(text => ({ text })), screenCode: [] }] }),
     });
-    await consume({ records, requests, composed });
+    await consume({ records, requests, composed, guardReads });
   } finally {
     try { await Promise.all(browsers.map(browser => browser.close())); }
     finally {
@@ -125,17 +134,21 @@ async function withDraftCaller(t, changedOnScroll, consume) {
   }
 }
 
-for (const changed of [false, true]) test(`caller Robôs revalida composição local no clique: mudança=${changed}`, async t => {
-  await withDraftCaller(t, changed, async ({ records, requests, composed }) => {
+for (const changed of [false, true]) test(`caller Robôs revalida estado inativo no clique: mudança=${changed}`, async t => {
+  await withDraftCaller(t, changed, async ({ records, requests, composed, guardReads }) => {
     assert.equal(records[0].status, 'concluída', JSON.stringify(records[0]));
     const menu = records.find(record => record.task === 'robos.montar_menu');
     assert.equal(composed.length, changed ? 0 : 1, JSON.stringify({ menu, composed }));
     assert.equal(menu.actions.filter(action => action.name === 'Enviar mensagem').length, changed ? 0 : 1);
-    if (changed) { assert.equal(menu.status, 'bloqueada'); assert.equal(menu.reason, 'ação proibida'); }
+    if (changed) {
+      assert.equal(menu.status, 'bloqueada'); assert.equal(menu.reason, 'ação proibida');
+      assert.ok(guardReads >= 2, 'o estado é relido antes do efeito');
+    }
     else {
       assert.match(composed[0], /^Teste FAQ /u);
       // The fixture deliberately ends after its first local composition, with no model configured.
       assert.equal(menu.status, 'inconclusiva'); assert.equal(menu.reason, 'modelo');
+      assert.equal(guardReads, 2, 'autorização e clique têm leituras próprias');
     }
     assert.deepEqual(records.cleanup.pending, []);
     assert.deepEqual(requests.filter(request => request.method !== 'GET'), [
