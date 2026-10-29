@@ -88,10 +88,12 @@ for (const authorized of [true, false]) test(`runJourneys consulta a prova antes
   const root = await mkdtemp(join(tmpdir(), 'local-draft-'));
   const marker = '1234abcd', phone = '+44 20 7946 0099';
   const fixture = (kind, n = 1) => realCompanyFixture(kind, n, marker, phone);
-  const vocabulary = ['Robôs', 'Título do Robô', 'Salvar', 'Adicionar bloco', 'Mensagem', 'Opção um', 'Opção dois', 'Enviar mensagem'];
+  const vocabulary = ['Robôs', 'Título do Robô', 'Canais', 'opção 1', 'Salvar', 'Adicionar bloco', 'Mensagem', 'Opção um', 'Opção dois', 'Enviar mensagem'];
   let current, values, composed = 0, checks = 0;
   const actions = {
     'robos.criar': [{ type: 'fill', role: 'textbox', name: 'Título do Robô', value: fixture('robotName') },
+      { type: 'click', role: 'button', name: 'Canais', value: null },
+      { type: 'click', role: 'option', name: 'opção 1', value: null },
       { type: 'click', role: 'button', name: 'Salvar', value: null }, { type: 'finish', role: null, name: null, value: null }],
     'robos.montar_menu': [{ type: 'click', role: 'button', name: 'Adicionar bloco', value: null },
       { type: 'fill', role: 'textbox', name: 'Mensagem', value: fixture('menuQuestion') },
@@ -102,7 +104,8 @@ for (const authorized of [true, false]) test(`runJourneys consulta a prova antes
   const fake = {
     async open(task) { current = task.id; values = new Map(); return { account: { userId: 'user-1', companyId: '42' } }; },
     async observe() { return { title: 'Robôs', path: '/bot/own-1', state: {}, messages: [],
-      controls: ['Salvar', 'Adicionar bloco', 'Enviar mensagem'].map(name => ({ role: 'button', name, enabled: true })),
+      controls: [...['Salvar', 'Adicionar bloco', 'Enviar mensagem', 'Canais'].map(name => ({ role: 'button', name, enabled: true })),
+        { role: 'option', name: 'opção 1', enabled: true }],
       fields: ['Título do Robô', 'Mensagem', 'Opção um', 'Opção dois'].map(name => ({ role: 'textbox', name, value: values.get(name) ?? null, filled: values.has(name) })) }; },
     async policyContext(action) { if (action.name === send.name) checks++; return { localRobotDraft: authorized }; },
     async act(action) { if (action.type === 'fill') values.set(action.name, action.value); if (action.name === send.name) composed++; },
@@ -118,8 +121,8 @@ for (const authorized of [true, false]) test(`runJourneys consulta a prova antes
     ], root, marker, frontSha: 'a'.repeat(40), profile: 'qa', realCompany: true, testPhone: phone,
     allowedScreenLabels: new Set(vocabulary), browser: fake,
     model: { async decide({ actions: done }) { return actions[current][done.length]; } }, cacheBypass: true });
-    assert.equal(records[0].status, 'concluída');
-    assert.equal(records[1].status, authorized ? 'concluída' : 'bloqueada');
+    assert.equal(records[0].status, 'concluída', JSON.stringify(records[0]));
+    assert.equal(records[1].status, authorized ? 'concluída' : 'bloqueada', JSON.stringify(records[1]));
     assert.equal(composed, authorized ? 1 : 0);
     if (authorized) assert.equal(checks, 1);
   } finally { await rm(root, { recursive: true, force: true }); }
