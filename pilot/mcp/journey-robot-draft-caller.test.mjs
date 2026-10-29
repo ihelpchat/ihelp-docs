@@ -40,7 +40,17 @@ async function withDraftCaller(t, changedOnScroll, consume) {
       <form hidden><input placeholder="Título do Robô"><button type="button">Canais</button><div role="combobox" aria-label="Canais" tabindex="0">Canais</div><div role="option" data-value="1">Canal fictício</div><button>Adicionar robô</button></form></main>
       <script>${bootstrap}
       document.querySelector('#create').onclick=()=>document.querySelector('form').hidden=false;
-      document.querySelector('form').onsubmit=async event=>{event.preventDefault();await fetch('/api/v2/bot',{method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify({title:document.querySelector('[placeholder="Título do Robô"]').value,type:1,botTrigger:1,botChannels:[{CanalId:1}],status:false})}).then(response=>response.json());location.href='/bot/own-17';};
+      document.querySelector('form').onsubmit=async event=>{
+        event.preventDefault();
+        const created=await fetch('/api/v2/bot',{method:'POST',headers:{...headers,'content-type':'application/json'},
+          body:JSON.stringify({title:document.querySelector('[placeholder="Título do Robô"]').value,type:1,
+            botTrigger:1,botChannels:[{CanalId:1}],status:false})}).then(response=>response.json());
+        // React Router preserves the document and its completed POST response.
+        history.pushState(null,'','/bot/'+created.dados.idRef);
+        const heading=document.createElement('h1');heading.textContent=created.dados.title;
+        const flow=document.createElement('a');flow.href='#flow';flow.textContent='Fluxo de Robô';
+        document.querySelector('main').replaceChildren(heading,flow);
+      };
       </script>`;
     else if (url.pathname === '/bot/own-17') html = `<main><h1>${bot.title}</h1><a href="#flow">Fluxo de Robô</a><button id="add">Adicionar bloco</button><section class="custom-height-sidebar"></section></main>
       <script>${bootstrap}
