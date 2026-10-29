@@ -807,7 +807,9 @@ export async function createJourneyContext(browser) {
 
 export function journeyReadinessControl(taskId, path) {
   if (!taskId?.startsWith('robos.')) return null;
-  if (path === '/bot') return { selector: 'input[placeholder="Buscar robô"]' };
+  if (path === '/bot') return { selector: taskId === 'robos.criar'
+    ? 'input[placeholder="Buscar robô"], [role="dialog"] input[placeholder="Digite o título do robô"]'
+    : 'input[placeholder="Buscar robô"]' };
   if (/^\/bot\/[a-z0-9-]+$/iu.test(path)) return { selector: 'a', text: 'Fluxo de Robô' };
   return null;
 }
