@@ -62,6 +62,17 @@ test('salvar real recusa mensagem legada e telefone mesmo pertencendo a outra fi
   }
 });
 
+test('salvar legado reconhece a tag com marker da execução e recusa outra execução', async () => {
+  const marker = '1234abcd';
+  const legacyFixture = (kind, n = 1) => fixtureValue(kind, n, marker);
+  const options = { fixtureFor: legacyFixture, requiredEventRefs: new Set(['message-ref']) };
+  const events = message => [{ idRef: 'message-ref', type: 0, messages: [{ type: 0, message }] }];
+  assert.equal((await verify('robos.salvar', events(legacyFixture('tagName')), [], options)).confirmed, true);
+  for (const message of [fixtureValue('tagName'), fixtureValue('tagName', 1, 'fedcba98')]) {
+    assert.equal((await verify('robos.salvar', events(message), [], options)).observed, 'salvar: blocos');
+  }
+});
+
 test('menu exige pergunta, duas opções do gerador e destinos existentes', async () => {
   const events = [menu, { idRef: 'one-ref', type: 0 }, { idRef: 'two-ref', type: 0 }];
   assert.equal((await verify('robos.montar_menu', events, ['Menu de opções'])).confirmed, true);

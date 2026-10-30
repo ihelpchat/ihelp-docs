@@ -13,7 +13,7 @@ async function withFlowCaller(t, flowMode, consume) {
   const requests = [], browsers = [], composed = [];
   const authorization = 'Bearer fixture.' + Buffer.from(JSON.stringify({ userId: '3', businessId: '42' }))
     .toString('base64url') + '.fixture';
-  let bot, draftReady = false, guardReads = 0, saved = false;
+  let bot, saved = false;
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, origin);
     requests.push({ method: req.method, path: url.pathname });
@@ -40,11 +40,6 @@ async function withFlowCaller(t, flowMode, consume) {
       if (url.pathname === '/api/v2/company') return json({ dados: { id: 42 } });
       if (url.pathname === '/api/v2/bot/own-17') {
         const snapshot = structuredClone(bot);
-        if (draftReady) {
-          guardReads++;
-          // The first authorization sees the inactive snapshot. Its next read must see this change.
-
-        }
         return json({ dados: { bot: snapshot } });
       }
       if (url.pathname === '/api/v2/configurations/channels') return json({ dados: [{ id: 1 }] });
@@ -80,7 +75,6 @@ async function withFlowCaller(t, flowMode, consume) {
       const choices=()=>{sidebar.innerHTML='<button id="menu">Menu de opções</button><button id="simple">Mensagem simples</button>';
         document.querySelector('#menu').onclick=()=>{sidebar.innerHTML='<input placeholder="Mensagem de onboarding"><input placeholder="Mensagem"><button id="option">Adicionar opção +</button><div id="options"></div>';document.querySelector('#option').onclick=()=>{const input=document.createElement('input');input.placeholder='Adicione uma opção';document.querySelector('#options').append(input);};};
         document.querySelector('#simple').onclick=()=>{sidebar.innerHTML='<input placeholder="Título da mensagem"><div><textarea></textarea><button id="compose"><svg width="20" height="20"><rect width="20" height="20"/></svg></button></div>';
-          document.querySelector('textarea').oninput=()=>console.log('fixture-draft-ready');
           document.querySelector('#compose').onclick=()=>{const text=document.querySelector('textarea').value;messages.push({title:document.querySelector('input').value,text});console.log('fixture-composed:'+text);sidebar.replaceChildren();};
         };
       };
@@ -108,7 +102,6 @@ async function withFlowCaller(t, flowMode, consume) {
       t.mock.method(browser, 'newContext', async (...options) => {
         const context = await newContext(...options);
         context.on('page', page => page.on('console', msg => {
-          if (msg.text() === 'fixture-draft-ready') draftReady = true;
           if (msg.text().startsWith('fixture-composed:')) composed.push(msg.text().slice('fixture-composed:'.length));
         }));
         const register = context.route.bind(context);
@@ -144,7 +137,7 @@ async function withFlowCaller(t, flowMode, consume) {
       getProductContext: async () => ({ code: [{ role: 'frontend', available: true, ref: 'a'.repeat(40),
         screenFacts: labels.map(text => ({ text })), screenCode: [] }] }),
     });
-    await consume({ records, requests, composed, guardReads });
+    await consume({ records, requests, composed });
   } finally {
     try { await Promise.all(browsers.map(browser => browser.close())); }
     finally {
