@@ -47,6 +47,142 @@ test('diagnóstico de login em produção e confirmação não captura nem grava
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test('pré-voo preserva a inicialização autenticada antes de navegar e bloqueia sem API', async () => {
+  for (const authenticated of [true, false]) {
+    let ready = false; let initializationCancelled = false; let navigations = 0; let closed = false; let reads = 0;
+    const authorization = `Bearer test.${Buffer.from(JSON.stringify({ businessId: '42' })).toString('base64url')}.test`;
+    const response = (origin = 'https://api.example.test', status = 200, bearer = authorization) => ({
+      url: () => `${origin}/api/v2/company`, status: () => status,
+      request: () => ({ headers: () => ({ authorization: bearer }) }),
+    });
+    const page = {
+      on() {}, url: () => 'https://front.example.test/atendimento',
+      async goto() { navigations++; if (!ready) initializationCancelled = true; },
+      async waitForResponse(predicate, options) {
+        assert.ok(options.timeout > 0 && options.timeout <= 30_000);
+        if (!authenticated || initializationCancelled) throw new Error('initialization unavailable');
+        assert.equal(predicate(response('https://outside.example.test')), false);
+        assert.equal(predicate(response('https://api.example.test', 401)), false);
+        assert.equal(predicate(response('https://api.example.test', 200, null)), false);
+        assert.equal(predicate(response('https://api.example.test', 200, 'Bearer undefined')), false);
+        assert.equal(predicate(response('https://api.example.test', 200, 'Bearer null')), false);
+        assert.equal(predicate(response()), true);
+        ready = true;
+        return response();
+      },
+      async evaluate(_callback, { href }) {
+        reads++;
+        const url = new URL(href);
+        return read(url.pathname.replace(/^\/api\/v2/u, '') + url.search);
+      },
+    };
+    const browser = { async newContext() { return { async route() {}, async newPage() { return page; } }; },
+      async close() { closed = true; } };
+    const result = await runtime.browserProductionPreflight({ ...env, QA_PROD_COMPANY_ID: '42' }, {
+      launchBrowser: async () => browser, login: async () => ({}),
+    });
+    if (authenticated) {
+      assert.equal(result.mode, 'ready', result.reason);
+      assert.equal(initializationCancelled, false);
+      assert.equal(navigations, 1);
+      assert.ok(reads > 0);
+    } else {
+      assert.equal(result.mode, 'bloqueado');
+      assert.equal(result.reason, 'api_nao_detectada');
+      assert.equal(navigations, 0);
+      assert.equal(reads, 0);
+    }
+    assert.equal(closed, true);
+  }
+});
+
+function startupPage() {
+  const handlers = new Map(); let pending;
+  const page = { gotos: [], waits: [], resolutions: 0,
+    on(event, handler) { handlers.set(event, [...handlers.get(event) ?? [], handler]); },
+    emit(event, value) {
+      for (const handler of handlers.get(event) ?? []) handler(value);
+      if (event === 'response' && pending?.predicate(value)) {
+        page.resolutions++; const resolve = pending.resolve; pending = null; resolve(value);
+      }
+    },
+    async goto(url) { page.gotos.push(url); },
+    waitForResponse(predicate, options) {
+      page.waits.push(options.timeout);
+      return new Promise(resolve => { pending = { predicate, resolve }; });
+    },
+  };
+  return page;
+}
+function startupResponse(url = 'https://api.example.test/api/v2/company', status = 200,
+  authorization = 'Bearer valid.fixture.token') {
+  const request = { url: () => url, method: () => 'GET', headers: () => ({ authorization }) };
+  return { url: () => url, status: () => status, request: () => request };
+}
+
+test('navegação compartilhada de produção ignora request e aguarda response confirmada', async () => {
+  const page = startupPage(); const valid = startupResponse();
+  const requestCandidate = { origin: 'https://api.example.test', authorization: 'Bearer valid.fixture.token' };
+  const navigate = runtime.createJourneyNavigation(page, productionConfig(env).target, () => requestCandidate);
+  page.emit('request', valid.request());
+  const navigation = navigate('/contact');
+  try {
+    assert.deepEqual(page.waits, [30_000], 'request iniciada não pode ser usada como resposta confirmada');
+    assert.deepEqual(page.gotos, []);
+    for (const response of [startupResponse('https://outside.example.test/api/v2/company'),
+      startupResponse(undefined, 401), startupResponse(undefined, 200, 'Bearer undefined'),
+      startupResponse(undefined, 200, 'Bearer null')]) {
+      page.emit('response', response);
+      assert.equal(page.resolutions, 0);
+      assert.deepEqual(page.gotos, []);
+    }
+    page.emit('response', valid);
+    assert.deepEqual(await navigation, requestCandidate);
+    assert.deepEqual(page.gotos, ['https://front.example.test/contact']);
+  } finally {
+    page.emit('response', valid);
+    await navigation.catch(() => {});
+  }
+});
+
+test('navegação compartilhada preserva response anterior após estáticos e Bearer inválido', async () => {
+  const page = startupPage(); const valid = startupResponse();
+  const navigate = runtime.createJourneyNavigation(page, productionConfig(env).target);
+  for (let index = 0; index < 100; index++) {
+    const response = startupResponse(`https://front.example.test/static/${index}.js`, 200, '');
+    page.emit('request', response.request()); page.emit('response', response);
+  }
+  page.emit('request', valid.request()); page.emit('response', valid);
+  page.emit('response', startupResponse(undefined, 200, 'Bearer undefined'));
+  const navigation = navigate('/contact');
+  try {
+    assert.deepEqual(page.waits, [], 'response válida anterior não depende do buffer de diagnóstico');
+    assert.deepEqual(await navigation, { origin: 'https://api.example.test', authorization: 'Bearer valid.fixture.token' });
+    assert.equal(page.gotos.length, 1);
+  } finally { page.emit('response', valid); await navigation.catch(() => {}); }
+});
+
+test('navegação compartilhada sem response falha fechada mesmo com candidato de request', async () => {
+  const page = startupPage();
+  page.waitForResponse = async (_predicate, options) => { page.waits.push(options.timeout); throw new Error('timeout'); };
+  const navigate = runtime.createJourneyNavigation(page, productionConfig(env).target,
+    () => ({ origin: 'https://api.example.test', authorization: 'Bearer valid.fixture.token' }));
+  assert.equal(await navigate('/contact'), null);
+  assert.deepEqual(page.waits, [30_000]);
+  assert.deepEqual(page.gotos, []);
+});
+
+test('navegação compartilhada de homologação lê a API que surge durante goto', async () => {
+  for (const expected of [null, { origin: 'https://api.example.test', authorization: 'Bearer valid.fixture.token' }]) {
+    const page = startupPage(); let api = null;
+    page.goto = async url => { page.gotos.push(url); api = expected; };
+    const navigate = runtime.createJourneyNavigation(page, { local: false, url: 'https://front.example.test' }, () => api);
+    assert.deepEqual(await navigate('/contact'), expected);
+    assert.equal(page.gotos.length, 1);
+    assert.deepEqual(page.waits, []);
+  }
+});
+
 test('produção requer chave geral e somente hosts explícitos da conta', () => {
   assert.throws(() => productionConfig({ ...env, QA_PROD_ENABLED: 'false' }), /produção desabilitada/u);
   const cfg = productionConfig(env);
@@ -115,6 +251,102 @@ test('CDN de interface só aceita GET estático em produção, sem credenciais',
   assert.deepEqual(denied, {});
 });
 
+test('betaapp aceita somente sua API refactor explícita sem relaxar os demais hosts', () => {
+  const betaEnv = { ...env, QA_PROD_URL: 'https://betaapp.ihelpchat.com',
+    QA_PROD_ALLOWED_HOSTS: 'betaapp.ihelpchat.com,apiv3refactor.ihelpchat.com' };
+  const target = productionConfig(betaEnv).target;
+  assert.doesNotThrow(() => assertAllowedTarget(betaEnv.QA_PROD_URL, betaEnv, { allowProduction: true }));
+  assert.equal(qaRequestDecision('https://apiv3refactor.ihelpchat.com/api/v2/company', target, betaEnv).allowed, true);
+  assert.equal(qaRequestDecision('https://apiv3.ihelpchat.com/api/v2/company', target, betaEnv).allowed, false);
+  for (const config of [{ ...betaEnv, QA_PROD_URL: env.QA_PROD_URL,
+    QA_PROD_ALLOWED_HOSTS: 'front.example.test,apiv3refactor.ihelpchat.com' },
+  { ...betaEnv, QA_PROD_ALLOWED_HOSTS: 'betaapp.ihelpchat.com,apiv3refactorevil.ihelpchat.com' },
+  { ...betaEnv, QA_PROD_ALLOWED_HOSTS: 'betaapp.ihelpchat.com,apiv3refactor.ihelpchat.com,app.ihelpchat.com' }]) {
+    assert.throws(() => productionConfig(config), /hosts de produção/u);
+    assert.throws(() => assertAllowedTarget(config.QA_PROD_URL, config, { allowProduction: true }), /recusado/u);
+    assert.equal(qaRequestDecision('https://apiv3refactor.ihelpchat.com/api/v2/company', {
+      mode: 'producao', url: config.QA_PROD_URL, allowedHosts: config.QA_PROD_ALLOWED_HOSTS.split(','),
+    }, config).allowed, false);
+  }
+});
+
+test('betaapp carrega somente os scripts compartilhados explícitos, sem ampliar hosts da conta', async () => {
+  const betaEnv = { ...env, QA_PROD_URL: 'https://betaapp.ihelpchat.com',
+    QA_PROD_ALLOWED_HOSTS: 'betaapp.ihelpchat.com,apiv3.ihelpchat.com' };
+  const target = productionConfig(betaEnv).target;
+  const prefix = 'https://app.ihelpchat.com/javascripts/hidden-dist-js/';
+  const scripts = ['runtime.min.js', 'jquery-3.3.1.slim.min.js', 'popper.min.js',
+    'import-map-overrides.js', 'system.min.js', 'amd.min.js', 'react.production.min.js',
+    'react-dom.production.min.js', 'single-spa.min.js'];
+  const request = (url, method = 'GET', type = 'script', headers = {}) => ({
+    url: () => url, method: () => method, resourceType: () => type, headers: () => headers,
+  });
+  for (const script of scripts) {
+    const input = request(prefix + script);
+    assert.equal(qaStaticCdnAllowed(input, target, betaEnv), true, script);
+    assert.equal(qaRequestDecision(input.url(), target, betaEnv).allowed, false);
+    let outcome;
+    await handleJourneyRoute({ request: () => input, fallback: async () => { outcome = 'allowed'; },
+      abort: async () => { outcome = 'denied'; } }, { target, env: betaEnv,
+      thirdPartyDenied: {}, productionReady: () => false, taskId: 'contatos.cadastrar' });
+    assert.equal(outcome, 'allowed');
+  }
+  const script = prefix + scripts[0];
+  for (const input of [request(script, 'POST'), request(script, 'GET', 'fetch'),
+    request(script, 'GET', 'document'), request(script, 'GET', 'stylesheet'), request(script, 'GET', 'font'),
+    request(script, 'GET', 'image'), request(script.replace('app.ihelpchat.com', 'outside.example.test')),
+    request(script, 'GET', 'script', { Cookie: 'session=secret' }),
+    request(script, 'GET', 'script', { Authorization: 'Bearer secret' }),
+    request(script, 'GET', 'script', { 'Proxy-Authorization': 'secret' }),
+    request(script + '?token=secret'), request(script + '#fragment'),
+    request(prefix + 'unlisted.js'), request(prefix + 'runtime.min.js/extra'),
+    request(prefix + '%72untime.min.js'), request('https://app.ihelpchat.com/api/v2/company'),
+    request('https://app.ihelpchat.com/login'), request(script.replace('https:', 'http:')),
+    request(script.replace('app.ihelpchat.com', 'app.ihelpchat.com:8443')),
+    request(script.replace('app.ihelpchat.com', 'user:pass@app.ihelpchat.com'))])
+    assert.equal(qaStaticCdnAllowed(input, target, betaEnv), false, input.url());
+  assert.equal(qaStaticCdnAllowed(request(script), productionConfig(env).target, env), false);
+  let handler;
+  await installQaNetworkGuard({ async route(_pattern, callback) { handler = callback; } }, target, betaEnv);
+  let fetched = false; let result; let fetchOptions;
+  await handler({ request: () => request(script), fetch: async options => {
+    fetched = true; fetchOptions = options;
+    return { headers: () => ({ location: 'https://app.ihelpchat.com/api/v2/company' }) };
+  }, fulfill: async () => { result = 'allowed'; }, abort: async () => { result = 'denied'; } });
+  assert.equal(fetched, true);
+  assert.equal(fetchOptions.maxRedirects, 0);
+  assert.equal(result, 'denied');
+});
+
+test('observador mantém API autenticada fora do limite de diagnósticos', () => {
+  const observer = createProductionApiObserver(productionConfig(env).target, env);
+  const request = (url, authorization) => ({ url: () => url, method: () => 'GET',
+    headers: () => ({ ...(authorization ? { authorization } : {}) }) });
+  const respond = (input) => {
+    observer.request(input);
+    observer.response({ request: () => input, url: input.url, status: () => 200 });
+  };
+  for (let index = 0; index < 100; index++) respond(request(`https://front.example.test/static/${index}.js`));
+  respond(request('https://api.example.test/api/v2/company', 'Bearer valid.fixture.token'));
+  assert.deepEqual(observer.api(), { origin: 'https://api.example.test', authorization: 'Bearer valid.fixture.token' });
+  assert.equal(observer.diagnostic().requests.length, 100);
+});
+
+test('observador mantém última API válida ao receber Bearer ausente', () => {
+  const observer = createProductionApiObserver(productionConfig(env).target, env);
+  const respond = (authorization) => {
+    const input = { url: () => 'https://api.example.test/api/v2/company', method: () => 'GET',
+      headers: () => ({ authorization }) };
+    observer.request(input);
+    observer.response({ request: () => input, url: input.url, status: () => 200 });
+  };
+  respond('Bearer valid.fixture.token');
+  for (const authorization of ['Bearer undefined', 'Bearer null']) {
+    respond(authorization);
+    assert.equal(observer.api()?.authorization, 'Bearer valid.fixture.token');
+  }
+});
+
 test('requisição sem resposta registra motivo sanitizado da falha', () => {
   const observer = createProductionApiObserver(productionConfig(env).target, env);
   const request = { url: () => 'https://front.example.test/private?token=secret',
@@ -172,7 +404,7 @@ test('diagnóstico do login guarda só host, padrão de caminho, Bearer e status
     method: () => 'GET', headers: () => ({ authorization: bearer, cookie }),
   };
   observer.request(request);
-  observer.response({ request: () => request, status: () => 200 });
+  observer.response({ request: () => request, url: request.url, status: () => 200 });
   observer.loginFinished({ url: () => 'https://front.example.test/contact/98765?cookie=secret-cookie-value' });
   const diagnostic = observer.diagnostic();
   assert.equal(observer.api()?.origin, 'https://api.example.test');
@@ -211,7 +443,7 @@ for (const [label, url, headers, status] of [
   const observer = createProductionApiObserver(productionConfig(env).target, env);
   const request = { url: () => url, method: () => 'GET', headers: () => headers };
   observer.request(request);
-  observer.response({ request: () => request, status: () => status });
+  observer.response({ request: () => request, url: request.url, status: () => status });
   assert.equal(observer.api(), null);
   assert.equal(observer.diagnostic().requests[0].status, status);
 });
@@ -231,7 +463,7 @@ test('host do front também pode ser API quando recebe resposta Bearer autentica
   const request = { url: () => 'https://front.example.test/api/v2/company', method: () => 'GET',
     headers: () => ({ authorization: 'Bearer secret-authorization-value' }) };
   observer.request(request);
-  observer.response({ request: () => request, status: () => 200 });
+  observer.response({ request: () => request, url: request.url, status: () => 200 });
   assert.equal(observer.api()?.origin, target.url);
   assert.doesNotThrow(() => assertProductionAccountHosts(target, observer.api()?.origin));
 });

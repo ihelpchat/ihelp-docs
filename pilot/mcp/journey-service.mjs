@@ -5,7 +5,7 @@ import { containsSensitiveData } from './sensitive-data.mjs';
 import { captureFailureCategory, captureFailureLog } from './capture-diagnostics.mjs';
 import { areaPlans, areaFixtureValue, nextAreaAction } from './journey-plans/index.mjs';
 
-export const JOURNEY_POLICY_VERSION = 'm578-3';
+export const JOURNEY_POLICY_VERSION = 'm578-4';
 const sha = /^[a-f0-9]{40}$/u;
 const taskId = /^(?:contatos|robos|crm|campanhas|agendamentos|tarefas)\.[a-z_]+$/u;
 const modules = new Set(['contatos', 'robos', 'crm', 'campanhas', 'agendamentos', 'tarefas']);
@@ -84,7 +84,7 @@ export function journeyCoverage(records) {
     ...(environmentBlocked.length ? { environmentBlocked } : {}) };
 }
 
-export function policyDecision(action, generated = fixtureValues, taskId = '', { realCompany = false, testPhone } = {}) {
+export function policyDecision(action, generated = fixtureValues, taskId = '', { realCompany = false, testPhone, localRobotDraft = false } = {}) {
   if (!action || typeof action !== 'object' || Array.isArray(action)) return deny('ação inválida');
   if (!['click', 'fill', 'select', 'press', 'finish', 'upload_csv'].includes(action.type)) return deny('tipo inválido');
   if (action.type === 'finish') return { allowed: true };
@@ -94,8 +94,10 @@ export function policyDecision(action, generated = fixtureValues, taskId = '', {
   if (!['button', 'link', 'menuitem', 'textbox', 'combobox', 'option', 'checkbox', 'tab'].includes(action.role)
     || typeof action.name !== 'string' || !action.name.trim() || action.name.length > 100) return deny('alvo inválido');
   const name = normalized(action.name);
-  if (forbidden.test(name) && !(action.type === 'click' && action.role === 'button' && !realCompany
-    && name === 'enviar mensagem' && taskId === 'robos.montar_menu')) return deny('ação proibida');
+  const localComposition = action.type === 'click' && action.role === 'button'
+    && name === 'enviar mensagem' && taskId === 'robos.montar_menu'
+    && (!realCompany || localRobotDraft === true && action.value === null);
+  if (forbidden.test(name) && !localComposition) return deny('ação proibida');
   if (action.type === 'fill' && (action.role !== 'textbox'
     && !(taskId === 'contatos.marcar_tags' && action.role === 'combobox')
     && !(taskId === 'crm.criar_card' && action.role === 'combobox'
@@ -691,7 +693,11 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           if (action.type === 'upload_csv' && task.id !== 'contatos.importar') {
             record.status = 'bloqueada'; record.reason = 'upload fora da tarefa'; break;
           }
-          const policy = policyDecision(action, generatedFor(), task.id, { realCompany, testPhone });
+          const context = realCompany && task.id === 'robos.montar_menu' && action.type === 'click'
+            && action.role === 'button' && action.name === 'Enviar mensagem' && action.value === null
+            ? await browser.policyContext?.(action) : null;
+          const policy = policyDecision(action, generatedFor(), task.id, {
+            realCompany, testPhone, localRobotDraft: context?.localRobotDraft === true });
           if (!policy.allowed) { record.status = 'bloqueada'; record.reason = policy.reason; break; }
           if (action.type === 'click' && /^(?:Salvar|Adicionar robô)$/iu.test(action.name) && missingPlanned) {
             feedback = `${missingPlanned[0]} ainda sem o valor do gerador (${missingPlanned[1]})`;
@@ -787,6 +793,8 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       } finally {
         const diagnostics = browser.diagnostics?.() ?? {};
         record.thirdPartyDenied = diagnostics.thirdPartyDenied ?? {};
+        record.backgroundDenied = diagnostics.backgroundDenied ?? {};
+        record.preflightDenied = diagnostics.preflightDenied ?? {};
         if (diagnostics.searchProbe) record.searchProbe = diagnostics.searchProbe;
         if (diagnostics.apiError && ['contatos.buscar', 'contatos.exportar', 'contatos.definir_responsavel', 'contatos.importar'].includes(task.id)) {
           record.apiError = diagnostics.apiError;
