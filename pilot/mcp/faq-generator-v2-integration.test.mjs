@@ -25,7 +25,7 @@ const cost = (calls) => calls * 0.002;
 
 // All loaders and the Responses client are in-memory. The only file is a synthetic image.
 async function fixture(t, { area = 'robos', page = pageFor(area), rewrite = page,
-  factual, response, screenshot = false, completed = false, model = 'gpt-6-astra' } = {}) {
+  factual, response, screenshot = false, completed = false, model = 'gpt-6-astra', business = [] } = {}) {
   const state = await mkdtemp(join(tmpdir(), 'faq-v2-'));
   t.after(() => rm(state, { recursive: true, force: true }));
   for (const [name, value] of Object.entries({ MCP_STATE_DIR: state, QA_TARGET: 'homolog',
@@ -63,7 +63,7 @@ async function fixture(t, { area = 'robos', page = pageFor(area), rewrite = page
     journeyReader: async ({ task }) => ({ task, status: completed || screenshot ? 'concluída' : 'bloqueada',
       verification: { confirmed: true }, screens: screenshot ? [{ screenshotId, title: 'Robôs' }] : [] }),
     contextLoader: async () => ({ screenFacts: [{ text: 'Criar robô; Título do Robô; Salvar.', kind: 'field' }] }),
-    businessLoader: async () => [],
+    businessLoader: async () => business,
   }); });
   return { result, calls, screenshotId };
 }
@@ -279,3 +279,88 @@ test('diagnóstico seguro identifica validação do juiz editorial', async (t) =
   assert.equal(result.costUsd, cost(3));
 });
 
+
+// Prova de ENCAMINHAMENTO de prompt, não de qualidade do LLM: os providers são falsos e nenhuma
+// chamada real acontece. O juiz de fatos falso recusa um caso de uso procedural sem taskId para
+// forçar a única reescrita; verificamos as instruções que chegam a faq_page_v2 e faq_rewrite_v2.
+const procedural = 'Ao concluir o cadastro, o item novo aparece na lista.';
+const businessFact = { body: 'Equipes de atendimento organizam o relacionamento com clientes.' };
+const sentences = (text) => text.split(/(?<=\.)\s+/u);
+const hasRule = (text, ...patterns) => sentences(text).some((sentence) =>
+  patterns.every((pattern) => pattern.test(sentence)));
+async function forwarded(t, area) {
+  const page = pageFor(area);
+  page.sections.push({ heading: 'Casos de uso', headingEvidenceIds: [], taskId: null,
+    units: [{ text: procedural, kind: 'contexto', evidenceIds: ['F1'] }] });
+  const { result, calls } = await fixture(t, { area, page, business: [businessFact],
+    factual: (claim) => claim.taskId === null && claim.field?.includes('.units[')
+      ? { status: 'a confirmar', reason: 'Procedimento sem jornada concluída.' } : undefined });
+  const named = (name) => calls.filter(({ text }) => text.format.name === name);
+  return { page, result, draft: named('faq_page_v2'), rewrite: named('faq_rewrite_v2'),
+    facts: named('faq_facts_v2') };
+}
+
+for (const area of ['contatos', 'robos']) test(`redator e reescrita recebem as mesmas instruções, pauta e evidências; juiz de fatos intacto: ${area}`, async (t) => {
+  const { page, result, draft, rewrite, facts } = await forwarded(t, area);
+  assert.equal(result.status, 'precisa de revisão humana');
+  assert.equal(result.corrections, 1);
+  assert.equal(result.mdx, undefined);
+  assert.ok(result.diagnostic.some((item) => item.includes('Procedimento sem jornada concluída.')));
+  assert.equal(draft.length, 1);
+  assert.equal(rewrite.length, 1);
+  assert.equal(facts.length, 2);
+  const [developer, user] = draft[0].input;
+  assert.equal(developer.role, 'developer');
+  const writer = developer.content;
+  assert.equal(rewrite[0].input[0].role, 'developer');
+  assert.ok(rewrite[0].input[0].content.startsWith(`${writer}\n`), 'reescrita herda as instruções do redator');
+  assert.match(rewrite[0].input[0].content.slice(writer.length), /UMA vez.*Não invente passos/su);
+  // Barreiras que já existiam continuam no texto do redator.
+  assert.ok(hasRule(writer, /sem jornada/u, /sem passo ou efeito/u));
+  assert.ok(hasRule(writer, /não o invente/u));
+  assert.ok(hasRule(writer, /somente evidenceIds existentes/u));
+  // Pauta e evidências chegam ao redator e à reescrita.
+  const draftInput = JSON.parse(user.content[0].text);
+  const rewriteInput = JSON.parse(rewrite[0].input[1].content);
+  for (const input of [draftInput, rewriteInput]) {
+    assert.deepEqual(input.plan.tasks.map(({ id, status }) => [id, status]),
+      tasks(area).map(({ id }) => [id, 'sem jornada']));
+    assert.ok(input.evidence.some(({ type, text }) => type === 'front' && text.includes('Criar robô')));
+    assert.ok(input.evidence.some(({ type, text }) => type === 'negocio' && text === businessFact.body));
+  }
+  assert.deepEqual(rewriteInput.page, page);
+  assert.ok(rewriteInput.report.diagnostic.some((item) => item.includes('Procedimento sem jornada concluída.')));
+  // O juiz de fatos continua exigindo jornada para procedimento, com ou sem taskId.
+  for (const call of facts) {
+    assert.match(call.input[0].content, /Renomear kind para contexto ou omitir taskId não dispensa jornada/u);
+    assert.match(call.input[0].content, /sem vínculo com tarefa, deve ficar a confirmar/u);
+  }
+});
+
+const writerRules = {
+  'seções sem taskId não descrevem ação nem resultado de tarefa': [
+    [/sem taskId/u, /O que é/u, /Para que serve/u, /Casos de uso/u, /\bnão\b/u, /ação|procediment/u, /resultado|efeito/u],
+    [/caso/iu, /guia/u, /taskId/u, /necessidade|benefício/u],
+    [/unidade/u, /herd/u, /taskId/u, /seção/u],
+  ],
+  'casos de uso distintos sem repetir o benefício de Para que serve': [
+    [/Casos de uso/u, /Para que serve/u, /repet|repit/u, /benefício/u, /distint|diferent/u],
+  ],
+  'tarefa sem jornada traz finalidade do front e do negócio, sem listar controles': [
+    [/sem jornada/u, /front/u, /negócio/u, /finalidade|por que|quando/u, /controle/u, /passo/u, /efeito/u],
+  ],
+  'permissão documentada é contexto, não instrução sem jornada própria': [
+    [/permiss|acesso/u, /contexto/u, /conferir|habilitar|configurar/u, /jornada/u],
+  ],
+  'cliques e confirmações só os observados, na ordem da jornada': [
+    [/ordem/u, /jornada/u, /observ/u, /clique|confirmaç/u, /etapa|passo/u, /rótulo|nome/u],
+  ],
+};
+for (const area of ['contatos', 'robos']) test(`regras de taskId, jornada, finalidade e ordem chegam ao redator e à reescrita: ${area}`, async (t) => {
+  const { draft, rewrite } = await forwarded(t, area);
+  const sent = { faq_page_v2: draft[0].input[0].content, faq_rewrite_v2: rewrite[0].input[0].content };
+  for (const [rule, groups] of Object.entries(writerRules)) await t.test(rule, () => {
+    for (const [stage, text] of Object.entries(sent)) for (const patterns of groups)
+      assert.ok(hasRule(text, ...patterns), `${stage} sem a regra: ${rule} (${patterns.join(' ')})`);
+  });
+});
