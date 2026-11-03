@@ -758,7 +758,7 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
       name += ` (${node.region}${count > 1 ? ` ${count}` : ''})`;
     }
     const generatedSelection = node.role === 'checkbox' && [...generated].some((value) =>
-      /^Contato Exemplo/u.test(value) && node.name === `Selecionar ${value}`);
+      /^(?:Teste FAQ )?Contato Exemplo/u.test(value) && node.name === `Selecionar ${value}`);
     if (!generatedSelection && !knownFolded.has(node.name.toLocaleLowerCase('pt-BR'))
       && !generated.has(node.name) && !knownFolded.has(name.toLocaleLowerCase('pt-BR')) && !generated.has(name)) {
       if (node.field) name = `campo ${fieldNumber} do formulário (${node.role === 'combobox' ? 'seleção'
@@ -782,7 +782,7 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
     state: { headings: raw.headings.split(' | ').map((value) => known.has(value) ? value : '[conteúdo oculto]').join(' | '),
       campaignViewMode: raw.campaignViewMode, sessionUserOption,
       visibleRows: String(raw.rows.length), generatedRows: String(raw.rows.filter((row) => [...generated].some((value) =>
-        /^(?:Contato|Card|Campanha|Tarefa) Exemplo/u.test(value) && row.includes(value))).length) },
+        /^(?:Teste FAQ )?(?:Contato|Card|Campanha|Tarefa) Exemplo/u.test(value) && row.includes(value))).length) },
     title: raw.title, targets };
 }
 
@@ -806,6 +806,8 @@ export async function createJourneyContext(browser) {
 }
 
 export function journeyReadinessControl(taskId, path) {
+  if (['contatos.buscar', 'contatos.exportar'].includes(taskId))
+    return path === '/contact' ? { selector: 'input[placeholder="Buscar contato..."]' } : null;
   if (!taskId?.startsWith('robos.')) return null;
   if (path === '/bot') return { selector: taskId === 'robos.criar'
     ? 'input[placeholder="Buscar robô"], [role="dialog"] input[placeholder="Digite o título do robô"]'
