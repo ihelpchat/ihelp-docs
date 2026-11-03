@@ -1,0 +1,22 @@
+{
+  "versao": "M5.76-1",
+  "termosDoProduto": ["Contatos", "Adicionar Contato", "Salvar", "Proprietário do Contato", "Robôs", "Menu de opções"],
+  "termosAEvitar": [
+    { "termo": "ficha", "preferir": "contato ou cadastro, conforme a tela" },
+    { "termo": "reabrir e conferir", "preferir": "omitir; se for uma ação útil, dizer 'você pode abrir o contato e ver os dados'" },
+    { "termo": "reaberta", "preferir": "omitir a mecânica de verificação" },
+    { "termo": "identidade", "preferir": "omitir a mecânica de verificação" },
+    { "termo": "persistência", "preferir": "resultado visível no produto, somente se houver evidência" },
+    { "termo": "marcador", "preferir": "omitir o dado de teste" },
+    { "termo": "ref", "preferir": "omitir a referência interna" },
+    { "termo": "loja", "preferir": "empresa" },
+    { "termo": "quem cuida", "preferir": "responsável" }
+  ],
+  "licoes": [
+    "Não inclua dados ou nomes usados no teste.",
+    "Não exponha incerteza, preparação ou verificação internas ao cliente.",
+    "Use 'O que acontece depois' somente quando houver resultado ou próxima ação útil observável.",
+    "Ligue tópicos relacionados com links quando o destino existir e a ligação ajudar o leitor.",
+    "Preserve frases completas ao corrigir; reescreva a ideia sem cortar o conteúdo sustentado."
+  ]
+}
