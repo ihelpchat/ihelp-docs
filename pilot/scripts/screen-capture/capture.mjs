@@ -438,12 +438,20 @@ export async function captureMaskedFrame(page, vocabulary = [], options = {}) {
   } finally { await cdp.detach(); }
 }
 
-export async function waitForStableScreen(page) {
+export async function waitForStableScreen(page, { readyControl = null } = {}) {
   await page.waitForLoadState('domcontentloaded', { timeout: 10_000 });
-  const result = await page.evaluate(async () => {
+  const result = await page.evaluate(async (required) => {
     const deadline = performance.now() + 4_000;
     let previous = null;
     let frames = 0;
+    const ready = () => !required || [...document.querySelectorAll(required.selector)].some((element) =>
+      element.getClientRects().length && !element.closest('[inert]')
+      && getComputedStyle(element).visibility !== 'hidden'
+      && (!required.text || element.textContent?.trim() === required.text));
+    const loading = () => [...document.querySelectorAll('svg')].some((element) =>
+      element.getClientRects().length && !element.closest('[inert]')
+      && getComputedStyle(element).visibility !== 'hidden'
+      && /^(?:carregando|loading)(?:\.{3}|…)?$/iu.test(element.querySelector('title')?.textContent?.trim() ?? ''));
     while (performance.now() < deadline) {
       await new Promise((done) => requestAnimationFrame(done));
       const active = document.getAnimations().some((animation) => animation.playState === 'running'
@@ -455,15 +463,17 @@ export async function waitForStableScreen(page) {
             getComputedStyle(element).transform];
         });
       const position = JSON.stringify(boxes);
-      frames = !active && position === previous ? frames + 1 : 0;
+      frames = ready() && !active && !loading() && position === previous ? frames + 1 : 0;
       if (frames >= 2) return { stable: true };
       previous = position;
     }
+    if (loading()) return { stable: false, condition: 'carregamento' };
+    if (!ready()) return { stable: false, condition: 'controle inicial indisponível' };
     const animations = document.getAnimations().filter((animation) => animation.playState === 'running');
     if (animations.length && animations.every((animation) => animation.effect?.getComputedTiming().iterations === Infinity))
       return { stable: true, limit: 'animações infinitas' };
     return { stable: false, condition: animations.length ? 'animação finita' : 'layout' };
-  });
+  }, readyControl);
   if (!result.stable) throw new Error(`tela não estabilizou: ${result.condition}`);
   return result;
 }

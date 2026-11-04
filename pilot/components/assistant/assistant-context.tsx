@@ -64,7 +64,8 @@ function historyOf(messages: ChatMessage[]): AssistantHistoryItem[] {
       });
     }
   }
-  return history.slice(-6);
+  // Até 12 turnos: o serviço deriva o estado do guia deles e envia ao modelo só os mais recentes.
+  return history.slice(-12);
 }
 
 export function AssistantProvider({ counts, children }: { counts: ScopeCounts; children: ReactNode }) {
