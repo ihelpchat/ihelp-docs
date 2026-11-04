@@ -40,6 +40,14 @@ export function fixtureValue(kind, n = 1, marker = '') {
   }
   throw new Error('tipo fictício inválido');
 }
+export function realCompanyFixture(kind, n = 1, marker = '', phone) {
+  if (!/^\+?[0-9 ()-]{10,22}$/u.test(phone ?? '')) throw new Error('telefone de teste inválido');
+  if (kind === 'phone') return phone;
+  const value = fixtureValue(kind, n, marker);
+  return ['contactName', 'editedName', 'robotName', 'tagName', 'departmentName', 'userName',
+    'menuQuestion', 'menuOption'].includes(kind)
+    ? `Teste FAQ ${value}` : value;
+}
 const generatedValues = () => new Set(['contactName', 'editedName', 'robotName', 'tagName', 'menuQuestion',
   'menuOption', 'departmentName', 'userName', 'email', 'phone']
   .flatMap((kind) => Array.from({ length: 99 }, (_, index) => fixtureValue(kind, index + 1))));
@@ -76,7 +84,7 @@ export function journeyCoverage(records) {
     ...(environmentBlocked.length ? { environmentBlocked } : {}) };
 }
 
-export function policyDecision(action, generated = fixtureValues, taskId = '') {
+export function policyDecision(action, generated = fixtureValues, taskId = '', { realCompany = false, testPhone } = {}) {
   if (!action || typeof action !== 'object' || Array.isArray(action)) return deny('ação inválida');
   if (!['click', 'fill', 'select', 'press', 'finish', 'upload_csv'].includes(action.type)) return deny('tipo inválido');
   if (action.type === 'finish') return { allowed: true };
@@ -86,19 +94,36 @@ export function policyDecision(action, generated = fixtureValues, taskId = '') {
   if (!['button', 'link', 'menuitem', 'textbox', 'combobox', 'option', 'checkbox', 'tab'].includes(action.role)
     || typeof action.name !== 'string' || !action.name.trim() || action.name.length > 100) return deny('alvo inválido');
   const name = normalized(action.name);
-  if (forbidden.test(name) && !(action.type === 'click' && action.role === 'button'
+  if (forbidden.test(name) && !(action.type === 'click' && action.role === 'button' && !realCompany
     && name === 'enviar mensagem' && taskId === 'robos.montar_menu')) return deny('ação proibida');
   if (action.type === 'fill' && (action.role !== 'textbox'
     && !(taskId === 'contatos.marcar_tags' && action.role === 'combobox')
     && !(taskId === 'crm.criar_card' && action.role === 'combobox'
       && action.name === 'Buscar por nome, telefone ou e-mail...') || !generated.has(action.value)))
     return deny('valor fora do gerador');
+  if (realCompany && action.type === 'fill' && (/nome|título|titulo|tag|departamento/iu.test(action.name)
+    && !String(action.value).startsWith('Teste FAQ ') || /telefone/iu.test(action.name)
+      && action.value !== testPhone)) return deny('valor fora do modo empresa real');
   if (action.type === 'select' && (action.role !== 'combobox' || !generated.has(action.value)
     && !(taskId === 'contatos.importar' && ['Nome', 'Contato', 'Email'].includes(action.value)))) return deny('valor fora do gerador');
   if (action.type === 'click' && !['button', 'link', 'menuitem', 'checkbox', 'tab', 'combobox', 'option'].includes(action.role)) return deny('clique inválido');
   if (taskId === 'contatos.exportar' && /limpar filtros/iu.test(action.name)) return deny('ação proibida');
   if (action.role === 'option' && !/^opção [1-9]\d{0,2}$/u.test(action.name)) return deny('opção inválida');
   return { allowed: true };
+}
+export async function cleanupCreatedItems(items, remove) {
+  const deleted = []; const pending = [];
+  for (const item of items) {
+    if (!['contact', 'robot', 'tag'].includes(item.kind)
+      || !(Number.isSafeInteger(item.id) && item.id > 0
+        || typeof item.id === 'string' && /^[a-z0-9-]{1,80}$/iu.test(item.id))) {
+      pending.push({ kind: item.kind, reason: 'id de resposta ausente' }); continue;
+    }
+    try { await remove(item); deleted.push({ kind: item.kind, id: item.id }); }
+    catch { pending.push({ kind: item.kind, id: item.id, reason: 'remoção não confirmada' }); }
+  }
+  return { created: items.map(({ kind, id }) => ({ kind, id: Number.isSafeInteger(id)
+    || typeof id === 'string' && /^[a-z0-9-]{1,80}$/iu.test(id) ? id : null })), deleted, pending };
 }
 export function selectedRobotChannel(actions) {
   let selected = null;
@@ -111,9 +136,9 @@ export function selectedRobotChannel(actions) {
   return selected;
 }
 
-function safeString(value) {
+function safeString(value, generated = fixtureValues) {
   if (typeof value !== 'string' || value.length > 180 || /[\r\n<>]/u.test(value)
-    || !fixtureValues.has(value) && !fictionalAreaValue.test(value) && !fictionalPhone.test(value)
+    || !generated.has(value) && !fixtureValues.has(value) && !fictionalAreaValue.test(value) && !fictionalPhone.test(value)
       && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
       && containsSensitiveData(value, { detectOpaque: true })) throw new Error('sanitização falhou');
   return value;
@@ -121,18 +146,19 @@ function safeString(value) {
 const commonLabels = new Set(['Adicionar Contato', 'Importar Contatos', 'Exportar Contatos', 'Criar novo Robô',
   'Listar Contatos', 'Proprietário do Contato', 'Menu de opções', 'Encaminhar atendimento']);
 const personLike = /\b[\p{Lu}][\p{Ll}]{2,}\s+[\p{Lu}][\p{Ll}]{2,}\b/u;
-function screenString(value, allowedLabels) {
+function screenString(value, allowedLabels, generated = fixtureValues) {
   if (typeof value !== 'string' || value.length > 180 || /[\r\n<>]/u.test(value)) throw new Error('sanitização falhou');
-  return !fixtureValues.has(value) && !fictionalAreaValue.test(value) && !fictionalPhone.test(value)
+  return !generated.has(value) && !fixtureValues.has(value) && !fictionalAreaValue.test(value) && !fictionalPhone.test(value)
     && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
     && !/^Selecionar Contato Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
     && (containsSensitiveData(value, { detectOpaque: true })
       || personLike.test(value) && !allowedLabels.has(value) && !commonLabels.has(value))
     ? '[conteúdo oculto]' : value;
 }
-function sanitizeScreen(raw, allowedLabels) {
-  if (!raw || typeof raw !== 'object' || !Buffer.isBuffer(raw.screenshot)) throw new Error('sanitização falhou');
-  const clean = (value) => screenString(value, allowedLabels);
+function sanitizeScreen(raw, allowedLabels, generated = fixtureValues, allowMissingScreenshot = false) {
+  if (!raw || typeof raw !== 'object' || raw.screenshot == null && !allowMissingScreenshot
+    || raw.screenshot != null && !Buffer.isBuffer(raw.screenshot)) throw new Error('sanitização falhou');
+  const clean = (value) => screenString(value, allowedLabels, generated);
   const path = clean(raw.path);
   if (!/^\/[a-z0-9/_-]*$/iu.test(path)) throw new Error('sanitização falhou');
   const controls = (raw.controls ?? []).slice(0, 40).map((item) => ({
@@ -148,9 +174,10 @@ function sanitizeScreen(raw, allowedLabels) {
   const state = {};
   for (const [key, value] of Object.entries(raw.state ?? {}).slice(0, 15)) state[clean(key)] = clean(value);
   return { title: clean(raw.title), path, controls, fields, messages, state,
-    screenshot: raw.screenshot };
+    screenshot: raw.screenshot, ...(raw.screenshotReason ? { screenshotReason: clean(raw.screenshotReason) } : {}),
+    ...(raw.aprovacao === 'pendente' ? { aprovacao: 'pendente' } : {}) };
 }
-function safeJourney(record) {
+function safeJourney(record, generated = fixtureValues) {
   const copy = structuredClone(record);
   const identity = copy.identity;
   delete copy.identity;
@@ -166,7 +193,7 @@ function safeJourney(record) {
   if (copy.configuredIdentityHash != null && !/^[a-f0-9]{64}$/u.test(copy.configuredIdentityHash)) throw new Error('sanitização falhou');
   const check = (value) => {
     if (typeof value === 'string' && !sha.test(value) && !/^[a-f0-9]{64}$/u.test(value)
-      && !fixtureValues.has(value) && !fictionalAreaValue.test(value) && !fictionalPhone.test(value)
+      && !generated.has(value) && !fixtureValues.has(value) && !fictionalAreaValue.test(value) && !fictionalPhone.test(value)
       && !/^(?:Contato|Robô|Tag) Exemplo \d{2}(?: Editado)? · [a-f0-9]{8}$/iu.test(value)
       && value !== copy.created?.robotRef && value !== copy.createdRef
       && containsSensitiveData(value, { detectOpaque: true })) throw new Error('sanitização falhou');
@@ -365,6 +392,7 @@ async function loadCache(root, module, id, key, cacheOnly = false) {
       || data.status === 'bloqueada' && /política|proibida|upload fora da tarefa|tipo inválido|ação inválida|alvo inválido|valor fora do gerador|clique inválido|opção inválida/u.test(data.reason ?? '')))
       return null;
     for (const { screenshotId } of data.screens ?? []) {
+      if (screenshotId == null) continue;
       if (!/^[a-f0-9]{64}$/u.test(screenshotId)
         || createHash('sha256').update(await readFile(join(root, module, `${screenshotId}.png`))).digest('hex') !== screenshotId)
         throw new Error('print do cache inválido');
@@ -441,7 +469,7 @@ export async function readJourney({ root = resolve(process.env.MCP_STATE_DIR ?? 
 
 export async function runJourneys({ module, tasks, root = resolve(process.env.MCP_STATE_DIR ?? '/data', 'journeys'), marker = '',
   frontSha, backSha = 'unavailable', profile, browser, model, sanitize = async (value) => value,
-  connectivityAttestation,
+  connectivityAttestation, realCompany = false, testPhone, ownerAttestation,
   allowedScreenLabels = new Set(),
   maxActionsPerTask = 30, maxActionsPerModule = 300, maxMs = 900_000, maxCostUsd = 5,
   cacheConfig = {}, cacheBypass = false, markerChanged = () => {}, accountIdentity, probeAccount,
@@ -455,6 +483,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
     ['marker', Boolean(marker && !/^[a-f0-9]{8}$/u.test(marker))],
   ].find(([, failed]) => failed)?.[0];
   if (invalid) throw new Error(`${invalid} ausente`);
+  if (realCompany) realCompanyFixture('phone', 1, marker, testPhone);
   const account = accountIdentity ? await accountIdentity() : null;
   if (accountIdentity && (!account || !(typeof account.credentialHash === 'string' && account.credentialHash
     || typeof account.userId === 'string' && account.userId && typeof account.companyId === 'string' && account.companyId)))
@@ -464,7 +493,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
   let areaFixtureContext = {};
   const fixtureFor = (kind, n = 1) => areaModules.has(module)
     ? areaFixtureContext[kind] ?? areaFixtureValue(kind, { marker: currentMarker, ...areaFixtureContext })
-    : fixtureValue(kind, n, currentMarker);
+    : realCompany ? realCompanyFixture(kind, n, currentMarker, testPhone) : fixtureValue(kind, n, currentMarker);
   const generatedFor = () => areaModules.has(module) ? new Set([...Object.values(areaFixtureContext),
     ...['cardName', 'campaignName', 'noteText', 'taskName', 'editedTaskName']
       .map((kind) => areaFixtureValue(kind, { marker: currentMarker }))])
@@ -483,7 +512,8 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
       : { marker: currentMarker, contact: prepared.contact, robot: prepared.robot,
         robotRef: prepared.robotRef, robotId: prepared.robotId, identity: prepared.identity };
     const key = digest({ task, frontSha, backSha, profile, accountHash, policy: JOURNEY_POLICY_VERSION, dependency,
-      config: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd, connectivityAttestation, ...cacheConfig } });
+      config: { maxActionsPerTask, maxActionsPerModule, maxMs, maxCostUsd, connectivityAttestation,
+        ownerAttestation, realCompany, ...cacheConfig } });
     let cached = cacheBypass || areaModules.has(module) ? null : await loadCache(root, module, task.id, key, true);
     if (cached && accountHash && cached.configuredIdentityHash !== accountHash) cached = null;
     if (cached && probeAccount) {
@@ -508,6 +538,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
     }
     const record = { task: task.id, module, target: cacheConfig.qaTarget ?? 'homolog',
       ...(connectivityAttestation ? { connectivityAttestation } : {}),
+      ...(ownerAttestation ? { ownerAttestation } : {}),
       objective: task.tarefa, prerequisites: task.preRequisitos,
       profile, versions: { frontSha, backSha, note: backSha === 'unavailable' ? 'SHA do back indisponível; recapturar quando disponível' : null },
       fixtures: [prepared.contact, prepared.robot].filter((value) => typeof value === 'string'), marker: currentMarker,
@@ -550,13 +581,13 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             record.reason = 'ações necessárias não observadas'; return;
           }
           const checked = await browser.verify(task, prepared, record.actions);
-          record.verification = { confirmed: Boolean(checked.confirmed), observed: safeString(checked.observed ?? ''),
+          record.verification = { confirmed: Boolean(checked.confirmed), observed: safeString(checked.observed ?? '', generatedFor()),
             ...(Number.isSafeInteger(checked.refsCount) ? { refsCount: checked.refsCount } : {}),
             ...(typeof checked.createdRefInRefs === 'boolean' ? { createdRefInRefs: checked.createdRefInRefs } : {}),
             ...(Number.isSafeInteger(checked.foundCount) ? { foundCount: checked.foundCount } : {}) };
           if (checked.importCapture) record.importCapture = checked.importCapture;
           if (checked.persistedCapture) record.persistedCapture = checked.persistedCapture;
-          if (checked.importResultMessage) record.importResultMessage = screenString(checked.importResultMessage, allowedScreenLabels);
+          if (checked.importResultMessage) record.importResultMessage = screenString(checked.importResultMessage, allowedScreenLabels, generatedFor());
           record.observed = record.verification.observed;
           record.after = screen.state;
           record.status = checked.confirmed ? 'concluída' : 'inconclusiva';
@@ -587,17 +618,20 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
             throw safe;
           }
           let sanitized;
-          try { sanitized = sanitizeScreen(await sanitize(raw), allowedScreenLabels); }
+          try { sanitized = sanitizeScreen(await sanitize(raw), allowedScreenLabels, generatedFor(), realCompany); }
           catch { throw new SanitizationError('sanitização falhou'); }
-          const screenshotId = createHash('sha256').update(sanitized.screenshot).digest('hex');
+          const screenshotId = sanitized.screenshot
+            ? createHash('sha256').update(sanitized.screenshot).digest('hex') : null;
           const screen = { title: sanitized.title, path: sanitized.path, controls: sanitized.controls,
             fields: sanitized.fields, messages: sanitized.messages, state: sanitized.state, screenshotId,
-            controlsOffered: sanitized.controls };
+            controlsOffered: sanitized.controls,
+            ...(sanitized.screenshotReason ? { screenshotReason: sanitized.screenshotReason } : {}),
+            ...(sanitized.aprovacao ? { aprovacao: sanitized.aprovacao } : {}) };
           if (record.before == null) record.before = sanitized.state;
           if (record.screens.length) screen.controlsOffered = sanitized.controls.filter((control) =>
             !record.screens.at(-1).controls.some((old) => old.role === control.role && old.name === control.name));
           record.screens.push(screen);
-          images.push([screenshotId, sanitized.screenshot]);
+          if (screenshotId) images.push([screenshotId, sanitized.screenshot]);
           const validation = screen.messages.find((message) => /^(?:Informe o telefone com DDD|Já existe um contato com este número de telefone|O telefone é obrigatório|Precisa ter pelo menos um canal)$/iu.test(message));
           if (task.id === 'contatos.importar' && screen.controls.some((control) => /importar contatos/iu.test(control.name) && !control.enabled)) {
             record.importInProgress = true;
@@ -657,7 +691,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
           if (action.type === 'upload_csv' && task.id !== 'contatos.importar') {
             record.status = 'bloqueada'; record.reason = 'upload fora da tarefa'; break;
           }
-          const policy = policyDecision(action, generatedFor(), task.id);
+          const policy = policyDecision(action, generatedFor(), task.id, { realCompany, testPhone });
           if (!policy.allowed) { record.status = 'bloqueada'; record.reason = policy.reason; break; }
           if (action.type === 'click' && /^(?:Salvar|Adicionar robô)$/iu.test(action.name) && missingPlanned) {
             feedback = `${missingPlanned[0]} ainda sem o valor do gerador (${missingPlanned[1]})`;
@@ -719,7 +753,7 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
               record.creationCapture = outcome.capture;
               if (outcome.capture?.refFound && typeof outcome.ref === 'string') record.createdRef = outcome.ref;
               if (outcome.saveOutcome) record.saveOutcome = outcome.saveOutcome;
-              if (outcome.messages) record.saveMessages = outcome.messages.map((message) => screenString(message, allowedScreenLabels));
+              if (outcome.messages) record.saveMessages = outcome.messages.map((message) => screenString(message, allowedScreenLabels, generatedFor()));
               if (outcome.ref && outcome.capture?.refFound && outcome.capture?.status >= 200
                 && outcome.capture.status < 300) { await complete(sanitized); break; }
               if (outcome.capture?.postSeen && outcome.capture.status >= 400) {
@@ -771,7 +805,11 @@ export async function runJourneys({ module, tasks, root = resolve(process.env.MC
     record.usage.costUsd = costUsd;
     record.usage.elapsedMs = Date.now() - started;
     // The caller cannot bypass this final privacy gate with an injected sanitizer.
-    safeJourney(record);
+    if (realCompany) {
+      const masked = JSON.parse(JSON.stringify(record).replaceAll(testPhone, '[telefone de teste mascarado]'));
+      Object.assign(record, masked);
+    }
+    safeJourney(record, generatedFor());
     await saveJourney(root, module, record, images);
     Object.assign(prepared, record.created);
     if (record.identity) prepared.identity = record.identity;
