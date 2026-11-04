@@ -640,6 +640,16 @@ test('etapa opcional dispensada não volta pela narração, pelos itens nem pela
   assert.ok(!JSON.stringify({ answer: reply.answer, sections: reply.sections, suggestions: reply.suggestions }).includes(optionalStep),
     'a instrução da etapa dispensada não aparece em nenhum campo visível');
   assert.match(reply.answer, /^Siga estes passos para criar a pipeline\./, 'o resto da narração do modelo fica');
+  // Mesma pergunta, modelo parcial e sem passos: nada é preenchido, e a etapa dispensada continua fora dos campos
+  // (a permissão de narrar a etapa recusada não depende da resolução do modelo).
+  const partial = await answerQuestion(root, 'Quero ver todos os passos para começar sem automação', { history, client: provider({
+    answer: `Siga estes passos para criar a pipeline. ${optionalStep}`,
+    sections: [{ title: 'Depois', items: [optionalStep] }], suggestions: [optionalStep], sources: [crmPath], resolution: 'partial',
+  }).client });
+  assert.deepEqual(partial.steps, [], 'parcial sem passos do modelo não preenche a sequência');
+  assert.ok(!JSON.stringify({ answer: partial.answer, sections: partial.sections, suggestions: partial.suggestions }).includes(optionalStep),
+    'a instrução da etapa dispensada não aparece mesmo com resolução parcial');
+  assert.match(partial.answer, /^Siga estes passos para criar a pipeline\./, 'o resto da narração fica');
 });
 
 test('página só com parágrafo procedural: controle inventado não aparece e zero passos não vira guia automático', async () => {
