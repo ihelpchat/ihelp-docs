@@ -20,15 +20,22 @@ export function safetyPayload(answer, documentedSteps) {
 }
 
 export async function classifyAnswerSafety(client, answer, documentedSteps, budget) {
+  const result = await classifyAnswerSafetyResult(client, answer, documentedSteps, budget);
+  return result.kind === 'ok' ? result.verdict : null;
+}
+
+export async function classifyAnswerSafetyResult(client, answer, documentedSteps, budget) {
   try {
     const payload = safetyPayload(answer, documentedSteps);
     const result = await createBudgetedResponse(client, payload, budget);
-    if (result.kind !== 'ok') return null;
-    const parsed = JSON.parse(result.response.output_text);
+    if (result.kind !== 'ok') return { kind: 'unavailable', reason: result.kind };
+    let parsed;
+    try { parsed = JSON.parse(result.response.output_text); }
+    catch { return { kind: 'unavailable', reason: 'invalid' }; }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
       || Object.keys(parsed).length !== 2
       || typeof parsed.mentionsSource !== 'boolean'
-      || typeof parsed.unsupportedAction !== 'boolean') return null;
-    return parsed;
-  } catch { return null; }
+      || typeof parsed.unsupportedAction !== 'boolean') return { kind: 'unavailable', reason: 'invalid' };
+    return { kind: 'ok', verdict: parsed };
+  } catch { return { kind: 'unavailable', reason: 'exception' }; }
 }

@@ -36,6 +36,7 @@ export function stateEchoClient({ answer = 'Orientação inicial.', steps = 'fir
     }
     onRequest?.(request);
     const body = {
+      plan: { intent: 'execute', optionalBranch: 'unspecified' },
       answer: stateNarration(request, answer), sections: [],
       steps: steps === 'first' ? firstDocumentedStep(request) : steps,
       code: null, sources, suggestions, resolution: 'complete', found: true,

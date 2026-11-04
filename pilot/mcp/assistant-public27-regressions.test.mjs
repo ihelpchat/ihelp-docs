@@ -198,12 +198,12 @@ test('recusa na primeira passagem e aprovação na segunda devolvem a resposta v
 test('triagem e geração indisponíveis identificam o ramo do fallback', async () => {
   const router = fake({ answer: 'não usado', sources: [crmPath] }, { triage: 'throw' });
   const routed = await answerQuestion(root, 'Como criar uma pipeline?', { client: router.client });
-  assert.equal(routed.answer, fixedError);
+  assert.match(routed.answer, /^Tive um problema para responder agora\./u);
   assert.deepEqual(routed.fallback, { branch: 'router', reason: 'provider_failed', pass: 1 });
   assert.equal(router.calls.answer, 0);
   const generation = fake('throw');
   const generated = await answerQuestion(root, 'Como criar uma pipeline?', { client: generation.client });
-  assert.equal(generated.answer, fixedError);
+  assert.match(generated.answer, /^Tive um problema para responder agora\./u);
   assert.deepEqual(generated.fallback, { branch: 'generation', reason: 'exception', pass: 1 });
 });
 
@@ -242,3 +242,44 @@ for (const plan of [undefined, null, { intent: 'bad', optionalBranch: 'skip' }, 
     assert.equal(JSON.stringify(reply).includes('fallback'), false, 'metadados internos não vão no HTTP');
   });
 }
+
+
+test('routing isolado entre duas pessoas e duas invocações, mesmo com o mesmo client', async () => {
+  await withBusiness(async () => {
+    const { client, calls } = fake({ answer: 'Pipeline organiza oportunidades.', sources: [crmPath] },
+      { safety: [{ mentionsSource: true, unsupportedAction: false }, { mentionsSource: false, unsupportedAction: false },
+        { mentionsSource: true, unsupportedAction: false }, { mentionsSource: false, unsupportedAction: false }] });
+    const first = await answerQuestion(root, conceptual, { client, history: [{ role: 'user', content: 'Quero entender o quadro.' }] });
+    const second = await answerQuestion(root, conceptual, { client, history: [{ role: 'user', content: 'Estou vendo uma pipeline.' }] });
+    assert.equal(first.answer, 'Pipeline organiza oportunidades.');
+    assert.equal(second.answer, first.answer);
+    assert.equal(calls.triage, 2);
+    assert.equal(calls.answer, 4);
+    assert.equal(calls.safety, 4);
+  });
+});
+
+test('plano de entendimento também governa os passos com contexto de negócio', async () => {
+  await withBusiness(async () => {
+    const { client, calls } = fake({ plan: { intent: 'explain', optionalBranch: 'unspecified' }, answer: 'Pipeline organiza oportunidades.',
+      steps: crm.documentedSteps.slice(0, 2).map((text, i) => ({ ...step(text), sourceStepId: `faq-1-step-${i + 1}` })), sources: [crmPath] });
+    const reply = await answerQuestion(root, conceptual, { client });
+    assert.equal(reply.answer, 'Pipeline organiza oportunidades.');
+    assert.deepEqual(reply.steps, []);
+    assert.equal(calls.answer, 1);
+    assert.equal(calls.safety, 1);
+  });
+});
+
+test('sem robô não significa dispensa automática de automação CRM', async () => {
+  const { client } = fake({ answer: 'A automação é opcional.', steps: mandatory.map(step), sources: [crmPath] });
+  const reply = await answerQuestion(root, 'Quero ver todos os passos para criar uma pipeline, sem configurar robô agora.', { client });
+  assert.deepEqual(reply.steps.map(({ text }) => text), crm.documentedSteps);
+});
+
+test('dispensa explícita continua protegida; plano contraditório falha fechado', async () => {
+  const { client } = fake({ plan: { intent: 'execute', optionalBranch: 'include' }, answer: 'Inclua a automação.', sources: [crmPath] });
+  const reply = await answerQuestion(root, 'Quero todos os passos para criar uma pipeline sem automação.', { client });
+  assert.deepEqual(reply.steps, []);
+  assert.equal(reply.fallback?.reason, 'plan_conflict');
+});

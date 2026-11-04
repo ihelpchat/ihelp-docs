@@ -19,7 +19,7 @@ const robotPath = '/docs/sobre-o-sistema/robo-de-atendimento';
 const robotAction = { id: 'abrir-robos', label: 'Abrir a tela Robôs', route: '/bot', target: 'robots-create' };
 const source = { title: 'Robô de Atendimento', path: robotPath };
 const response = { model: 'fixture', output_text: JSON.stringify({
-  answer: 'Abra Robôs.', sections: [], steps: [{ text: 'No menu do iHelp, abra Robôs. Na lista, clique em “Criar novo Robô”.', actionId: null, imagePath: null }],
+  plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Abra Robôs.', sections: [], steps: [{ text: 'No menu do iHelp, abra Robôs. Na lista, clique em “Criar novo Robô”.', actionId: null, imagePath: null }],
   code: null, sources: [robotPath], suggestions: [], resolution: 'complete', found: true,
 }) };
 const requests = [];

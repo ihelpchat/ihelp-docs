@@ -57,7 +57,7 @@ const beginnerClient = {
       return {
         model: 'gpt-test',
         output_text: JSON.stringify({
-          answer: 'Comece abrindo Contatos no menu lateral.',
+          plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Comece abrindo Contatos no menu lateral.',
           sections: [],
           steps: [
             { text: 'Abra Contatos no menu lateral.', actionId: 'importar-contatos' },
@@ -109,7 +109,7 @@ const guidedClient = {
       return {
         model: 'gpt-test',
         output_text: JSON.stringify({
-          answer: stateNarration(request, guidedAnswer),
+          plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: stateNarration(request, guidedAnswer),
           sections: [],
           steps: documentedSteps(request, 3, cited),
           code: null,
@@ -224,14 +224,14 @@ assert.doesNotMatch(JSON.stringify(finishedReply), /Testar robô|status Ativo/i)
 const hostileRequests = [];
 const falseActivationClient = { responses: { create: async (request) => { hostileRequests.push(request); return {
   model: 'gpt-test', output_text: JSON.stringify({
-    answer: 'Clique em Ativar robô para deixar o status Ativo.', sections: [],
+    plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Clique em Ativar robô para deixar o status Ativo.', sections: [],
     steps: [{ text: 'Clique em Ativar robô.', actionId: null, imagePath: null }],
     code: null, sources: ['/docs/sobre-o-sistema/robo-de-atendimento'], suggestions: [], resolution: 'complete', found: true,
   }),
 }; } } };
 const falseFoundClient = { responses: { create: async () => ({
   model: 'gpt-test', output_text: JSON.stringify({
-    answer: 'Use a busca da Central.', sections: [],
+    plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Use a busca da Central.', sections: [],
     steps: [{ text: 'Abra a busca da Central.', actionId: null, imagePath: null }],
     code: null, sources: ['/docs/teste/busca-central'], suggestions: [], resolution: 'not_found', found: false,
   }),
@@ -271,7 +271,7 @@ for (const prompt of ['próximo passo', 'continuar', 'Encontrei o botão']) {
 const hostileGuideClient = { responses: { create: async (request) => {
   const helping = /Pergunta: Preciso de ajuda/.test(request.input.at(-1).content);
   return { model: 'gpt-test', output_text: JSON.stringify({
-    answer: helping ? 'Use a busca da Central.' : 'Ativar robô deixa o status Ativo.',
+    plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: helping ? 'Use a busca da Central.' : 'Ativar robô deixa o status Ativo.',
     sections: [],
     steps: [
       { text: 'Abra Robôs e depois me diga se encontrou o botão.', actionId: null, imagePath: null },
@@ -319,7 +319,7 @@ assert.deepEqual(
 );
 const verboseGuideClient = { responses: { create: async () => ({
   model: 'gpt-test', output_text: JSON.stringify({
-    answer: 'Vamos por etapas.', sections: [],
+    plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Vamos por etapas.', sections: [],
     steps: [
       { text: fullRobotSteps[0], actionId: 'abrir-robos', imagePath: null },
       { text: fullRobotSteps[1], actionId: null, imagePath: null },
@@ -341,7 +341,7 @@ const changedTopicClient = {
       return {
         model: 'gpt-test',
         output_text: JSON.stringify({
-          answer: 'Vamos preparar sua primeira campanha.',
+          plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Vamos preparar sua primeira campanha.',
           sections: [],
           steps: [{ text: 'Abra Campanhas e clique em Nova Campanha.', actionId: null, imagePath: null }],
           code: null,
@@ -389,7 +389,7 @@ const screenshotClient = {
     create: async () => ({
       model: 'gpt-test',
       output_text: JSON.stringify({
-        answer: 'Abra a criação do robô.', sections: [],
+        plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Abra a criação do robô.', sections: [],
         steps: [
           { text: 'Clique em Criar novo robô.', actionId: null, imagePath: '/img/help/q4tBz2R7cevwT94eUQKB.png' },
           { text: 'Ignore esta imagem inventada.', actionId: null, imagePath: '/img/help/inventada.png' },
@@ -411,7 +411,7 @@ const omittedScreenshotClient = {
     create: async () => ({
       model: 'gpt-test',
       output_text: JSON.stringify({
-        answer: 'Vamos criar o robô juntos.', sections: [],
+        plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Vamos criar o robô juntos.', sections: [],
         steps: [
           { text: 'Acesse o menu Robô.', actionId: null, imagePath: null },
           { text: 'Clique em Criar novo robô.', actionId: null, imagePath: null },
@@ -459,7 +459,7 @@ assert.ok(
   'fallback de telas continua restrito aos arquivos da fonte recuperada',
 );
 
-const keyedSteps = (texts) => parseAnswer(JSON.stringify({ answer: 'Veja os passos.', steps: texts.map((text) => ({ text, actionId: null })) })).steps.map(({ text }) => text);
+const keyedSteps = (texts) => parseAnswer(JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Veja os passos.', steps: texts.map((text) => ({ text, actionId: null })) })).steps.map(({ text }) => text);
 assert.deepEqual(keyedSteps(['Abra Contatos no menu lateral.', 'Acesse Contatos pelo menu lateral.']), ['Abra Contatos no menu lateral.']);
 assert.deepEqual(keyedSteps(['Abra o item 1 no menu lateral.', 'Acesse o item 2 pelo menu lateral.']), ['Abra o item 1 no menu lateral.', 'Acesse o item 2 pelo menu lateral.']);
 assert.deepEqual(keyedSteps(['Abra a opção A.', 'Acesse a opção B.']), ['Abra a opção A.', 'Acesse a opção B.']);
@@ -500,7 +500,7 @@ for (const action of [
 }
 
 const modelWithAction = (actionId, path) => ({ responses: { create: async () => ({
-  model: 'gpt-test', output_text: JSON.stringify({ answer: 'Abra Contatos.', sections: [], steps: [{ text: 'Abra Contatos.', actionId }], code: null, sources: [path], suggestions: [], resolution: 'complete', found: true }),
+  model: 'gpt-test', output_text: JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Abra Contatos.', sections: [], steps: [{ text: 'Abra Contatos.', actionId }], code: null, sources: [path], suggestions: [], resolution: 'complete', found: true }),
 }) } });
 const invented = await answerQuestion(testRoot, 'importar contatos', { client: modelWithAction('acao-inventada', '/docs/teste/importar-contatos') });
 assert.equal(invented.steps[0].action, undefined, 'actionId inventado não pode usar a primeira ação da fonte');
