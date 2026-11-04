@@ -194,11 +194,19 @@ test('ficha literal "Quero ver todos os passos" entrega o procedimento da âncor
   assert.equal(calls.triage, 0);
 
   // Pedido completo com assunto: o modelo confirma o procedimento devolvendo passos; o servidor entrega a sequência documentada inteira.
+  const full = await answerQuestion(root, 'Quero ver todos os passos para criar a pipeline', {
+    client: provider({ answer: 'Aqui vai tudo, do início ao fim.', sources: [crmPath], steps: [step('Abra Pipeline no CRM.')] }).client, history,
+  });
+  assert.deepEqual(full.steps.map(({ text }) => text), crm.documentedSteps, 'sem negativa, a sequência inteira');
+  assert.equal(full.sources[0]?.path, crmPath);
+  // Com negativa explícita da etapa opcional ("sem automação"), só os passos obrigatórios: até a decisão e da retomada
+  // ao fim (caso real P40-A3; antes a sequência inteira, com automação, era entregue).
   const scoped = await answerQuestion(root, 'Quero ver todos os passos para começar sem automação', {
     client: provider({ answer: 'Os passos de automação são opcionais; você pode ir direto para Criar Pipeline.', sources: [crmPath],
       steps: [step('Abra Pipeline no CRM.'), step('Clique em Criar Pipeline e confira o novo quadro na lista.')] }).client, history,
   });
-  assert.deepEqual(scoped.steps.map(({ text }) => text), crm.documentedSteps);
+  const branch = crm.optionalBranch;
+  assert.deepEqual(scoped.steps.map(({ text }) => text), [...crm.documentedSteps.slice(0, branch.decision + 1), ...crm.documentedSteps.slice(branch.decline)]);
   assert.equal(scoped.sources[0]?.path, crmPath);
 });
 
