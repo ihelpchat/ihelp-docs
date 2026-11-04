@@ -292,6 +292,17 @@ Fonte usada: ${crmPath}` },
   assert.equal(started.steps.length, 16, 'com passos já mostrados, a ficha continua entregando a sequência inteira');
 });
 
+test('pedido completo com esclarecimento (partial) mantém a guarda: instrução inventada não vaza em nenhum campo', async () => {
+  const hostile = 'Você precisa clicar em Ativar pipeline para deixar o status Ativo.';
+  const reply = await answerQuestion(root, 'Quero todos os passos para alterar uma pipeline existente', { client: provider({
+    answer: hostile, sections: [{ title: 'Orientação', items: [hostile] }], suggestions: [hostile], sources: [crmPath], resolution: 'partial',
+  }).client });
+  assert.deepEqual(reply.steps, [], 'esclarecimento: nenhum passo documentado');
+  assert.doesNotMatch(JSON.stringify({ answer: reply.answer, sections: reply.sections, suggestions: reply.suggestions }), /Ativar pipeline|status Ativo/i,
+    'com fonte procedural em jogo, a guarda vale mesmo sem passos mostrados');
+  assert.equal(reply.resolution, 'partial');
+});
+
 test('pedido completo de outro assunto não herda o guia anterior por uma palavra em comum', async () => {
   const history = await crmHistory();
   const reply = await answerQuestion(root, 'Quero ver todos os passos para cadastrar um contato', {
