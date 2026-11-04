@@ -145,7 +145,7 @@
           "maximum": 9007199254740991
         },
         "history": {
-          "maxItems": 6,
+          "maxItems": 12,
           "type": "array",
           "items": {
             "type": "object",

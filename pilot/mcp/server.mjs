@@ -31,7 +31,7 @@ const probeCurrentJourneyAccount = async () => {
   return probeJourneyAccount(process.env);
 };
 const lockedJourneyProbe = () => withJourneyGate(probeCurrentJourneyAccount);
-const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto']);
+const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_generate_faq_v2', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto']);
 const requestedBySchema = z.string().optional().describe('Ator opcional; se informado, deve coincidir com o ator da credencial');
 const confirmationsSchema = z.array(z.string().max(300)).max(8).optional();
 const contentRequestSchema = z.object({
@@ -212,6 +212,23 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     }
   });
 
+  registerTool('docs_generate_faq_v2', {
+    mutates: false,
+    description: 'Gera uma página FAQ inteira com jornadas, juízes factual/editorial, uma correção e montagem fiel; retorna revisão humana quando o aceite falha.',
+    inputSchema: z.strictObject({ module: z.enum(['contatos', 'robos']), requestedBy: requestedBySchema }),
+  }, async ({ module, requestedBy }) => {
+    await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_faq_v2', target: module, result: 'attempt' });
+    try {
+      const { generateFaqV2 } = await import('./faq-generator-v2.mjs');
+      const result = await generateFaqV2(root, module, { probeAccount: lockedJourneyProbe });
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_faq_v2', target: module, result: result.status });
+      return textResult(result);
+    } catch (error) {
+      await auditOperation(root, { actor: requestedBy, operation: 'docs_generate_faq_v2', target: module, result: 'failure' });
+      return textResult({ status: 'precisa de revisão humana', error: error.message }, true);
+    }
+  });
+
   registerTool('criar_guia', {
     mutates: true,
     description: 'Na primeira chamada, cria um plano com perguntas; na segunda, retoma pelo planId e cria somente um draft de guia canônico.',
@@ -299,13 +316,15 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
       const { journeyCoverage } = await import('./journey-service.mjs');
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'success' });
       return textResult({ tasks: records.map(journeyTaskSummary),
-        coverage: journeyCoverage(records), elapsedMs: Date.now() - started });
+        coverage: journeyCoverage(records), ...(records.cleanup ? { cleanup: records.cleanup } : {}),
+        elapsedMs: Date.now() - started });
     } catch (error) {
       const { journeyFailureCategory, journeyFailureLog } = await import('./journey-service.mjs');
       console.error(journeyFailureLog(error));
       await auditOperation(root, { actor: requestedBy, operation: 'gravar_jornada', target, result: 'failure' });
       return textResult({ error: journeyFailureCategory(error), diagnostic: journeyFailureLog(error),
         tasks: error?.results?.map(journeyTaskSummary) ?? [],
+        ...(error?.cleanup ? { cleanup: error.cleanup } : {}),
         elapsedMs: Date.now() - started }, true);
     } finally {
       const { clearJourneyProofCache } = await import('./journey-service.mjs');
