@@ -1107,7 +1107,12 @@ export async function answerQuestion(root, question, options = {}) {
   // pedido de alterar/apagar nem negativa. Pergunta conceitual ou de status da área, continuação, escolha, ficha e
   // pergunta solta de seguimento ficam sem passos (o estado do guia é deles) e com fontes só da conversa. A decisão
   // depende só da pergunta e da recuperação, não de qual etapa falhou (com orçamento esgotado a triagem falha primeiro).
-  const startRequest = /\b(?:criar|crie|crio|criando|configurar|configure|configuro|configurando|montar|monte|monto|montando|comecar|comece|comeco|comecando|iniciar|inicie|inicio|iniciando)\b/i.test(normalize(question));
+  // Pedido explícito de criar/começar, conservador e curto: a pergunta ABRE (após no máximo um cumprimento/conectivo)
+  // com "como [posso/eu faço para] …", "quero/preciso …" ou "me ajude a …" seguido do verbo de criar/começar. Palavra
+  // solta no meio ("data de início", "o que é criar uma campanha?"), capacidade/permissão ("Posso criar duas
+  // campanhas?") ou frase ambígua não são pedido: nesses casos o fallback fica sem passos.
+  const startRequest = /^(?:(?:oi|ola|bom dia|boa tarde|boa noite|por favor|entao|e|ai)[,!.]?\s+)*(?:como(?:\s+(?:eu|posso|poderia|devo))?(?:\s+(?:faco|fazer)\s+(?:para|pra))?|quero|queria|gostaria de|preciso|precisava|me ajuda a|me ajude a|pode me ajudar a|poderia me ajudar a|me ensina a|me ensine a)\s+(?:criar|crie|crio|configurar|configure|configuro|montar|monte|monto|iniciar|comecar(?: a)?|comeco a)\b/i
+    .test(normalize(question).replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim());
   const alterationRequest = /\b(?:alterar|altere|mudar|mude|renomear|renomeie|editar|edite|trocar|troque|apagar|apague|excluir|exclua|remover|remova|deletar|delete|desativar|desative|cancelar|cancele|nao|sem)\b/i.test(normalize(question));
   const safeGuide = !history.length && startRequest && !alterationRequest ? exactQuestionGuide ?? exactGuide ?? null : null;
   const fixedFallback = (failed = false) => {
