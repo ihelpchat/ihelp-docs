@@ -303,6 +303,27 @@ test('pedido completo com esclarecimento (partial) mantém a guarda: instrução
   assert.equal(reply.resolution, 'partial');
 });
 
+test('narração que abre a tela do primeiro passo é preservada, com ou sem passos', async () => {
+  const narration = 'Abra Campanhas para preparar o envio.';
+  const withStep = await answerQuestion(root, 'Como criar e enviar uma campanha?', { client: provider({
+    answer: narration, sources: [campaignPath], steps: [step(campaign.documentedSteps[0])],
+  }).client });
+  assert.deepEqual(withStep.steps.map(({ text }) => text), [campaign.documentedSteps[0]]);
+  assert.equal(withStep.answer, narration, 'instrução cuja primeira oração está no passo documentado não é derrubada');
+  const withoutStep = await answerQuestion(root, 'Como criar e enviar uma campanha?', { client: provider({ answer: narration, sources: [campaignPath] }).client });
+  assert.deepEqual(withoutStep.steps, []);
+  assert.equal(withoutStep.answer, narration, 'sem passos, a narração legítima também fica (nada de texto de erro)');
+  const hostile = await answerQuestion(root, 'Como criar e enviar uma campanha?', { client: provider({ answer: 'Abra Campanhas para excluir todos os contatos.', sources: [campaignPath] }).client });
+  assert.doesNotMatch(hostile.answer, /excluir todos/, 'mesma oração inicial com efeito inventado continua fora');
+  // prefixo documentado não libera um segundo controle inventado, em nenhum campo exibido
+  for (const invented of ['Abra Campanhas e clique em Painel Secreto.', 'Abra Campanhas para clicar em Painel Secreto.']) {
+    const reply = await answerQuestion(root, 'Como criar e enviar uma campanha?', { client: provider({
+      answer: invented, sections: [{ title: 'Depois', items: [invented] }], suggestions: [invented], sources: [campaignPath], steps: [step(campaign.documentedSteps[0])],
+    }).client });
+    assert.doesNotMatch(JSON.stringify({ answer: reply.answer, sections: reply.sections, suggestions: reply.suggestions }), /Painel Secreto/, `${invented}: controle inventado não aparece`);
+  }
+});
+
 test('pedido completo de outro assunto não herda o guia anterior por uma palavra em comum', async () => {
   const history = await crmHistory();
   const reply = await answerQuestion(root, 'Quero ver todos os passos para cadastrar um contato', {
