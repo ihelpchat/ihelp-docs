@@ -676,6 +676,12 @@ test('fallback de orçamento: guia documentado só para pedido inicial de criar 
   // um pedido inicial de criar/começar; seguimento solto (P40-B3) e pedido de alterar continuam sem passos.
   const exhausted = (name) => ({ file: join(root, `budget-${name}.json`), dailyLimitUsd: 0 });
   const quiet = () => provider({ answer: 'não deve ser chamada' }).client;
+  // Triagem responde normalmente e a geração falha: routerFailed=false, caminho em que o guia de criação vazava
+  // para perguntas sem intenção de criar (peer sobre b24111e).
+  const generationDown = { responses: { create: async (request) => {
+    if (request.text?.format?.name === 'triagem_fechada') return { status: 'completed', output_text: '{"choice":"sem guia"}', usage: { input_tokens: 1, output_tokens: 1 } };
+    throw new Error('fixture: geração indisponível');
+  } } };
   const first = await answerQuestion(root, 'como criar campanha no whatsapp', { client: quiet(), budget: exhausted('criar') });
   assert.deepEqual(first.steps.map(({ text }) => text), campaign.documentedSteps.slice(0, 3), 'primeiros passos documentados do guia da área');
   assert.equal(first.sources[0]?.path, campaignPath, 'o guia vem primeiro nas fontes');
@@ -692,15 +698,15 @@ test('fallback de orçamento: guia documentado só para pedido inicial de criar 
   assert.deepEqual(followUp.steps, [], 'seguimento solto não recebe passos');
   assert.ok(followUp.sources.every(({ path }) => [crmPath, tutorialPath].includes(path)), 'fontes só da conversa');
   assert.doesNotMatch(followUp.answer, /guia abaixo/);
-  const rename = await answerQuestion(root, 'Quero só renomear a pipeline que já existe', { client: quiet(), budget: exhausted('renomear') });
+  const rename = await answerQuestion(root, 'Quero só renomear a pipeline que já existe', { client: generationDown });
   assert.deepEqual(rename.steps, [], 'pedido de alterar no primeiro turno não recebe o guia de criação, mesmo com o título da área batendo');
   assert.doesNotMatch(rename.answer, /guia abaixo/);
   // Pergunta conceitual da área (com a página Campanhas aberta) e consulta de status: título/visão geral batem, mas não
   // há intenção de criar/começar — nenhum passo de criação no fallback.
-  const concept = await answerQuestion(root, 'O que é uma campanha?', { client: quiet(), budget: exhausted('conceito'), page: { path: campaignPath, title: 'Campanhas' } });
+  const concept = await answerQuestion(root, 'O que é uma campanha?', { client: generationDown, page: { path: campaignPath, title: 'Campanhas' } });
   assert.deepEqual(concept.steps, [], 'pergunta conceitual da área não recebe os passos de criação');
   assert.doesNotMatch(concept.answer, /guia abaixo/);
-  const status = await answerQuestion(root, 'Como acompanho o status da minha campanha?', { client: quiet(), budget: exhausted('status') });
+  const status = await answerQuestion(root, 'Como acompanho o status da minha campanha?', { client: generationDown });
   assert.deepEqual(status.steps, [], 'consulta de status/acompanhamento não recebe os passos de criação');
   assert.doesNotMatch(status.answer, /guia abaixo/);
 });
