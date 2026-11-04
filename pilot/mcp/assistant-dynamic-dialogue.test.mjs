@@ -446,9 +446,21 @@ test('prints e ações continuam restritos à fonte; prints documentados acompan
     sources: [robotPath],
   }).client });
   assert.deepEqual(reply.steps.map(({ text }) => text), robot.documentedSteps.slice(0, 3));
-  assert.equal(reply.steps[0].action?.id, 'abrir-robos', 'actionId inventado não vale; a ação documentada do primeiro passo vale');
+  assert.equal(reply.steps[0].action, undefined, 'actionId explícito inventado não ganha o CTA documentado como substituto');
   assert.deepEqual(reply.steps.map((item) => item.image?.src), robot.stepImages.slice(0, 3));
   assert.doesNotMatch(JSON.stringify(reply), /inventada\.png|abrir-tudo/);
+  // Sem actionId (omitido), o primeiro passo documentado mantém o CTA do catálogo.
+  const omitted = await answerQuestion(root, 'como criar um robô do zero?', { client: provider({
+    answer: 'Você cria o robô, dá um nome e liga ao número.',
+    steps: [step('Abra Robôs no menu e clique em Criar novo robô.'), step('Escreva um nome em Título do Robô.')], sources: [robotPath],
+  }).client });
+  assert.equal(omitted.steps[0].action?.id, 'abrir-robos', 'actionId omitido: a ação documentada do primeiro passo vale');
+  // Com actionId válido do catálogo, o CTA do catálogo vale.
+  const valid = await answerQuestion(root, 'como criar um robô do zero?', { client: provider({
+    answer: 'Você cria o robô, dá um nome e liga ao número.',
+    steps: [step('Abra Robôs no menu e clique em Criar novo robô.', 'abrir-robos'), step('Escreva um nome em Título do Robô.')], sources: [robotPath],
+  }).client });
+  assert.equal(valid.steps[0].action?.id, 'abrir-robos', 'actionId válido: CTA do catálogo');
 });
 
 // Casos reais da validação em staging (C8, personas P40): transcrições em
@@ -594,7 +606,8 @@ test('pedido explícito de outro procedimento vence o guia em andamento, mesmo q
   }).client });
   assert.equal(reply.sources[0]?.path, robotPath, 'a nova tarefa explícita segue a fonte escolhida pelo modelo');
   assert.deepEqual(reply.steps.map(({ text }) => text), robot.documentedSteps, 'procedimento completo do robô');
-  assert.ok(!reply.steps.some(({ text }) => contacts.documentedSteps.includes(text)), 'nenhum passo de Contatos');
+  assert.ok(!reply.steps.some(({ text }) => contacts.documentedSteps.includes(text) && !robot.documentedSteps.includes(text)),
+    'nenhum passo exclusivo de Contatos ("Clique em Salvar." é documentado nos dois procedimentos)');
 });
 
 test('negativa da etapa opcional em paráfrase comum conta; dupla negação não conta', async () => {
@@ -608,6 +621,25 @@ test('negativa da etapa opcional em paráfrase comum conta; dupla negação não
   assert.deepEqual(declined.steps.map(({ text }) => text), mandatory, 'negação a três palavras do termo ainda é recusa');
   const doubleNegative = await ask('Quero ver todos os passos, não quero pular a automação');
   assert.deepEqual(doubleNegative.steps.map(({ text }) => text), crm.documentedSteps, '"não quero pular" não é recusa: sequência inteira');
+  const withoutSkipping = await ask('Quero ver todos os passos sem pular a automação');
+  assert.deepEqual(withoutSkipping.steps.map(({ text }) => text), crm.documentedSteps, '"sem pular" pede a etapa: sequência inteira');
+});
+
+test('etapa opcional dispensada não volta pela narração, pelos itens nem pelas sugestões', async () => {
+  // Revisor (C7c): só steps era filtrado; a guarda de answer/sections/suggestions ainda ancorava no passo opcional.
+  const history = await crmHistory();
+  const branch = crm.optionalBranch;
+  const optionalStep = crm.documentedSteps[branch.accept + 1];
+  const mandatory = [...crm.documentedSteps.slice(0, branch.decision + 1), ...crm.documentedSteps.slice(branch.decline)];
+  const reply = await answerQuestion(root, 'Quero ver todos os passos para começar sem automação', { history, client: provider({
+    answer: `Siga estes passos para criar a pipeline. ${optionalStep}`,
+    sections: [{ title: 'Depois', items: [optionalStep] }], suggestions: [optionalStep],
+    sources: [crmPath], steps: [step('Abra Pipeline no CRM.')],
+  }).client });
+  assert.deepEqual(reply.steps.map(({ text }) => text), mandatory);
+  assert.ok(!JSON.stringify({ answer: reply.answer, sections: reply.sections, suggestions: reply.suggestions }).includes(optionalStep),
+    'a instrução da etapa dispensada não aparece em nenhum campo visível');
+  assert.match(reply.answer, /^Siga estes passos para criar a pipeline\./, 'o resto da narração do modelo fica');
 });
 
 test('página só com parágrafo procedural: controle inventado não aparece e zero passos não vira guia automático', async () => {
