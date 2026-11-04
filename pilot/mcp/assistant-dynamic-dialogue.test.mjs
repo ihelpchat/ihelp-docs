@@ -8,6 +8,7 @@ import { cp, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { answerQuestion, retrieveContext } from './assistant-service.mjs';
+import { stateNarration } from './fixtures/state-echo-client.mjs';
 
 const projectRoot = new URL('../', import.meta.url).pathname;
 const root = await mkdtemp(join(tmpdir(), 'claricia-dialogo-'));
@@ -18,12 +19,15 @@ delete process.env.BUSINESS_CONTEXT_DIR;
 const crmPath = '/docs/principais-motivos-de-suporte/crm';
 const tutorialPath = '/docs/sobre-o-sistema/crm/como-criar-uma-nova-pipeline';
 const campaignPath = '/docs/principais-motivos-de-suporte/campanhas';
+const contactsPath = '/docs/sobre-o-sistema/agenda-de-contatos';
 const robotPath = '/docs/sobre-o-sistema/robo-de-atendimento';
 const sourceOf = async (question, path) => (await retrieveContext(root, question, 8)).find((source) => source.path === path);
 const crm = await sourceOf('Como criar pipeline no CRM?', crmPath);
 const tutorial = await sourceOf('Como criar uma nova Pipeline', tutorialPath);
 const campaign = await sourceOf('Como criar uma campanha?', campaignPath);
 const robot = await sourceOf('Robô de Atendimento', robotPath);
+const contacts = await sourceOf('Agenda de contatos', contactsPath);
+assert.ok(contacts?.documentedSteps.length, 'a página de contatos tem passos documentados');
 assert.equal(crm.documentedSteps.length, 16, 'a fonte curada do CRM tem 16 passos');
 assert.ok(tutorial.documentedSteps.length < 16, 'o tutorial numera só parte do procedimento');
 assert.ok(robot.stepImages[0] && robot.stepImages[1] && robot.stepImages[2], 'robô tem prints nos três primeiros passos');
@@ -189,17 +193,81 @@ test('ficha literal "Quero ver todos os passos" entrega o procedimento da âncor
   assert.match(developerPrompt(calls), /passo a passo completo/i);
   assert.equal(calls.triage, 0);
 
+  // Pedido completo com assunto: o modelo confirma o procedimento devolvendo passos; o servidor entrega a sequência documentada inteira.
   const scoped = await answerQuestion(root, 'Quero ver todos os passos para começar sem automação', {
-    client: provider({ answer: 'Os passos de automação são opcionais; você pode ir direto para Criar Pipeline.', sources: [crmPath] }).client, history,
+    client: provider({ answer: 'Os passos de automação são opcionais; você pode ir direto para Criar Pipeline.', sources: [crmPath],
+      steps: [step('Abra Pipeline no CRM.'), step('Clique em Criar Pipeline e confira o novo quadro na lista.')] }).client, history,
   });
   assert.deepEqual(scoped.steps.map(({ text }) => text), crm.documentedSteps);
   assert.equal(scoped.sources[0]?.path, crmPath);
 });
 
+test('narração hostil não entra: instrução ou controle inventado sai da resposta, mesmo com passos vazios', async () => {
+  const history = await crmHistory();
+  const hostile = 'Clique em Ativar pipeline para deixar o status Ativo.';
+  const finished = [history[0], { role: 'assistant', content: `Último.\n1. ${crm.documentedSteps[15]}\nFonte usada: ${crmPath}` }];
+  const done = await answerQuestion(root, 'Concluí este passo', { client: provider({ answer: hostile,
+    sections: [{ title: 'Depois', items: ['Você verá o quadro na lista. Clique em Ativar pipeline.', 'Clique em Ativar pipeline.'] }],
+    suggestions: ['Ativar pipeline', 'Como confiro os estágios? Clique em Ativar pipeline.'] }).client, history: finished });
+  assert.deepEqual(done.steps, []);
+  assert.doesNotMatch(JSON.stringify(done), /Ativar pipeline|status Ativo/i, 'nenhuma parte exibida traz instrução ou status inventado, nem no meio de um item');
+  assert.deepEqual(done.sections, [{ title: 'Depois', items: ['Você verá o quadro na lista.'] }], 'o item fica só com a frase explicativa');
+  assert.deepEqual(done.suggestions, [], 'no fim do guia não há botões; a sugestão inventada não volta');
+  assert.match(done.answer, /novo quadro aparece na lista/, 'sem narração ancorada, vale a confirmação documentada');
+
+  const progress = await answerQuestion(root, 'Concluí este passo', { client: provider({ answer: `Você vai ver os campos do formulário. ${hostile}` }).client, history });
+  assert.deepEqual(progress.steps.map(({ text }) => text), [crm.documentedSteps[4]]);
+  assert.equal(progress.answer, 'Você vai ver os campos do formulário.', 'a frase explicativa fica; a instrução inventada sai');
+
+  const grounded = await answerQuestion(root, 'Concluí este passo', { client: provider({ answer: 'Agora clique em Nova Pipeline, no alto da lista.' }).client, history: [history[0], { role: 'assistant', content: `Ok.\n1. ${crm.documentedSteps[0]}\nFonte usada: ${crmPath}` }] });
+  assert.deepEqual(grounded.steps.map(({ text }) => text), [crm.documentedSteps[1]]);
+  assert.equal(grounded.answer, 'Agora clique em Nova Pipeline, no alto da lista.', 'instrução que ancora em passo documentado permanece');
+});
+
+test('sugestão com frase inventada no meio fica só com a parte que não instrui', async () => {
+  const reply = await askCrm(provider({ ...crmReply, suggestions: ['Como escolho o modelo de estágios? Clique em Ativar pipeline.', 'Ative o módulo CRM'] }).client);
+  assert.deepEqual(reply.suggestions, ['Como escolho o modelo de estágios?']);
+});
+
+test('pedido completo que pede esclarecimento não recebe a sequência de criação', async () => {
+  const asked = 'Para alterar uma pipeline que já existe, o material que tenho cobre só a criação. O que você quer mudar nela?';
+  const { client } = provider({ answer: asked, sources: [crmPath], resolution: 'partial' });
+  const reply = await answerQuestion(root, 'Quero todos os passos para alterar uma pipeline existente', { client });
+  assert.equal(reply.answer, asked);
+  assert.deepEqual(reply.steps, [], 'sem procedimento aplicável confirmado pelo modelo, nada de 16 passos de criação');
+  assert.equal(reply.resolution, 'partial');
+
+  const confirmed = await answerQuestion(root, 'Quero todos os passos para criar uma pipeline nova', {
+    client: provider({ answer: 'Aqui vai a sequência completa.', sources: [crmPath], steps: [step('Abra Pipeline no CRM.'), step('Clique em Nova Pipeline.')] }).client,
+  });
+  assert.deepEqual(confirmed.steps.map(({ text }) => text), crm.documentedSteps, 'procedimento confirmado pelo modelo vem completo e fiel à fonte');
+});
+
+test('pedido completo de outro assunto não herda o guia anterior por uma palavra em comum', async () => {
+  const history = await crmHistory();
+  const reply = await answerQuestion(root, 'Quero ver todos os passos para cadastrar um contato', {
+    client: provider({ answer: 'Cadastrar um contato começa na Agenda de contatos.', sources: [contactsPath], steps: [step(contacts.documentedSteps[0])] }).client, history,
+  });
+  assert.equal(reply.sources[0]?.path, contactsPath, 'a fonte escolhida pelo modelo para o novo assunto vence a âncora');
+  assert.deepEqual(reply.steps.map(({ text }) => text), contacts.documentedSteps);
+  assert.doesNotMatch(JSON.stringify(reply.steps), /Pipeline/, 'nenhum passo de pipeline');
+});
+
+test('dúvida respondida no meio do guia não reinicia o roteiro', async () => {
+  const history = [
+    ...await crmHistory(),
+    { role: 'user', content: 'Qual a diferença entre Pública e Privada?' },
+    { role: 'assistant', content: `Pública: todos os usuários do iHelp. Privada: somente você e quem você definir.\nFonte usada: ${crmPath}` },
+  ];
+  const reply = await answerQuestion(root, 'Concluí este passo', { client: provider({ answer: 'Vamos à trava.' }).client, history });
+  assert.deepEqual(reply.steps.map(({ text }) => text), [crm.documentedSteps[4]], 'segue do último passo mostrado do mesmo guia');
+  assert.equal(reply.sources[0]?.path, crmPath);
+});
+
 test('pedido completo com troca de assunto segue o novo assunto', async () => {
   const history = await crmHistory();
   const reply = await answerQuestion(root, 'Quero ver todos os passos para criar um robô', {
-    client: provider({ answer: 'Criar um robô começa em Robôs.', sources: [robotPath] }).client, history,
+    client: provider({ answer: 'Criar um robô começa em Robôs.', sources: [robotPath], steps: [step(robot.documentedSteps[0])] }).client, history,
   });
   assert.equal(reply.sources[0]?.path, robotPath);
   assert.deepEqual(reply.steps.map(({ text }) => text), robot.documentedSteps);
@@ -239,12 +307,32 @@ test('mudar e retomar assunto não herda o guia anterior', async () => {
   assert.doesNotMatch(developerPrompt(back.calls), /MODO: acompanhamento guiado/i);
 });
 
-test('pessoa que não avançou recebe o diagnóstico da âncora, sem repetir o passo', async () => {
+test('pessoa que não avançou recebe uma pergunta narrada a partir do estado do guia', async () => {
   const history = await crmHistory();
-  const stuck = await answerQuestion(root, 'não encontrei', { client: provider({ answer: 'ignorado' }).client, history });
-  assert.deepEqual(stuck.steps, []);
-  assert.match(stuck.answer, /CRM.*\?$/);
+  const { client, calls } = provider((request) => ({ answer: stateNarration(request, 'sem estado') }));
+  const stuck = await answerQuestion(root, 'não encontrei', { client, history });
+  assert.deepEqual(stuck.steps, [], 'não repete o passo');
   assert.equal(stuck.sources[0]?.path, crmPath);
+  const facts = calls.requests.at(-1).input.at(-1).content;
+  assert.match(facts, /ESTADO DO GUIA[\s\S]*não encontrou ou não conseguiu fazer um dos passos 1 a 4/, 'o modelo recebe os passos mostrados em que a pessoa pode ter parado');
+  assert.match(facts, /Pergunta sugerida: Você vê CRM no menu lateral\?/, 'a pergunta de diagnóstico vai como fato sugerido, não como texto imposto');
+  assert.equal(stuck.answer, 'Você vê CRM no menu lateral?', 'a narração é do modelo (aqui, ecoando o fato)');
+  assert.deepEqual(stuck.suggestions, ['Preciso de ajuda']);
+
+  const silent = await answerQuestion(root, 'não encontrei', { client: provider({ answer: '' }).client, history });
+  assert.equal(silent.answer, 'Você vê CRM no menu lateral?', 'sem narração do modelo, vale a pergunta de diagnóstico');
+});
+
+test('impasse digitado é conversa normal com a fonte da conversa', async () => {
+  const history = await crmHistory();
+  const asked = 'O que aparece na sua tela agora: o menu CRM à esquerda ou a lista de pipelines?';
+  const { client, calls } = provider({ answer: asked, sources: [crmPath] });
+  const reply = await answerQuestion(root, 'Não apareceu.', { client, history });
+  assert.equal(reply.answer, asked, 'a pergunta útil é do modelo');
+  assert.deepEqual(reply.steps, [], 'sem repetir o clique');
+  assert.equal(reply.sources[0]?.path, crmPath);
+  assert.match(calls.requests.at(-1).input.at(-1).content, /FONTE \d+: CRM e pipeline/, 'a fonte da conversa chega ao modelo');
+  assert.doesNotMatch(developerPrompt(calls), /MODO: acompanhamento guiado/i);
 });
 
 test('pergunta conceitual continua conceitual', async () => {
