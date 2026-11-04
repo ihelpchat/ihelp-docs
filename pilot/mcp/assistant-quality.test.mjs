@@ -45,7 +45,7 @@ await writeFile(join(actionDir, 'sugestoes.mdx'), `---\ntitle: "Roteiro editoria
 const suggestionSource = (await retrieveContext(testRoot, 'roteiro editorial de sugestões'))
   .find((source) => source.path === '/docs/teste/sugestoes');
 assert.deepEqual(suggestionSource?.assistantSuggestions, ['Primeira dúvida', 'Segunda dúvida'], 'lista do frontmatter deve ser lida com separador e sem duplicatas');
-await writeFile(join(actionDir, 'importar-contatos.mdx'), `---\ntitle: "Importar contatos"\ndescription: "Aprenda a importar contatos pela tela correta do iHelp."\nsource: produto\ncontentType: tutorial\n---\n\nAbra a lista de contatos e use o menu de opções para iniciar a importação.\n\n<ProductAction id="importar-contatos" label="Ir para importar contatos" route="/contact" target="contacts-more-options" />\n`);
+await writeFile(join(actionDir, 'importar-contatos.mdx'), `---\ntitle: "Importar contatos"\ndescription: "Aprenda a importar contatos pela tela correta do iHelp."\nsource: produto\ncontentType: tutorial\n---\n\nAbra a lista de contatos e use o menu de opções para iniciar a importação.\n\n1. Abra Contatos no menu lateral.\n2. Clique em Mais opções e escolha Importar contatos.\n3. Acesse Contatos pelo menu lateral e escolha Exportar.\n\n<ProductAction id="importar-contatos" label="Ir para importar contatos" route="/contact" target="contacts-more-options" />\n`);
 
 const beginnerClient = {
   responses: {
@@ -75,7 +75,9 @@ const beginnerClient = {
     },
   },
 };
-const beginnerReply = await answerQuestion(testRoot, 'como importar contatos', { client: beginnerClient });
+// A pergunta cobre as duas operações documentadas na página de teste (importar e exportar): o passo de Exportar não é
+// um controle fora de propósito, é parte do que a pessoa perguntou.
+const beginnerReply = await answerQuestion(testRoot, 'como importar e exportar contatos', { client: beginnerClient });
 assert.equal(beginnerReply.steps.length, 3, 'verbos equivalentes devem consolidar o mesmo destino sem apagar resultado diferente');
 assert.match(beginnerReply.steps[2].text, /Exportar/, 'ação com resultado diferente deve permanecer');
 assert.doesNotMatch(beginnerReply.answer, /comece abrindo contatos no menu lateral/i, 'answer não pode repetir a instrução do primeiro passo');

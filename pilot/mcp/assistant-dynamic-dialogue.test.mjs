@@ -4,7 +4,7 @@
 // ou a explicação bastam.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { answerQuestion, retrieveContext } from './assistant-service.mjs';
@@ -608,6 +608,25 @@ test('negativa da etapa opcional em paráfrase comum conta; dupla negação não
   assert.deepEqual(declined.steps.map(({ text }) => text), mandatory, 'negação a três palavras do termo ainda é recusa');
   const doubleNegative = await ask('Quero ver todos os passos, não quero pular a automação');
   assert.deepEqual(doubleNegative.steps.map(({ text }) => text), crm.documentedSteps, '"não quero pular" não é recusa: sequência inteira');
+});
+
+test('página só com parágrafo procedural: controle inventado não aparece e zero passos não vira guia automático', async () => {
+  // Fidelidade (ROOT): quando a página documenta só um parágrafo ("abra a lista e use o menu"), um passo do modelo
+  // com controle que não existe não ancora e não aparece; formatação da página não enfraquece a guarda.
+  const dir = join(root, 'content/docs/docs/teste');
+  await mkdir(dir, { recursive: true });
+  const taskPath = '/docs/teste/lista-de-tarefas';
+  await writeFile(join(dir, 'lista-de-tarefas.mdx'), '---\ntitle: "Lista de tarefas"\ndescription: "Organize tarefas fictícias na lista."\n---\n\nAbra a lista de tarefas e use o menu de opções para organizar as tarefas.\n');
+  const invented = await answerQuestion(root, 'como organizar a lista de tarefas?', { client: provider({
+    answer: 'Organize pela lista de tarefas.', sources: [taskPath], steps: [step('Clique em Exportar tarefas.')],
+  }).client });
+  assert.deepEqual(invented.steps, [], 'controle inventado não ancora no parágrafo documentado');
+  assert.doesNotMatch(JSON.stringify(invented), /Exportar tarefas/);
+  const none = await answerQuestion(root, 'como organizar a lista de tarefas?', { client: provider({
+    answer: 'Abra a lista de tarefas pelo menu.', sources: [taskPath],
+  }).client });
+  assert.deepEqual(none.steps, [], 'zero passos do modelo não vira guia automático');
+  assert.ok(none.answer.trim() && !/Siga os passos abaixo|Não consegui organizar/.test(none.answer), 'a narração continua do modelo');
 });
 
 test('prompt pede escrita natural, contexto do histórico e sugestões na voz da pessoa', async () => {
