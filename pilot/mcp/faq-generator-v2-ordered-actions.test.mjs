@@ -178,7 +178,7 @@ test('contrato N1/N2/N3 chega ao redator junto com dados que distinguem tarefa c
   const rule = (...patterns) => sentences.some((sentence) => patterns.every((pattern) => pattern.test(sentence)));
   assert.ok(rule(/ausência de um valor/u, /não prova/u, /não negue/u, /valor oculto/u, /conclusão estruturada/u), 'N1');
   assert.ok(rule(/sem jornada/u, /critérios de busca/u, /modo de operação/u, /pré-requisitos/u), 'N2');
-  assert.ok(rule(/caso concreto/u, /recurso escolhido/u, /sem ação na tela/u, /Para que serve/u), 'N3');
+  assert.ok(rule(/caso concreto/u, /recurso escolhido/u, /sem ação na tela/u, /evite repetir/u, /Para que serve/u), 'N3');
   // Barreiras anteriores permanecem no mesmo texto.
   assert.ok(rule(/sem jornada/u, /sem passo ou efeito/u));
   assert.ok(rule(/ação ausente de acoes/u));

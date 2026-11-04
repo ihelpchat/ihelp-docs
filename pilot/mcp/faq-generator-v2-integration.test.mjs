@@ -380,7 +380,7 @@ const writerRules = {
     [/sem jornada/u, /critérios de busca/u, /modo de operação/u, /finalidade/u, /pré-requisitos/u, /tarefas concluídas/u],
   ],
   'caso concreto liga situação, recurso escolhido e finalidade documentada, sem ação nem resultado sem jornada': [
-    [/caso concreto/u, /situação distinta/u, /recurso escolhido/u, /finalidade|benefício/u, /sem ação na tela/u, /resultado/u, /Para que serve/u],
+    [/caso concreto/u, /situação distinta/u, /recurso escolhido/u, /finalidade|benefício/u, /sem ação na tela/u, /resultado/u, /evite repetir/u, /Para que serve/u],
   ],
 };
 for (const area of ['contatos', 'robos']) test(`regras de taskId, jornada, finalidade e ordem chegam ao redator e à reescrita: ${area}`, async (t) => {
