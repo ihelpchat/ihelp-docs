@@ -355,6 +355,10 @@ const writerRules = {
   'cliques e confirmações só os observados, na ordem da jornada': [
     [/ordem/u, /jornada/u, /observ/u, /clique|confirmaç/u, /etapa|passo/u, /rótulo|nome/u],
   ],
+  'tarefa sem jornada: front e negócio sustentam finalidade e pré-requisito, nunca funcionamento, resultado ou orientação de execução': [
+    [/sem jornada/u, /finalidade/u, /pré-requisito|requisito/u, /funcionamento/u, /mesmo que a fonte de negócio/u],
+    [/sem jornada/u, /orient/u, /execut/u, /processo|planejamento/u],
+  ],
 };
 for (const area of ['contatos', 'robos']) test(`regras de taskId, jornada, finalidade e ordem chegam ao redator e à reescrita: ${area}`, async (t) => {
   const { draft, rewrite } = await forwarded(t, area);
@@ -363,4 +367,55 @@ for (const area of ['contatos', 'robos']) test(`regras de taskId, jornada, final
     for (const [stage, text] of Object.entries(sent)) for (const patterns of groups)
       assert.ok(hasRule(text, ...patterns), `${stage} sem a regra: ${rule} (${patterns.join(' ')})`);
   });
+});
+
+// Casos reais da R3 (fonte 660cc52): afirmações de contexto em tarefas sem jornada que o juiz factual reprovou.
+// c23 (Contatos) descreve funcionamento documentado no negócio; c65 (Robôs) orienta a execução da tarefa.
+// A prova offline verifica a fronteira de evidência nos dois prompts e o encaminhamento do diagnóstico e do escopo
+// à reescrita; o comportamento do modelo só se mede em rodada real.
+const realContextRejections = {
+  contatos: { task: 'contatos.definir_responsavel', claim: 'c23',
+    text: 'O encaminhamento direto ao responsável se aplica a novos atendimentos iniciados pelo cliente e depende de um canal conectado para receber a conversa.',
+    reason: 'Afirma um efeito operacional de encaminhamento. Embora descrito em B338, falta jornada concluída de definir responsável que demonstre esse funcionamento e suas condições.' },
+  robos: { task: 'robos.publicar_ativar', claim: 'c65',
+    text: 'Considere essa etapa no planejamento tanto de um novo robô quanto de mudanças em um fluxo já usado pela empresa.',
+    reason: 'Apesar do kind de contexto, orienta a inclusão da publicação no processo de criação ou alteração. A tarefa real de publicar/ativar está sem jornada concluída.' },
+};
+for (const [area, real] of Object.entries(realContextRejections)) test(`fronteira de evidência em tarefa sem jornada chega ao redator e à reescrita com o diagnóstico real (${real.claim}): ${area}`, async (t) => {
+  const page = pageFor(area);
+  const section = page.sections.find(({ taskId }) => taskId === real.task);
+  assert.ok(section, `pauta da área inclui ${real.task}`);
+  section.units.push({ text: real.text, kind: 'contexto', evidenceIds: ['F1'] });
+  const { result, calls } = await fixture(t, { area, page, business: [businessFact],
+    factual: (claim) => claim.text === real.text ? { status: 'a confirmar', reason: real.reason } : undefined });
+  assert.equal(result.status, 'precisa de revisão humana');
+  assert.equal(result.corrections, 1);
+  assert.ok(result.diagnostic.some((item) => item.includes(real.reason)));
+  const named = (name) => calls.filter(({ text }) => text.format.name === name);
+  const writer = named('faq_page_v2')[0].input[0].content;
+  const rewriteCall = named('faq_rewrite_v2')[0];
+  const rewriter = rewriteCall.input[0].content;
+  // W1: em tarefa sem jornada, front e negócio sustentam finalidade, público e pré-requisito; funcionamento,
+  // resultado e orientação de execução exigem jornada concluída, mesmo quando o negócio descreve o comportamento.
+  for (const [stage, text] of Object.entries({ faq_page_v2: writer, faq_rewrite_v2: rewriter })) {
+    assert.ok(hasRule(text, /sem jornada/u, /finalidade/u, /pré-requisito|requisito/u, /funcionamento/u, /mesmo que a fonte de negócio/u),
+      `${stage}: funcionamento documentado no negócio não entra em tarefa sem jornada`);
+    assert.ok(hasRule(text, /sem jornada/u, /orient/u, /execut/u, /processo|planejamento/u),
+      `${stage}: sem orientação de execução em tarefa sem jornada`);
+  }
+  // Barreiras anteriores permanecem.
+  assert.ok(hasRule(writer, /sem jornada/u, /sem passo ou efeito/u));
+  assert.ok(hasRule(writer, /não o invente/u));
+  // R1: a reescrita remove ou reduz a afirmação a confirmar, sem preservar efeito nem orientação.
+  const tail = rewriter.slice(writer.length);
+  assert.match(tail, /UMA vez.*Não invente passos/su);
+  assert.ok(hasRule(tail, /a confirmar/u, /remova|reduza/u, /finalidade|pré-requisito/u, /não a reformule/u),
+    'reescrita sem regra de correção para item a confirmar');
+  // Diagnóstico real e escopo (tarefa sem jornada) chegam à reescrita.
+  const rewriteInput = JSON.parse(rewriteCall.input[1].content);
+  assert.ok(rewriteInput.report.diagnostic.some((item) => item.includes(real.reason)));
+  assert.ok(rewriteInput.report.facts.some((item) => item.status === 'a confirmar'));
+  assert.equal(rewriteInput.plan.tasks.find(({ id }) => id === real.task).status, 'sem jornada');
+  assert.ok(rewriteInput.page.sections.some(({ taskId, units }) => taskId === real.task
+    && units.some(({ text }) => text === real.text)));
 });
