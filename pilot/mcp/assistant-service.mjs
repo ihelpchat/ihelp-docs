@@ -305,7 +305,6 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       title,
       description,
       path,
-      links: citedPathsOf(raw),
       body: body.slice(0, 12_000),
       assistantQuestion: frontmatterValue(raw, 'assistantQuestion'),
       assistantIntent,
@@ -734,9 +733,17 @@ function conversationAnchor(history) {
   };
 }
 
-/** Duas fontes são relacionadas quando são a mesma página ou uma linka a outra (por exemplo, "Leia também"). */
-function relatedSources(left, right) {
-  return left.path === right.path || (left.links ?? []).includes(right.path) || (right.links ?? []).includes(left.path);
+/**
+ * Duas fontes descrevem o mesmo procedimento quando são a mesma página ou quando a maioria dos passos documentados de
+ * uma ancora nos passos da outra (a curada do CRM e o tutorial de criar pipeline). Link entre páginas não basta:
+ * Agenda de Contatos e Robô se linkam e são procedimentos diferentes.
+ */
+function sameProcedure(left, right) {
+  if (left.path === right.path) return true;
+  const share = (from, to) => from.documentedSteps.length && to.documentedSteps.length
+    ? from.documentedSteps.filter((step) => documentedIndexOf(step, to.documentedSteps) >= 0).length / from.documentedSteps.length
+    : 0;
+  return Math.max(share(left, right), share(right, left)) >= 0.5;
 }
 
 function proceduralQuestion(question) {
@@ -799,14 +806,21 @@ function optionalKeywords(guide) {
   return [...new Set(shared.length ? shared : stepWords)];
 }
 
-/** A pessoa dispensou a etapa opcional na própria mensagem ("sem automação", "não quero automação agora", "pular a automação"). */
+/**
+ * A pessoa dispensou a etapa opcional na própria mensagem, avaliada por oração: "sem automação", "não quero
+ * configurar automação agora", "pular a automação" são recusas; "não quero pular a automação" (pular negado) não é.
+ */
 function optionalDeclined(question, guide) {
   const keywords = optionalKeywords(guide);
   if (!keywords.length) return false;
-  const words = plainWords(question);
-  const negation = /^(?:sem|nao|nunca|pular|pule|pulando|dispenso|dispensar|depois)$/;
-  return words.some((word, index) => keywords.includes(word)
-    && (negation.test(words[index - 1] ?? '') || negation.test(words[index - 2] ?? '')));
+  return normalize(question).split(/[,;.!?]|\b(?:mas|porem|e|ou|porque|pois|entao)\b/).some((clause) => {
+    const words = plainWords(clause);
+    if (!words.some((word) => keywords.includes(word))) return false;
+    const negated = words.some((word) => /^(?:nao|nunca|nem)$/.test(word));
+    const without = words.includes('sem');
+    const skipping = words.some((word) => /^(?:pular|pule|pulando|dispenso|dispensar|dispensando|depois)$/.test(word));
+    return skipping ? without || !negated : negated || without;
+  });
 }
 
 /** Índices do procedimento completo; com a etapa opcional dispensada, só os obrigatórios (até a decisão e da retomada ao fim). */
@@ -1032,9 +1046,11 @@ export async function answerQuestion(root, question, options = {}) {
   });
   const anchorSources = anchor.paths.map((path) => sources.find((source) => source.path === path)).filter(Boolean);
   const guideSource = anchor.guidePaths.map((path) => sources.find((source) => source.path === path)).find((source) => source?.documentedSteps.length);
-  // O guia em andamento sobrevive a um aparte: resposta sem passos que cita a mesma página ou uma página relacionada
-  // (a curada linka o tutorial). Resposta sem passos sobre outro assunto encerra o guia.
-  const guideKept = Boolean(guideSource) && (!anchorSources.length || anchorSources.some((source) => relatedSources(source, guideSource)));
+  // O guia em andamento sobrevive a um aparte: resposta sem passos que cita só páginas conceituais (sem passos) ou
+  // uma página do mesmo procedimento (o tutorial da pipeline). Resposta sem passos sobre outro procedimento encerra o guia.
+  const guideKept = Boolean(guideSource) && (!anchorSources.length
+    || anchorSources.every((source) => !source.documentedSteps.length)
+    || anchorSources.some((source) => sameProcedure(source, guideSource)));
   const shownSteps = guideKept ? anchor.shownSteps : [];
   const conversationSources = [...new Set([...(guideKept ? [guideSource] : []), ...anchorSources])];
   let business = '';
@@ -1184,9 +1200,10 @@ export async function answerQuestion(root, question, options = {}) {
   // Pedido do procedimento completo: a âncora da conversa vale só quando a ficha não cita assunto ou quando o
   // modelo a escolheu como fonte principal; assunto novo segue a fonte escolhida pelo modelo.
   const activeGuide = Boolean(priorGuide) && shownSteps.some((shown) => priorGuide.documentedSteps.some((step) => normalize(step) === shown));
-  // Página relacionada ao guia (o tutorial que a curada linka) não é assunto novo: o procedimento continua o do guia.
+  // Página do mesmo procedimento (o tutorial da pipeline) não é assunto novo: o procedimento continua o do guia.
+  // Pedido explícito de outro procedimento (criar um robô depois de Contatos) segue a fonte escolhida pelo modelo.
   const detailGuide = detailedProcedure && priorGuide && !historyGuide
-    && ((bareDetail && activeGuide) || chosen[0] === priorGuide || (chosen[0] && relatedSources(chosen[0], priorGuide))) ? priorGuide : undefined;
+    && ((bareDetail && activeGuide) || chosen[0] === priorGuide || (chosen[0] && sameProcedure(chosen[0], priorGuide))) ? priorGuide : undefined;
   const selected = (historyGuide ? [historyGuide]
     : detailGuide ? [detailGuide, ...chosen.filter((source) => source !== detailGuide)]
     : exactQuestionGuide ? [exactQuestionGuide]
@@ -1216,8 +1233,7 @@ export async function answerQuestion(root, question, options = {}) {
   const responseSteps = business ? parsed.steps.filter(({ text, sourceStepId }) =>
     groundedSteps.get(sourceStepId) === text)
     : overviewProcedure
-      // Página sem procedimento numerado (passos por frase) não ancora paráfrase com segurança: ficam os passos do modelo, limitados.
-      ? overviewSource?.stepGroups?.length ? groundedInitialSteps(parsed.steps, overviewSource, availableImages) : parsed.steps.slice(0, MAX_OVERVIEW_STEPS)
+      ? overviewSource ? groundedInitialSteps(parsed.steps, overviewSource, availableImages) : parsed.steps.slice(0, MAX_OVERVIEW_STEPS)
     : guideFinished || choicePending || diagnosticFollowup || blockedFollowup ? []
     : progressStep ? [progressStep]
     : continuation ? parsed.steps.slice(0, 1)
