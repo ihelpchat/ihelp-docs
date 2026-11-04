@@ -662,7 +662,14 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
         if (group.matches('form,[role="dialog"]')) break;
         const labels = [...group.querySelectorAll('label')].filter((label) =>
           label.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
-        if (labels.length) return labels[0];
+        if (!labels.length) continue;
+        // O label precedente mais próximo nomeia o controle: o primeiro do grupo costuma ser o título da etapa
+        // (ex.: "Encaminhar para um departamento ou atendente?" antes de "Selecione o departamento").
+        // Labels adjacentes, sem nada entre eles (título + dica, como "Canais" + "Adicione os canais permitidos:"),
+        // formam um só rótulo e valem pelo primeiro.
+        let start = labels.length - 1;
+        while (start > 0 && labels[start - 1].nextElementSibling === labels[start]) start--;
+        return labels[start];
       }
       return null;
     };
@@ -688,7 +695,11 @@ export async function observeJourneyDom(page, { vocabulary = [], generated = new
         && node.getAttribute('title') ? node.getAttribute('title')
       : node.getAttribute('aria-labelledby') && byId(node.getAttribute('aria-labelledby'))
       || node.labels?.[0]?.textContent || node.closest('label')?.textContent
-      || node.getAttribute('aria-label') || visual(node)
+      || node.getAttribute('aria-label')
+      // Texto próprio legível (com letras) de um botão sem role sobrescrito prevalece sobre o rótulo visual do
+      // ancestral; botão só com ícone, ou combobox/input (cujo texto é valor selecionado), seguem o fallback.
+      || (node.tagName === 'BUTTON' && !node.getAttribute('role') && /\p{L}/u.test(node.innerText ?? '') ? node.innerText : '')
+      || visual(node)
       || (node.closest('[data-tooltip-content="Editar"]') && node.closest('dd')?.previousElementSibling?.textContent?.trim() === 'Proprietário do Contato'
         ? 'Editar Proprietário do Contato' : '')
       || node.closest('[data-tooltip-content]')?.getAttribute('data-tooltip-content')
