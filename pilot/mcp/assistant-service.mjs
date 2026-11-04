@@ -195,7 +195,7 @@ function documentedStepGroupsOf(raw, stepCount) {
     if (number === '1' || !starts.length) starts.push(index);
     index += 1;
   }
-  return starts.length ? starts : [0];
+  return starts;
 }
 
 function optionalBranchOf(raw, stepCount) {
@@ -1054,6 +1054,8 @@ export async function answerQuestion(root, question, options = {}) {
   const declinedGuide = detailedProcedure && priorGuide?.optionalBranch && optionalDeclined(question, priorGuide) ? priorGuide : null;
   const branch = optionalBranchState(history, priorGuide, question);
   if ((choice && (branch.pending || branch.diagnosing || branch.resuming || branch.blocked)) || (recovery && branch.blocked)) continuation = true;
+  // Escolha do ramo opcional ("continuar sem") é acompanhamento guiado, mesmo com palavra procedural na frase.
+  if (continuation) overviewProcedure = false;
   const exactQuestionGuide = sources.find((source) => source.assistantQuestion && (
     normalize(source.assistantQuestion) === normalize(question.trim())
     || (detailedProcedure && normalize(question).replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '') === normalize(source.assistantQuestion))
@@ -1214,7 +1216,8 @@ export async function answerQuestion(root, question, options = {}) {
   const responseSteps = business ? parsed.steps.filter(({ text, sourceStepId }) =>
     groundedSteps.get(sourceStepId) === text)
     : overviewProcedure
-      ? overviewSource ? groundedInitialSteps(parsed.steps, overviewSource, availableImages) : parsed.steps.slice(0, MAX_OVERVIEW_STEPS)
+      // Página sem procedimento numerado (passos por frase) não ancora paráfrase com segurança: ficam os passos do modelo, limitados.
+      ? overviewSource?.stepGroups?.length ? groundedInitialSteps(parsed.steps, overviewSource, availableImages) : parsed.steps.slice(0, MAX_OVERVIEW_STEPS)
     : guideFinished || choicePending || diagnosticFollowup || blockedFollowup ? []
     : progressStep ? [progressStep]
     : continuation ? parsed.steps.slice(0, 1)
