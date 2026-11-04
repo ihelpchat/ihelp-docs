@@ -271,7 +271,7 @@ globalThis.fetch = async (url, init = {}) => {
       create: async (request) => {
         assert.equal(request.store, false);
         assert.match(request.input[1].content, /Atendimento/);
-        return { output_text: 'Abra o atendimento e use a opção de transferência.\n\nFontes: Atendimento (/docs/sobre-o-sistema/atendimento)', model: 'gpt-test' };
+        return { output_text: JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Abra o atendimento e use a opção de transferência.', sources: ['/docs/sobre-o-sistema/atendimento'], steps: [], sections: [], suggestions: [], code: null, resolution: 'complete', found: true }), model: 'gpt-test' };
       },
     },
   };

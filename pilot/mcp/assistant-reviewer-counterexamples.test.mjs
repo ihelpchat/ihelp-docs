@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-// Contraexemplos do revisor independente (2026-11-03, review-b47a831-0311), preservados na íntegra; só o caminho do pilot foi parametrizado.
+// Contraexemplos do revisor independente (2026-11-03, review-b47a831-0311), asserções preservadas; caminho do pilot parametrizado e fixture adaptado ao plan interno obrigatório.
 const pilot=new URL('../', import.meta.url).pathname.replace(/\/$/, '');
 const { answerQuestion, retrieveContext }=await import(`${pilot}/mcp/assistant-service.mjs`);
 const { parseAssistantRequest }=await import(`${pilot}/architecture/conversation-v1.mjs`);
@@ -13,7 +13,7 @@ assert.equal(crm.documentedSteps.length,16);
 function provider(body,onRequest=()=>{}) {return {responses:{create:async req=>{
  if(req.text?.format?.name==='triagem_fechada')return {status:'completed',output_text:'{"choice":"sem guia"}',usage:{input_tokens:1,output_tokens:1}};
  onRequest(req);
- return {status:'completed',model:'offline-review-fixture',usage:{input_tokens:1,output_tokens:1},output_text:JSON.stringify({answer:'Resposta curta.',sections:[],steps:[],sources:[crmPath],suggestions:[],code:null,resolution:'complete',found:true,...body})};
+ return {status:'completed',model:'offline-review-fixture',usage:{input_tokens:1,output_tokens:1},output_text:JSON.stringify({plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer:'Resposta curta.',sections:[],steps:[],sources:[crmPath],suggestions:[],code:null,resolution:'complete',found:true,...body})};
 }}};}
 const snapshot=r=>JSON.stringify({answer:r.answer,sections:r.sections,steps:r.steps,suggestions:r.suggestions,sources:r.sources.map(s=>s.path),resolution:r.resolution});
 test('OWN: full-mode alteration with partial ungrounded model step must not inject creation procedure',async()=>{

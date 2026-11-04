@@ -74,7 +74,7 @@ const doneAnswer = 'A criação deu certo quando a pipeline aparece na lista e v
 
 test('P60-B3: "Terminei de criar. Como sei se deu certo?" não devolve de novo o passo de criar', async () => {
   const { client, calls } = fake({ plan: { intent: 'confirm_completion', optionalBranch: 'unspecified' }, answer: doneAnswer, steps: [step(crm.documentedSteps[15])], sources: [crmPath, robotPath],
-    suggestions: ['Como testo se a automação da pipeline cria cards?', 'Como publico o fluxo do robô?'] });
+    suggestions: ['Como sei se a automação está funcionando?', 'O que muda depois de publicar o robô?'] });
   const reply = await answerQuestion(root, 'Terminei de criar. Como sei se deu certo? O robô já começa a responder?',
     { client, history: historyP60B });
   assert.equal(calls.answer, 1);
@@ -282,4 +282,44 @@ test('dispensa explícita continua protegida; plano contraditório falha fechado
   const reply = await answerQuestion(root, 'Quero todos os passos para criar uma pipeline sem automação.', { client });
   assert.deepEqual(reply.steps, []);
   assert.equal(reply.fallback?.reason, 'plan_conflict');
+});
+
+
+test('confirmação admite verificar o resultado sem repetir a criação', async () => {
+  const answer = 'Confira se a pipeline aparece na lista.';
+  const { client } = fake({ plan: { intent: 'confirm_completion', optionalBranch: 'unspecified' }, answer, sources: [crmPath] });
+  const reply = await answerQuestion(root, 'Terminei de criar. Como sei se deu certo?', { client, history: historyP60B });
+  assert.equal(reply.answer, answer);
+  assert.deepEqual(reply.steps, []);
+});
+
+test('instrução de criar depois de oração explicativa também conflita com entendimento', async () => {
+  const { client } = fake({ plan: { intent: 'explain', optionalBranch: 'unspecified' }, answer: 'Para conhecer o recurso, crie uma pipeline.', sources: [crmPath] });
+  const reply = await answerQuestion(root, 'Quero entender o CRM.', { client });
+  assert.deepEqual(reply.steps, []);
+  assert.equal(reply.fallback?.reason, 'plan_conflict');
+});
+
+test('plano indefinido não combina narrativa de dispensa com procedimento inteiro', async () => {
+  const { client } = fake({ answer: 'Pule a etapa opcional.', sources: [crmPath], steps: mandatory.map(step) });
+  const reply = await answerQuestion(root, 'Quero ver todos os passos para criar uma pipeline.', { client });
+  assert.deepEqual(reply.steps, []);
+  assert.equal(reply.fallback?.reason, 'plan_conflict');
+});
+
+test('abort depois da geração fecha classificador, sem repetir; próxima pessoa tem routing próprio', async () => {
+  await withBusiness(async () => {
+    const controller = new AbortController();
+    const { client, calls } = fake(() => { controller.abort(); return { answer: 'Pipeline organiza oportunidades.', sources: [crmPath] }; });
+    const budget = { file: join(root, 'abort-budget.json'), dailyLimitUsd: 10, reserveUsd: 0.1, signal: controller.signal };
+    const reply = await answerQuestion(root, conceptual, { client, budget });
+    assert.equal(reply.fallback?.reason, 'provider_failed');
+    assert.equal(reply.fallback?.branch, 'classifier');
+    assert.equal(calls.answer, 1);
+    assert.equal(calls.safety, 0);
+    const next = fake({ answer: 'Pipeline organiza oportunidades.', sources: [crmPath] });
+    assert.equal((await answerQuestion(root, conceptual, { client: next.client })).answer, 'Pipeline organiza oportunidades.');
+    assert.equal(next.calls.triage, 1);
+    assert.equal(next.calls.answer, 1);
+  });
 });

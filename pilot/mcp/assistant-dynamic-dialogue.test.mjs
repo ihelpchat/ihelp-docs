@@ -164,7 +164,7 @@ test('continuação segue a fonte curada e usa a narração do modelo', async ()
   const silent = provider({ answer: '' });
   const quiet = await answerQuestion(root, 'Concluí este passo', { client: silent.client, history });
   assert.deepEqual(quiet.steps.map(({ text }) => text), [crm.documentedSteps[4]]);
-  assert.equal(quiet.answer, 'Vamos para a próxima ação.', 'sem narração do modelo vale o fallback curto');
+  assert.equal(quiet.answer, 'O próximo passo está abaixo.', 'sem narração do modelo vale o fallback curto');
 
   const shownSecond = [history[0], { role: 'assistant', content: `Agora o nome.\n1. ${crm.documentedSteps[1]}\nFonte usada: ${crmPath}\nFonte usada: ${tutorialPath}` }];
   const third = await answerQuestion(root, 'Concluí este passo', { client: provider({ answer: 'Nome e responsável ajudam a equipe a achar o quadro.' }).client, history: shownSecond });
@@ -306,7 +306,7 @@ test('pedido completo com esclarecimento (partial) mantém a guarda: instrução
     answer: hostile, sections: [{ title: 'Orientação', items: [hostile] }], suggestions: [hostile], sources: [crmPath], resolution: 'partial',
   }).client });
   assert.deepEqual(reply.steps, [], 'esclarecimento: nenhum passo documentado');
-  assert.doesNotMatch(JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: reply.answer, sections: reply.sections, suggestions: reply.suggestions }), /Ativar pipeline|status Ativo/i,
+  assert.doesNotMatch(JSON.stringify({ answer: reply.answer, sections: reply.sections, suggestions: reply.suggestions }), /Ativar pipeline|status Ativo/i,
     'com fonte procedural em jogo, a guarda vale mesmo sem passos mostrados');
   assert.equal(reply.resolution, 'partial');
 });
@@ -329,7 +329,7 @@ test('narração que abre a tela do primeiro passo é preservada, com ou sem pas
     const reply = await answerQuestion(root, 'Como criar e enviar uma campanha?', { client: provider({
       answer: invented, sections: [{ title: 'Depois', items: [invented] }], suggestions: [invented], sources: [campaignPath], steps: [step(campaign.documentedSteps[0])],
     }).client });
-    assert.doesNotMatch(JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: reply.answer, sections: reply.sections, suggestions: reply.suggestions }), /painel secreto/i, `${invented}: controle inventado não aparece`);
+    assert.doesNotMatch(JSON.stringify({ answer: reply.answer, sections: reply.sections, suggestions: reply.suggestions }), /painel secreto/i, `${invented}: controle inventado não aparece`);
   }
 });
 
@@ -637,7 +637,7 @@ test('etapa opcional dispensada não volta pela narração, pelos itens nem pela
     sources: [crmPath], steps: [step('Abra Pipeline no CRM.')],
   }).client });
   assert.deepEqual(reply.steps.map(({ text }) => text), mandatory);
-  assert.ok(!JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: reply.answer, sections: reply.sections, suggestions: reply.suggestions }).includes(optionalStep),
+  assert.ok(!JSON.stringify({ answer: reply.answer, sections: reply.sections, suggestions: reply.suggestions }).includes(optionalStep),
     'a instrução da etapa dispensada não aparece em nenhum campo visível');
   assert.match(reply.answer, /^Siga estes passos para criar a pipeline\./, 'o resto da narração do modelo fica');
   // Mesma pergunta, modelo parcial e sem passos: nada é preenchido, e a etapa dispensada continua fora dos campos

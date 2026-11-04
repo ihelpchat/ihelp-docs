@@ -16,6 +16,7 @@ const providerInputs = [];
 // Contrato dinâmico (2026-11-03): o modelo escolhe o passo (aqui, o primeiro passo documentado da fonte);
 // o servidor ancora o texto na fonte e resolve guideId/stepId do evento a partir desse passo.
 const payload = {
+  plan: { intent: 'execute', optionalBranch: 'unspecified' },
   answer: 'Abra Campanhas para preparar o envio.', sections: [],
   steps: [{ text: 'Abra Campanhas e clique em Nova Campanha.', actionId: null, imagePath: null }], code: null,
   sources: [guide], suggestions: [], resolution: 'complete', found: true,

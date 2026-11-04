@@ -182,7 +182,7 @@ test('atribuição indireta e instrução sem lastro não chegam ao cliente', as
         return response('A carteira organiza os contatos.');
       } },
     } });
-    assert.equal(answerCalls, 2, 'falha do classificador provoca uma única tentativa sem contexto');
+    assert.equal(answerCalls, 1, 'falha técnica do classificador fecha sem nova geração');
     assert.match(failedClassifier.answer, /guia abaixo|Tive um problema/iu);
     assert.equal(failedClassifier.businessContextUsed, undefined);
   } finally {

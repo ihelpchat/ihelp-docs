@@ -217,7 +217,8 @@ const finishedReply = await answerQuestion(testRoot, 'Concluí este passo', {
 });
 assert.deepEqual(finishedReply.steps, [], 'após Salvar/Publicar o guia não reinicia no primeiro passo');
 assert.match(finishedReply.answer, /Publicar[\s\S]*online/i);
-assert.match(finishedReply.answer, /Salvar[\s\S]*inativo/i);
+assert.match(finishedReply.answer, /antes da primeira publicação[\s\S]*Salvar só guarda/i);
+assert.match(finishedReply.answer, /já estiver publicado[\s\S]*Salvar pode atualizar o fluxo em atendimento/i);
 assert.doesNotMatch(JSON.stringify(finishedReply), /Testar robô|status Ativo/i);
 // Modelo hostil: a narração é dele (contrato dinâmico), mas passo inventado nunca entra e o fato documentado
 // da conclusão (Salvar/Publicar) chega ao prompt para ele narrar.
@@ -251,9 +252,9 @@ for (const alias of ['Concluí', 'feito', 'terminei', 'pronto', 'preenchi os cam
     history: [guidedHistory[0], { role: 'assistant', content: `1. ${currentGuideReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
   });
   assert.deepEqual(aliasReply.steps, [], `${alias}: último passo não pode reiniciar`);
-  assert.match(hostileRequests.at(-1).input.at(-1).content, /Como confirmar: [^\n]*Publicar[^\n]*online[^\n]*Salvar[^\n]*inativo/i, `${alias}: o fato documentado da conclusão vai ao modelo`);
+  assert.match(hostileRequests.at(-1).input.at(-1).content, /Como confirmar: [^\n]*Publicar[^\n]*online[^\n]*antes da primeira publicação[^\n]*Salvar só guarda/i, `${alias}: o fato documentado da conclusão vai ao modelo`);
   assert.match(aliasReply.answer, /Publicar[\s\S]*online/i, `${alias}: sem narração ancorada, vale a conclusão documentada`);
-  assert.match(aliasReply.answer, /Salvar[\s\S]*inativo/i, `${alias}: conclusão deve distinguir salvar`);
+  assert.match(aliasReply.answer, /antes da primeira publicação[\s\S]*Salvar só guarda/i, `${alias}: conclusão deve distinguir salvar`);
   assert.doesNotMatch(JSON.stringify(aliasReply), /Ativar robô|status Ativo/i, `${alias}: instrução ou status inventado não aparece em nenhuma parte`);
 }
 for (const prompt of ['próximo passo', 'continuar', 'Encontrei o botão']) {
@@ -264,7 +265,7 @@ for (const prompt of ['próximo passo', 'continuar', 'Encontrei o botão']) {
   assert.deepEqual(afterLastReply.steps, [], `${prompt}: não avança após o último passo`);
   assert.match(hostileRequests.at(-1).input.at(-1).content, /Como confirmar: [^\n]*Publicar[^\n]*online/i, `${prompt}: conclusão documentada vai ao modelo`);
   assert.match(afterLastReply.answer, /Publicar[\s\S]*online/i);
-  assert.match(afterLastReply.answer, /Salvar[\s\S]*inativo/i);
+  assert.match(afterLastReply.answer, /antes da primeira publicação[\s\S]*Salvar só guarda/i);
   assert.doesNotMatch(JSON.stringify(afterLastReply), /Ativar robô|status Ativo/i);
 }
 
