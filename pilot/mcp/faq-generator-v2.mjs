@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import tasksCatalog from '../architecture/faq-regua/tarefas-ouro.json' with { type: 'json' };
 import { getIhelpContext } from './product-context-service.mjs';
+import { maskedShare, MASKED_SHARE_LIMIT } from './screenshot-mask.mjs';
 import { loadBusinessContext, judgeClaims, splitClaims } from './faq-editorial.mjs';
 import { judgeEditorial, consolidateEditorialReadings, FAQ_WRITER_GLOSSARY } from './faq-editorial-judge.mjs';
 import { readJourney } from './journey-service.mjs';
@@ -288,6 +289,8 @@ export async function generateFaqV2(root, module, { client = new OpenAI(),
     if (!screen?.screenshotId || !/^[a-f0-9]{64}$/u.test(screen.screenshotId)) continue;
     const image = await readFile(join(journeyRoot, module, `${screen.screenshotId}.png`)).catch(() => null);
     if (!image) continue;
+    // Captura inteiramente coberta pela máscara de privacidade não é evidência visual: fora dos dois arrays.
+    if (maskedShare(image) >= MASKED_SHARE_LIMIT) continue;
     imageItems.push({ type: 'input_image', image_url: `data:image/png;base64,${image.toString('base64')}` });
     screenshots.push({ task: journey.task, screenshotId: screen.screenshotId, approval: 'pendente' });
   }
