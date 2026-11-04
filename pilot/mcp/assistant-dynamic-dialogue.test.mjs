@@ -671,6 +671,32 @@ test('página só com parágrafo procedural: controle inventado não aparece e z
   assert.ok(none.answer.trim() && !/Siga os passos abaixo|Não consegui organizar/.test(none.answer), 'a narração continua do modelo');
 });
 
+test('fallback de orçamento: guia documentado só para pedido inicial de criar sobre a área curada', async () => {
+  // CI hospedado (provider-budget.test.mjs:64): sem resposta do modelo, o guia documentado volta quando é inequívoco para
+  // um pedido inicial de criar/começar; seguimento solto (P40-B3) e pedido de alterar continuam sem passos.
+  const exhausted = (name) => ({ file: join(root, `budget-${name}.json`), dailyLimitUsd: 0 });
+  const quiet = () => provider({ answer: 'não deve ser chamada' }).client;
+  const first = await answerQuestion(root, 'como criar campanha no whatsapp', { client: quiet(), budget: exhausted('criar') });
+  assert.deepEqual(first.steps.map(({ text }) => text), campaign.documentedSteps.slice(0, 3), 'primeiros passos documentados do guia da área');
+  assert.equal(first.sources[0]?.path, campaignPath, 'o guia vem primeiro nas fontes');
+  assert.deepEqual(first.suggestions, []);
+  assert.match(first.answer, /guia abaixo/);
+  assert.doesNotMatch(first.answer, /não deve ser chamada/);
+  const history = [
+    { role: 'user', content: 'Como faço uma pipeline para minhas vendas?' },
+    { role: 'assistant', content: `Comece em CRM > Pipeline.\n1. ${crm.documentedSteps[0]}\n2. ${crm.documentedSteps[1]}\nFonte usada: ${crmPath}\nFonte usada: ${tutorialPath}` },
+    { role: 'user', content: 'Já tenho uma, só quero mudar.' },
+    { role: 'assistant', content: `Você quer mudar os estágios ou outra coisa?\nFonte usada: ${tutorialPath}` },
+  ];
+  const followUp = await answerQuestion(root, 'Quero mudar o nome. Vai apagar os clientes?', { history, client: quiet(), budget: exhausted('seguimento') });
+  assert.deepEqual(followUp.steps, [], 'seguimento solto não recebe passos');
+  assert.ok(followUp.sources.every(({ path }) => [crmPath, tutorialPath].includes(path)), 'fontes só da conversa');
+  assert.doesNotMatch(followUp.answer, /guia abaixo/);
+  const rename = await answerQuestion(root, 'Quero só renomear a pipeline que já existe', { client: quiet(), budget: exhausted('renomear') });
+  assert.deepEqual(rename.steps, [], 'pedido de alterar no primeiro turno não recebe o guia de criação, mesmo com o título da área batendo');
+  assert.doesNotMatch(rename.answer, /guia abaixo/);
+});
+
 test('prompt pede escrita natural, contexto do histórico e sugestões na voz da pessoa', async () => {
   const { client, calls } = provider(crmReply);
   await askCrm(client, { history: [
