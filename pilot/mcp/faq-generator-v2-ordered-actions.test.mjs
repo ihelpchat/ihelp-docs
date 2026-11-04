@@ -5,6 +5,8 @@ import * as generator from './faq-generator-v2.mjs';
 // Forma sanitizada REAL registrada pela jornada robos.encaminhar (status concluída, 8 ações, 9 telas):
 // o mesmo controle "Adicionar bloco (cabeçalho)" aparece em duas posições com propósitos diferentes
 // (abrir a seleção de blocos; incluir o bloco configurado antes de Salvar). Nomes já sanitizados; sem valores.
+// O registro não vincula tela a ação (journey-service observa sem agir e pode concluir sem observar), então a
+// projeção não atribui controles de tela a uma ação: só sequência tipada, estado antes e estado depois.
 const click = (role, name) => ({ type: 'click', role, name, value: null });
 const control = (role, name) => ({ role, name, enabled: true, checked: false });
 const hidden = '[conteúdo oculto]';
@@ -68,12 +70,10 @@ test('projeção preserva a sequência sanitizada de ações com repetição e o
     'sequência observada com repetição perdida pela projeção');
   assert.deepEqual(sequence.map((action) => [action.tipo, action.papel]).slice(4, 6),
     [['click', 'combobox'], ['click', 'option']]);
-  // O mesmo rótulo em posições diferentes é distinguível pelo que a tela passou a oferecer logo depois.
-  assert.ok(['Mensagem simples', 'Menu de opções', 'Ação'].every((name) => sequence[1].controlesDepois.includes(name)));
-  assert.ok(sequence[6].controlesDepois.includes('Adicionar bloco'));
-  assert.ok(!sequence[6].controlesDepois.includes('Ação'));
-  assert.ok(sequence[4].controlesDepois.length <= 8, 'contexto por ação é limitado');
-  assert.equal(sequence[7].controlesDepois, undefined, 'tela final vazia não gera contexto');
+  // Sem vínculo temporal comprovado entre tela e ação, nenhuma ação recebe controles de tela.
+  for (const action of sequence) {
+    assert.deepEqual(Object.keys(action).sort(), ['nome', 'papel', 'tipo'], `só sequência tipada: ${action.nome}`);
+  }
 });
 
 test('projeção separa o estado visível antes da primeira ação do estado depois da última', () => {
@@ -99,11 +99,34 @@ test('instruções do redator: efeito condicionado ao estado inicial, sem fecho 
   const instructions = generator.faqWriterInstructions([]);
   assert.match(instructions, /estadoVisivelAntes[^.]*não é efeito da tarefa/u);
   assert.match(instructions, /mesmo controle aparece mais de uma vez/u);
-  assert.match(instructions, /controlesDepois/u);
+  assert.doesNotMatch(instructions, /controlesDepois/u);
+  assert.match(instructions, /não atribua a uma ação o que a tela mostrou em outro momento/u);
+  assert.match(instructions, /\(cabeçalho\)[^.]*não é rótulo nem posição real/u);
+  assert.match(instructions, /parênteses que fazem parte do texto do produto permanecem/u);
   assert.match(instructions, /efeito completo uma vez/u);
   assert.match(instructions, /ação ausente de acoes/u);
   assert.match(instructions, /estadoVisivelDepois estiver vazio[^.]*não foi observado/u);
   assert.match(instructions, /observado e não vazio/u);
-  assert.match(instructions, /desambiguação da captura/u);
   assert.match(instructions, /cada tarefa concluída.*resultado/isu);
+});
+
+test('observação extra sem ação e conclusão imediata não atribuem controles de tela a outra ação', () => {
+  // screen0 → ação0; screen1 = observação de feedback sem ação; screen2 → ação1; screen3 → ação2; conclusão
+  // imediata sem observação final. Cardinalidade n+1 (4 telas, 3 ações) sem alinhamento tela→ação.
+  const journey = { task: 'robos.salvar', status: 'concluída', verification: { confirmed: true, observed: 'ok' },
+    before: state, after: state,
+    actions: [click('link', 'Fluxo de Robô'), click('button', 'Adicionar bloco'), click('button', 'Salvar')],
+    screens: [screen([control('link', 'Fluxo de Robô')]), screen([control('button', 'Somente feedback')]),
+      screen([control('button', 'Menu de opções')]), screen([control('button', 'Salvar')])] };
+  const task = { id: 'robos.salvar', modulo: 'robos', tarefa: 'salvar' };
+  const projected = JSON.parse(generator.projectFaqEvidence(generator.planFaqPage('robos', [task], [journey]),
+    [journey], { screenFacts: [] }, []).find((item) => item.id === 'J:robos.salvar').text);
+  assert.deepEqual(projected.acoes, [
+    { tipo: 'click', papel: 'link', nome: 'Fluxo de Robô' },
+    { tipo: 'click', papel: 'button', nome: 'Adicionar bloco' },
+    { tipo: 'click', papel: 'button', nome: 'Salvar' },
+  ]);
+  assert.doesNotMatch(JSON.stringify(projected.acoes), /Somente feedback|Menu de opções|controlesDepois/u,
+    'controle de outra observação atribuído a uma ação');
+  assert.deepEqual(projected.estadoVisivelAntes.mensagens, ['Inativo']);
 });
