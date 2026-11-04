@@ -34,6 +34,8 @@ test('modelo mockado recebe página, módulo e evidências sem notas guardadas',
     async (input) => { request = input; return { output_text: JSON.stringify(verdict), usage: { input_tokens: 20, output_tokens: 10 } }; });
   assert.equal(judged.aceite, true);
   assert.match(request.input, /Um trecho/);
+  assert.match(request.instructions, /ficha.*contato/isu);
+  assert.match(request.instructions, /reabrir e conferir/iu);
   assert.doesNotMatch(JSON.stringify(request), /G01|G02|G03|G04|comentario secreto/);
   assert.deepEqual(judged.usage, { input_tokens: 20, output_tokens: 10 });
 });
