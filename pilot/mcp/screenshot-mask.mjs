@@ -1,7 +1,7 @@
 // Fração dos pixels de um PNG cobertos pela cor real da máscara de privacidade (#E2E8F0, RGB 226/232/240, opaca).
 // Serve para omitir da geração uma captura inteiramente mascarada ("tela cinza"), que não é evidência visual.
 // Decodificador mínimo, sem dependência: PNG não entrelaçado, 8 bits por canal, RGB (tipo 2) ou RGBA (tipo 6),
-// filtros 0–4. Qualquer outro formato, PNG truncado, dimensões acima do limite ou inflação inesperada devolvem 0:
+// filtros 0–4, sem tRNS. Qualquer outro formato, PNG truncado, dimensões acima do limite ou inflação inesperada devolvem 0:
 // sem prova de máscara, a captura segue o fluxo de sempre (não é aprovação visual nem remoção de máscara).
 import { inflateSync } from 'node:zlib';
 
@@ -28,6 +28,8 @@ export function maskedShare(bytes, { color = MASK_COLOR_RGB } = {}) {
       const bitDepth = data[8], colorType = data[9], interlace = data[12];
       channels = bitDepth === 8 && interlace === 0 ? CHANNELS[colorType] ?? 0 : 0;
     } else if (type === 'IDAT') idat.push(data);
+    // tRNS declara cor-chave transparente (RGB): pixels da cor da máscara poderiam ser transparência, não máscara opaca.
+    else if (type === 'tRNS') return 0;
     else if (type === 'IEND') break;
     offset += 12 + length;
   }
