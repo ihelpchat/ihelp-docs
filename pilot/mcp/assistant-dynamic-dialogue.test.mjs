@@ -273,6 +273,20 @@ Fonte usada: ${crmPath}` },
     client: provider({ answer: 'Para alterar, me diga o que quer mudar; o material cobre a criação.', sources: [crmPath], resolution: 'partial' }).client });
   assert.deepEqual(chip.steps, [], 'sem guia em andamento nem confirmação do modelo, a ficha não injeta a criação');
   assert.equal(chip.resolution, 'partial');
+  // passo de edição que ancora lexicalmente num passo de criação não aparece quando o modelo esclarece (partial)
+  const edit = await answerQuestion(root, 'Quero todos os passos para alterar uma pipeline existente', {
+    client: provider({ answer: 'Você quer mudar o nome ou os estágios?', steps: [step('Defina o nome da pipeline existente.')], sources: [crmPath], resolution: 'partial' }).client,
+  });
+  assert.deepEqual(edit.steps, [], 'esclarecimento vence: nenhum passo documentado de criação');
+  // correção explícita depois de passos já mostrados: a ficha só entrega tudo se o modelo confirmar (complete)
+  const corrected = [
+    ...await crmHistory(),
+    { role: 'user', content: 'Já tenho uma, só quero alterar.' },
+    { role: 'assistant', content: `O material cobre criar; o que você quer alterar?\nFonte usada: ${crmPath}` },
+  ];
+  const afterCorrection = await answerQuestion(root, 'Quero ver todos os passos', { history: corrected,
+    client: provider({ answer: 'Para alterar uma pipeline existente não tenho o procedimento; me diga o que quer mudar.', sources: [crmPath], resolution: 'partial' }).client });
+  assert.deepEqual(afterCorrection.steps, [], 'após a correção, o esclarecimento do modelo vence a ficha');
   const started = await answerQuestion(root, 'Quero ver todos os passos', { history: await crmHistory(),
     client: provider({ answer: 'Aqui vai o caminho completo.', sources: [crmPath] }).client });
   assert.equal(started.steps.length, 16, 'com passos já mostrados, a ficha continua entregando a sequência inteira');
