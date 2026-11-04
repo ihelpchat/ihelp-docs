@@ -1248,11 +1248,12 @@ export async function answerQuestion(root, question, options = {}) {
   // resolution=complete do modelo é condição global: com esclarecimento (partial), nenhum passo do procedimento entra.
   const fullProcedure = detailedProcedure && fallbackSource && parsed.resolution === 'complete'
     && ((bareDetail && activeGuide && fallbackSource === priorGuide) || exactQuestionGuide === fallbackSource || parsed.steps.length > 0);
-  // Com a etapa opcional dispensada, o subconjunto permitido vale para os passos E para a guarda de answer, sections e
-  // suggestions: a instrução do passo dispensado não volta por outro campo.
-  const procedureIndexes = fullProcedure ? mandatoryIndexes(fallbackSource, optionalDeclined(question, fallbackSource)) : null;
+  // Com a etapa opcional dispensada no pedido completo, o subconjunto permitido vale para os passos E para a guarda de
+  // answer, sections e suggestions, independentemente de o modelo ter resolvido completo ou parcial: a instrução do
+  // passo dispensado não volta por outro campo. fullProcedure controla só o preenchimento de steps.
+  const allowedIndexes = fallbackSource ? mandatoryIndexes(fallbackSource, detailedProcedure && optionalDeclined(question, fallbackSource)) : null;
   const safeSteps = needsHelp ? [] : fullProcedure
-    ? procedureIndexes.map((index) => ({
+    ? allowedIndexes.map((index) => ({
         text: fallbackSource.documentedSteps[index], actionId: index === 0 && firstActionAllowed ? fallbackSource.productActions[0]?.id ?? null : null,
         imagePath: fallbackSource.stepImages[index] ?? null,
       }))
@@ -1278,7 +1279,7 @@ export async function answerQuestion(root, question, options = {}) {
   // A guarda vale onde a interface controla o procedimento (guia, visão geral, sequência completa); na resposta
   // livre o texto do modelo segue como antes, pois não há passo documentado confirmado para comparar.
   const groundingSteps = (continuation || overviewProcedure || detailedProcedure)
-    ? (procedureIndexes ? procedureIndexes.map((index) => fallbackSource.documentedSteps[index]) : fallbackSource?.documentedSteps ?? [])
+    ? (allowedIndexes ? allowedIndexes.map((index) => fallbackSource.documentedSteps[index]) : [])
     : [];
   const editorialSuggestions = overviewProcedure ? used[0]?.assistantSuggestions ?? [] : [];
   const fallbackSuggestions = safeSteps.length && fallbackSource ? ['Pode me guiar etapa por etapa'] : [];
