@@ -709,6 +709,13 @@ test('fallback de orçamento: guia documentado só para pedido inicial de criar 
   const status = await answerQuestion(root, 'Como acompanho o status da minha campanha?', { client: generationDown });
   assert.deepEqual(status.steps, [], 'consulta de status/acompanhamento não recebe os passos de criação');
   assert.doesNotMatch(status.answer, /guia abaixo/);
+  // Substantivo "início" e verbo dentro de uma pergunta conceitual não são pedido de criar/começar.
+  const startDate = await answerQuestion(root, 'Qual a data de início da minha campanha?', { client: generationDown, page: { path: campaignPath, title: 'Campanhas' } });
+  assert.deepEqual(startDate.steps, [], '"data de início" não é pedido de começar');
+  assert.doesNotMatch(startDate.answer, /guia abaixo/);
+  const conceptVerb = await answerQuestion(root, 'O que é criar uma campanha?', { client: generationDown, page: { path: campaignPath, title: 'Campanhas' } });
+  assert.deepEqual(conceptVerb.steps, [], 'pergunta conceitual com o verbo no meio não é pedido');
+  assert.doesNotMatch(conceptVerb.answer, /guia abaixo/);
 });
 
 test('prompt pede escrita natural, contexto do histórico e sugestões na voz da pessoa', async () => {
