@@ -182,6 +182,22 @@ function documentedStepsOf(raw) {
     .slice(0, MAX_GUIDE_STEPS);
 }
 
+/**
+ * Início de cada procedimento numerado da página (índices em documentedSteps): toda lista que recomeça em "1." é um
+ * procedimento distinto. Página sem numeração (passos por frase procedural) tem um único grupo.
+ */
+function documentedStepGroupsOf(raw, stepCount) {
+  const starts = [];
+  let index = 0;
+  for (const [, number, text] of raw.matchAll(/^\s*(\d+)\.\s+(.+)$/gm)) {
+    if (/^\s*\[[^\]]*\]\(#[^)]*\)\s*$/.test(text) || !cleanText(text.replace(/!\[[^\]]*\]\([^)]*\)/g, ''))) continue;
+    if (index >= stepCount) break;
+    if (number === '1' || !starts.length) starts.push(index);
+    index += 1;
+  }
+  return starts.length ? starts : [0];
+}
+
 function optionalBranchOf(raw, stepCount) {
   const match = frontmatterValue(raw, 'assistantOptionalBranch').match(/^(\d+):(\d+):(\d+)$/);
   if (!match) return null;
@@ -289,6 +305,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       title,
       description,
       path,
+      links: citedPathsOf(raw),
       body: body.slice(0, 12_000),
       assistantQuestion: frontmatterValue(raw, 'assistantQuestion'),
       assistantIntent,
@@ -302,6 +319,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       screenshots,
       stepImages: documentedStepImagesOf(raw, screenshots),
       documentedSteps,
+      stepGroups: documentedStepGroupsOf(raw, documentedSteps.length),
       optionalBranch: optionalBranchOf(raw, documentedSteps.length),
       assistantOptionalPrompt: frontmatterValue(raw, 'assistantOptionalPrompt'),
       assistantOptionalResumePrompt: frontmatterValue(raw, 'assistantOptionalResumePrompt'),
@@ -589,8 +607,18 @@ function groundedInitialSteps(modelSteps, source, availableImages) {
     cursor = Math.max(cursor, index + 1);
   }
   if (!matched.size) return [];
-  const first = Math.min(...matched.keys());
-  const last = Math.min(Math.max(...matched.keys()), first + MAX_OVERVIEW_STEPS - 1);
+  // Página com vários procedimentos numerados (Contatos: buscar, filtrar, cadastrar, editar…): fica só o procedimento
+  // em que o modelo mais ancorou; a lacuna entre passos ancorados segue a ordem da fonte dentro dele e nunca
+  // atravessa para outro procedimento.
+  const groups = source.stepGroups?.length ? source.stepGroups : [0];
+  const groupOf = (index) => groups.findLastIndex((start) => start <= index);
+  const counts = new Map();
+  for (const index of matched.keys()) counts.set(groupOf(index), (counts.get(groupOf(index)) ?? 0) + 1);
+  const [best] = [...counts.entries()].toSorted((left, right) => right[1] - left[1] || left[0] - right[0])[0];
+  const groupEnd = (groups[best + 1] ?? source.documentedSteps.length) - 1;
+  const inGroup = [...matched.keys()].filter((index) => index >= groups[best] && index <= groupEnd);
+  const first = Math.min(...inGroup);
+  const last = Math.min(Math.max(...inGroup), first + MAX_OVERVIEW_STEPS - 1, groupEnd);
   return source.documentedSteps.slice(first, last + 1).map((text, offset) => {
     const index = first + offset;
     const modelImage = matched.get(index)?.imagePath;
@@ -685,24 +713,30 @@ function citedPathsOf(content) {
 }
 
 /**
- * Âncora da conversa: as fontes citadas pela última resposta do assistente, na ordem em que foram
- * citadas (a primeira é a fonte procedural principal), mais os passos numerados que essa resposta
- * mostrou. Texto digitado pela pessoa nunca define a âncora.
+ * Âncora da conversa: as fontes citadas pela última resposta do assistente (paths, a primeira é a principal) e,
+ * separadamente, o guia em andamento: a última resposta com passos numerados (guidePaths) e os passos que ela
+ * mostrou (shownSteps). Uma dúvida respondida depois (resposta sem passos) não apaga o progresso; se ela citou
+ * outra página, o serviço decide com as fontes carregadas se foi um aparte do mesmo guia (páginas relacionadas)
+ * ou troca de assunto. Texto digitado pela pessoa nunca define a âncora.
  */
 function conversationAnchor(history) {
   const turns = history.filter((item) => item.role === 'assistant').toReversed();
   const active = turns.find((item) => citedPathsOf(item.content).length);
   const paths = active ? citedPathsOf(active.content) : [];
-  const earlier = turns.filter((item) => item !== active).flatMap((item) => citedPathsOf(item.content));
-  // Uma dúvida respondida no meio do guia (resposta sem passos) não apaga o progresso: os passos mostrados vêm
-  // da última resposta com passos numerados do mesmo guia (mesma primeira fonte citada).
-  const stepsTurn = turns.find((item) => /^\d+\.\s+/m.test(item.content)
-    && (!citedPathsOf(item.content).length || citedPathsOf(item.content)[0] === paths[0]));
+  const stepsTurn = turns.find((item) => /^\d+\.\s+/m.test(item.content));
+  const guidePaths = stepsTurn ? citedPathsOf(stepsTurn.content) : [];
+  const earlier = turns.filter((item) => item !== active && item !== stepsTurn).flatMap((item) => citedPathsOf(item.content));
   return {
     paths,
+    guidePaths,
     shownSteps: stepsTurn ? [...stepsTurn.content.matchAll(/^\d+\.\s+(.+)$/gm)].map(([, text]) => normalize(text)) : [],
-    preferredPaths: [...new Set([...paths, ...earlier])].slice(0, 4),
+    preferredPaths: [...new Set([...paths, ...guidePaths, ...earlier])].slice(0, 4),
   };
+}
+
+/** Duas fontes são relacionadas quando são a mesma página ou uma linka a outra (por exemplo, "Leia também"). */
+function relatedSources(left, right) {
+  return left.path === right.path || (left.links ?? []).includes(right.path) || (right.links ?? []).includes(left.path);
 }
 
 function proceduralQuestion(question) {
@@ -749,6 +783,37 @@ function optionalChoice(question) {
 function optionalRecovery(question) {
   const value = normalize(question).replace(/[^a-z0-9]+/g, ' ').trim();
   return /^(?:encontrei|consegui|conclui(?: (?:este )?passo)?|agora apareceu)$/.test(value);
+}
+
+/**
+ * Palavras que identificam a etapa opcional de um guia, tiradas da própria fonte: termos comuns ao passo que abre a
+ * etapa e à pergunta de decisão (assistantOptionalPrompt), sem verbos de ação. Nada é fixado por produto.
+ */
+function optionalKeywords(guide) {
+  const branch = guide?.optionalBranch;
+  if (!branch) return [];
+  const content = (text) => plainWords(text).filter((word) => word.length >= 5 && !ANY_ACTION_WORD.test(word));
+  const stepWords = content(guide.documentedSteps[branch.accept] ?? '');
+  const promptWords = new Set(content(guide.assistantOptionalPrompt ?? ''));
+  const shared = stepWords.filter((word) => promptWords.has(word));
+  return [...new Set(shared.length ? shared : stepWords)];
+}
+
+/** A pessoa dispensou a etapa opcional na própria mensagem ("sem automação", "não quero automação agora", "pular a automação"). */
+function optionalDeclined(question, guide) {
+  const keywords = optionalKeywords(guide);
+  if (!keywords.length) return false;
+  const words = plainWords(question);
+  const negation = /^(?:sem|nao|nunca|pular|pule|pulando|dispenso|dispensar|depois)$/;
+  return words.some((word, index) => keywords.includes(word)
+    && (negation.test(words[index - 1] ?? '') || negation.test(words[index - 2] ?? '')));
+}
+
+/** Índices do procedimento completo; com a etapa opcional dispensada, só os obrigatórios (até a decisão e da retomada ao fim). */
+function mandatoryIndexes(source, declined) {
+  const branch = source.optionalBranch;
+  return source.documentedSteps.map((_, index) => index)
+    .filter((index) => !(declined && branch) || index <= branch.decision || index >= branch.decline);
 }
 
 
@@ -954,33 +1019,39 @@ export async function answerQuestion(root, question, options = {}) {
   let originalQuestion = history.find((item) => item.role === 'user' && !guidedContinuation(item.content, history))?.content ?? question;
   const procedure = proceduralQuestion(question);
   let continuation = generalContinuation;
-  let overviewProcedure = procedure
-    && /\b(?:criar|configurar|montar)\b/i.test(normalize(question))
-    && !continuation
-    && !detailedProcedure;
+  // Pergunta procedural aberta (primeira pergunta, pedido de alteração, "como começo…") é visão geral: o modelo
+  // explica e escolhe os primeiros passos; o servidor ancora e limita. Só continuação e pedido completo saem daqui.
+  let overviewProcedure = procedure && !continuation && !detailedProcedure && !guidance;
   const anchor = conversationAnchor(history);
   const anchoredTurn = generalContinuation || Boolean(choice) || recovery || bareDetail;
   let sources = await retrieveContext(root, question, 8, {
     scope, page, preferredPaths: anchor.preferredPaths,
-    // Fontes da conversa ficam disponíveis (e na frente) em turnos ancorados e em pedidos do procedimento completo;
-    // a escolha entre âncora e assunto novo é do modelo (primeira fonte citada), não da ordem.
-    requiredPaths: anchoredTurn || detailedProcedure ? anchor.paths : [],
+    // Fontes da conversa (última resposta e guia em andamento) ficam disponíveis e na frente em todo turno com
+    // histórico; a escolha entre âncora e assunto novo é do modelo (primeira fonte citada), não da ordem.
+    requiredPaths: [...new Set([...anchor.paths, ...anchor.guidePaths])],
   });
+  const anchorSources = anchor.paths.map((path) => sources.find((source) => source.path === path)).filter(Boolean);
+  const guideSource = anchor.guidePaths.map((path) => sources.find((source) => source.path === path)).find((source) => source?.documentedSteps.length);
+  // O guia em andamento sobrevive a um aparte: resposta sem passos que cita a mesma página ou uma página relacionada
+  // (a curada linka o tutorial). Resposta sem passos sobre outro assunto encerra o guia.
+  const guideKept = Boolean(guideSource) && (!anchorSources.length || anchorSources.some((source) => relatedSources(source, guideSource)));
+  const shownSteps = guideKept ? anchor.shownSteps : [];
+  const conversationSources = [...new Set([...(guideKept ? [guideSource] : []), ...anchorSources])];
   let business = '';
   if (!options.withoutBusinessContext && !procedure && !generalContinuation && !choice && !recovery && !detailedProcedure && sources.length) {
     business = publicBusinessText(await loadBusinessContext(root, businessModule(question, sources) ?? '__geral_only__'));
     const routedModule = topicModules[topicForQuestion(question)];
     if (business && routedModule) {
       const matching = sources.filter(({ path }) => moduleForSource(path) === routedModule);
-      if (matching.length) sources = matching;
+      // Uma palavra da pergunta pode apontar outro módulo ("Departamento" numa dúvida sobre visibilidade da pipeline):
+      // as fontes da conversa continuam no contexto; sem conversa, vale só o módulo.
+      if (matching.length) sources = [...new Set([...conversationSources, ...matching])];
     }
   }
-  const anchorSources = anchor.paths.map((path) => sources.find((source) => source.path === path)).filter(Boolean);
-  // O guia ativo é a fonte citada cujos passos numerados a última resposta mostrou; senão, a primeira citada com passos.
-  const priorGuide = anchorSources.find((source) => source.documentedSteps.length
-    && anchor.shownSteps.some((shown) => source.documentedSteps.some((step) => normalize(step) === shown)))
-    ?? anchorSources.find((source) => source.documentedSteps.length);
+  // O guia ativo é o guia em andamento (quando sobreviveu ao último turno); senão, a primeira fonte citada com passos.
+  const priorGuide = guideKept ? guideSource : anchorSources.find((source) => source.documentedSteps.length);
   const priorSource = priorGuide ?? anchorSources[0];
+  const declinedGuide = detailedProcedure && priorGuide?.optionalBranch && optionalDeclined(question, priorGuide) ? priorGuide : null;
   const branch = optionalBranchState(history, priorGuide, question);
   if ((choice && (branch.pending || branch.diagnosing || branch.resuming || branch.blocked)) || (recovery && branch.blocked)) continuation = true;
   const exactQuestionGuide = sources.find((source) => source.assistantQuestion && (
@@ -1004,20 +1075,23 @@ export async function answerQuestion(root, question, options = {}) {
     };
   }
 
+  // Sem resposta do modelo não há procedimento a mostrar: nenhum passo "da primeira fonte recuperada" e nenhuma
+  // fonte de outro assunto numa conversa que já tem âncora. Texto operacional fixo; o resto fica vazio.
   const fixedFallback = (failed = false) => ({
-    answer: failed ? 'Tive um problema, tente de novo. Você pode seguir o guia abaixo ou falar com uma pessoa.'
-      : 'Siga o guia abaixo. Se precisar, fale com uma pessoa.',
+    answer: failed ? 'Tive um problema para responder agora. Tente de novo ou fale com uma pessoa.'
+      : 'Não consigo responder agora. Tente de novo em alguns minutos ou fale com uma pessoa.',
     sections: [],
-    steps: sources[0]?.documentedSteps.slice(0, 3).map((text) => ({ text })) ?? [],
+    steps: [],
     code: null,
-    sources: sources.slice(0, 3).map(({ title, path, description }) => ({ title, path, kind: kindOf(path), excerpt: description })),
+    sources: (conversationSources.length ? conversationSources : sources).slice(0, 3)
+      .map(({ title, path, description }) => ({ title, path, kind: kindOf(path), excerpt: description })),
     suggestions: [],
     actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
     resolution: 'partial', found: true,
   });
   if (routerFailed) return fixedFallback(true);
   // Estado do guia conhecido antes da chamada: a interface decide passo, botões e transição; o modelo narra.
-  const turn = { question, history, anchor, continuation, choice, recovery, guidance, branch };
+  const turn = { question, history, anchor: { ...anchor, shownSteps }, continuation, choice, recovery, guidance, branch };
   const guidedIntent = intentFromSource(priorSource);
   const guidedDiagnosisQuestion = questionForDiagnosis(originalQuestion, widgetContext, diagnosisFor(originalQuestion, widgetContext, guidedIntent), guidedIntent);
   const preFlags = historyGuide ? guideTurnFlags({ ...turn, guide: historyGuide }) : null;
@@ -1068,7 +1142,7 @@ export async function answerQuestion(root, question, options = {}) {
           business ? 'Separe explicação em answer e sections dos passos em steps. Use o material de negócio apenas para explicar o que é, para que serve, casos de uso e dúvidas. Não mencione sua origem, arquivo, ficha ou contexto. Instruções de ação no produto só podem vir dos PASSOS DOCUMENTADOS do FAQ: copie o texto exato e o sourceStepId correspondente. Não escreva instruções de ação em answer, sections ou suggestions. Não use dados de teste nem incertezas internas.' : '',
           'Comece em answer pela resposta à pergunta, em até 2 frases. Use sections só para separar valores, diferenças, requisitos ou opções que a pessoa precisa comparar, com título curto e itens curtos. Quando faltar um dado que muda a orientação (por exemplo, criar algo novo ou mudar algo que já existe), faça uma pergunta curta e específica em vez de assumir e deixe steps vazio. Nem toda resposta termina com pergunta.',
           overviewProcedure ? 'MODO: visão geral conversacional. A pergunta é ampla. Diga em answer o que a pessoa vai conseguir e por onde começa. Em steps, copie só os primeiros PASSOS DOCUMENTADOS que ela deve fazer agora, na ordem da fonte, sem o procedimento inteiro; use a AÇÃO disponível quando ela abrir a tela certa. Se a pessoa disser que já tem o item e quer alterar, ou se o objetivo não estiver claro, não ofereça o procedimento de criação. A VISÃO INICIAL da fonte é um resumo editorial de apoio: use a informação, não a copie como resposta.' : '',
-          detailedProcedure ? 'MODO: passo a passo completo. Use todos os PASSOS DOCUMENTADOS relevantes, em ordem, sem pular a configuração entre criar e publicar.' : '',
+          detailedProcedure ? `MODO: passo a passo completo. Use todos os PASSOS DOCUMENTADOS relevantes, em ordem, sem pular a configuração entre criar e publicar.${declinedGuide ? ` A pessoa dispensou a etapa opcional deste procedimento (passos ${declinedGuide.optionalBranch.accept + 1} a ${declinedGuide.optionalBranch.decline}); steps mostrará só os passos obrigatórios: não oriente essa etapa nem a trate como pendência.` : ''}` : '',
           continuation ? `MODO: acompanhamento guiado. A pessoa está fazendo o procedimento com você.${stateBlock ? ' Siga o ESTADO DO GUIA informado junto da pergunta: ele diz o que a interface vai mostrar (passo e botões) e o que sua resposta precisa fazer.' : ' Em steps, coloque só o próximo PASSO DOCUMENTADO depois do último mostrado no histórico.'} Em answer, escreva só o que ajuda agora, sem repetir o passo nem resumir o que já foi feito.` : '',
           !overviewProcedure && !continuation ? 'Para perguntas de “como fazer”, use os PASSOS DOCUMENTADOS relevantes: não troque um procedimento detalhado por um resumo. Escreva um passo por ação, em ordem única, dizendo o texto exato de menus e botões, o resultado esperado e como confirmar que funcionou.' : '',
           'O primeiro passo sempre deve dizer onde começar. Use actionId somente quando uma AÇÃO fornecida levar exatamente ao local daquele passo; nunca invente IDs. Quando houver TELAS DOCUMENTADAS, associe cada tela ao passo que ela realmente ilustra, copiando o imagePath sem alterar; use null apenas quando nenhuma tela apoiar aquele passo. Para perguntas técnicas de API, inclua code com um exemplo que use $IHELP_TOKEN, apenas com endpoints presentes nas fontes.',
@@ -1087,8 +1161,14 @@ export async function answerQuestion(root, question, options = {}) {
     budgeted = options.client && !options.budget
       ? { kind: 'ok', response: await client.responses.create(payload) }
       : await createBudgetedResponse(client, payload, options.budget);
-  } catch { return fixedFallback(true); }
-  if (budgeted.kind !== 'ok') return fixedFallback(budgeted.kind === 'provider_failed');
+  } catch (error) {
+    console.error(`Claricia: geração indisponível (${redactSensitiveData(String(error?.status ?? error?.code ?? error?.name ?? 'erro'))})`);
+    return fixedFallback(true);
+  }
+  if (budgeted.kind !== 'ok') {
+    console.error(`Claricia: geração sem resposta (${budgeted.kind})`);
+    return fixedFallback(budgeted.kind === 'provider_failed');
+  }
   const response = budgeted.response;
 
   const parsed = parseAnswer(response.output_text);
@@ -1101,9 +1181,10 @@ export async function answerQuestion(root, question, options = {}) {
     : parsed.sources.map((path) => byPath.get(`/${String(path).split(/[?#]/)[0].replace(/^\/+|\/+$/g, '')}`)).filter(Boolean);
   // Pedido do procedimento completo: a âncora da conversa vale só quando a ficha não cita assunto ou quando o
   // modelo a escolheu como fonte principal; assunto novo segue a fonte escolhida pelo modelo.
-  const activeGuide = Boolean(priorGuide) && anchor.shownSteps.some((shown) => priorGuide.documentedSteps.some((step) => normalize(step) === shown));
+  const activeGuide = Boolean(priorGuide) && shownSteps.some((shown) => priorGuide.documentedSteps.some((step) => normalize(step) === shown));
+  // Página relacionada ao guia (o tutorial que a curada linka) não é assunto novo: o procedimento continua o do guia.
   const detailGuide = detailedProcedure && priorGuide && !historyGuide
-    && ((bareDetail && activeGuide) || chosen[0] === priorGuide) ? priorGuide : undefined;
+    && ((bareDetail && activeGuide) || chosen[0] === priorGuide || (chosen[0] && relatedSources(chosen[0], priorGuide))) ? priorGuide : undefined;
   const selected = (historyGuide ? [historyGuide]
     : detailGuide ? [detailGuide, ...chosen.filter((source) => source !== detailGuide)]
     : exactQuestionGuide ? [exactQuestionGuide]
@@ -1114,8 +1195,11 @@ export async function answerQuestion(root, question, options = {}) {
     ? selected.filter((source) => source.documentedSteps.length || source.productActions.length)
     : selected;
   // Visão geral: a fonte procedural (de preferência a curada, com VISÃO INICIAL) ancora os passos e fica como primeira citada.
+  // A visão geral mostra o procedimento por onde o modelo começou (fonte que ancora o primeiro passo dele); sem passo
+  // ancorável, a curada (com VISÃO INICIAL) e, por fim, a primeira fonte com passos. Assim texto e passos não divergem.
   const overviewSource = overviewProcedure
-    ? used.find((source) => source.assistantOverview && source.documentedSteps.length) ?? used.find((source) => source.documentedSteps.length) ?? null
+    ? (parsed.steps[0] ? used.find((source) => source.documentedSteps.length && documentedIndexOf(parsed.steps[0].text, source.documentedSteps) >= 0) : undefined)
+      ?? used.find((source) => source.assistantOverview && source.documentedSteps.length) ?? used.find((source) => source.documentedSteps.length) ?? null
     : null;
   if (overviewSource) used = [overviewSource, ...used.filter((source) => source !== overviewSource)];
   // A intenção de diagnóstico vem da fonte citada pelo modelo ou da fonte explícita da conversa.
@@ -1142,8 +1226,8 @@ export async function answerQuestion(root, question, options = {}) {
   const fullProcedure = detailedProcedure && fallbackSource && parsed.resolution === 'complete'
     && ((bareDetail && activeGuide && fallbackSource === priorGuide) || exactQuestionGuide === fallbackSource || parsed.steps.length > 0);
   const safeSteps = needsHelp ? [] : fullProcedure
-    ? fallbackSource.documentedSteps.map((text, index) => ({
-        text, actionId: index === 0 ? fallbackSource.productActions[0]?.id ?? null : null,
+    ? mandatoryIndexes(fallbackSource, optionalDeclined(question, fallbackSource)).map((index) => ({
+        text: fallbackSource.documentedSteps[index], actionId: index === 0 ? fallbackSource.productActions[0]?.id ?? null : null,
         imagePath: fallbackSource.stepImages[index] ?? null,
       }))
     : detailedProcedure && fallbackSource ? []
