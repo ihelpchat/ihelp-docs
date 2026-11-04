@@ -4,7 +4,7 @@
 // ou a explicação bastam.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, rm } from 'node:fs/promises';
+import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { answerQuestion, retrieveContext } from './assistant-service.mjs';
@@ -520,6 +520,49 @@ test('pergunta aberta inicial recebe visão geral: no máximo 5 passos, ancorado
   assert.deepEqual(reply.steps.map(({ text }) => text), crm.documentedSteps.slice(0, reply.steps.length), 'passos documentados do procedimento principal, do primeiro em diante');
   assert.match(developerPrompt(calls), /MODO: visão geral conversacional/, 'pergunta procedural aberta é visão geral para o modelo');
   assert.ok(reply.answer && !/Não consegui organizar|Siga os passos abaixo/.test(reply.answer), 'a narração continua sendo do modelo');
+});
+
+test('dúvida sobre as opções do guia em andamento mantém a fonte do guia no contexto, mesmo quando uma palavra aponta outro módulo', async () => {
+  // P60-B2: "Qual a diferença entre Pública, Departamento e Privada?" no meio do guia da pipeline foi roteada pela
+  // palavra "Departamento" ao módulo de departamentos (contexto de negócio); a fonte do CRM, que lista as três
+  // opções, saiu do contexto e a resposta virou "Departamento é uma divisão da empresa".
+  const question = 'Qual a diferença entre Pública, Departamento e Privada?';
+  const departmentsPath = '/docs/sobre-o-sistema/configuracoes/departamentos';
+  const businessDir = await mkdtemp(join(tmpdir(), 'claricia-negocio-'));
+  const previous = process.env.BUSINESS_CONTEXT_DIR;
+  try {
+    await writeFile(join(businessDir, 'geral.md'), '🟢 PÚBLICO\nO produto fictício organiza equipes.');
+    await writeFile(join(businessDir, 'configuracoes-departamentos.md'), '🟢 PÚBLICO\nDepartamento fictício é uma divisão da empresa.');
+    process.env.BUSINESS_CONTEXT_DIR = businessDir;
+    const fake = (answer, sources) => {
+      const requests = [];
+      const client = { responses: { create: async (request) => {
+        const name = request.text?.format?.name;
+        if (name === 'triagem_fechada') return { status: 'completed', output_text: '{"choice":"sem guia"}', usage: { input_tokens: 1, output_tokens: 1 } };
+        if (name === 'seguranca_resposta') return { status: 'completed', output_text: JSON.stringify({ mentionsSource: false, unsupportedAction: false }), usage: { input_tokens: 1, output_tokens: 1 } };
+        requests.push(request);
+        return { model: 'fixture', status: 'completed', usage: { input_tokens: 1, output_tokens: 1 }, output_text: JSON.stringify({
+          answer, sections: [], steps: [], code: null, sources, suggestions: [], resolution: 'complete', found: true,
+        }) };
+      } } };
+      return { requests, client };
+    };
+    const inGuide = fake('Pública: todos veem. Departamento: só quem é do seu departamento. Privada: só você e quem convidar.', [crmPath]);
+    const reply = await answerQuestion(root, question, { client: inGuide.client, history: await crmHistory() });
+    assert.ok(inGuide.requests.length, 'o modelo foi chamado');
+    assert.match(inGuide.requests[0].input.at(-1).content, new RegExp(`URL: ${crmPath}`), 'a fonte do guia em andamento continua no contexto do modelo');
+    assert.equal(reply.sources[0]?.path, crmPath, 'a fonte do guia citada pelo modelo é aceita');
+    assert.equal(reply.answer, 'Pública: todos veem. Departamento: só quem é do seu departamento. Privada: só você e quem convidar.');
+    // Sem guia em andamento, a mesma pergunta segue conceitual pelo módulo de departamentos.
+    const alone = fake('Departamento é uma divisão da empresa.', [departmentsPath]);
+    const conceptual = await answerQuestion(root, question, { client: alone.client });
+    assert.ok(alone.requests.length, 'o modelo foi chamado');
+    assert.doesNotMatch(alone.requests[0].input.at(-1).content, new RegExp(`URL: ${crmPath}`), 'sem histórico, nenhuma fonte de pipeline é imposta');
+    assert.equal(conceptual.sources[0]?.path, departmentsPath);
+  } finally {
+    if (previous === undefined) delete process.env.BUSINESS_CONTEXT_DIR; else process.env.BUSINESS_CONTEXT_DIR = previous;
+    await rm(businessDir, { recursive: true, force: true });
+  }
 });
 
 test('prompt pede escrita natural, contexto do histórico e sugestões na voz da pessoa', async () => {
