@@ -359,6 +359,17 @@ const writerRules = {
     [/sem jornada/u, /finalidade/u, /pré-requisito|requisito/u, /funcionamento/u, /mesmo que a fonte de negócio/u],
     [/sem jornada/u, /orient/u, /execut/u, /processo|planejamento/u],
   ],
+  // Clareza (humanizer R3): papel da escolha observada e ação seguinte, dentro da fronteira W1.
+  'escolha observada em tarefa com jornada: dizer o que ela define e a ação seguinte, sem autorizar efeito sem jornada': [
+    [/escolha/u, /lista|opção/u, /jornada/u, /define|representa/u, /ação seguinte/u, /não autorizam efeito/u, /não invente|nem invente/u],
+  ],
+  'termo explicado na primeira ocorrência, com rótulo real; palavras usuais e benefício sustentado': [
+    [/primeira vez/u, /termo/u, /rótulo/u, /expliq|explic/u],
+    [/palavras usuais/u, /sujeito concreto/u, /benefício/u, /finalidade/u],
+  ],
+  'cada unidade acrescenta informação: sem reformular a anterior nem repetir abertura; pontes de passos repetidos preservadas': [
+    [/unidade/u, /acrescenta/u, /reformul/u, /abertura/u, /pontes|para começar/u],
+  ],
 };
 for (const area of ['contatos', 'robos']) test(`regras de taskId, jornada, finalidade e ordem chegam ao redator e à reescrita: ${area}`, async (t) => {
   const { draft, rewrite } = await forwarded(t, area);
