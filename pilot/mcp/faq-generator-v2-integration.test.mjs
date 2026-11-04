@@ -370,6 +370,18 @@ const writerRules = {
   'cada unidade acrescenta informação: sem reformular a anterior nem repetir abertura; pontes de passos repetidos preservadas': [
     [/unidade/u, /acrescenta/u, /reformul/u, /abertura/u, /pontes|para começar/u],
   ],
+  // R4 real (b08): negativa inventada a partir de valor anonimizado; critério de operação em tarefa sem jornada;
+  // casos que param na necessidade. Regras genéricas, sem termo de produto.
+  'ausência de valor ou nome na captura não prova que nada foi escolhido; sem negar ação nem inferir valor oculto': [
+    [/ausência de um valor/u, /não prova/u, /não negue/u, /valor oculto/u, /sequência observada/u, /conclusão estruturada/u],
+    [/política|status/u, /sem jornada/u, /honestidade/u],
+  ],
+  'tarefa sem jornada: sem critérios de busca, campos ou modo de operação como finalidade': [
+    [/sem jornada/u, /critérios de busca/u, /modo de operação/u, /finalidade/u, /pré-requisitos/u, /tarefas concluídas/u],
+  ],
+  'caso concreto liga situação, recurso escolhido e finalidade documentada, sem ação nem resultado sem jornada': [
+    [/caso concreto/u, /situação distinta/u, /recurso escolhido/u, /finalidade|benefício/u, /sem ação na tela/u, /resultado/u, /Para que serve/u],
+  ],
 };
 for (const area of ['contatos', 'robos']) test(`regras de taskId, jornada, finalidade e ordem chegam ao redator e à reescrita: ${area}`, async (t) => {
   const { draft, rewrite } = await forwarded(t, area);

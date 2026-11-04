@@ -153,3 +153,33 @@ test('observação extra sem ação e conclusão imediata não atribuem controle
     'controle de outra observação atribuído a uma ação');
   assert.deepEqual(projected.estadoVisivelAntes.mensagens, ['Inativo']);
 });
+
+test('contrato N1/N2/N3 chega ao redator junto com dados que distinguem tarefa concluída, contexto e valor anonimizado', () => {
+  // Jornada concluída cuja escolha ficou anonimizada ("opção 1", sem value) e tarefa sem jornada na mesma pauta:
+  // o redator recebe os dois estados e as regras que proíbem negar a seleção, detalhar operação sem jornada
+  // e deixar o caso na necessidade. O teste valida o que é enviado; o comportamento do modelo só se mede em rodada real.
+  const chosen = { task: 'robos.encaminhar', status: 'concluída', verification: { confirmed: true, observed: 'ok' },
+    before: state, after: state,
+    actions: [click('combobox', 'Encaminhar para um departamento ou atendente?'), click('option', 'opção 1'), click('button', 'Salvar')],
+    screens: [screen([]), screen([]), screen([]), screen([], { messages: [] })] };
+  const agenda = [{ id: 'robos.encaminhar', modulo: 'robos', tarefa: 'encaminhar' },
+    { id: 'robos.publicar_ativar', modulo: 'robos', tarefa: 'publicar_ativar' }];
+  const scoped = generator.planFaqPage('robos', agenda, [chosen]);
+  const sent = JSON.parse(generator.faqWriterInput(scoped, agenda,
+    generator.projectFaqEvidence(scoped, [chosen], { screenFacts: [] }, []), []));
+  assert.deepEqual(sent.plan.tasks.map(({ id, status }) => [id, status]),
+    [['robos.encaminhar', 'concluída'], ['robos.publicar_ativar', 'sem jornada']]);
+  const journey = JSON.parse(sent.evidence.find((item) => item.id === 'J:robos.encaminhar').text);
+  assert.deepEqual(journey.acoes.map((action) => action.nome),
+    ['Encaminhar para um departamento ou atendente?', 'opção 1', 'Salvar'], 'valor anonimizado chega como nome, sem value');
+  assert.doesNotMatch(JSON.stringify(sent), /"value"/u);
+  const instructions = generator.faqWriterInstructions([]);
+  const sentences = instructions.split(/(?<=\.)\s+/u);
+  const rule = (...patterns) => sentences.some((sentence) => patterns.every((pattern) => pattern.test(sentence)));
+  assert.ok(rule(/ausência de um valor/u, /não prova/u, /não negue/u, /valor oculto/u, /conclusão estruturada/u), 'N1');
+  assert.ok(rule(/sem jornada/u, /critérios de busca/u, /modo de operação/u, /pré-requisitos/u), 'N2');
+  assert.ok(rule(/caso concreto/u, /recurso escolhido/u, /sem ação na tela/u, /Para que serve/u), 'N3');
+  // Barreiras anteriores permanecem no mesmo texto.
+  assert.ok(rule(/sem jornada/u, /sem passo ou efeito/u));
+  assert.ok(rule(/ação ausente de acoes/u));
+});
