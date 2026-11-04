@@ -695,6 +695,14 @@ test('fallback de orçamento: guia documentado só para pedido inicial de criar 
   const rename = await answerQuestion(root, 'Quero só renomear a pipeline que já existe', { client: quiet(), budget: exhausted('renomear') });
   assert.deepEqual(rename.steps, [], 'pedido de alterar no primeiro turno não recebe o guia de criação, mesmo com o título da área batendo');
   assert.doesNotMatch(rename.answer, /guia abaixo/);
+  // Pergunta conceitual da área (com a página Campanhas aberta) e consulta de status: título/visão geral batem, mas não
+  // há intenção de criar/começar — nenhum passo de criação no fallback.
+  const concept = await answerQuestion(root, 'O que é uma campanha?', { client: quiet(), budget: exhausted('conceito'), page: { path: campaignPath, title: 'Campanhas' } });
+  assert.deepEqual(concept.steps, [], 'pergunta conceitual da área não recebe os passos de criação');
+  assert.doesNotMatch(concept.answer, /guia abaixo/);
+  const status = await answerQuestion(root, 'Como acompanho o status da minha campanha?', { client: quiet(), budget: exhausted('status') });
+  assert.deepEqual(status.steps, [], 'consulta de status/acompanhamento não recebe os passos de criação');
+  assert.doesNotMatch(status.answer, /guia abaixo/);
 });
 
 test('prompt pede escrita natural, contexto do histórico e sugestões na voz da pessoa', async () => {
