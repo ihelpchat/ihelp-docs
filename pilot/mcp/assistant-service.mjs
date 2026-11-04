@@ -1134,7 +1134,7 @@ export async function answerQuestion(root, question, options = {}) {
   // da fonte na visão geral. A entrada no guia só aparece como fallback quando o modelo não sugeriu nada e há passos à vista.
   // A guarda vale onde a interface controla o procedimento (guia, visão geral, sequência completa); na resposta
   // livre o texto do modelo segue como antes, pois não há passo documentado confirmado para comparar.
-  const groundingSteps = (continuation || overviewProcedure || fullProcedure) ? fallbackSource?.documentedSteps ?? [] : [];
+  const groundingSteps = (continuation || overviewProcedure || detailedProcedure) ? fallbackSource?.documentedSteps ?? [] : [];
   const editorialSuggestions = overviewProcedure ? used[0]?.assistantSuggestions ?? [] : [];
   const fallbackSuggestions = safeSteps.length && fallbackSource ? ['Pode me guiar etapa por etapa'] : [];
   const suggestions = continuation
