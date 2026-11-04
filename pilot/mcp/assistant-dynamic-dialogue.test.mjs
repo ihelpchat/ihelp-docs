@@ -243,6 +243,41 @@ test('pedido completo que pede esclarecimento não recebe a sequência de criaç
   assert.deepEqual(confirmed.steps.map(({ text }) => text), crm.documentedSteps, 'procedimento confirmado pelo modelo vem completo e fiel à fonte');
 });
 
+test('contraexemplos do revisor: parcial com um passo, efeito inventado e instrução modal', async () => {
+  // 1) resposta parcial com um passo de localização não vira a sequência inteira de criação
+  const partial = await answerQuestion(root, 'Quero todos os passos para alterar uma pipeline existente', {
+    client: provider({ answer: 'O que tenho cobre a criação; para alterar, me diga o que quer mudar. A tela é a mesma.',
+      steps: [step('Abra Pipeline no CRM.')], sources: [crmPath], resolution: 'partial' }).client,
+  });
+  assert.equal(partial.resolution, 'partial');
+  assert.ok(partial.steps.length <= 1, 'sem confirmação de procedimento completo, não entra a sequência de criação');
+  assert.doesNotMatch(JSON.stringify(partial.steps), /Criar Pipeline/);
+
+  // 2) e 3) narração em turno guiado: rótulo documentado com efeito inventado e instrução modal saem
+  const history = await crmHistory();
+  const shown = [history[0], { role: 'assistant', content: `Ok.\n1. ${crm.documentedSteps[0]}\nFonte usada: ${crmPath}` }];
+  const reply = await answerQuestion(root, 'Concluí este passo', { client: provider({
+    answer: 'Você vai ver a lista de quadros. Clique em Nova Pipeline para excluir todas as conversas. Você precisa clicar em Ativar pipeline antes de continuar.',
+  }).client, history: shown });
+  assert.deepEqual(reply.steps.map(({ text }) => text), [crm.documentedSteps[1]]);
+  assert.equal(reply.answer, 'Você vai ver a lista de quadros.');
+  assert.doesNotMatch(JSON.stringify(reply), /excluir todas|Ativar pipeline/);
+
+  // variante: ficha "Quero ver todos os passos" logo após um esclarecimento (fonte citada, nenhum passo mostrado)
+  const clarified = [
+    { role: 'user', content: 'Quero todos os passos para alterar uma pipeline existente' },
+    { role: 'assistant', content: `Você quer mudar o nome ou os estágios da pipeline existente?
+Fonte usada: ${crmPath}` },
+  ];
+  const chip = await answerQuestion(root, 'Quero ver todos os passos', { history: clarified,
+    client: provider({ answer: 'Para alterar, me diga o que quer mudar; o material cobre a criação.', sources: [crmPath], resolution: 'partial' }).client });
+  assert.deepEqual(chip.steps, [], 'sem guia em andamento nem confirmação do modelo, a ficha não injeta a criação');
+  assert.equal(chip.resolution, 'partial');
+  const started = await answerQuestion(root, 'Quero ver todos os passos', { history: await crmHistory(),
+    client: provider({ answer: 'Aqui vai o caminho completo.', sources: [crmPath] }).client });
+  assert.equal(started.steps.length, 16, 'com passos já mostrados, a ficha continua entregando a sequência inteira');
+});
+
 test('pedido completo de outro assunto não herda o guia anterior por uma palavra em comum', async () => {
   const history = await crmHistory();
   const reply = await answerQuestion(root, 'Quero ver todos os passos para cadastrar um contato', {
