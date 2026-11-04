@@ -486,14 +486,14 @@ test('falha do provedor ou do orçamento numa dúvida de seguimento não injeta 
   assert.match(failed.answer, /Tive um problema/, 'fallback operacional honesto');
   assert.deepEqual(failed.steps, [], 'sem resposta do modelo não há passos de uma fonte qualquer');
   assert.ok(failed.sources.length > 0 && failed.sources.every(({ path }) => conversationPaths.has(path)), `só fontes da própria conversa: ${JSON.stringify(failed.sources.map(({ path }) => path))}`);
-  assert.doesNotMatch(JSON.stringify(failed), /contato/i, 'nenhum guia desconexo');
+  assert.ok(!failed.sources.some(({ path }) => path === contactsPath), 'a Agenda de Contatos (primeira fonte recuperada) não entra');
   // Orçamento: a triagem (pedido pequeno) ainda é admitida; a geração (pedido grande) é negada.
   const budget = { file: join(root, 'budget-seguimento.json'), dailyLimitUsd: 0.12, reserveUsd: 0.05 };
   const exhausted = await answerQuestion(root, question, { history, client: provider({ answer: 'não deve ser chamada' }).client, budget });
   assert.doesNotMatch(exhausted.answer, /guia abaixo|não deve ser chamada/, 'sem guia inventado quando não há resposta');
   assert.deepEqual(exhausted.steps, []);
   assert.ok(exhausted.sources.every(({ path }) => conversationPaths.has(path)), `só fontes da própria conversa: ${JSON.stringify(exhausted.sources.map(({ path }) => path))}`);
-  assert.doesNotMatch(JSON.stringify(exhausted), /contato/i);
+  assert.ok(!exhausted.sources.some(({ path }) => path === contactsPath), 'a Agenda de Contatos não entra');
 });
 
 test('pergunta aberta inicial recebe visão geral: no máximo 5 passos, ancorados no procedimento principal', async () => {
@@ -517,9 +517,18 @@ test('pergunta aberta inicial recebe visão geral: no máximo 5 passos, ancorado
   });
   const reply = await answerQuestion(root, 'Como começo a organizar meus clientes no CRM?', { client });
   assert.ok(reply.steps.length > 0 && reply.steps.length <= 5, `visão inicial curta, não o despejo (${reply.steps.length} passos)`);
-  assert.deepEqual(reply.steps.map(({ text }) => text), crm.documentedSteps.slice(0, reply.steps.length), 'passos documentados do procedimento principal, do primeiro em diante');
+  // Os passos são de UM procedimento documentado, contíguo, da fonte por onde o modelo começou (a narração abre em
+  // Contatos); texto e passos não divergem e nada de Tags/responsável ou Pipeline entra na primeira resposta.
+  const shownSource = [contacts, crm].find((source) => source.documentedSteps.includes(reply.steps[0].text));
+  assert.ok(shownSource, 'passos documentados');
+  const indexes = reply.steps.map(({ text }) => shownSource.documentedSteps.indexOf(text));
+  assert.deepEqual(indexes, indexes.map((_, offset) => indexes[0] + offset), 'sequência contígua de um único procedimento');
+  assert.equal(shownSource, contacts, 'o procedimento mostrado é o que a narração do modelo abre');
+  assert.ok(reply.steps.every(({ text }) => !/Tag|proprietário|Pipeline/i.test(text)), 'sem procedimentos extras na visão inicial');
+  assert.equal(reply.sources[0]?.path, shownSource.path, 'a primeira fonte citada é a do procedimento mostrado');
   assert.match(developerPrompt(calls), /MODO: visão geral conversacional/, 'pergunta procedural aberta é visão geral para o modelo');
-  assert.ok(reply.answer && !/Não consegui organizar|Siga os passos abaixo/.test(reply.answer), 'a narração continua sendo do modelo');
+  assert.match(reply.answer, /^Comece cadastrando os clientes em Contatos/, 'a narração continua sendo do modelo');
+  assert.doesNotMatch(reply.answer, /Não consegui organizar|Siga os passos abaixo/);
 });
 
 test('dúvida sobre as opções do guia em andamento mantém a fonte do guia no contexto, mesmo quando uma palavra aponta outro módulo', async () => {
@@ -553,9 +562,9 @@ test('dúvida sobre as opções do guia em andamento mantém a fonte do guia no 
     assert.match(inGuide.requests[0].input.at(-1).content, new RegExp(`URL: ${crmPath}`), 'a fonte do guia em andamento continua no contexto do modelo');
     assert.equal(reply.sources[0]?.path, crmPath, 'a fonte do guia citada pelo modelo é aceita');
     assert.equal(reply.answer, 'Pública: todos veem. Departamento: só quem é do seu departamento. Privada: só você e quem convidar.');
-    // Sem guia em andamento, a mesma pergunta segue conceitual pelo módulo de departamentos.
+    // Sem guia em andamento, uma pergunta só sobre departamento segue conceitual pelo módulo de departamentos.
     const alone = fake('Departamento é uma divisão da empresa.', [departmentsPath]);
-    const conceptual = await answerQuestion(root, question, { client: alone.client });
+    const conceptual = await answerQuestion(root, 'O que é um departamento?', { client: alone.client });
     assert.ok(alone.requests.length, 'o modelo foi chamado');
     assert.doesNotMatch(alone.requests[0].input.at(-1).content, new RegExp(`URL: ${crmPath}`), 'sem histórico, nenhuma fonte de pipeline é imposta');
     assert.equal(conceptual.sources[0]?.path, departmentsPath);
