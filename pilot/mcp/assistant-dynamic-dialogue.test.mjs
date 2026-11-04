@@ -582,6 +582,34 @@ test('dúvida sobre as opções do guia em andamento mantém a fonte do guia no 
   }
 });
 
+test('pedido explícito de outro procedimento vence o guia em andamento, mesmo quando as páginas se linkam', async () => {
+  // Revisor (C7): Agenda de Contatos e Robô de Atendimento linkam uma à outra; depois de passos de Contatos, "Quero ver
+  // todos os passos para criar um robô" com o modelo citando o robô não pode voltar a Contatos por causa do link.
+  const history = [
+    { role: 'user', content: 'Como cadastro um contato?' },
+    { role: 'assistant', content: `Comece em Contatos.\n1. ${contacts.documentedSteps[0]}\nFonte usada: ${contactsPath}` },
+  ];
+  const reply = await answerQuestion(root, 'Quero ver todos os passos para criar um robô', { history, client: provider({
+    answer: 'Aqui vai o caminho do robô, do início ao fim.', sources: [robotPath], steps: [step(robot.documentedSteps[0])],
+  }).client });
+  assert.equal(reply.sources[0]?.path, robotPath, 'a nova tarefa explícita segue a fonte escolhida pelo modelo');
+  assert.deepEqual(reply.steps.map(({ text }) => text), robot.documentedSteps, 'procedimento completo do robô');
+  assert.ok(!reply.steps.some(({ text }) => contacts.documentedSteps.includes(text)), 'nenhum passo de Contatos');
+});
+
+test('negativa da etapa opcional em paráfrase comum conta; dupla negação não conta', async () => {
+  const history = await crmHistory();
+  const branch = crm.optionalBranch;
+  const mandatory = [...crm.documentedSteps.slice(0, branch.decision + 1), ...crm.documentedSteps.slice(branch.decline)];
+  const ask = (question) => answerQuestion(root, question, { history, client: provider({
+    answer: 'Aqui vai o caminho.', sources: [crmPath], steps: [step('Abra Pipeline no CRM.')],
+  }).client });
+  const declined = await ask('Quero ver todos os passos, mas não quero configurar automação agora');
+  assert.deepEqual(declined.steps.map(({ text }) => text), mandatory, 'negação a três palavras do termo ainda é recusa');
+  const doubleNegative = await ask('Quero ver todos os passos, não quero pular a automação');
+  assert.deepEqual(doubleNegative.steps.map(({ text }) => text), crm.documentedSteps, '"não quero pular" não é recusa: sequência inteira');
+});
+
 test('prompt pede escrita natural, contexto do histórico e sugestões na voz da pessoa', async () => {
   const { client, calls } = provider(crmReply);
   await askCrm(client, { history: [
