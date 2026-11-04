@@ -13,8 +13,11 @@ const guide = '/docs/principais-motivos-de-suporte/campanhas';
 const sentinel = 'sk-proj-FAKESECRET012345678901234567890';
 const hostilePath = `/docs/${sentinel}`;
 const providerInputs = [];
+// Contrato dinâmico (2026-11-03): o modelo escolhe o passo (aqui, o primeiro passo documentado da fonte);
+// o servidor ancora o texto na fonte e resolve guideId/stepId do evento a partir desse passo.
 const payload = {
-  answer: 'Abra Campanhas para preparar o envio.', sections: [], steps: [], code: null,
+  answer: 'Abra Campanhas para preparar o envio.', sections: [],
+  steps: [{ text: 'Abra Campanhas e clique em Nova Campanha.', actionId: null, imagePath: null }], code: null,
   sources: [guide], suggestions: [], resolution: 'complete', found: true,
 };
 const fakeOpenAI = createServer(async (request, response) => {
