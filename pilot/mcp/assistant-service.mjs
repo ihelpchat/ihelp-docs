@@ -676,7 +676,7 @@ function validConversationPlan(plan) {
 
 // Falha fechada quando a narração contradiz o plano de explicação/objetivo/conclusão.
 // O plano semântico vem da mesma geração; esta guarda só barra instruções explícitas.
-function hasExecutionInstruction(text, intent) {
+function hasExecutionInstruction(text, intent, goalChoice = false) {
   return String(text).split(/(?<=[.!?])\s+|\n/).some((sentence) => {
     const value = normalize(sentence).trim();
     // Confirmar pode pedir inspeção do resultado, sem repetir ações que alteram o produto.
@@ -684,16 +684,19 @@ function hasExecutionInstruction(text, intent) {
       && !actionStems(sentence).size) return false;
     return instructionSentence(sentence)
       || new RegExp(`[,;:]\\s*(?:${INSTRUCTION_VERBS})\\b`).test(value)
-      || /^(?:como (?:eu |posso )?|quero (?:aprender a )?)(?:criar|crio|configurar|configuro|montar|monto|publicar|publico|adicionar|adiciono|ativar|ativo)\b/u.test(value);
+      || (!(goalChoice && /^quero\b/u.test(value))
+        && /^(?:como (?:eu |posso )?|quero (?:aprender a )?)(?:criar|crio|configurar|configuro|montar|monto|publicar|publico|adicionar|adiciono|ativar|ativo)\b/u.test(value));
   });
 }
 
 function narratesSkippedBranch(text, source) {
+  const keywords = optionalKeywords(source);
+  // Só uma orientação afirmada de pular conta: mencionar a alternativa ou perguntar sobre ela é válido.
   return String(text).split(/(?<=[.!?])\s+/u).some((sentence) => !sentence.trim().endsWith('?')
-    && (optionalDeclined(sentence, source) || normalize(sentence).split(/[,;.!?]/u).some((clause) =>
-      /\b(?:etapa|ramo|parte) opcional\b/u.test(clause)
+    && normalize(sentence).split(/[,;.!?]/u).some((clause) =>
+      (/\b(?:etapa|ramo|parte) opcional\b/u.test(clause) || plainWords(clause).some((word) => keywords.includes(word)))
       && /\b(?:pule|pular|dispense|dispensar|ignore|ignorar)\b/u.test(clause)
-      && !/\b(?:nao|sem|nem)\b/u.test(clause))));
+      && !/\b(?:nao|sem|nem)\b/u.test(clause)));
 }
 
 /** Lê a resposta estruturada sem expor JSON literal ou wrappers malformados. */
@@ -1226,7 +1229,7 @@ async function answerQuestionAttempt(root, question, options, invocation) {
           'Escreva como alguém da equipe que conhece o produto e está conversando com um cliente: frases curtas e concretas, cada uma com uma informação nova. Não cumprimente, não elogie a pergunta, não anuncie o que vai fazer e não repita a pergunta da pessoa. Não termine com resumo, oferta genérica de ajuda ou frase de efeito. Evite contraste artificial (“não é X, é Y”), listas de três por hábito, linguagem de propaganda e travessão.',
           'Parta do que a pessoa já informou na pergunta e no histórico: não repita o que ela já sabe ou já fez e não reinicie o roteiro depois de uma dúvida, correção ou troca de assunto. Se nada indicar o contrário, presuma que ela acabou de acessar o iHelp e não conhece os menus: diga onde começar, o nome exato do botão quando a fonte trouxer e como confirmar que deu certo.',
           'Quando houver problema, reconheça brevemente o que a pessoa relatou antes de orientar. Explique um termo do produto só quando ele for necessário para a pessoa agir ou entender a resposta, junto do termo e no espaço que a dúvida pedir; não repita uma explicação que ela já entendeu, mas reformule se ela mostrar que ainda não entendeu. Prefira uma explicação curta junto do termo a um glossário. Preserve o significado da fonte: card representa uma oportunidade ligada ao contato, que pode ter vários cards; exemplos de colunas são hipotéticos, não o estado da conta. Explique salvar, publicar e outros comandos quando a distinção mudar o resultado.',
-          'Decida plan junto com a resposta, usando a intenção atual e o histórico: explain para entender, confirm_completion para quem concluiu e quer confirmar, clarify quando falta objetivo, execute quando pede ação, inclusive aprender a fazer, refazer ou criar outro. Os modos preliminares abaixo não decidem a intenção. Só execute admite steps e instruções de ação nos demais campos. Nos outros casos, explique, confirme como reconhecer o resultado sem refazer a criação, ou pergunte o objetivo; sections e suggestions também devem servir a essa intenção. Nunca afirme que observou sucesso na conta.',
+          'Decida plan junto com a resposta, usando a intenção atual e o histórico: explain para entender, confirm_completion para quem concluiu e quer confirmar, clarify quando falta objetivo, execute quando pede ação, inclusive aprender a fazer, refazer ou criar outro. Os modos preliminares abaixo não decidem a intenção. Só execute admite steps e instruções de ação nos demais campos. Nos outros casos, explique, confirme como reconhecer o resultado sem refazer a criação, ou pergunte o objetivo; sections e suggestions também devem servir a essa intenção. Em clarify, suggestions pode oferecer escolhas de objetivo na voz da pessoa, sem iniciar o procedimento. Nunca afirme que observou sucesso na conta.',
           'plan.optionalBranch decide o ramo opcional da fonte usada: skip se a pessoa dispensou aquele ramo, include se o pediu, unspecified se não decidiu ou se a fonte não definir ramo opcional. Use o ramo da primeira fonte procedural citada. Recurso diferente não implica dispensa: não equipare robô e automação de CRM. Uma lista incompleta de steps não dispensa ramo. Com skip, a narrativa e as sugestões devem acompanhar os passos obrigatórios, sem orientar os passos dispensados. Com include ou unspecified, não diga para pular o ramo. Se o ramo ou o objetivo estiver ambíguo, esclareça. Não é preciso agir só porque a fonte ensina a criar.',
           'Use somente as fontes fornecidas. Analise cada pedido da pergunta separadamente. Se toda a pergunta estiver documentada, use resolution=complete. Se apenas uma parte estiver documentada, use resolution=partial. Se nada estiver, use resolution=not_found e found=false.',
           'Quando algo não estiver documentado, não invente etapas nem nomes de botões. Diga o que a documentação permite afirmar e que o time de atendimento pode concluir ou confirmar o procedimento. A interface mostrará o botão de WhatsApp; não escreva número de telefone nem URL.',
@@ -1267,8 +1270,9 @@ async function answerQuestionAttempt(root, question, options, invocation) {
   const plan = parsed.plan;
   if (!plan) return fixedFallback(true, { branch: 'composition', reason: 'invalid_plan' });
   const executing = plan.intent === 'execute';
-  if (!executing && [parsed.answer, ...parsed.sections.flatMap(({ title, items }) => [title, ...items]),
-    ...parsed.suggestions].some((text) => hasExecutionInstruction(text, plan.intent))) {
+  if (!executing && ([parsed.answer, ...parsed.sections.flatMap(({ title, items }) => [title, ...items])]
+    .some((text) => hasExecutionInstruction(text, plan.intent))
+    || parsed.suggestions.some((text) => hasExecutionInstruction(text, plan.intent, plan.intent === 'clarify')))) {
     return fixedFallback(true, { branch: 'composition', reason: 'plan_conflict' });
   }
   // A intenção atual prevalece sobre o gatilho lexical preliminar de visão geral.
