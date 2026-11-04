@@ -116,3 +116,27 @@ test('a prova válida de uma invocação não vale para a invocação seguinte (
   assert.equal(failing.log.length, 1);
   assert.equal(ok.log.length, 1);
 });
+
+test('prova que lança de forma síncrona: memoizada como rejeição, sem nova tentativa, nenhuma jornada concluída', async (t) => {
+  await state(t);
+  const log = [];
+  const fn = () => { log.push('probe'); throw new Error('falha síncrona'); };
+  const { result, completed } = await generate(fn);
+  assert.deepEqual(completed, []);
+  assert.deepEqual(result.reviewTasks, tasks.map(({ id }) => id));
+  assert.equal(log.length, 1, 'throw síncrono entra na promessa compartilhada; não é repetido por registro');
+});
+
+test('cada registro continua comparado com a prova: registro de outra conta na mesma invocação não conclui', async (t) => {
+  const dir = await state(t);
+  // robos.buscar regravado com accountProof de outra conta; o ponteiro .latest passa a apontar para ele.
+  await saveJourney(join(dir, 'journeys'), 'robos', { task: 'robos.buscar', module: 'robos', status: 'concluída',
+    target: 'producao', cacheKey: digest(['registro-outra-conta', 'robos.buscar']),
+    configuredIdentityHash: configuredJourneyIdentity(process.env).credentialHash, accountProof: digest(['u9', 'c9']),
+    verification: { confirmed: true, observed: 'ok' }, actions: [], screens: [], before: null, after: null }, []);
+  const { fn, log } = probe(resolving(live));
+  const { result, completed } = await generate(fn);
+  assert.deepEqual(completed, eligible.filter((id) => id !== 'robos.buscar'));
+  assert.ok(result.reviewTasks.includes('robos.buscar'), 'jornada de outra conta fica sem jornada');
+  assert.equal(log.length, 1, 'a mesma prova serve para comparar cada registro individualmente');
+});
