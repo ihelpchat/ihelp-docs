@@ -596,7 +596,7 @@ function withoutUngroundedInstructions(text, documentedSteps) {
  * print do passo documentado, limitado a MAX_OVERVIEW_STEPS. Passo que não ancora em nenhum documentado
  * não é mostrado; sem nenhum ancorado, nenhum passo é mostrado.
  */
-function groundedInitialSteps(modelSteps, source, availableImages) {
+function groundedInitialSteps(modelSteps, source, availableImages, firstActionAllowed = true) {
   let cursor = 0;
   const matched = new Map();
   for (const item of modelSteps) {
@@ -623,7 +623,7 @@ function groundedInitialSteps(modelSteps, source, availableImages) {
     const modelImage = matched.get(index)?.imagePath;
     return {
       text,
-      actionId: index === 0 ? source.productActions[0]?.id ?? null : null,
+      actionId: index === 0 && firstActionAllowed ? source.productActions[0]?.id ?? null : null,
       imagePath: source.stepImages[index] ?? (availableImages.has(modelImage) ? modelImage : null),
     };
   });
@@ -808,7 +808,8 @@ function optionalKeywords(guide) {
 
 /**
  * A pessoa dispensou a etapa opcional na própria mensagem, avaliada por oração: "sem automação", "não quero
- * configurar automação agora", "pular a automação" são recusas; "não quero pular a automação" (pular negado) não é.
+ * configurar automação agora", "pular a automação" são recusas; "não quero pular a automação" e "sem pular a
+ * automação" (pular negado) pedem a etapa.
  */
 function optionalDeclined(question, guide) {
   const keywords = optionalKeywords(guide);
@@ -816,10 +817,10 @@ function optionalDeclined(question, guide) {
   return normalize(question).split(/[,;.!?]|\b(?:mas|porem|e|ou|porque|pois|entao)\b/).some((clause) => {
     const words = plainWords(clause);
     if (!words.some((word) => keywords.includes(word))) return false;
-    const negated = words.some((word) => /^(?:nao|nunca|nem)$/.test(word));
-    const without = words.includes('sem');
+    // "sem"/"não" negam o que vem junto: negam a etapa ("sem automação") ou negam o pular ("sem pular", "não quero pular").
+    const negated = words.some((word) => /^(?:nao|nunca|nem|sem)$/.test(word));
     const skipping = words.some((word) => /^(?:pular|pule|pulando|dispenso|dispensar|dispensando|depois)$/.test(word));
-    return skipping ? without || !negated : negated || without;
+    return skipping ? !negated : negated;
   });
 }
 
@@ -1227,13 +1228,16 @@ export async function answerQuestion(root, question, options = {}) {
   const availableActions = new Map(used.flatMap((source) => source.productActions.map((action) => [action.id, action])));
   const availableImages = new Map(used.flatMap((source) => source.screenshots.map((image) => [image.src, image])));
   const fallbackSource = used.find((source) => source.documentedSteps.length);
+  // actionId explícito que não existe no catálogo das fontes usadas: o modelo tentou dirigir o botão; o primeiro passo
+  // não recebe o CTA documentado como substituto. actionId omitido (null) mantém o CTA do passo documentado.
+  const firstActionAllowed = !parsed.steps.some((item) => item.actionId && !availableActions.has(item.actionId));
   const flags = preFlags ?? guideTurnFlags({ ...turn, guide: continuation ? fallbackSource ?? null : null, branch: NO_BRANCH });
   const { needsHelp, diagnosticFollowup, blockedFollowup, choicePending, guideFinished, progressStep, escalate } = flags;
   // Os passos são do modelo (texto validado quando há fonte procedural) ou do estado do guia; não há preenchimento mecânico.
   const responseSteps = business ? parsed.steps.filter(({ text, sourceStepId }) =>
     groundedSteps.get(sourceStepId) === text)
     : overviewProcedure
-      ? overviewSource ? groundedInitialSteps(parsed.steps, overviewSource, availableImages) : parsed.steps.slice(0, MAX_OVERVIEW_STEPS)
+      ? overviewSource ? groundedInitialSteps(parsed.steps, overviewSource, availableImages, firstActionAllowed) : parsed.steps.slice(0, MAX_OVERVIEW_STEPS)
     : guideFinished || choicePending || diagnosticFollowup || blockedFollowup ? []
     : progressStep ? [progressStep]
     : continuation ? parsed.steps.slice(0, 1)
@@ -1244,14 +1248,17 @@ export async function answerQuestion(root, question, options = {}) {
   // resolution=complete do modelo é condição global: com esclarecimento (partial), nenhum passo do procedimento entra.
   const fullProcedure = detailedProcedure && fallbackSource && parsed.resolution === 'complete'
     && ((bareDetail && activeGuide && fallbackSource === priorGuide) || exactQuestionGuide === fallbackSource || parsed.steps.length > 0);
+  // Com a etapa opcional dispensada, o subconjunto permitido vale para os passos E para a guarda de answer, sections e
+  // suggestions: a instrução do passo dispensado não volta por outro campo.
+  const procedureIndexes = fullProcedure ? mandatoryIndexes(fallbackSource, optionalDeclined(question, fallbackSource)) : null;
   const safeSteps = needsHelp ? [] : fullProcedure
-    ? mandatoryIndexes(fallbackSource, optionalDeclined(question, fallbackSource)).map((index) => ({
-        text: fallbackSource.documentedSteps[index], actionId: index === 0 ? fallbackSource.productActions[0]?.id ?? null : null,
+    ? procedureIndexes.map((index) => ({
+        text: fallbackSource.documentedSteps[index], actionId: index === 0 && firstActionAllowed ? fallbackSource.productActions[0]?.id ?? null : null,
         imagePath: fallbackSource.stepImages[index] ?? null,
       }))
     : detailedProcedure && fallbackSource ? []
     : responseSteps;
-  if (!needsHelp && safeSteps[0] && fallbackSource?.productActions[0]
+  if (!needsHelp && firstActionAllowed && safeSteps[0] && fallbackSource?.productActions[0]
     && (fullProcedure || safeSteps[0].text === fallbackSource.documentedSteps[0])) {
     safeSteps[0] = { ...safeSteps[0], actionId: fallbackSource.productActions[0].id };
   }
@@ -1270,7 +1277,9 @@ export async function answerQuestion(root, question, options = {}) {
   // da fonte na visão geral. A entrada no guia só aparece como fallback quando o modelo não sugeriu nada e há passos à vista.
   // A guarda vale onde a interface controla o procedimento (guia, visão geral, sequência completa); na resposta
   // livre o texto do modelo segue como antes, pois não há passo documentado confirmado para comparar.
-  const groundingSteps = (continuation || overviewProcedure || detailedProcedure) ? fallbackSource?.documentedSteps ?? [] : [];
+  const groundingSteps = (continuation || overviewProcedure || detailedProcedure)
+    ? (procedureIndexes ? procedureIndexes.map((index) => fallbackSource.documentedSteps[index]) : fallbackSource?.documentedSteps ?? [])
+    : [];
   const editorialSuggestions = overviewProcedure ? used[0]?.assistantSuggestions ?? [] : [];
   const fallbackSuggestions = safeSteps.length && fallbackSource ? ['Pode me guiar etapa por etapa'] : [];
   const suggestions = continuation
