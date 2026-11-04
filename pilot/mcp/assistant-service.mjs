@@ -1034,9 +1034,12 @@ export async function answerQuestion(root, question, options = {}) {
   let originalQuestion = history.find((item) => item.role === 'user' && !guidedContinuation(item.content, history))?.content ?? question;
   const procedure = proceduralQuestion(question);
   let continuation = generalContinuation;
-  // Pergunta procedural aberta (primeira pergunta, pedido de alteração, "como começo…") é visão geral: o modelo
-  // explica e escolhe os primeiros passos; o servidor ancora e limita. Só continuação e pedido completo saem daqui.
-  let overviewProcedure = procedure && !continuation && !detailedProcedure && !guidance;
+  // Visão geral = pedido AMPLO: verbo de começo ou montagem (criar, configurar, montar, organizar, começar, iniciar,
+  // usar) ou pergunta sobre a área de uma página curada (exactGuide, abaixo). O modelo explica e escolhe os primeiros
+  // passos; o servidor ancora e limita. Procedimento específico ("como transferir um atendimento") segue a resposta
+  // livre, como antes; continuação e pedido completo têm modos próprios.
+  let overviewProcedure = procedure && !continuation && !detailedProcedure && !guidance
+    && /\b(?:criar|configurar|montar|organizar|comecar|comeco|iniciar|usar)\b/i.test(normalize(question));
   const anchor = conversationAnchor(history);
   const anchoredTurn = generalContinuation || Boolean(choice) || recovery || bareDetail;
   let sources = await retrieveContext(root, question, 8, {
@@ -1077,10 +1080,14 @@ export async function answerQuestion(root, question, options = {}) {
     normalize(source.assistantQuestion) === normalize(question.trim())
     || (detailedProcedure && normalize(question).replace(/^(?:quero|mostre) todos os passos\s*:\s*/, '') === normalize(source.assistantQuestion))
   ));
-  const exactGuide = exactQuestionGuide || sources.find((source, index) => index === 0 && source.assistantOverview && source.score >= 40
-    && normalize(source.title).split(/[^a-z0-9]+/).some((word) => word.length > 4
-      && normalize(question).split(/[^a-z0-9]+/).some((term) => term.replace(/s$/, '') === word.replace(/s$/, ''))));
-  if (exactGuide?.assistantOverview && !continuation && !detailedProcedure) overviewProcedure = true;
+  // Página curada da área perguntada: a primeira fonte recuperada fora das fontes pinadas da conversa, com VISÃO
+  // INICIAL e uma palavra do título na pergunta (sigla em maiúsculas como "CRM" conta; palavra comum só com 5+ letras).
+  const rankedFirst = sources.find((source) => !conversationSources.includes(source)) ?? sources[0];
+  const areaGuide = rankedFirst && rankedFirst.assistantOverview && rankedFirst.score >= 40
+    && rankedFirst.title.split(/[^\p{L}\p{N}]+/u).some((word) => (word.length > 4 || /^\p{Lu}{2,}$/u.test(word))
+      && normalize(question).split(/[^a-z0-9]+/).some((term) => term.replace(/s$/, '') === normalize(word).replace(/s$/, '')));
+  const exactGuide = exactQuestionGuide || (areaGuide ? rankedFirst : undefined);
+  if (exactGuide?.assistantOverview && !continuation && !detailedProcedure && !guidance) overviewProcedure = true;
   const historyGuide = continuation ? priorGuide : undefined;
   if (continuation && historyGuide?.assistantQuestion
     && (originalQuestion === question || optionalChoice(originalQuestion) || optionalRecovery(originalQuestion))) {
