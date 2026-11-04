@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { answerQuestion, retrieveContext } from './assistant-service.mjs';
-import { freeAnswerClient } from './fixtures/free-answer-client.mjs';
+import { stateEchoClient } from './fixtures/state-echo-client.mjs';
 
 const uiSource = await readFile(new URL('../lib/assistant.ts', import.meta.url), 'utf8');
 const actions = await readFile(new URL('../architecture/product-actions.json', import.meta.url), 'utf8');
@@ -34,9 +34,10 @@ const originalCrm = await readFile(new URL('../content/docs/docs/sobre-o-sistema
 assert.match(originalCrm, /trava de contato/i);
 assert.equal((originalCrm.match(/Clique em Próximo/g) ?? []).length, 2);
 assert.match(originalCrm, /Criar automação/);
-const client = freeAnswerClient({ responses: { create: async () => ({ model: 'fixture', output_text: JSON.stringify({
-  answer: 'Orientação inicial.', sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: 'complete', found: true,
-}) }) } });
+// Contrato dinâmico (2026-11-03): o modelo escolhe o passo inicial (aqui, o primeiro documentado) e narra a
+// partir dos fatos do ESTADO DO GUIA; o serviço não troca a narração por texto fixo nem preenche passos sozinho.
+const requests = [];
+const client = stateEchoClient({ onRequest: (request) => requests.push(request) });
 const ask = (question, options = {}) => answerQuestion(root, question, { client, ...options });
 
 for (const [question, slug, intent, action, count, moduleName] of cases) {
@@ -54,7 +55,7 @@ for (const [question, slug, intent, action, count, moduleName] of cases) {
   if (action) assert.equal(overview.steps[0].action?.route.startsWith('/'), true);
   if (slug === 'cobranca-plano') {
     assert.doesNotMatch(raw + overview.answer + overview.steps.map(({ text }) => text).join(' '), /configurações|\/configuracoes|Canais/i);
-    assert.match(overview.answer, /atendimento/i);
+    assert.match(requests.at(-1).input.at(-1).content, /VISÃO INICIAL: Não há uma tela de cobrança/, 'o modelo recebe o fato de que não há tela de cobrança');
   }
   assert.equal(overview.sources[0]?.media, undefined, 'nenhum vídeo automático');
   assert.doesNotMatch(JSON.stringify(overview), /[+][0-9]{10,}|\b(?:sk-[a-z0-9]+|token)\b|<VideoEmbed/i);
