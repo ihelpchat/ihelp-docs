@@ -6,7 +6,8 @@ import * as generator from './faq-generator-v2.mjs';
 // o mesmo controle "Adicionar bloco (cabeçalho)" aparece em duas posições com propósitos diferentes
 // (abrir a seleção de blocos; incluir o bloco configurado antes de Salvar). Nomes já sanitizados; sem valores.
 // O registro não vincula tela a ação (journey-service observa sem agir e pode concluir sem observar), então a
-// projeção não atribui controles de tela a uma ação: só sequência tipada, estado antes e estado depois.
+// projeção não atribui controles de tela a uma ação: só sequência tipada, estado antes (1ª observação precede
+// qualquer ação) e a última observação registrada, sem afirmar que ela é posterior à última ação.
 const click = (role, name) => ({ type: 'click', role, name, value: null });
 const control = (role, name) => ({ role, name, enabled: true, checked: false });
 const hidden = '[conteúdo oculto]';
@@ -63,7 +64,7 @@ const evidence = generator.projectFaqEvidence(plan, [forwarding, menu], { screen
 const product = (taskId) => JSON.parse(evidence.find((item) => item.id === `J:${taskId}`).text);
 const prompt = generator.faqWriterInput(plan, tasks, evidence, []);
 
-test('projeção preserva a sequência sanitizada de ações com repetição e o contexto de cada ação', () => {
+test('projeção preserva a sequência sanitizada de ações com repetição, sem contexto de tela por ação', () => {
   assert.equal(plan.tasks[0].status, 'concluída');
   const sequence = product('robos.encaminhar').acoes;
   assert.deepEqual(sequence.map((action) => action.nome), forwardingActions.map(({ name }) => name),
@@ -76,12 +77,33 @@ test('projeção preserva a sequência sanitizada de ações com repetição e o
   }
 });
 
-test('projeção separa o estado visível antes da primeira ação do estado depois da última', () => {
+test('projeção separa o estado antes da primeira ação da última observação, sem afirmar fase', () => {
   const forwarded = product('robos.encaminhar');
   assert.deepEqual(forwarded.estadoVisivelAntes.mensagens, ['Inativo']);
-  assert.deepEqual(forwarded.estadoVisivelDepois.mensagens, []);
-  assert.deepEqual(forwarded.estadoVisivelDepois.controles, []);
+  assert.deepEqual(forwarded.ultimaObservacao.mensagens, []);
+  assert.deepEqual(forwarded.ultimaObservacao.controles, []);
+  assert.equal(forwarded.estadoVisivelDepois, undefined, 'última tela não pode ser rotulada como depois');
   assert.ok(forwarded.mensagens.includes('Inativo'));
+});
+
+test('atalho de conclusão logo após agir: a última observação é anterior à última ação e não vira efeito', () => {
+  // journey-service pode chamar complete(sanitized) com a observação feita ANTES do act recém-executado
+  // (sem nova observação): 3 telas / 3 ações, after = state da tela 2. Nada aqui prova estado posterior a Salvar.
+  const lastSeen = { ...state, headings: 'Contato' };
+  const journey = { task: 'contatos.definir_responsavel', status: 'concluída',
+    verification: { confirmed: true, observed: 'ok' }, before: state, after: lastSeen,
+    actions: [click('button', 'Editar Proprietário do Contato'), click('option', 'opção 1'), click('button', 'Salvar')],
+    screens: [screen([control('button', 'Editar Proprietário do Contato')]),
+      screen([control('option', 'opção 1')], { messages: ['Rascunho'] }),
+      { ...screen([control('button', 'Salvar')], { messages: ['Ainda não salvo'] }), state: lastSeen }] };
+  const task = { id: 'contatos.definir_responsavel', modulo: 'contatos', tarefa: 'definir_responsavel' };
+  const projected = JSON.parse(generator.projectFaqEvidence(generator.planFaqPage('contatos', [task], [journey]),
+    [journey], { screenFacts: [] }, []).find((item) => item.id === 'J:contatos.definir_responsavel').text);
+  assert.deepEqual(projected.acoes.map((action) => action.nome), ['Editar Proprietário do Contato', 'opção 1', 'Salvar']);
+  assert.deepEqual(projected.estadoVisivelAntes.mensagens, ['Inativo']);
+  assert.deepEqual(projected.ultimaObservacao, { titulos: ['Contato'], controles: ['Salvar'], mensagens: ['Ainda não salvo'] });
+  assert.equal(projected.estadoVisivelDepois, undefined);
+  assert.ok(!Object.keys(projected).some((key) => /depois/iu.test(key)), 'nenhuma chave afirma fase posterior');
 });
 
 test('projeção mantém filtros de privacidade e o esquema público da evidência', () => {
@@ -105,8 +127,9 @@ test('instruções do redator: efeito condicionado ao estado inicial, sem fecho 
   assert.match(instructions, /parênteses que fazem parte do texto do produto permanecem/u);
   assert.match(instructions, /efeito completo uma vez/u);
   assert.match(instructions, /ação ausente de acoes/u);
-  assert.match(instructions, /estadoVisivelDepois estiver vazio[^.]*não foi observado/u);
-  assert.match(instructions, /observado e não vazio/u);
+  assert.doesNotMatch(instructions, /estadoVisivelDepois/u);
+  assert.match(instructions, /ultimaObservacao[^.]*não garante que ela seja posterior à última ação/u);
+  assert.match(instructions, /mesmo resultado confirmado pela conclusão estruturada/u);
   assert.match(instructions, /cada tarefa concluída.*resultado/isu);
 });
 
