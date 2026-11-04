@@ -323,3 +323,12 @@ test('abort depois da geração fecha classificador, sem repetir; próxima pesso
     assert.equal(next.calls.answer, 1);
   });
 });
+
+
+test('menção a alternativa sem automação não dispensa o ramo escolhido', async () => {
+  const answer = 'Também é possível seguir sem automação; você escolheu incluir essa etapa.';
+  const { client } = fake({ plan: { intent: 'execute', optionalBranch: 'include' }, answer, steps: crm.documentedSteps.map(step), sources: [crmPath] });
+  const reply = await answerQuestion(root, 'Quero todos os passos para criar uma pipeline com automação.', { client });
+  assert.equal(reply.answer, answer);
+  assert.deepEqual(reply.steps.map(({ text }) => text), crm.documentedSteps);
+});

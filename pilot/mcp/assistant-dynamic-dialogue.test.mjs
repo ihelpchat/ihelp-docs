@@ -112,6 +112,7 @@ test('a mesma pergunta recebe respostas diferentes quando o modelo escreve difer
 
 test('esclarecimento ou pedido de alteração não recebem passos de criação', async () => {
   const clarify = await askCrm(provider({
+    plan: { intent: 'clarify', optionalBranch: 'unspecified' },
     answer: 'Depende do que você quer: criar uma pipeline nova ou ajustar uma que já existe no seu CRM?',
     sources: [crmPath], suggestions: ['Quero criar uma nova', 'Já tenho uma, quero ajustar'],
   }).client);
