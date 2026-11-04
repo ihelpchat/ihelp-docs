@@ -509,17 +509,15 @@ function instructionSentence(sentence) {
 // não entram na comparação, para não derrubar paráfrases legítimas.
 const EFFECT_VERB = /^(?:ativ|desativ|publi|salv|exclu|apag|remov|envi|cri|adicion|configur|habilit|desabilit|cancel|fech|alter|mud|troq|troc|edit|ger|confirm|test|marq|marc|desmarq|desmarc|copi|col|arrast|repit|repet|pression|desfa)/;
 const effectStem = (token) => token.slice(0, 3);
-/** Radicais curtos dos verbos de efeito de uma frase. */
+const ANY_ACTION_WORD = new RegExp(`^(?:${INSTRUCTION_VERBS}|${ACTION_INFINITIVES})$`);
+/**
+ * Radicais curtos dos verbos de efeito de uma frase. Só formas de verbo conhecidas (imperativo ou infinitivo da
+ * lista de ações) contam: substantivo com o mesmo prefixo ("envio", "criativos", "publicação") não é efeito.
+ */
 function actionStems(text) {
-  return new Set(normalize(text).split(/[^a-z0-9]+/).filter((token) => EFFECT_VERB.test(token)).map(effectStem));
+  return new Set(normalize(text).split(/[^a-z0-9]+/).filter((token) => ANY_ACTION_WORD.test(token) && EFFECT_VERB.test(token)).map(effectStem));
 }
 
-/**
- * Uma frase-instrução só está ancorada se, além de cobrir um passo documentado, todos os seus verbos de efeito
- * aparecem nesse passo: "Clique em Nova Pipeline para excluir todas as conversas" compartilha o rótulo, mas
- * "excluir" não está no passo, então a frase sai. Comparação por radical curto: lexical, não semântica.
- */
-const ANY_ACTION_WORD = new RegExp(`^(?:${INSTRUCTION_VERBS}|${ACTION_INFINITIVES})$`);
 const CLAUSE_CONNECTORS = new Set(['para', 'e', 'ou', 'depois', 'entao', 'quando', 'se', 'assim', 'ate']);
 const plainWords = (text) => normalize(text).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
 
@@ -548,6 +546,11 @@ function clauseAnchoredIndex(sentence, documentedSteps) {
   return extraAction || extraLabel ? -1 : index;
 }
 
+/**
+ * Uma frase-instrução só está ancorada se, além de cobrir um passo documentado, todos os seus verbos de efeito
+ * aparecem nesse passo: "Clique em Nova Pipeline para excluir todas as conversas" compartilha o rótulo, mas
+ * "excluir" não está no passo, então a frase sai. Comparação por radical curto: lexical, não semântica.
+ */
 function anchoredInstruction(sentence, documentedSteps) {
   let index = documentedIndexOf(sentence, documentedSteps);
   if (index < 0) index = clauseAnchoredIndex(sentence, documentedSteps);
