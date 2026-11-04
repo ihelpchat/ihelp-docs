@@ -510,12 +510,16 @@ function instructionSentence(sentence) {
 const EFFECT_VERB = /^(?:ativ|desativ|publi|salv|exclu|apag|remov|envi|cri|adicion|configur|habilit|desabilit|cancel|fech|alter|mud|troq|troc|edit|ger|confirm|test|marq|marc|desmarq|desmarc|copi|col|arrast|repit|repet|pression|desfa)/;
 const effectStem = (token) => token.slice(0, 3);
 const ANY_ACTION_WORD = new RegExp(`^(?:${INSTRUCTION_VERBS}|${ACTION_INFINITIVES})$`);
+const GERUND = /(?:ando|endo|indo)$/;
 /**
- * Radicais curtos dos verbos de efeito de uma frase. Só formas de verbo conhecidas (imperativo ou infinitivo da
- * lista de ações) contam: substantivo com o mesmo prefixo ("envio", "criativos", "publicação") não é efeito.
+ * Radicais curtos dos verbos de efeito de uma frase. Só formas verbais contam: imperativo ou infinitivo da lista de
+ * ações, ou gerúndio com prefixo de efeito ("excluindo"); substantivo com o mesmo prefixo ("envio", "criativos",
+ * "publicação") não é efeito.
  */
 function actionStems(text) {
-  return new Set(normalize(text).split(/[^a-z0-9]+/).filter((token) => ANY_ACTION_WORD.test(token) && EFFECT_VERB.test(token)).map(effectStem));
+  return new Set(normalize(text).split(/[^a-z0-9]+/)
+    .filter((token) => EFFECT_VERB.test(token) && (ANY_ACTION_WORD.test(token) || GERUND.test(token)))
+    .map(effectStem));
 }
 
 const CLAUSE_CONNECTORS = new Set(['para', 'e', 'ou', 'depois', 'entao', 'quando', 'se', 'assim', 'ate']);
@@ -530,20 +534,16 @@ function leadingClause(sentence) {
 }
 
 /**
- * Ancoragem conservadora pela oração inicial: o passo documentado contém a oração literalmente e o resto da frase
- * não introduz outro controle (verbos de ação e rótulos capitalizados precisam estar no mesmo passo).
+ * Ancoragem conservadora pela oração inicial: só para frase com UMA palavra de ação de interface (a inicial) cuja
+ * oração inicial aparece literalmente num passo documentado ("Abra Campanhas para preparar o envio."). Qualquer
+ * segunda ação ("e clique em painel secreto", "para clicar em painel secreto") desliga este fallback, com ou sem
+ * maiúsculas; frase com duas ações só ancora pela sobreposição lexical normal com um passo documentado.
  */
 function clauseAnchoredIndex(sentence, documentedSteps) {
+  if (plainWords(sentence).filter((word) => ANY_ACTION_WORD.test(word)).length !== 1) return -1;
   const clause = leadingClause(sentence);
   if (!clause) return -1;
-  const index = documentedSteps.findIndex((step) => plainWords(step).join(' ').includes(clause));
-  if (index < 0) return -1;
-  const documentedWords = new Set(plainWords(documentedSteps[index]));
-  const documentedActionStems = new Set([...documentedWords].filter((word) => ANY_ACTION_WORD.test(word)).map(effectStem));
-  const extraAction = plainWords(sentence).filter((word) => ANY_ACTION_WORD.test(word)).some((word) => !documentedActionStems.has(effectStem(word)));
-  const labels = (sentence.match(/(?<!^)(?<![.!?]\s)\b\p{Lu}[\p{L}\p{N}-]*/gu) ?? []).map((word) => normalize(word));
-  const extraLabel = labels.some((label) => !documentedWords.has(label));
-  return extraAction || extraLabel ? -1 : index;
+  return documentedSteps.findIndex((step) => plainWords(step).join(' ').includes(clause));
 }
 
 /**
