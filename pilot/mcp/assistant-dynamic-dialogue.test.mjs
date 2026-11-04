@@ -257,11 +257,11 @@ test('contraexemplos do revisor: parcial com um passo, efeito inventado e instru
   const history = await crmHistory();
   const shown = [history[0], { role: 'assistant', content: `Ok.\n1. ${crm.documentedSteps[0]}\nFonte usada: ${crmPath}` }];
   const reply = await answerQuestion(root, 'Concluí este passo', { client: provider({
-    answer: 'Você vai ver a lista de quadros. Clique em Nova Pipeline para excluir todas as conversas. Você precisa clicar em Ativar pipeline antes de continuar.',
+    answer: 'Você vai ver a lista de quadros. Clique em Nova Pipeline para excluir todas as conversas. Você precisa clicar em Ativar pipeline antes de continuar. Clique em Nova Pipeline excluindo todas as conversas.',
   }).client, history: shown });
   assert.deepEqual(reply.steps.map(({ text }) => text), [crm.documentedSteps[1]]);
   assert.equal(reply.answer, 'Você vai ver a lista de quadros.');
-  assert.doesNotMatch(JSON.stringify(reply), /excluir todas|Ativar pipeline/);
+  assert.doesNotMatch(JSON.stringify(reply), /excluir todas|excluindo|Ativar pipeline/, 'efeito inventado sai no infinitivo, na forma modal e no gerúndio');
 
   // variante: ficha "Quero ver todos os passos" logo após um esclarecimento (fonte citada, nenhum passo mostrado)
   const clarified = [
