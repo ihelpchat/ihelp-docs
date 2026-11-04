@@ -443,6 +443,85 @@ test('prints e ações continuam restritos à fonte; prints documentados acompan
   assert.doesNotMatch(JSON.stringify(reply), /inventada\.png|abrir-tudo/);
 });
 
+// Casos reais da validação em staging (C8, personas P40): transcrições em
+// .regente/conversa-dinamica-0311/live-personas-c8f2a3584722/P40-{A,B,C}.json.
+test('pedido completo "sem automação" depois de um aparte conceitual entrega o procedimento curado só com os passos obrigatórios', async () => {
+  // P40-A3: a resposta 2 (conceitual) citou só o tutorial; o modelo citou o tutorial e o serviço entregou os 9 passos
+  // numerados dele (2 de acesso + 7 de automação), sem os obrigatórios e apesar do "sem automação".
+  const branch = crm.optionalBranch;
+  assert.ok(branch, 'a fonte curada declara o ramo opcional');
+  const history = [
+    { role: 'user', content: 'Como configurar o CRM? É a primeira vez que entro no iHelp.' },
+    { role: 'assistant', content: `Para organizar oportunidades no CRM, você cria uma pipeline e define seus estágios. Comece em Pipeline, na área de CRM.\n1. ${crm.documentedSteps[0]}\n2. ${crm.documentedSteps[1]}\n3. ${crm.documentedSteps[2]}\nFonte usada: ${crmPath}\nFonte usada: /docs/sobre-o-sistema/crm` },
+    { role: 'user', content: 'Pipeline é o que? Eu quero acompanhar quem pediu orçamento e quem já comprou.' },
+    { role: 'assistant', content: `Pipeline é um quadro visual onde cada oportunidade fica em um card e avança por etapas, do primeiro contato ao fechamento.\nFonte usada: ${tutorialPath}` },
+  ];
+  const reply = await answerQuestion(root, 'Quero ver todos os passos para começar sem automação.', { history, client: provider({
+    answer: 'Siga estes passos para configurar e confirmar que ela está pronta para uso.',
+    steps: tutorial.documentedSteps.map((text) => step(text)), sources: [tutorialPath],
+  }).client });
+  const mandatory = [...crm.documentedSteps.slice(0, branch.decision + 1), ...crm.documentedSteps.slice(branch.decline)];
+  assert.deepEqual(reply.steps.map(({ text }) => text), mandatory, 'procedimento curado sem a etapa opcional dispensada, até a conclusão');
+  assert.equal(reply.sources[0]?.path, crmPath, 'a fonte curada do guia em andamento responde pelo procedimento completo');
+  assert.equal(reply.steps[0].action?.id, 'abrir-crm');
+  assert.equal(reply.resolution, 'complete');
+});
+
+test('falha do provedor ou do orçamento numa dúvida de seguimento não injeta passos de outro assunto', async () => {
+  // P40-B3: depois de criar a pipeline e dizer que só quer mudar o nome, a geração falhou e o fallback mostrou os
+  // 3 primeiros passos de "Agenda de Contatos" (primeira fonte recuperada para "clientes"), sem relação com a conversa.
+  const history = [
+    { role: 'user', content: 'Como faço uma pipeline para minhas vendas?' },
+    { role: 'assistant', content: `Você pode acompanhar suas oportunidades em um quadro por etapas e escolher o modelo Vendas padrão. Comece em CRM > Pipeline.\n1. ${crm.documentedSteps[0]}\n2. ${crm.documentedSteps[1]}\n3. ${crm.documentedSteps[2]}\nFonte usada: ${crmPath}\nFonte usada: ${tutorialPath}` },
+    { role: 'user', content: 'Já tenho uma, só quero mudar.' },
+    { role: 'assistant', content: `Entendi. Você quer mudar os estágios da pipeline, como editar, renomear ou reordenar, ou alterar outra coisa?\nFonte usada: ${tutorialPath}` },
+  ];
+  const question = 'Quero mudar o nome. Vai apagar os clientes?';
+  const conversationPaths = new Set([crmPath, tutorialPath]);
+  const failing = { responses: { create: async (request) => {
+    if (request.text?.format?.name === 'triagem_fechada') return { status: 'completed', output_text: '{"choice":"sem guia"}', usage: { input_tokens: 1, output_tokens: 1 } };
+    throw new Error('fixture: provedor indisponível');
+  } } };
+  const failed = await answerQuestion(root, question, { history, client: failing });
+  assert.match(failed.answer, /Tive um problema/, 'fallback operacional honesto');
+  assert.deepEqual(failed.steps, [], 'sem resposta do modelo não há passos de uma fonte qualquer');
+  assert.ok(failed.sources.length > 0 && failed.sources.every(({ path }) => conversationPaths.has(path)), `só fontes da própria conversa: ${JSON.stringify(failed.sources.map(({ path }) => path))}`);
+  assert.doesNotMatch(JSON.stringify(failed), /contato/i, 'nenhum guia desconexo');
+  // Orçamento: a triagem (pedido pequeno) ainda é admitida; a geração (pedido grande) é negada.
+  const budget = { file: join(root, 'budget-seguimento.json'), dailyLimitUsd: 0.12, reserveUsd: 0.05 };
+  const exhausted = await answerQuestion(root, question, { history, client: provider({ answer: 'não deve ser chamada' }).client, budget });
+  assert.doesNotMatch(exhausted.answer, /guia abaixo|não deve ser chamada/, 'sem guia inventado quando não há resposta');
+  assert.deepEqual(exhausted.steps, []);
+  assert.ok(exhausted.sources.every(({ path }) => conversationPaths.has(path)), `só fontes da própria conversa: ${JSON.stringify(exhausted.sources.map(({ path }) => path))}`);
+  assert.doesNotMatch(JSON.stringify(exhausted), /contato/i);
+});
+
+test('pergunta aberta inicial recebe visão geral: no máximo 5 passos, ancorados no procedimento principal', async () => {
+  // P40-C1: "Como começo a organizar meus clientes no CRM?" — o modelo devolveu 14 passos (Contatos + Pipeline, 208
+  // palavras) e o serviço entregou todos, porque a pergunta não casava com o modo de visão geral.
+  const liveSteps = [
+    'Abra Contatos no menu.', 'Clique em Adicionar Contato.', 'Preencha Nome e Telefone. Os demais campos são opcionais.',
+    'Clique em Salvar. A mensagem “Contato criado com sucesso!” confirma o cadastro.',
+    'Abra o contato em Contatos. Em Tags, use Buscar ou criar tag... para selecionar uma tag existente. A mensagem “Tag adicionada com sucesso!” confirma o vínculo.',
+    'No contato, encontre Definir proprietário e clique em Editar. Escolha um departamento e o usuário responsável. Se a responsabilidade for apenas do departamento, selecione Somente departamento.',
+    'Clique em Salvar. A mensagem “Proprietário atualizado com sucesso!” confirma a escolha.',
+    'Abra Pipeline no CRM.', 'Clique em Nova Pipeline.', 'Preencha o nome, o responsável, a descrição, o ícone e a cor da Pipeline.',
+    'Escolha a visibilidade: Pública, Departamento ou Privada.',
+    'Defina a trava de contato: ativada para permitir um card por contato ou desativada para permitir vários cards.',
+    'Clique em Próximo e escolha um modelo de estágios ou comece em branco. Clique em Próximo novamente.',
+    'Se não quiser configurar automação, pule essa parte e clique em Criar Pipeline. Confira o novo quadro na lista; os estágios podem ser abertos.',
+  ];
+  const { client, calls } = provider({
+    answer: 'Comece cadastrando os clientes em Contatos, onde você pode adicionar tags e definir um responsável. Depois, crie uma Pipeline no CRM para acompanhar as oportunidades por estágios.',
+    steps: liveSteps.map((text) => step(text)), sources: [crmPath, contactsPath],
+  });
+  const reply = await answerQuestion(root, 'Como começo a organizar meus clientes no CRM?', { client });
+  assert.ok(reply.steps.length > 0 && reply.steps.length <= 5, `visão inicial curta, não o despejo (${reply.steps.length} passos)`);
+  assert.deepEqual(reply.steps.map(({ text }) => text), crm.documentedSteps.slice(0, reply.steps.length), 'passos documentados do procedimento principal, do primeiro em diante');
+  assert.match(developerPrompt(calls), /MODO: visão geral conversacional/, 'pergunta procedural aberta é visão geral para o modelo');
+  assert.ok(reply.answer && !/Não consegui organizar|Siga os passos abaixo/.test(reply.answer), 'a narração continua sendo do modelo');
+});
+
 test('prompt pede escrita natural, contexto do histórico e sugestões na voz da pessoa', async () => {
   const { client, calls } = provider(crmReply);
   await askCrm(client, { history: [
