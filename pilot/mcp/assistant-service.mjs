@@ -1101,12 +1101,15 @@ export async function answerQuestion(root, question, options = {}) {
     };
   }
 
-  // Sem resposta do modelo, o guia documentado só entra no fallback quando é inequívoco para um pedido INICIAL de
-  // criar/começar: sem histórico, triagem não falhou, pergunta canônica da fonte ou página curada da área perguntada
-  // (título, VISÃO INICIAL e score já calculados) e sem pedido de alterar/apagar nem negativa. Continuação, escolha,
-  // ficha e pergunta solta de seguimento ficam sem passos (o estado do guia é deles) e com fontes só da conversa.
+  // Sem resposta do modelo (triagem, orçamento ou geração), o guia documentado só entra no fallback quando é inequívoco
+  // para um pedido INICIAL de criar/começar: sem histórico, intenção positiva de criar/começar na própria pergunta,
+  // pergunta canônica da fonte ou página curada da área perguntada (título, VISÃO INICIAL e score já calculados) e sem
+  // pedido de alterar/apagar nem negativa. Pergunta conceitual ou de status da área, continuação, escolha, ficha e
+  // pergunta solta de seguimento ficam sem passos (o estado do guia é deles) e com fontes só da conversa. A decisão
+  // depende só da pergunta e da recuperação, não de qual etapa falhou (com orçamento esgotado a triagem falha primeiro).
+  const startRequest = /\b(?:criar|crie|crio|criando|configurar|configure|configuro|configurando|montar|monte|monto|montando|comecar|comece|comeco|comecando|iniciar|inicie|inicio|iniciando)\b/i.test(normalize(question));
   const alterationRequest = /\b(?:alterar|altere|mudar|mude|renomear|renomeie|editar|edite|trocar|troque|apagar|apague|excluir|exclua|remover|remova|deletar|delete|desativar|desative|cancelar|cancele|nao|sem)\b/i.test(normalize(question));
-  const safeGuide = !history.length && !routerFailed && overviewProcedure && !alterationRequest ? exactQuestionGuide ?? exactGuide ?? null : null;
+  const safeGuide = !history.length && startRequest && !alterationRequest ? exactQuestionGuide ?? exactGuide ?? null : null;
   const fixedFallback = (failed = false) => {
     const steps = safeGuide?.documentedSteps.slice(0, 3).map((text) => ({ text })) ?? [];
     return {
