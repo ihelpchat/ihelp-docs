@@ -12,7 +12,7 @@ const chunk = (type, data) => {
 };
 const paeth = (a, b, c) => { const p = a + b - c; const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); return pa <= pb && pa <= pc ? a : pb <= pc ? b : c; };
 /** Codificador PNG de teste (8 bits, tipo 2 RGB ou 6 RGBA, não entrelaçado) aplicando o filtro pedido em todas as linhas. */
-export function encodePng(width, height, pixel, { filter = 0, channels = 4 } = {}) {
+export function encodePng(width, height, pixel, { filter = 0, channels = 4, trns = null } = {}) {
   const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4); ihdr[8] = 8; ihdr[9] = channels === 4 ? 6 : 2;
   const stride = width * channels;
   const image = Buffer.alloc(height * stride);
@@ -33,5 +33,7 @@ export function encodePng(width, height, pixel, { filter = 0, channels = 4 } = {
     }
     rows.push(row);
   }
-  return Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
+  // tRNS (só tipo 2, RGB): cor-chave de 16 bits por canal que o PNG trata como transparente.
+  const transparency = trns && channels === 3 ? [chunk('tRNS', Buffer.from([0, trns[0], 0, trns[1], 0, trns[2]]))] : [];
+  return Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), chunk('IHDR', ihdr), ...transparency, chunk('IDAT', deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
 }

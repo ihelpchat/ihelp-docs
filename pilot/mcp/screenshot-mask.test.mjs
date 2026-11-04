@@ -29,6 +29,9 @@ test('cor da máscara com alfa parcial e outras cores uniformes não contam como
   assert.equal(maskedShare(encodePng(32, 32, () => [...MASK_COLOR_RGB, 128])), 0, 'alfa parcial não é máscara');
   assert.equal(maskedShare(encodePng(32, 32, () => [255, 255, 255, 255])), 0, 'tela branca uniforme não é máscara');
   assert.equal(maskedShare(encodePng(32, 32, () => [0xe2, 0xe8, 0xf1, 255])), 0, 'cor vizinha não é máscara');
+  // RGB com tRNS cuja chave é a própria cor da máscara: esses pixels são transparentes, não máscara opaca; o formato
+  // com transparência fica fora do decodificador suportado e a captura segue sem omissão.
+  assert.equal(maskedShare(encodePng(32, 32, () => [...MASK_COLOR_RGB], { channels: 3, trns: [...MASK_COLOR_RGB] })), 0, 'tRNS com a cor da máscara não é máscara opaca');
 });
 
 test('formato fora do suportado, PNG truncado ou dimensões fora de escala devolvem 0 (sem prova, sem omissão)', () => {
