@@ -248,7 +248,7 @@ export const httpServer = createServer(async (request, response) => {
         quota(assistantSessions, `${ip}:${sessionId}`, assistantSessionLimit, now),
         quota(assistantIps, ip, assistantIpLimit, now),
       ])) return;
-      const history = Array.isArray(body.history) ? body.history.slice(-6) : [];
+      const history = Array.isArray(body.history) ? body.history.slice(-12) : [];
       const scope = typeof body.scope === 'string' ? body.scope : 'Tudo';
       const pagePath = publishedPathOrNull(body.page?.path);
       const page = pagePath

@@ -6,6 +6,7 @@ import ts from 'typescript';
 import { answerQuestion } from './assistant-service.mjs';
 import { sanitizeWidgetContext, diagnoseState, diagnosticQuestion } from './real-state.mjs';
 import { freeAnswerClient } from './fixtures/free-answer-client.mjs';
+import { stateNarration } from './fixtures/state-echo-client.mjs';
 
 const projectRoot = new URL('../', import.meta.url).pathname;
 const root = await mkdtemp(join(tmpdir(), 'ihelp-real-state-'));
@@ -22,7 +23,10 @@ const response = { model: 'fixture', output_text: JSON.stringify({
   code: null, sources: [robotPath], suggestions: [], resolution: 'complete', found: true,
 }) };
 const requests = [];
-const client = freeAnswerClient({ responses: { create: async (request) => { requests.push(request); return response; } } });
+// A narração do diagnóstico vem do modelo a partir do ESTADO DO GUIA (pergunta sugerida); o fixture a ecoa.
+const client = freeAnswerClient({ responses: { create: async (request) => { requests.push(request);
+  const body = JSON.parse(response.output_text);
+  return { ...response, output_text: JSON.stringify({ ...body, answer: stateNarration(request, body.answer) }) }; } } });
 const ask = (question, options = {}) => answerQuestion(root, question, { client, ...options });
 
 const safe = sanitizeWidgetContext({
