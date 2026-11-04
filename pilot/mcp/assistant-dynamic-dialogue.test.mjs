@@ -315,12 +315,13 @@ test('narração que abre a tela do primeiro passo é preservada, com ou sem pas
   assert.equal(withoutStep.answer, narration, 'sem passos, a narração legítima também fica (nada de texto de erro)');
   const hostile = await answerQuestion(root, 'Como criar e enviar uma campanha?', { client: provider({ answer: 'Abra Campanhas para excluir todos os contatos.', sources: [campaignPath] }).client });
   assert.doesNotMatch(hostile.answer, /excluir todos/, 'mesma oração inicial com efeito inventado continua fora');
-  // prefixo documentado não libera um segundo controle inventado, em nenhum campo exibido
-  for (const invented of ['Abra Campanhas e clique em Painel Secreto.', 'Abra Campanhas para clicar em Painel Secreto.']) {
+  // prefixo documentado não libera um segundo controle inventado, em nenhum campo exibido, com ou sem maiúsculas
+  for (const invented of ['Abra Campanhas e clique em Painel Secreto.', 'Abra Campanhas para clicar em Painel Secreto.',
+    'Abra Campanhas e clique em painel secreto.', 'Abra Campanhas para clicar em painel secreto.']) {
     const reply = await answerQuestion(root, 'Como criar e enviar uma campanha?', { client: provider({
       answer: invented, sections: [{ title: 'Depois', items: [invented] }], suggestions: [invented], sources: [campaignPath], steps: [step(campaign.documentedSteps[0])],
     }).client });
-    assert.doesNotMatch(JSON.stringify({ answer: reply.answer, sections: reply.sections, suggestions: reply.suggestions }), /Painel Secreto/, `${invented}: controle inventado não aparece`);
+    assert.doesNotMatch(JSON.stringify({ answer: reply.answer, sections: reply.sections, suggestions: reply.suggestions }), /painel secreto/i, `${invented}: controle inventado não aparece`);
   }
 });
 
