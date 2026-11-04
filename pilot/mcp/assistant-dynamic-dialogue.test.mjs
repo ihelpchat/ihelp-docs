@@ -70,9 +70,14 @@ const crmReply = {
   suggestions: ['Pode me acompanhar passo a passo?', 'O que é a trava de contato?', 'Como escolho o modelo de estágios?'],
 };
 const askCrm = (client, options = {}) => answerQuestion(root, crmQuestion, { client, ...options });
+/** Histórico como a UI envia depois de uma primeira resposta correta (independe do reparo da primeira resposta). */
 async function crmHistory() {
-  const first = await askCrm(provider(crmReply).client);
-  assert.deepEqual(first.steps.map(({ text }) => text), crm.documentedSteps.slice(0, 4));
+  const first = {
+    answer: crmReply.answer,
+    sections: crmReply.sections,
+    steps: crm.documentedSteps.slice(0, 4).map((text) => ({ text })),
+    sources: [{ path: crmPath }, { path: tutorialPath }],
+  };
   return [{ role: 'user', content: crmQuestion }, { role: 'assistant', content: assistantTurn(first) }];
 }
 
