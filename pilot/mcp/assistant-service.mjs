@@ -519,8 +519,38 @@ function actionStems(text) {
  * aparecem nesse passo: "Clique em Nova Pipeline para excluir todas as conversas" compartilha o rótulo, mas
  * "excluir" não está no passo, então a frase sai. Comparação por radical curto: lexical, não semântica.
  */
+const ANY_ACTION_WORD = new RegExp(`^(?:${INSTRUCTION_VERBS}|${ACTION_INFINITIVES})$`);
+const CLAUSE_CONNECTORS = new Set(['para', 'e', 'ou', 'depois', 'entao', 'quando', 'se', 'assim', 'ate']);
+const plainWords = (text) => normalize(text).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+
+/** Primeira oração da frase (até um conectivo), normalizada: "abra campanhas" em "Abra Campanhas para preparar o envio." */
+function leadingClause(sentence) {
+  const tokens = plainWords(sentence);
+  const stop = tokens.findIndex((token, position) => position > 0 && CLAUSE_CONNECTORS.has(token));
+  const clause = (stop > 0 ? tokens.slice(0, stop) : tokens).join(' ');
+  return clause.split(' ').length >= 2 ? clause : '';
+}
+
+/**
+ * Ancoragem conservadora pela oração inicial: o passo documentado contém a oração literalmente e o resto da frase
+ * não introduz outro controle (verbos de ação e rótulos capitalizados precisam estar no mesmo passo).
+ */
+function clauseAnchoredIndex(sentence, documentedSteps) {
+  const clause = leadingClause(sentence);
+  if (!clause) return -1;
+  const index = documentedSteps.findIndex((step) => plainWords(step).join(' ').includes(clause));
+  if (index < 0) return -1;
+  const documentedWords = new Set(plainWords(documentedSteps[index]));
+  const documentedActionStems = new Set([...documentedWords].filter((word) => ANY_ACTION_WORD.test(word)).map(effectStem));
+  const extraAction = plainWords(sentence).filter((word) => ANY_ACTION_WORD.test(word)).some((word) => !documentedActionStems.has(effectStem(word)));
+  const labels = (sentence.match(/(?<!^)(?<![.!?]\s)\b\p{Lu}[\p{L}\p{N}-]*/gu) ?? []).map((word) => normalize(word));
+  const extraLabel = labels.some((label) => !documentedWords.has(label));
+  return extraAction || extraLabel ? -1 : index;
+}
+
 function anchoredInstruction(sentence, documentedSteps) {
-  const index = documentedIndexOf(sentence, documentedSteps);
+  let index = documentedIndexOf(sentence, documentedSteps);
+  if (index < 0) index = clauseAnchoredIndex(sentence, documentedSteps);
   if (index < 0) return false;
   const documented = actionStems(documentedSteps[index]);
   return [...actionStems(sentence)].every((stem) => documented.has(stem));
