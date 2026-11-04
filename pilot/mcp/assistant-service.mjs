@@ -495,7 +495,7 @@ function documentedIndexOf(text, documentedSteps, from = 0) {
 const INSTRUCTION_VERBS = 'clique|toque|abra|acesse|selecione|escolha|marque|desmarque|preencha|digite|informe|insira|defina|ative|desative|publique|salve|crie|adicione|remova|exclua|apague|envie|configure|habilite|desabilite|pressione|arraste|copie|cole|va|use|utilize|confirme|teste|edite|altere|mude|troque|gere|aperte|role|busque|pesquise|localize|confira|verifique|revise|feche|cancele|repita';
 const ACTION_INFINITIVES = 'clicar|tocar|abrir|acessar|selecionar|escolher|marcar|preencher|digitar|informar|inserir|definir|ativar|desativar|publicar|salvar|criar|adicionar|remover|excluir|apagar|enviar|configurar|habilitar|desabilitar|pressionar|arrastar|copiar|colar|usar|utilizar|confirmar|testar|editar|alterar|mudar|trocar|gerar|apertar|buscar|pesquisar|localizar|conferir|verificar|revisar|fechar|cancelar|repetir';
 const INSTRUCTION_LEAD = '(?:(?:depois|agora|entao|em seguida|primeiro|por fim|para isso|ai|dai|ja|so|basta|e|ou|na sequencia|depois disso)[,:]?\\s+)*';
-const INSTRUCTION_SENTENCE = new RegExp(`^${INSTRUCTION_LEAD}(?:${INSTRUCTION_VERBS})\\b`);
+const INSTRUCTION_SENTENCE = new RegExp(`^${INSTRUCTION_LEAD}(?:voce\\s+)?(?:(?:${INSTRUCTION_VERBS})\\b|(?:precisa|precisara|deve|devera|deveria|tem que|tera que|basta|so precisa|e so)\\s+(?:${ACTION_INFINITIVES})\\b)`);
 const ACTION_LABEL = new RegExp(`^(?:${ACTION_INFINITIVES})\\b`);
 const INSTRUCTION_INSIDE = /\b(?:clique|toque)\s+(?:em|no|na|nos|nas)\b/;
 
@@ -503,6 +503,27 @@ function instructionSentence(sentence) {
   const value = normalize(sentence).replace(/[^a-z0-9]+/g, ' ').trim();
   const tokens = value.split(' ').filter(Boolean);
   return INSTRUCTION_SENTENCE.test(value) || INSTRUCTION_INSIDE.test(value) || (tokens.length <= 4 && ACTION_LABEL.test(value));
+}
+
+// Verbos de efeito (mudam algo no produto). Verbos de interação equivalentes (clicar/tocar/abrir/acessar/escolher)
+// não entram na comparação, para não derrubar paráfrases legítimas.
+const EFFECT_VERB = /^(?:ativ|desativ|publi|salv|exclu|apag|remov|envi|cri|adicion|configur|habilit|desabilit|cancel|fech|alter|mud|troq|troc|edit|ger|confirm|test|marq|marc|desmarq|desmarc|copi|col|arrast|repit|repet|pression|desfa)/;
+const effectStem = (token) => token.slice(0, 3);
+/** Radicais curtos dos verbos de efeito de uma frase. */
+function actionStems(text) {
+  return new Set(normalize(text).split(/[^a-z0-9]+/).filter((token) => EFFECT_VERB.test(token)).map(effectStem));
+}
+
+/**
+ * Uma frase-instrução só está ancorada se, além de cobrir um passo documentado, todos os seus verbos de efeito
+ * aparecem nesse passo: "Clique em Nova Pipeline para excluir todas as conversas" compartilha o rótulo, mas
+ * "excluir" não está no passo, então a frase sai. Comparação por radical curto: lexical, não semântica.
+ */
+function anchoredInstruction(sentence, documentedSteps) {
+  const index = documentedIndexOf(sentence, documentedSteps);
+  if (index < 0) return false;
+  const documented = actionStems(documentedSteps[index]);
+  return [...actionStems(sentence)].every((stem) => documented.has(stem));
 }
 
 /**
@@ -515,7 +536,7 @@ function instructionSentence(sentence) {
 function withoutUngroundedInstructions(text, documentedSteps) {
   if (!documentedSteps.length || !text) return text;
   return text.split(/(?<=[.!?])\s+|\n{2,}/).filter(Boolean)
-    .filter((sentence) => !instructionSentence(sentence) || documentedIndexOf(sentence, documentedSteps) >= 0)
+    .filter((sentence) => !instructionSentence(sentence) || anchoredInstruction(sentence, documentedSteps))
     .join(' ').trim();
 }
 
@@ -1047,8 +1068,9 @@ export async function answerQuestion(root, question, options = {}) {
     : parsed.sources.map((path) => byPath.get(`/${String(path).split(/[?#]/)[0].replace(/^\/+|\/+$/g, '')}`)).filter(Boolean);
   // Pedido do procedimento completo: a âncora da conversa vale só quando a ficha não cita assunto ou quando o
   // modelo a escolheu como fonte principal; assunto novo segue a fonte escolhida pelo modelo.
+  const activeGuide = Boolean(priorGuide) && anchor.shownSteps.some((shown) => priorGuide.documentedSteps.some((step) => normalize(step) === shown));
   const detailGuide = detailedProcedure && priorGuide && !historyGuide
-    && (bareDetail || chosen[0] === priorGuide) ? priorGuide : undefined;
+    && ((bareDetail && activeGuide) || chosen[0] === priorGuide) ? priorGuide : undefined;
   const selected = (historyGuide ? [historyGuide]
     : detailGuide ? [detailGuide, ...chosen.filter((source) => source !== detailGuide)]
     : exactQuestionGuide ? [exactQuestionGuide]
@@ -1083,13 +1105,15 @@ export async function answerQuestion(root, question, options = {}) {
   const diagnosisQuestion = questionForDiagnosis(originalQuestion, widgetContext, diagnosis, selectedIntent);
   // Sequência completa só quando o procedimento se aplica: ficha sem assunto com âncora, pergunta canônica
   // da fonte ou modelo que devolveu passos. Esclarecimento ou alteração não coberta ficam com zero passos.
-  const fullProcedure = detailedProcedure && fallbackSource
-    && (bareDetail || exactQuestionGuide === fallbackSource || parsed.steps.length > 0);
+  // resolution=complete do modelo é condição global: com esclarecimento (partial), nenhum passo do procedimento entra.
+  const fullProcedure = detailedProcedure && fallbackSource && parsed.resolution === 'complete'
+    && ((bareDetail && activeGuide && fallbackSource === priorGuide) || exactQuestionGuide === fallbackSource || parsed.steps.length > 0);
   const safeSteps = needsHelp ? [] : fullProcedure
     ? fallbackSource.documentedSteps.map((text, index) => ({
         text, actionId: index === 0 ? fallbackSource.productActions[0]?.id ?? null : null,
         imagePath: fallbackSource.stepImages[index] ?? null,
       }))
+    : detailedProcedure && fallbackSource ? []
     : responseSteps;
   if (!needsHelp && safeSteps[0] && fallbackSource?.productActions[0]
     && (fullProcedure || safeSteps[0].text === fallbackSource.documentedSteps[0])) {
@@ -1124,7 +1148,7 @@ export async function answerQuestion(root, question, options = {}) {
   // Itens e sugestões recebem o texto já filtrado (frase inventada no meio de um item também sai); vazio é descartado.
   const safeSections = parsed.sections
     .map((section) => ({ title: section.title, items: section.items.map((item) => withoutUngroundedInstructions(item, groundingSteps)).filter(Boolean) }))
-    .filter((section) => section.items.length && !(instructionSentence(section.title) && documentedIndexOf(section.title, groundingSteps) < 0 && groundingSteps.length));
+    .filter((section) => section.items.length && !(instructionSentence(section.title) && !anchoredInstruction(section.title, groundingSteps) && groundingSteps.length));
   const guideText = fallbackSource && continuation
     ? guideFallbackText(flags, fallbackSource, { choice, recovery, branch, diagnosisQuestion })
     : needsHelp ? diagnosisQuestion : '';
