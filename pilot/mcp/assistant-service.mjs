@@ -1101,20 +1101,29 @@ export async function answerQuestion(root, question, options = {}) {
     };
   }
 
-  // Sem resposta do modelo não há procedimento a mostrar: nenhum passo "da primeira fonte recuperada" e nenhuma
-  // fonte de outro assunto numa conversa que já tem âncora. Texto operacional fixo; o resto fica vazio.
-  const fixedFallback = (failed = false) => ({
-    answer: failed ? 'Tive um problema para responder agora. Tente de novo ou fale com uma pessoa.'
-      : 'Não consigo responder agora. Tente de novo em alguns minutos ou fale com uma pessoa.',
-    sections: [],
-    steps: [],
-    code: null,
-    sources: (conversationSources.length ? conversationSources : sources).slice(0, 3)
-      .map(({ title, path, description }) => ({ title, path, kind: kindOf(path), excerpt: description })),
-    suggestions: [],
-    actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
-    resolution: 'partial', found: true,
-  });
+  // Sem resposta do modelo, o guia documentado só entra no fallback quando é inequívoco para um pedido INICIAL de
+  // criar/começar: sem histórico, triagem não falhou, pergunta canônica da fonte ou página curada da área perguntada
+  // (título, VISÃO INICIAL e score já calculados) e sem pedido de alterar/apagar nem negativa. Continuação, escolha,
+  // ficha e pergunta solta de seguimento ficam sem passos (o estado do guia é deles) e com fontes só da conversa.
+  const alterationRequest = /\b(?:alterar|altere|mudar|mude|renomear|renomeie|editar|edite|trocar|troque|apagar|apague|excluir|exclua|remover|remova|deletar|delete|desativar|desative|cancelar|cancele|nao|sem)\b/i.test(normalize(question));
+  const safeGuide = !history.length && !routerFailed && overviewProcedure && !alterationRequest ? exactQuestionGuide ?? exactGuide ?? null : null;
+  const fixedFallback = (failed = false) => {
+    const steps = safeGuide?.documentedSteps.slice(0, 3).map((text) => ({ text })) ?? [];
+    return {
+      answer: failed
+        ? `Tive um problema para responder agora. ${steps.length ? 'Você pode seguir o guia abaixo ou falar com uma pessoa.' : 'Tente de novo ou fale com uma pessoa.'}`
+        : steps.length ? 'Não consigo responder agora. Siga o guia abaixo ou, se precisar, fale com uma pessoa.'
+          : 'Não consigo responder agora. Tente de novo em alguns minutos ou fale com uma pessoa.',
+      sections: [],
+      steps,
+      code: null,
+      sources: [...new Set([...(safeGuide ? [safeGuide] : []), ...(conversationSources.length ? conversationSources : sources)])].slice(0, 3)
+        .map(({ title, path, description }) => ({ title, path, kind: kindOf(path), excerpt: description })),
+      suggestions: [],
+      actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
+      resolution: 'partial', found: true,
+    };
+  };
   if (routerFailed) return fixedFallback(true);
   // Estado do guia conhecido antes da chamada: a interface decide passo, botões e transição; o modelo narra.
   const turn = { question, history, anchor: { ...anchor, shownSteps }, continuation, choice, recovery, guidance, branch };
