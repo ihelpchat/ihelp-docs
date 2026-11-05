@@ -1,0 +1,372 @@
+{
+  "draftSchemaVersion": 1,
+  "status": "source-only-draft",
+  "title": "Colocar um recado fora do horário",
+  "description": "Confira horários e configure o texto para o departamento certo.",
+  "source": {
+    "repository": "ihelp-react",
+    "branch": "integration/grupos-redesign",
+    "sha": "730ec0c95c6653354f6ea532bddacfaf4cac9568"
+  },
+  "replaces": {
+    "path": "docs/sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario.mdx",
+    "guideVersion": 1
+  },
+  "publication": {
+    "editorialApproved": false,
+    "runtimeValidated": false,
+    "published": false
+  },
+  "prerequisites": [
+    "Ter acesso às seções Horários e feriados e Mensagens automáticas pelas permissões efetivas.",
+    "Confirmar o departamento e o alcance da mudança antes de salvar."
+  ],
+  "guide": {
+    "schemaVersion": 1,
+    "guideId": "recado-fora-do-horario",
+    "version": 2,
+    "mode": "treino",
+    "initialStepId": "abrir-horarios",
+    "steps": [
+      {
+        "stepId": "abrir-horarios",
+        "text": "Abra Configurações e depois Horários e feriados. O cartão Horário e feriados dentro de um departamento mostra um resumo; use Abrir Horários e feriados para editar."
+      },
+      {
+        "stepId": "escolher-abrangencia",
+        "text": "Confira o Horário padrão da empresa antes de mudar. Ele vale para os departamentos que não têm exceção. Você precisa ajustar o padrão da empresa ou só um departamento?",
+        "choices": [
+          {
+            "id": "empresa",
+            "label": "Padrão da empresa",
+            "nextStepId": "ajustar-padrao"
+          },
+          {
+            "id": "departamento",
+            "label": "Só um departamento",
+            "nextStepId": "ajustar-excecao"
+          },
+          {
+            "id": "correto",
+            "label": "O horário já está correto",
+            "nextStepId": "abrir-mensagens"
+          }
+        ]
+      },
+      {
+        "stepId": "ajustar-padrao",
+        "text": "No cartão Horário padrão da empresa, preencha início e fim de Segunda a sexta. Confira Sábado e Domingo, ativando apenas os dias em que a equipe atende. Não mude o padrão da empresa para corrigir apenas um setor."
+      },
+      {
+        "stepId": "salvar-padrao",
+        "text": "Na barra Você tem alterações não salvas, clique em Salvar. Aguarde Horário padrão salvo. Volte a esta seção e confira os valores.",
+        "choices": [
+          {
+            "id": "salvo",
+            "label": "Conferi o horário",
+            "nextStepId": "abrir-mensagens"
+          },
+          {
+            "id": "falhou",
+            "label": "Não consegui salvar",
+            "nextStepId": "pedir-ajuda"
+          }
+        ]
+      },
+      {
+        "stepId": "ajustar-excecao",
+        "text": "Em Exceções por departamento, clique em Editar ao lado do setor. Se ele ainda segue o padrão, use Adicionar exceção e escolha o Departamento. Se aparecer Ainda não há padrão, pare e confirme com o responsável antes de criar um padrão para toda a empresa."
+      },
+      {
+        "stepId": "salvar-excecao",
+        "text": "No modal, preencha o horário do departamento e a pausa, se houver. Confira Sábado e Domingo. Clique em Salvar ao editar, ou Criar exceção ao adicionar. Confira o resumo do departamento depois.",
+        "choices": [
+          {
+            "id": "salvo",
+            "label": "Conferi a exceção",
+            "nextStepId": "abrir-mensagens"
+          },
+          {
+            "id": "falhou",
+            "label": "Não consegui configurar",
+            "nextStepId": "pedir-ajuda"
+          }
+        ]
+      },
+      {
+        "stepId": "abrir-mensagens",
+        "text": "Abra Configurações e depois Mensagens automáticas. Escolha Fora de horário. O texto é configurado por departamento."
+      },
+      {
+        "stepId": "selecionar-departamento",
+        "text": "No campo Departamento, escolha o setor que receberá o recado. Confira o nome antes de editar para não mudar a mensagem de outra equipe."
+      },
+      {
+        "stepId": "escrever-recado",
+        "text": "Em Texto da mensagem, escreva quando a equipe volta a atender. Confira a prévia. Para Fora de horário não há um botão de ativação: em branco, o departamento não envia esse recado."
+      },
+      {
+        "stepId": "salvar-recado",
+        "text": "Na barra Você tem alterações não salvas, clique em Salvar e aguarde Mensagem salva. Se houver erro, mantenha o contexto e peça ajuda; não altere outro departamento para testar."
+      },
+      {
+        "stepId": "conferir-recado",
+        "text": "Reabra Mensagens automáticas, selecione Fora de horário e o mesmo Departamento. Confira o texto e o horário em Horários e feriados. Um feriado com mensagem própria pode substituir esse recado.",
+        "choices": [
+          {
+            "id": "conferi",
+            "label": "O texto e o horário estão corretos"
+          },
+          {
+            "id": "falhou",
+            "label": "Não consegui conferir",
+            "nextStepId": "pedir-ajuda"
+          }
+        ]
+      },
+      {
+        "stepId": "pedir-ajuda",
+        "text": "Fale com uma pessoa do atendimento e informe a seção e o passo em que parou. Não envie senha, dados de clientes ou conteúdo de conversas."
+      }
+    ]
+  },
+  "navigationByStep": {
+    "abrir-horarios": {
+      "route": "/configuracoes/horarios",
+      "anchor": {
+        "kind": "heading",
+        "name": "Horário padrão da empresa"
+      }
+    },
+    "abrir-mensagens": {
+      "route": "/configuracoes/mensagens",
+      "anchor": {
+        "kind": "button",
+        "name": "Fora de horário"
+      }
+    }
+  },
+  "evidenceByStep": {
+    "abrir-horarios": [
+      {
+        "path": "src/features/configurations/registry/sections.ts",
+        "line": 61,
+        "fragment": "path: `${CONFIG_V4_PREFIX}/horarios`"
+      },
+      {
+        "path": "src/features/configurations/pages/Departamentos/components/HorarioCard.tsx",
+        "line": 106,
+        "fragment": "Abrir Horários e feriados"
+      }
+    ],
+    "escolher-abrangencia": [
+      {
+        "path": "src/features/configurations/pages/Horarios/components/HorarioDaEmpresaCard.tsx",
+        "line": 57,
+        "fragment": "Usado por todos os departamentos que não definem exceção."
+      }
+    ],
+    "ajustar-padrao": [
+      {
+        "path": "src/features/configurations/pages/Horarios/components/HorarioDaEmpresaCard.tsx",
+        "line": 94,
+        "fragment": "label=\"Segunda a sexta\""
+      },
+      {
+        "path": "src/features/configurations/pages/Horarios/components/HorarioDaEmpresaCard.tsx",
+        "line": 134,
+        "fragment": "label=\"Sábado\""
+      }
+    ],
+    "salvar-padrao": [
+      {
+        "path": "src/features/configurations/layout/UnsavedChangesBar.tsx",
+        "line": 22,
+        "fragment": "Você tem alterações não salvas."
+      },
+      {
+        "path": "src/features/configurations/pages/Horarios/index.tsx",
+        "line": 155,
+        "fragment": "Horário padrão salvo"
+      }
+    ],
+    "ajustar-excecao": [
+      {
+        "path": "src/features/configurations/pages/Horarios/components/ExcecoesPorDepartamentoCard.tsx",
+        "line": 57,
+        "fragment": "title=\"Exceções por departamento\""
+      },
+      {
+        "path": "src/features/configurations/pages/Horarios/components/ExcecoesPorDepartamentoCard.tsx",
+        "line": 72,
+        "fragment": "title=\"Ainda não há padrão\""
+      }
+    ],
+    "salvar-excecao": [
+      {
+        "path": "src/features/configurations/pages/Horarios/components/ExcecaoModal.tsx",
+        "line": 129,
+        "fragment": "confirmLabel={idRef ? \"Salvar\" : \"Criar exceção\"}"
+      },
+      {
+        "path": "src/features/configurations/pages/Horarios/components/ExcecaoModal.tsx",
+        "line": 175,
+        "fragment": "label=\"Tem pausa no meio do expediente\""
+      }
+    ],
+    "abrir-mensagens": [
+      {
+        "path": "src/features/configurations/registry/sections.ts",
+        "line": 111,
+        "fragment": "path: `${CONFIG_V4_PREFIX}/mensagens`"
+      },
+      {
+        "path": "src/features/configurations/pages/Mensagens/mensagens.catalogo.ts",
+        "line": 91,
+        "fragment": "id: \"fora-de-horario\""
+      }
+    ],
+    "selecionar-departamento": [
+      {
+        "path": "src/features/configurations/pages/Mensagens/index.tsx",
+        "line": 681,
+        "fragment": "id=\"escopo-mensagem\""
+      }
+    ],
+    "escrever-recado": [
+      {
+        "path": "src/features/configurations/pages/Mensagens/index.tsx",
+        "line": 743,
+        "fragment": "Texto da mensagem"
+      },
+      {
+        "path": "src/features/configurations/pages/Mensagens/mensagens.catalogo.ts",
+        "line": 104,
+        "fragment": "Em branco, nada é enviado fora do expediente"
+      }
+    ],
+    "salvar-recado": [
+      {
+        "path": "src/features/configurations/pages/Mensagens/index.tsx",
+        "line": 474,
+        "fragment": "window.toast?.(\"Mensagem salva\")"
+      },
+      {
+        "path": "src/features/configurations/layout/UnsavedChangesBar.tsx",
+        "line": 45,
+        "fragment": "{salvando ? \"Salvando…\" : \"Salvar\"}"
+      }
+    ],
+    "conferir-recado": [
+      {
+        "path": "src/features/configurations/pages/Mensagens/mensagens.catalogo.ts",
+        "line": 106,
+        "fragment": "Um feriado com mensagem própria substitui esta."
+      }
+    ],
+    "pedir-ajuda": [
+      {
+        "path": "src/features/configurations/pages/Mensagens/index.tsx",
+        "line": 474,
+        "fragment": "window.toast?.(\"Mensagem salva\")"
+      }
+    ]
+  },
+  "runtimeQaPending": [
+    "Validar leitura, edição, salvamento e reabertura do padrão e de uma exceção em ambiente autorizado.",
+    "Validar que salvar o texto mantém o mesmo departamento e não modifica outro escopo.",
+    "Validar entrega fora de horário/feriado apenas em jornada separada com autorização de envio; esta proposta não executa mensagens."
+  ],
+  "transitionsByStep": {
+    "abrir-horarios": {
+      "continue": {
+        "nextStepId": "escolher-abrangencia"
+      }
+    },
+    "escolher-abrangencia": {
+      "choices": {
+        "empresa": {
+          "nextStepId": "ajustar-padrao"
+        },
+        "departamento": {
+          "nextStepId": "ajustar-excecao"
+        },
+        "correto": {
+          "nextStepId": "abrir-mensagens"
+        }
+      }
+    },
+    "ajustar-padrao": {
+      "continue": {
+        "nextStepId": "salvar-padrao"
+      }
+    },
+    "salvar-padrao": {
+      "choices": {
+        "salvo": {
+          "nextStepId": "abrir-mensagens"
+        },
+        "falhou": {
+          "nextStepId": "pedir-ajuda"
+        }
+      }
+    },
+    "ajustar-excecao": {
+      "continue": {
+        "nextStepId": "salvar-excecao"
+      }
+    },
+    "salvar-excecao": {
+      "choices": {
+        "salvo": {
+          "nextStepId": "abrir-mensagens"
+        },
+        "falhou": {
+          "nextStepId": "pedir-ajuda"
+        }
+      }
+    },
+    "abrir-mensagens": {
+      "continue": {
+        "nextStepId": "selecionar-departamento"
+      }
+    },
+    "selecionar-departamento": {
+      "continue": {
+        "nextStepId": "escrever-recado"
+      }
+    },
+    "escrever-recado": {
+      "continue": {
+        "nextStepId": "salvar-recado"
+      }
+    },
+    "salvar-recado": {
+      "continue": {
+        "nextStepId": "conferir-recado"
+      }
+    },
+    "conferir-recado": {
+      "choices": {
+        "conferi": {
+          "outcome": "complete"
+        },
+        "falhou": {
+          "nextStepId": "pedir-ajuda"
+        }
+      }
+    },
+    "pedir-ajuda": {
+      "outcome": "handoff"
+    }
+  },
+  "editorialSteps": [
+    "pedir-ajuda"
+  ],
+  "consumption": {
+    "localPilotOnly": true,
+    "requiresExplicitTransitions": true,
+    "publishedEngineCompatible": false,
+    "automaticSideEffectsAllowed": false
+  }
+}

@@ -1,0 +1,301 @@
+{
+  "draftSchemaVersion": 1,
+  "status": "source-only-draft",
+  "title": "Cadastrar uma pessoa e conferir seu acesso",
+  "description": "Crie o usuário com o perfil e os departamentos adequados.",
+  "source": {
+    "repository": "ihelp-react",
+    "branch": "integration/grupos-redesign",
+    "sha": "730ec0c95c6653354f6ea532bddacfaf4cac9568"
+  },
+  "replaces": {
+    "path": "docs/principais-motivos-de-suporte/usuario-acesso.mdx",
+    "guideVersion": 1
+  },
+  "publication": {
+    "editorialApproved": false,
+    "runtimeValidated": false,
+    "published": false
+  },
+  "prerequisites": [
+    "Ter permissão para gerenciar usuários e vaga no limite do plano.",
+    "Definir com o responsável quais departamentos e permissões a pessoa deve receber."
+  ],
+  "guide": {
+    "schemaVersion": 1,
+    "guideId": "usuario-acesso",
+    "version": 2,
+    "mode": "treino",
+    "initialStepId": "abrir-usuarios",
+    "steps": [
+      {
+        "stepId": "abrir-usuarios",
+        "text": "Abra Configurações e depois Usuários. Se a seção estiver indisponível, peça ao responsável para verificar seu acesso à Equipe.",
+        "actionId": "abrir-usuarios"
+      },
+      {
+        "stepId": "criar-usuario",
+        "text": "Clique em Novo usuário para abrir o formulário. Se o botão estiver bloqueado, confirme a permissão e o limite de usuários do plano.",
+        "choices": [
+          {
+            "id": "abriu",
+            "label": "O formulário abriu",
+            "nextStepId": "preencher-dados"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          }
+        ]
+      },
+      {
+        "stepId": "preencher-dados",
+        "text": "No formulário Novo usuário, preencha Nome e E-mail. Defina Senha e Confirmar senha no próprio iHelp. Não envie senha pelo chat. A criação atual usa esse e-mail e essa senha; ela não promete enviar convite por e-mail."
+      },
+      {
+        "stepId": "escolher-perfil",
+        "text": "No cartão Acesso, escolha o Perfil adequado entre os perfis da empresa. Se o cartão não aparecer ou ficar em Usar tipo de conta legado, revise Tipo de conta e as opções disponíveis; não escolha acesso de administrador apenas para liberar o cadastro."
+      },
+      {
+        "stepId": "escolher-departamento",
+        "text": "No cartão Atendimento, em Departamentos, selecione os setores em que a pessoa deve trabalhar. Pelo menos um departamento é obrigatório. A seleção do setor sozinha não comprova isolamento de todos os dados."
+      },
+      {
+        "stepId": "salvar-usuario",
+        "text": "Confira os dados e clique em Criar usuário no cabeçalho. Aguarde a confirmação. O iHelp abre o detalhe da pessoa criada, ou a lista se a resposta não trouxer o detalhe.",
+        "choices": [
+          {
+            "id": "criado",
+            "label": "A pessoa foi criada",
+            "nextStepId": "revisar-acesso"
+          },
+          {
+            "id": "falhou",
+            "label": "Não consegui criar",
+            "nextStepId": "pedir-ajuda"
+          }
+        ]
+      },
+      {
+        "stepId": "revisar-acesso",
+        "text": "Se a criação voltou à lista, abra a pessoa que acabou de criar. No detalhe, revise o cartão Acesso. Perfil define o pacote de permissões; uma troca de Perfil é aplicada na hora. Em Exceções desta pessoa, use Ajustar apenas para uma diferença necessária e confirme em Salvar exceções. Não amplie permissões por tentativa."
+      },
+      {
+        "stepId": "conferir-acesso",
+        "text": "Peça à pessoa para entrar pelo fluxo de acesso combinado com a empresa e conferir menu e atendimentos esperados. Não compartilhe a senha neste chat. Se houver acesso inesperado, pare e peça revisão ao responsável.",
+        "choices": [
+          {
+            "id": "conferiu",
+            "label": "O acesso está correto"
+          },
+          {
+            "id": "incorreto",
+            "label": "Há acesso inesperado",
+            "nextStepId": "pedir-ajuda"
+          }
+        ]
+      },
+      {
+        "stepId": "pedir-ajuda",
+        "text": "Fale com uma pessoa do atendimento. Informe a opção bloqueada ou o acesso inesperado, sem enviar senha ou dados de clientes."
+      }
+    ]
+  },
+  "navigationByStep": {
+    "abrir-usuarios": {
+      "route": "/configuracoes/usuarios",
+      "anchor": {
+        "kind": "button",
+        "name": "Novo usuário"
+      }
+    },
+    "preencher-dados": {
+      "route": "/configuracoes/usuarios/novo",
+      "anchor": {
+        "kind": "heading",
+        "name": "Novo usuário"
+      }
+    }
+  },
+  "evidenceByStep": {
+    "abrir-usuarios": [
+      {
+        "path": "src/features/configurations/registry/sections.ts",
+        "line": 218,
+        "fragment": "path: `${CONFIG_V4_PREFIX}/usuarios`"
+      },
+      {
+        "path": "src/features/configurations/hooks/useTeamAccess.tsx",
+        "line": 4,
+        "fragment": "ADMIN_USUARIOS_E_PERFIS"
+      }
+    ],
+    "criar-usuario": [
+      {
+        "path": "src/features/configurations/pages/Usuarios/index.tsx",
+        "line": 234,
+        "fragment": "labelText=\"Novo usuário\""
+      },
+      {
+        "path": "src/features/configurations/pages/Usuarios/index.tsx",
+        "line": 236,
+        "fragment": "disabled={noLimite || !canAdminister}"
+      }
+    ],
+    "preencher-dados": [
+      {
+        "path": "src/features/configurations/pages/Usuarios/UsuarioNovo.tsx",
+        "line": 269,
+        "fragment": "label=\"Confirmar senha\""
+      },
+      {
+        "path": "src/features/configurations/pages/Usuarios/UsuarioNovo.tsx",
+        "line": 243,
+        "fragment": "não há e-mail de convite."
+      }
+    ],
+    "escolher-perfil": [
+      {
+        "path": "src/features/configurations/pages/Usuarios/UsuarioNovo.tsx",
+        "line": 303,
+        "fragment": "ariaLabel=\"Perfil\""
+      },
+      {
+        "path": "src/features/configurations/pages/Usuarios/UsuarioNovo.tsx",
+        "line": 307,
+        "fragment": "Usar tipo de conta legado"
+      }
+    ],
+    "escolher-departamento": [
+      {
+        "path": "src/features/configurations/pages/Usuarios/UsuarioNovo.tsx",
+        "line": 337,
+        "fragment": "label=\"Departamentos\""
+      },
+      {
+        "path": "src/features/configurations/pages/Usuarios/UsuarioNovo.tsx",
+        "line": 339,
+        "fragment": "pelo menos um é obrigatório."
+      }
+    ],
+    "salvar-usuario": [
+      {
+        "path": "src/features/configurations/pages/Usuarios/UsuarioNovo.tsx",
+        "line": 187,
+        "fragment": "labelText=\"Criar usuário\""
+      },
+      {
+        "path": "src/features/configurations/pages/Usuarios/UsuarioNovo.tsx",
+        "line": 162,
+        "fragment": "navigate(idRef ? `${LISTA}/${idRef}` : LISTA)"
+      }
+    ],
+    "revisar-acesso": [
+      {
+        "path": "src/features/configurations/pages/Usuarios/components/AcessoCard.tsx",
+        "line": 100,
+        "fragment": "Trocar o perfil muda o acesso na hora"
+      },
+      {
+        "path": "src/features/configurations/pages/Usuarios/components/AcessoCard.tsx",
+        "line": 155,
+        "fragment": "Salvar exceções"
+      },
+      {
+        "path": "src/features/configurations/pages/Usuarios/index.tsx",
+        "line": 341,
+        "fragment": "const ir = () => navigate(`${CONFIG_V4_PREFIX}/usuarios/${u.idRef}`);"
+      }
+    ],
+    "conferir-acesso": [
+      {
+        "path": "src/features/configurations/pages/Usuarios/UsuarioNovo.tsx",
+        "line": 338,
+        "fragment": "A pessoa só vê e atende conversas dos departamentos listados aqui."
+      }
+    ],
+    "pedir-ajuda": [
+      {
+        "path": "src/features/configurations/hooks/useTeamAccess.tsx",
+        "line": 66,
+        "fragment": "Você não tem permissão para gerenciar este acesso."
+      }
+    ]
+  },
+  "runtimeQaPending": [
+    "Validar cadastro com perfil da empresa e fluxo legado quando o catálogo não tem perfis.",
+    "Validar bloqueios por permissão/limite e mensagens de erro sem contorná-los.",
+    "Validar salvamento, detalhe, troca de perfil/exceções e login com uma conta de teste autorizada; o texto não afirma isolamento em runtime."
+  ],
+  "transitionsByStep": {
+    "abrir-usuarios": {
+      "continue": {
+        "nextStepId": "criar-usuario"
+      }
+    },
+    "criar-usuario": {
+      "choices": {
+        "abriu": {
+          "nextStepId": "preencher-dados"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        }
+      }
+    },
+    "preencher-dados": {
+      "continue": {
+        "nextStepId": "escolher-perfil"
+      }
+    },
+    "escolher-perfil": {
+      "continue": {
+        "nextStepId": "escolher-departamento"
+      }
+    },
+    "escolher-departamento": {
+      "continue": {
+        "nextStepId": "salvar-usuario"
+      }
+    },
+    "salvar-usuario": {
+      "choices": {
+        "criado": {
+          "nextStepId": "revisar-acesso"
+        },
+        "falhou": {
+          "nextStepId": "pedir-ajuda"
+        }
+      }
+    },
+    "revisar-acesso": {
+      "continue": {
+        "nextStepId": "conferir-acesso"
+      }
+    },
+    "conferir-acesso": {
+      "choices": {
+        "conferiu": {
+          "outcome": "complete"
+        },
+        "incorreto": {
+          "nextStepId": "pedir-ajuda"
+        }
+      }
+    },
+    "pedir-ajuda": {
+      "outcome": "handoff"
+    }
+  },
+  "editorialSteps": [
+    "pedir-ajuda",
+    "conferir-acesso"
+  ],
+  "consumption": {
+    "localPilotOnly": true,
+    "requiresExplicitTransitions": true,
+    "publishedEngineCompatible": false,
+    "automaticSideEffectsAllowed": false
+  }
+}
