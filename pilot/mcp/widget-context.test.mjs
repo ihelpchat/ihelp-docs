@@ -10,7 +10,7 @@ import { answerQuestion } from './assistant-service.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const routes = ['canais', 'usuarios', 'departamentos', 'mensagens', 'horarios', 'primeiros-passos', 'perfis'].map((slug) => `/configuracoes/${slug}`);
-routes.push('/atendimento/mobile', '/configuracoes/channel', '/configuracoes/user', '/configuracoes/department');
+routes.push('/tarefas', '/atendimento/mobile', '/configuracoes/channel', '/configuracoes/user', '/configuracoes/department');
 const permissions = ['conversations.read', 'groups.read', 'groups.manage', 'settings.manage', 'departments.manage', 'tasks.read', 'contacts.read', 'crm.read'];
 const actor = { idRef: 'opaque-user-reference', firstName: 'João' };
 const widgetContext = { surface: 'app', route: '/atendimento/mobile', module: 'conversations', screen: 'list', role: 'admin', permissions: [], queue: 'groups', conversationKind: 'group' };

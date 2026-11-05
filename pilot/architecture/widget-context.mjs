@@ -4,7 +4,7 @@ import actions from './product-actions.json' with { type: 'json' };
 export const widgetContextRoutes = [...new Set([
   ...Object.values(actions).map(({ route }) => route),
   ...['canais', 'usuarios', 'departamentos', 'mensagens', 'horarios', 'primeiros-passos', 'perfis'].map((slug) => `/configuracoes/${slug}`),
-  '/atendimento/mobile',
+  '/atendimento/mobile', '/tarefas',
 ])];
 export const widgetPermissions = [
   'robots.read', 'robots.create', 'users.read', 'users.manage', 'channels.read', 'channels.manage',

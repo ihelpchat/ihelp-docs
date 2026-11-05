@@ -241,7 +241,8 @@
                 "/configuracoes/horarios",
                 "/configuracoes/primeiros-passos",
                 "/configuracoes/perfis",
-                "/atendimento/mobile"
+                "/atendimento/mobile",
+                "/tarefas"
               ]
             },
             "module": {
@@ -758,7 +759,8 @@
                     "/configuracoes/horarios",
                     "/configuracoes/primeiros-passos",
                     "/configuracoes/perfis",
-                    "/atendimento/mobile"
+                    "/atendimento/mobile",
+                    "/tarefas"
                   ]
                 },
                 "module": {

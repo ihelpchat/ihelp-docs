@@ -43,7 +43,7 @@ export type AssistantRequestV1 = {
 };
   widgetContext?: {
   surface?: "faq" | "app";
-  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/atendimento/mobile";
+  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/atendimento/mobile" | "/tarefas";
   module?: "robots" | "users" | "channels" | "billing" | "campaigns" | "templates" | "conversations" | "settings";
   screen?: "list" | "create" | "edit" | "detail" | "connection" | "qr" | "unknown";
   role?: "owner" | "admin" | "manager" | "agent" | "unknown";
@@ -117,7 +117,7 @@ export type AssistantReplyV1 = {
   diagnosis: "usage" | "configuration" | "permission" | "plan" | "channel_qr" | "meta_coexistence" | "bug_incident" | "sensitive_action";
   state?: {
   surface?: "faq" | "app";
-  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/atendimento/mobile";
+  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/atendimento/mobile" | "/tarefas";
   module?: "robots" | "users" | "channels" | "billing" | "campaigns" | "templates" | "conversations" | "settings";
   screen?: "list" | "create" | "edit" | "detail" | "connection" | "qr" | "unknown";
   role?: "owner" | "admin" | "manager" | "agent" | "unknown";
