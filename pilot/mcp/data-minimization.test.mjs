@@ -14,7 +14,7 @@ let captured;
 const client = { responses: { create: async (request) => {
   captured = JSON.stringify(request.input);
   return { model: 'fixture', output_text: JSON.stringify({
-    answer: 'Abra Campanhas.', sections: [], steps: [], code: null,
+    plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Abra Campanhas.', sections: [], steps: [], code: null,
     sources: [], suggestions: [], resolution: 'complete', found: true,
   }) };
 } } };

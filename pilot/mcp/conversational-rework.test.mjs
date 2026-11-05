@@ -58,8 +58,9 @@ const approved = await generateContentPackage(root, request, { client: model([co
 assert.equal(approved.status, 'ready');
 assert.deepEqual(approved.articles[0].productActions, [contactAction]);
 
-const reply = await answerQuestion(root, article.assistantQuestion, { client: { responses: { create: async () => ({ model: 'test', output_text: JSON.stringify({ answer: 'Abra Contatos para começar.', sections: [], steps: [], code: null, sources: [`/${article.path}`], suggestions: [], resolution: 'complete', found: true }) }) } } });
-assert.ok(reply.suggestions.includes('Pode me guiar etapa por etapa'), 'guia progressivo precisa permanecer');
+const reply = await answerQuestion(root, article.assistantQuestion, { client: { responses: { create: async () => ({ model: 'test', output_text: JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Abra Contatos para começar.', sections: [], steps: [{ text: 'Abra Contatos pelo menu lateral e localize a lista de contatos.', actionId: null, imagePath: null }], code: null, sources: [`/${article.path}`], suggestions: [], resolution: 'complete', found: true }) }) } } });
+// Sem sugestão do modelo e com passo documentado à vista, a entrada no guia entra como fallback (contrato dinâmico, 2026-11-03).
+assert.ok(reply.suggestions.includes('Pode me guiar etapa por etapa'), 'guia progressivo permanece como fallback');
 for (const suggestion of suggestions) assert.ok(reply.suggestions.includes(suggestion), `sugestão editorial ausente: ${suggestion}`);
 const source = await readFile(join(new URL('../', import.meta.url).pathname, 'lib/assistant.ts'), 'utf8');
 const catalog = JSON.parse(await readFile(join(new URL('../', import.meta.url).pathname, 'architecture/product-actions.json'), 'utf8'));

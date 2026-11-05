@@ -29,6 +29,7 @@ for (const value of ['invalid', '0', '-1', '1.5', '', '9007199254740992']) {
 }
 assert.equal(conversationsRetentionDays({ CONVERSATIONS_RETENTION_DAYS: '3651' }), 3651,
   'qualquer inteiro positivo seguro é aceito');
+let invalidPlan = false;
 const fakeOpenAI = createServer(async (request, response) => {
   let raw = '';
   for await (const chunk of request) raw += chunk;
@@ -39,7 +40,7 @@ const fakeOpenAI = createServer(async (request, response) => {
     output: [{ type: 'message', id: 'msg_test', status: 'completed', role: 'assistant',
       content: [{ type: 'output_text', text: route ? '{"choice":"sem guia"}'
         : format === 'seguranca_resposta' ? '{"mentionsSource":false,"unsupportedAction":false}' : JSON.stringify({
-        answer: 'Não encontrei o guia.', sections: [], steps: [{ text: 'Fale com a equipe.' }], code: null,
+        plan: invalidPlan ? null : { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Não encontrei o guia.', sections: [], steps: [{ text: 'Fale com a equipe.' }], code: null,
         sources: [], suggestions: [], resolution: 'not_found', found: false,
       }), annotations: [] }] }], usage: { input_tokens: 1, output_tokens: 1 },
   }));
@@ -90,6 +91,17 @@ try {
     const businessRow = JSON.parse((await readFile(file, 'utf8')).trim().split('\n').at(-1));
     assert.equal(businessRow.businessContextUsed, true, 'registro interno marca contexto fornecido ao modelo');
     delete process.env.BUSINESS_CONTEXT_DIR;
+    invalidPlan = true;
+    process.env.OPENAI_MODEL = 'configured-generation-model';
+    const fixed = await post({ ...base, question: 'Para que serve o CRM?' });
+    assert.equal(fixed.status, 200);
+    const fixedBody = await fixed.json();
+    const fixedRow = JSON.parse((await readFile(file, 'utf8')).trim().split('\n').at(-1));
+    assert.equal(fixedRow.model, 'fixed', 'fallback não herda modelo configurado');
+    assert.deepEqual(fixedRow.fallback, { branch: 'composition', reason: 'invalid_plan', pass: 1 });
+    for (const key of ['fallback', 'fixedResponse', 'plan']) assert.equal(fixedBody[key], undefined);
+    invalidPlan = false;
+    delete process.env.OPENAI_MODEL;
     const vote = await fetch(`${url}/feedback`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ eventId: conversation.eventId, type: 'assistant', value: 'down', path: '/assistente' }) });
     assert.equal(vote.status, 201);

@@ -60,6 +60,7 @@ try {
     'criar_guia',
     'docs_audit_content',
     'docs_delete_article',
+    'docs_generate_faq_v2',
     'docs_generate_package',
     'docs_get_article',
     'docs_inventory',
@@ -75,7 +76,7 @@ try {
     'lacunas',
     'ler_jornada',
   ]);
-  for (const name of ['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_submit_package', 'docs_update_article', 'docs_delete_article', 'docs_submit_article']) {
+  for (const name of ['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_generate_faq_v2', 'docs_submit_package', 'docs_update_article', 'docs_delete_article', 'docs_submit_article']) {
     assert.equal(tools.tools.find((tool) => tool.name === name).inputSchema.required?.includes('requestedBy') ?? false, false, `${name} exige requestedBy no corpo`);
   }
 
@@ -270,7 +271,7 @@ globalThis.fetch = async (url, init = {}) => {
       create: async (request) => {
         assert.equal(request.store, false);
         assert.match(request.input[1].content, /Atendimento/);
-        return { output_text: 'Abra o atendimento e use a opção de transferência.\n\nFontes: Atendimento (/docs/sobre-o-sistema/atendimento)', model: 'gpt-test' };
+        return { output_text: JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Abra o atendimento e use a opção de transferência.', sources: ['/docs/sobre-o-sistema/atendimento'], steps: [], sections: [], suggestions: [], code: null, resolution: 'complete', found: true }), model: 'gpt-test' };
       },
     },
   };
@@ -287,7 +288,7 @@ globalThis.fetch = async (url, init = {}) => {
         return {
           model: 'gpt-test',
           output_text: JSON.stringify({
-            answer: 'Abra a conversa e transfira.',
+            plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Abra a conversa e transfira.',
             sections: [{ title: 'Antes de começar', items: ['Confirme o departamento de destino'] }],
             steps: ['Abra a conversa', 'Clique em Transferir'],
             code: null,
@@ -320,7 +321,7 @@ globalThis.fetch = async (url, init = {}) => {
   await writeFile(join(mediaDir, 'claricia-tango.mdx'), `---\ntitle: "Guia Claricia Tango"\ndescription: "Guia de teste da mídia real."\n---\n<TutorialCard title="Fluxo" url="https://app.tango.us/app/workflow/Fluxo-586c4a6cabce4edd8032e657bf2979ae" embedUrl="https://app.tango.us/app/embed/586c4a6cabce4edd8032e657bf2979ae" />\n`);
   await writeFile(join(mediaDir, 'claricia-sem-midia.mdx'), `---\ntitle: "Guia Claricia Sem Mídia"\ndescription: "Guia de teste sem vídeo."\n---\nResposta completa sem vídeo.\n`);
   await writeFile(join(mediaDir, 'claricia-url-insegura.mdx'), `---\ntitle: "Guia Claricia URL Insegura"\ndescription: "Guia de teste da URL."\n---\n<VideoEmbed url="javascript:alert(1)" />\n`);
-  const mediaClient = (path) => freeAnswerClient({ responses: { create: async () => ({ model: 'gpt-test', output_text: JSON.stringify({ answer: 'Consulte o guia.', sources: [path, 'https://evil.example/falso'], resolution: 'partial', found: true }) }) } });
+  const mediaClient = (path) => freeAnswerClient({ responses: { create: async () => ({ model: 'gpt-test', output_text: JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Consulte o guia.', sources: [path, 'https://evil.example/falso'], resolution: 'partial', found: true }) }) } });
   const tangoReply = await answerQuestion(testRoot, 'Guia Claricia Tango', { client: mediaClient('/docs/teste/claricia-tango') });
   assert.deepEqual(tangoReply.sources.map((source) => source.path), ['/docs/teste/claricia-tango']);
   assert.deepEqual(tangoReply.sources[0].media, { kind: 'tango', url: 'https://app.tango.us/app/workflow/Fluxo-586c4a6cabce4edd8032e657bf2979ae', embedUrl: 'https://app.tango.us/app/embed/586c4a6cabce4edd8032e657bf2979ae' });

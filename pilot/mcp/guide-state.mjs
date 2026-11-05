@@ -143,7 +143,7 @@ export async function answerGuide(root, question, state, options = {}) {
     return safe;
   }
   if (command === 'preciso de ajuda' || /nao encontrei/.test(command)) {
-    return reply(source, current, 'Vamos conferir esta etapa. Veja a ação abaixo e me diga onde parou.', { path: path ?? [current.stepId] });
+    return reply(source, current, 'Me diga onde você parou no passo abaixo.', { path: path ?? [current.stepId] });
   }
   if (command === 'voltar' || command === 'passo anterior') {
     const previousPath = path?.length > 1 ? path.slice(0, -1) : [current.stepId];
@@ -156,7 +156,7 @@ export async function answerGuide(root, question, state, options = {}) {
     if (!choice) return reply(source, current, 'Escolha uma das opções deste passo.', { path });
     const selected = guide.steps.find((step) => step.stepId === choice.nextStepId) ?? current;
     options.onResolvedStep?.({ guideId: guide.guideId, stepId: selected.stepId });
-    return reply(source, selected, 'Vamos seguir pela opção escolhida.', { path: [...path, selected.stepId] });
+    return reply(source, selected, 'O passo abaixo segue a opção que você escolheu.', { path: [...path, selected.stepId] });
   }
   if (state.choiceId) return safe;
   const next = nextStep(guide, current);
@@ -165,8 +165,8 @@ export async function answerGuide(root, question, state, options = {}) {
     return reply(source, current, 'Você concluiu o guia.', { path, steps: [], suggestions: [], resolution: 'complete' });
   }
   if (!next || !advancing) {
-    return reply(source, current, next ? 'Este é o passo atual.' : 'Você chegou ao último passo. Deu certo?', { path: path ?? [current.stepId] });
+    return reply(source, current, next ? 'Você está neste passo.' : 'Você chegou ao último passo. Deu certo?', { path: path ?? [current.stepId] });
   }
   options.onResolvedStep?.({ guideId: guide.guideId, stepId: next.stepId });
-  return reply(source, next, 'Vamos para o próximo passo.', { path: [...path, next.stepId] });
+  return reply(source, next, 'O próximo passo está abaixo.', { path: [...path, next.stepId] });
 }

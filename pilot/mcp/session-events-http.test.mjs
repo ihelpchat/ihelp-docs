@@ -13,10 +13,16 @@ const guide = '/docs/principais-motivos-de-suporte/campanhas';
 const sentinel = 'sk-proj-FAKESECRET012345678901234567890';
 const hostilePath = `/docs/${sentinel}`;
 const providerInputs = [];
+// Contrato dinâmico (2026-11-03): o modelo escolhe o passo (aqui, o primeiro passo documentado da fonte);
+// o servidor ancora o texto na fonte e resolve guideId/stepId do evento a partir desse passo.
 const payload = {
-  answer: 'Abra Campanhas para preparar o envio.', sections: [], steps: [], code: null,
+  plan: { intent: 'execute', optionalBranch: 'unspecified' },
+  answer: 'Abra Campanhas para preparar o envio.', sections: [],
+  steps: [{ text: 'Abra Campanhas e clique em Nova Campanha.', actionId: null, imagePath: null }], code: null,
   sources: [guide], suggestions: [], resolution: 'complete', found: true,
 };
+// O caminho positivo usa `payload`; o witness de zero passos troca `currentPayload` só durante aquela chamada.
+let currentPayload = payload;
 const fakeOpenAI = createServer(async (request, response) => {
   assert.equal(request.url, '/v1/responses');
   let input = '';
@@ -26,7 +32,7 @@ const fakeOpenAI = createServer(async (request, response) => {
   response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
     id: 'resp_fixture', object: 'response', created_at: 1, model: 'fixture', status: 'completed',
     output: [{ type: 'message', id: 'msg_fixture', status: 'completed', role: 'assistant',
-      content: [{ type: 'output_text', text: route ? '{"choice":"sem guia"}' : JSON.stringify(payload), annotations: [] }] }],
+      content: [{ type: 'output_text', text: route ? '{"choice":"sem guia"}' : JSON.stringify(currentPayload), annotations: [] }] }],
     usage: { input_tokens: 1, output_tokens: 1 },
   }));
 });
@@ -78,6 +84,34 @@ try {
     assert.ok(providerInputs.at(-1).includes(guide), 'caminho publicado chega ao prompt');
     const publishedEvent = JSON.parse((await readFile(eventFile, 'utf8')).trim().split('\n').at(-1));
     assert.equal(publishedEvent.path, guide, 'caminho publicado chega ao evento');
+
+    // Controle de zero passos: mesma pergunta, mesma sessão e mesma resposta (complete) do caminho positivo, só sem
+    // steps. Prova que o passo resolvido do request anterior não vaza e que, mesmo com complete, o servidor não
+    // fabrica guideId/stepId; narração, resultado, tópico, ação e diagnóstico continuam derivados no servidor.
+    currentPayload = { ...payload, steps: [] };
+    try {
+      const zeroStep = await fetch(`http://127.0.0.1:${httpServer.address().port}/assistant`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: 'Como criar e enviar uma campanha?', sessionId: 'fixture-session', page: { path: hostilePath, title: 'Campanhas' } }),
+      });
+      assert.equal(zeroStep.status, 200);
+      const zeroReply = await zeroStep.json();
+      assert.deepEqual(zeroReply.steps, [], 'sem passo do modelo não há passo fabricado');
+      assert.equal(zeroReply.answer, payload.answer, 'a narração do modelo é preservada');
+      assert.equal(zeroReply.resolution, 'complete', 'complete é cobertura da resposta, não passo executado');
+      const zeroEvent = JSON.parse((await readFile(eventFile, 'utf8')).trim().split('\n').at(-1));
+      assert.equal(zeroEvent.result, 'complete', 'evento guarda o mesmo resultado da resposta');
+      assert.equal(zeroEvent.guideId, undefined, 'sem passo mostrado não há guideId fabricado nem herdado do request anterior');
+      assert.equal(zeroEvent.stepId, undefined, 'sem passo mostrado não há stepId fabricado nem herdado do request anterior');
+      assert.equal(zeroEvent.topic, 'abrir-campanhas', 'tópico continua calculado no servidor');
+      assert.equal(zeroEvent.action, 'criar', 'ação continua calculada no servidor');
+      assert.equal(zeroEvent.issue, 'usage', 'diagnóstico continua calculado no servidor');
+      assert.match(zeroEvent.sessionId, /^session-[a-f0-9]{16}$/);
+      assert.notEqual(zeroEvent.sessionId, 'fixture-session', 'ID do cliente não é gravado cru');
+      assert.equal(zeroEvent.sessionId, event.sessionId, 'mesma sessão do caminho positivo, mesmo hash');
+      assert.equal(zeroEvent.path, null, 'caminho não publicado não entra no evento');
+      assert.doesNotMatch(await readFile(eventFile, 'utf8'), /FAKESECRET012345678901234567890/);
+    } finally { currentPayload = payload; }
 
     for (const [question, widgetContext, expectedIssue] of [
       ['Erro ao abrir campanhas', undefined, 'incident'],
