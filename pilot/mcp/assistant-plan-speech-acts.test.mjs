@@ -197,3 +197,54 @@ test('execute keeps a sourced API example with a token placeholder', async () =>
   assert.equal(reply.fallback, undefined);
   assert.ok(reply.sources.some(({ path }) => path === '/api/crm/funis/listar-funis'));
 });
+
+// B1: the current explanatory plan owns capacity semantics; immediate operations retain their gate.
+const capacity = 'Você pode criar vários cards para o mesmo contato quando a trava está desativada.';
+for (const field of fields) {
+  test(`explain preserves sourced capability in ${field}`, async () => {
+    const input = field === 'answer' ? { answer: capacity } : field === 'section'
+      ? { sections: [{ title: 'Capacidade', items: [capacity] }] } : { suggestions: [capacity] };
+    const reply = await ask({ intent: 'explain', question: 'O mesmo contato pode ter vários cards na pipeline?', withHistory: false, ...input });
+    assert.equal(reply.fallback, undefined);
+    assert.deepEqual(reply.steps, []);
+    assert.equal(reply.code, null);
+    assert.ok(reply.sources.some((source) => source.path === path));
+    if (field === 'answer') assert.equal(reply.answer, capacity);
+    else if (field === 'section') assert.deepEqual(reply.sections, input.sections);
+    else assert.deepEqual(reply.suggestions, input.suggestions);
+  });
+  for (const text of [
+    'Você pode criar uma nova pipeline agora para começar.',
+    capacity + ' Clique em Nova Pipeline.',
+  ]) {
+    test(`explain does not authorize an immediate/compound operation in ${field}: ${text}`, async () => {
+      const input = field === 'answer' ? { answer: text } : field === 'section'
+        ? { sections: [{ title: 'Capacidade', items: [text] }] } : { suggestions: [text] };
+      const reply = await ask({ intent: 'explain', ...input });
+      assert.equal(reply.fallback?.reason, 'plan_conflict');
+      assert.deepEqual(reply.steps, []);
+      assert.deepEqual(reply.sections, []);
+      assert.deepEqual(reply.suggestions, []);
+      assert.notEqual(reply.answer, text);
+    });
+  }
+}
+test('explain capacity does not require a conditional clause', async () => {
+  const answer = 'Você pode criar vários cards para o mesmo contato com a trava desativada.';
+  const reply = await ask({ intent: 'explain', answer, question: 'O mesmo contato pode ter vários cards na pipeline?', withHistory: false });
+  assert.equal(reply.answer, answer);
+  assert.equal(reply.fallback, undefined);
+  assert.deepEqual(reply.steps, []);
+  assert.equal(reply.code, null);
+});
+for (const answer of [
+  'Agora, você pode criar uma nova pipeline.',
+  'Você pode criar uma nova pipeline para começar.',
+  'Você pode criar uma nova pipeline em seguida.',
+  'Se quiser, você pode criar uma nova pipeline agora.',
+  'Você deve criar uma nova pipeline.',
+]) {
+  test(`explain keeps current scope/deontic instruction blocked: ${answer}`, async () => {
+    assert.equal((await ask({ intent: 'explain', answer })).fallback?.reason, 'plan_conflict');
+  });
+}
