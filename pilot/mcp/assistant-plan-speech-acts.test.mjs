@@ -65,6 +65,8 @@ for (const field of fields) {
     'Confirme se o quadro aparece; depois, publique o robô.',
     'Verifique a lista. Crie uma nova pipeline.',
     'Clique em Nova Pipeline?',
+    'Confira a lista e agora clique em Nova Pipeline.',
+    'Informe no campo Nome o texto da pipeline.',
   ]) {
     test(`compound execution blocked in ${field}: ${text}`, async () => {
       const input = field === 'answer' ? { answer: text } : field === 'section'
@@ -96,7 +98,7 @@ for (const suggestion of ['Como publico o robô? Clique em Nova Pipeline.', 'Que
   });
 }
 
-for (const answer of ['Não clique em Nova Pipeline.', 'Confira a lista e não clique em Nova Pipeline.', 'Confirme se a pipeline aparece; não publique o robô agora.']) {
+for (const answer of ['Não clique em Nova Pipeline.', 'Confira a lista e não clique em Nova Pipeline.', 'Confirme se a pipeline aparece; não publique o robô agora.', 'Confirme se a pipeline aparece; agora não clique em Nova Pipeline.']) {
   test(`negated execution survives without becoming an operation: ${answer}`, async () => {
     const reply = await ask({ answer });
     assert.equal(reply.answer, answer);
@@ -130,4 +132,11 @@ test('real skip keeps every mandatory step and omits the optional branch', async
   const branch = crm.optionalBranch;
   assert.deepEqual(reply.steps.map(({ text }) => text), crm.documentedSteps.filter((_, i) => i <= branch.decision || i >= branch.decline));
   assert.equal(reply.fallback, undefined);
+});
+
+
+test('unrelated inspection does not make a preceding skip conditional', async () => {
+  const reply = await ask({ intent: 'execute', answer: 'Pule a automação e confirme se a pipeline aparece na lista.', steps: crm.documentedSteps.map(step), question: 'Quero ver todos os passos para criar uma pipeline.', withHistory: false });
+  assert.equal(reply.fallback?.reason, 'plan_conflict');
+  assert.deepEqual(reply.steps, []);
 });
