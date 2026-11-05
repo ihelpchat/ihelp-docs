@@ -677,31 +677,38 @@ function validConversationPlan(plan) {
 // Modais só indicam operação quando regem um verbo de ação; capacidade factual e pedido de informação
 // não viram operação. Cada comando coordenado é avaliado, sem passe livre para a oração seguinte.
 const MODAL_DIRECTIVE = '(?:pode|podera|precisa|precisara|deve|devera|deveria|tem que|tera que|basta|so precisa|e so)';
-const DIRECTIVE = new RegExp(`^${INSTRUCTION_LEAD}(?:voce\\s+)?(?:(?<verb>${INSTRUCTION_VERBS})\\b|${MODAL_DIRECTIVE}\\s+(?<infinitive>${ACTION_INFINITIVES})\\b)\\s*(?<object>.*)$`);
+const DIRECTIVE = new RegExp(`^${INSTRUCTION_LEAD}(?:voce\\s+)?(?:(?<verb>${INSTRUCTION_VERBS})\\b|(?<modal>${MODAL_DIRECTIVE})\\s+(?<infinitive>${ACTION_INFINITIVES})\\b)\\s*(?<object>.*)$`);
 const COMMAND_COORDINATION = new RegExp(`\\s+(?:e|ou)\\s+(?=${INSTRUCTION_LEAD}(?:voce\\s+)?(?:(?:nao|nunca|nem)\\s+)?(?:(?:${INSTRUCTION_VERBS})\\b|${MODAL_DIRECTIVE}\\s+(?:${ACTION_INFINITIVES})\\b))`);
-const COMMAND_BOUNDARY = new RegExp(`(?<=[.!?])\\s+|\\n|[,;:]\\s*|${COMMAND_COORDINATION.source}`);
+const COMMAND_SCOPE_BOUNDARY = /(?<=[.!?])\s+|\n|;\s*/u;
+// Marcas de orientação neste turno/sequência, não termos do produto nem condições de capacidade.
+const CURRENT_OPERATION = /\b(?:agora|ja|depois|em seguida|na sequencia|primeiro|por fim|para isso)\b|\bpara (?:comecar|iniciar|continuar|prosseguir)\b/u;
 const NEGATED_DIRECTIVE = new RegExp(`^${INSTRUCTION_LEAD}(?:voce\\s+)?(?:nao|nunca|nem)\\s+`);
 // Interação com a interface é execução mesmo quando o verbo não descreve uma mutação (clicar/abrir).
 const INTERFACE_OPERATION = /^(?:clic|cliq|toc|abr|acess|preench|digit|insir|inser|selecion|escolh|rol|va$)/u;
 
-function hasExecutionInstruction(text) {
-  return normalize(String(text)).split(COMMAND_BOUNDARY).some((clause) => {
-    const value = clause.trim();
-    const negated = NEGATED_DIRECTIVE.test(value);
-    const command = value.replace(NEGATED_DIRECTIVE, '').match(DIRECTIVE);
-    if (command) {
-      if (negated) return false;
-      const verb = command.groups.verb ?? command.groups.infinitive;
-      const object = command.groups.object;
-      // Complemento interrogativo pede informação sobre um estado; não confirma um botão/operação.
-      const reportedState = /^(?:se|que|qual|quais|onde|como)\b/u.test(object);
-      const changesProduct = EFFECT_VERB.test(verb) && !(reportedState && /^confirm/u.test(verb));
-      const fieldTarget = /^(?:no|na|nos|nas|em)\s+(?:campo|botao|menu|aba|formulario)\b/u.test(object);
-      return changesProduct || INTERFACE_OPERATION.test(verb) || fieldTarget;
-    }
-    // Perguntas/intenções futuras não são comandos. Imperativo embutido e rótulo de ação continuam vetados.
-    return instructionSentence(clause);
-  });
+function hasExecutionInstruction(text, intent) {
+  return normalize(String(text)).split(COMMAND_SCOPE_BOUNDARY).some((sentence) =>
+    sentence.split(COMMAND_COORDINATION).some((scope) => scope.split(/[,:]\s*/u).some((clause) => {
+      const value = clause.trim();
+      const negated = NEGATED_DIRECTIVE.test(value);
+      const command = value.replace(NEGATED_DIRECTIVE, '').match(DIRECTIVE);
+      if (command) {
+        if (negated) return false;
+        const verb = command.groups.verb ?? command.groups.infinitive;
+        const object = command.groups.object;
+        // Complemento interrogativo pede informação sobre um estado; não confirma um botão/operação.
+        const reportedState = /^(?:se|que|qual|quais|onde|como)\b/u.test(object);
+        const changesProduct = EFFECT_VERB.test(verb) && !(reportedState && /^confirm/u.test(verb));
+        const fieldTarget = /^(?:no|na|nos|nas|em)\s+(?:campo|botao|menu|aba|formulario)\b/u.test(object);
+        // explain decide capacidade; a guarda conserva orientação atual, imperativos e interação de UI.
+        // O alcance conserva prefixos através de vírgulas, sem liberar outra oração coordenada.
+        const capacity = intent === 'explain' && /^(?:pode|podera)$/u.test(command.groups.modal)
+          && !CURRENT_OPERATION.test(scope);
+        return INTERFACE_OPERATION.test(verb) || fieldTarget || (changesProduct && !capacity);
+      }
+      // Perguntas/intenções futuras não são comandos. Imperativo embutido e rótulo de ação continuam vetados.
+      return instructionSentence(clause);
+    })));
 }
 
 function narratesSkippedBranch(text, source) {
@@ -1290,7 +1297,7 @@ async function answerQuestionAttempt(root, question, options, invocation) {
   if (!plan) return fixedFallback(true, { branch: 'composition', reason: 'invalid_plan' });
   const executing = plan.intent === 'execute';
   if (!executing && [parsed.answer, ...parsed.sections.flatMap(({ title, items }) => [title, ...items]),
-    ...parsed.suggestions].some((text) => hasExecutionInstruction(text))) {
+    ...parsed.suggestions].some((text) => hasExecutionInstruction(text, plan.intent))) {
     return fixedFallback(true, { branch: 'composition', reason: 'plan_conflict' });
   }
   // A intenção atual prevalece sobre o gatilho lexical preliminar de visão geral.
