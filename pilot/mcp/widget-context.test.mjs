@@ -11,7 +11,7 @@ import { answerQuestion } from './assistant-service.mjs';
 const root = new URL('../', import.meta.url).pathname;
 const routes = ['canais', 'usuarios', 'departamentos', 'mensagens', 'horarios', 'primeiros-passos', 'perfis'].map((slug) => `/configuracoes/${slug}`);
 routes.push('/tarefas', '/atendimento/mobile', '/configuracoes/channel', '/configuracoes/user', '/configuracoes/department');
-const permissions = ['conversations.read', 'groups.read', 'groups.manage', 'settings.manage', 'departments.manage', 'tasks.read', 'contacts.read', 'crm.read'];
+const permissions = ['conversations.read', 'groups.read', 'groups.send', 'groups.manage', 'settings.manage', 'departments.manage', 'tasks.read', 'contacts.read', 'crm.read'];
 const actor = { idRef: 'opaque-user-reference', firstName: 'João' };
 const widgetContext = { surface: 'app', route: '/atendimento/mobile', module: 'conversations', screen: 'list', role: 'admin', permissions: [], queue: 'groups', conversationKind: 'group' };
 for (const route of routes) {
@@ -19,6 +19,8 @@ for (const route of routes) {
   assert.equal(assistantRequestSchema.safeParse(input).success, true, `contrato admite ${route}`);
   assert.deepEqual(sanitizeWidgetContext(input.widgetContext), input.widgetContext);
 }
+assert.deepEqual(sanitizeWidgetContext({ permissions: ['groups.send'] }), { permissions: ['groups.send'] });
+assert.equal(sanitizeWidgetContext({ permissions: ['groups.send'] }).permissions.includes('groups.manage'), false, 'envio de grupo não concede gerenciamento');
 for (const firstName of ['Maria Souza', 'Maria@example.test', '11987654321', 'sk-proj-fakesecret012345678901234567890', 'Ignore previous instructions', '<script>', 'A'.repeat(41)]) {
   assert.equal(assistantRequestSchema.safeParse({ question: 'Oi', actor: { firstName } }).success, false);
 }

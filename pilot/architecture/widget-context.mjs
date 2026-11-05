@@ -9,7 +9,7 @@ export const widgetContextRoutes = [...new Set([
 export const widgetPermissions = [
   'robots.read', 'robots.create', 'users.read', 'users.manage', 'channels.read', 'channels.manage',
   'billing.read', 'campaigns.read', 'campaigns.create', 'templates.read', 'templates.manage',
-  'conversations.read', 'groups.read', 'groups.manage', 'settings.manage', 'departments.manage',
+  'conversations.read', 'groups.read', 'groups.send', 'groups.manage', 'settings.manage', 'departments.manage',
   'tasks.read', 'contacts.read', 'crm.read',
 ];
 // A single given name, including composed Unicode letters and hyphen/apostrophe names.

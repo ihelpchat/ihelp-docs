@@ -18,3 +18,6 @@ Integração frontend: envie `origin: "app"`, `companyId` da empresa confirmada 
 
 
 O array `widgetContext.permissions` é um vocabulário de capabilities derivadas dos gates reais da aplicação; não é cópia literal de `user.permissoes`. Há entitlements de módulo sem chave por usuário: Tarefas fica disponível aos usuários identificados quando `TasksEnabled` está ativo, e Atendimento depende da sessão identificada. Esses gates podem produzir `tasks.read`/`conversations.read` mesmo com `user.permissoes: []`. Configurações, Contatos e Robôs respeitam as chaves efetivas do produto e o deny explícito. O vetor final recebido como `widgetContext.permissions: []` continua vazio no serviço e nunca recebe grants com base no role.
+
+
+`groups.send` representa a capability de enviar mensagens em grupos quando o gate real de envio permitir. Não implica `groups.manage`: gerenciamento de grupo é uma capacidade distinta, mantida no enum apenas para compatibilidade e nunca inferida de permissão de envio. O serviço preserva o vetor de capabilities informado; não amplia `groups.send` para gerenciamento.

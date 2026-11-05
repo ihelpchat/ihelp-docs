@@ -47,7 +47,7 @@ export type AssistantRequestV1 = {
   module?: "robots" | "users" | "channels" | "billing" | "campaigns" | "templates" | "conversations" | "settings";
   screen?: "list" | "create" | "edit" | "detail" | "connection" | "qr" | "unknown";
   role?: "owner" | "admin" | "manager" | "agent" | "unknown";
-  permissions?: Array<"robots.read" | "robots.create" | "users.read" | "users.manage" | "channels.read" | "channels.manage" | "billing.read" | "campaigns.read" | "campaigns.create" | "templates.read" | "templates.manage" | "conversations.read" | "groups.read" | "groups.manage" | "settings.manage" | "departments.manage" | "tasks.read" | "contacts.read" | "crm.read">;
+  permissions?: Array<"robots.read" | "robots.create" | "users.read" | "users.manage" | "channels.read" | "channels.manage" | "billing.read" | "campaigns.read" | "campaigns.create" | "templates.read" | "templates.manage" | "conversations.read" | "groups.read" | "groups.send" | "groups.manage" | "settings.manage" | "departments.manage" | "tasks.read" | "contacts.read" | "crm.read">;
   queue?: "mine" | "all" | "groups" | "other";
   conversationKind?: "attendance" | "group" | "none";
   plan?: "trial" | "active" | "expired" | "limited" | "unknown";
@@ -121,7 +121,7 @@ export type AssistantReplyV1 = {
   module?: "robots" | "users" | "channels" | "billing" | "campaigns" | "templates" | "conversations" | "settings";
   screen?: "list" | "create" | "edit" | "detail" | "connection" | "qr" | "unknown";
   role?: "owner" | "admin" | "manager" | "agent" | "unknown";
-  permissions?: Array<"robots.read" | "robots.create" | "users.read" | "users.manage" | "channels.read" | "channels.manage" | "billing.read" | "campaigns.read" | "campaigns.create" | "templates.read" | "templates.manage" | "conversations.read" | "groups.read" | "groups.manage" | "settings.manage" | "departments.manage" | "tasks.read" | "contacts.read" | "crm.read">;
+  permissions?: Array<"robots.read" | "robots.create" | "users.read" | "users.manage" | "channels.read" | "channels.manage" | "billing.read" | "campaigns.read" | "campaigns.create" | "templates.read" | "templates.manage" | "conversations.read" | "groups.read" | "groups.send" | "groups.manage" | "settings.manage" | "departments.manage" | "tasks.read" | "contacts.read" | "crm.read">;
   queue?: "mine" | "all" | "groups" | "other";
   conversationKind?: "attendance" | "group" | "none";
   plan?: "trial" | "active" | "expired" | "limited" | "unknown";
