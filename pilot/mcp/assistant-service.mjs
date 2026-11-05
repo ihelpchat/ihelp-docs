@@ -675,26 +675,28 @@ function validConversationPlan(plan) {
 }
 
 // Separa comandos coordenados antes de avaliar permissão: uma inspeção nunca encobre outra ação.
-const DIRECTIVE = new RegExp(`^${INSTRUCTION_LEAD}(?:voce\\s+)?(?:(?<verb>${INSTRUCTION_VERBS})\\b|(?:precisa|precisara|deve|devera|deveria|tem que|tera que|basta|so precisa|e so)\\s+(?<infinitive>${ACTION_INFINITIVES})\\b)\\s*(?<object>.*)$`);
-const COMMAND_BOUNDARY = new RegExp(`(?<=[.!?])\\s+|\\n|[,;:]\\s*|\\s+(?:e|ou)\\s+(?=(?:nao\\s+)?(?:voce\\s+)?(?:${INSTRUCTION_VERBS})\\b)`);
+const MODAL_DIRECTIVE = '(?:precisa|precisara|deve|devera|deveria|tem que|tera que|basta|so precisa|e so)';
+const DIRECTIVE = new RegExp(`^${INSTRUCTION_LEAD}(?:voce\\s+)?(?:(?<verb>${INSTRUCTION_VERBS})\\b|${MODAL_DIRECTIVE}\\s+(?<infinitive>${ACTION_INFINITIVES})\\b)\\s*(?<object>.*)$`);
+const COMMAND_COORDINATION = new RegExp(`\\s+(?:e|ou)\\s+(?=${INSTRUCTION_LEAD}(?:voce\\s+)?(?:(?:nao|nunca|nem)\\s+)?(?:(?:${INSTRUCTION_VERBS})\\b|${MODAL_DIRECTIVE}\\s+(?:${ACTION_INFINITIVES})\\b))`);
+const COMMAND_BOUNDARY = new RegExp(`(?<=[.!?])\\s+|\\n|[,;:]\\s*|${COMMAND_COORDINATION.source}`);
+const NEGATED_DIRECTIVE = new RegExp(`^${INSTRUCTION_LEAD}(?:voce\\s+)?(?:nao|nunca|nem)\\s+`);
 // Interação com a interface é execução mesmo quando o verbo não descreve uma mutação (clicar/abrir).
-const INTERFACE_OPERATION = /^(?:clic|cliq|toc|abr|acess|preench|digit|insir|inser|selecion|escolh|rol)/u;
+const INTERFACE_OPERATION = /^(?:clic|cliq|toc|abr|acess|preench|digit|insir|inser|selecion|escolh|rol|va$)/u;
 
-function hasExecutionInstruction(text, documentedSteps) {
+function hasExecutionInstruction(text) {
   return normalize(String(text)).split(COMMAND_BOUNDARY).some((clause) => {
     const value = clause.trim();
-    const negated = /^(?:nao|nunca|nem)\s+/u.test(value);
-    const command = value.replace(/^(?:nao|nunca|nem)\s+/u, '').match(DIRECTIVE);
+    const negated = NEGATED_DIRECTIVE.test(value);
+    const command = value.replace(NEGATED_DIRECTIVE, '').match(DIRECTIVE);
     if (command) {
       if (negated) return false;
       const verb = command.groups.verb ?? command.groups.infinitive;
       const object = command.groups.object;
       // Complemento interrogativo pede informação sobre um estado; não confirma um botão/operação.
-      const reportedState = /^(?:se|qual|quais|onde|como)\b/u.test(object);
+      const reportedState = /^(?:se|que|qual|quais|onde|como)\b/u.test(object);
       const changesProduct = EFFECT_VERB.test(verb) && !(reportedState && /^confirm/u.test(verb));
       const fieldTarget = /^(?:no|na|nos|nas|em)\s+(?:campo|botao|menu|aba|formulario)\b/u.test(object);
-      return changesProduct || INTERFACE_OPERATION.test(verb) || fieldTarget
-        || (!reportedState && anchoredInstruction(clause, documentedSteps));
+      return changesProduct || INTERFACE_OPERATION.test(verb) || fieldTarget;
     }
     // Perguntas/intenções futuras não são comandos. Imperativo embutido e rótulo de ação continuam vetados.
     return instructionSentence(clause);
@@ -704,14 +706,15 @@ function hasExecutionInstruction(text, documentedSteps) {
 function narratesSkippedBranch(text, source) {
   const keywords = optionalKeywords(source);
   return normalize(String(text)).split(/(?<=[.!?])\s+/u).some((sentence) =>
-    sentence.split(/;|\b(?:mas|porem|contudo)\b/u).some((scope) => {
-      // A condição vale para a oração depois da vírgula e também pode vir depois da ação.
-      if (scope.trim().endsWith('?') || /\b(?:se|caso|quando)\b/u.test(scope)) return false;
-      return scope.split(/,/u).some((clause) =>
-        (/\b(?:etapa|ramo|parte) opcional\b/u.test(clause) || plainWords(clause).some((word) => keywords.includes(word)))
-        && /\b(?:pule|pular|dispense|dispensar|ignore|ignorar)\b/u.test(clause)
-        && !/\b(?:nao|sem|nem)\b/u.test(clause));
-    }));
+    sentence.split(/;|\b(?:mas|porem|contudo)\b/u).some((scope) =>
+      scope.split(COMMAND_COORDINATION).some((command) => {
+        // A condição vale para esta orientação, inclusive depois de vírgula; outra ação inicia novo alcance.
+        if (command.trim().endsWith('?') || /\b(?:se|caso|quando)\b/u.test(command)) return false;
+        return command.split(/,/u).some((clause) =>
+          (/\b(?:etapa|ramo|parte) opcional\b/u.test(clause) || plainWords(clause).some((word) => keywords.includes(word)))
+          && /\b(?:pule|pular|dispense|dispensar|ignore|ignorar)\b/u.test(clause)
+          && !/\b(?:nao|sem|nem)\b/u.test(clause));
+      })));
 }
 
 /** Lê a resposta estruturada sem expor JSON literal ou wrappers malformados. */
@@ -1285,9 +1288,8 @@ async function answerQuestionAttempt(root, question, options, invocation) {
   const plan = parsed.plan;
   if (!plan) return fixedFallback(true, { branch: 'composition', reason: 'invalid_plan' });
   const executing = plan.intent === 'execute';
-  const documentedSteps = sources.flatMap((source) => source.documentedSteps);
   if (!executing && [parsed.answer, ...parsed.sections.flatMap(({ title, items }) => [title, ...items]),
-    ...parsed.suggestions].some((text) => hasExecutionInstruction(text, documentedSteps))) {
+    ...parsed.suggestions].some((text) => hasExecutionInstruction(text))) {
     return fixedFallback(true, { branch: 'composition', reason: 'plan_conflict' });
   }
   // A intenção atual prevalece sobre o gatilho lexical preliminar de visão geral.
