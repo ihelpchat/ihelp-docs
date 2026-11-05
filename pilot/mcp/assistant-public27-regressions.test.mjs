@@ -332,3 +332,130 @@ test('menção a alternativa sem automação não dispensa o ramo escolhido', as
   assert.equal(reply.answer, answer);
   assert.deepEqual(reply.steps.map(({ text }) => text), crm.documentedSteps);
 });
+
+// Recuperação de conteúdo: contratos novos, provider falso; não reproduzem candidatos reais rejeitados.
+const conflictBody = { plan: { intent: 'clarify', optionalBranch: 'unspecified' }, answer: 'Crie uma pipeline.', sources: [crmPath] };
+const recoveredBody = { plan: { intent: 'clarify', optionalBranch: 'unspecified' }, answer: 'Você quer entender o quadro ou ajustar um que já existe?', sources: [crmPath] };
+const reviewOf = (request) => request.input.filter(({ role }) => role === 'developer').map(({ content }) => content).join(' ');
+const hasReview = (request, branch, reason) => reviewOf(request).includes(JSON.stringify({ branch, reason }));
+
+test('recuperação: conflito de composição pode gerar uma resposta dinâmica validada sem business', async () => {
+  await withBusiness(async () => {
+    const { client, calls } = fake((request, pass) => pass === 1 ? conflictBody : recoveredBody);
+    const reply = await answerQuestion(root, conceptual, { client });
+    assert.equal(reply.answer, recoveredBody.answer);
+    assert.equal(reply.fallback, undefined);
+    assert.deepEqual(reply.steps, []);
+    assert.equal(calls.answer, 2);
+    assert.equal(calls.triage, 1);
+    assert.equal(calls.safety, 1, 'a recuperação também passa pelo safety aplicável');
+    assert.ok(hasReview(calls.requests[1], 'composition', 'plan_conflict'));
+    assert.match(calls.requests[0].input.at(-1).content, /Produto fictício|produto fictício/u);
+    assert.doesNotMatch(calls.requests[1].input.at(-1).content, /produto fictício|Pipeline fictícia/u);
+    assert.equal(JSON.stringify(reply).includes('plan_conflict'), false, 'feedback não entra no JSON público');
+    assert.equal(JSON.stringify(reply).includes('REVISÃO INTERNA'), false);
+  });
+});
+for (const reason of ['mentionsSource', 'unsupportedAction']) {
+  test(`recuperação: classificador transmite motivo ${reason} ao redator e revalida`, async () => {
+    await withBusiness(async () => {
+      const { client, calls } = fake((request, pass) => pass === 1
+        ? { answer: 'Explicação inicial.', sources: [crmPath] } : recoveredBody,
+      { safety: [{ mentionsSource: reason === 'mentionsSource', unsupportedAction: reason === 'unsupportedAction' }, { mentionsSource: false, unsupportedAction: false }] });
+      const reply = await answerQuestion(root, conceptual, { client });
+      assert.equal(reply.answer, recoveredBody.answer);
+      assert.equal(reply.fallback, undefined);
+      assert.equal(calls.answer, 2);
+      assert.equal(calls.safety, 2);
+      assert.equal(calls.triage, 1);
+      assert.ok(hasReview(calls.requests[1], 'classifier', reason));
+      assert.equal(JSON.stringify(reply).includes(reason), false);
+    });
+  });
+}
+test('recuperação: composição e classificador compartilham duas gerações, não três', async () => {
+  await withBusiness(async () => {
+    const { client, calls } = fake((request, pass) => pass === 1 ? conflictBody : recoveredBody,
+      { safety: [{ mentionsSource: false, unsupportedAction: true }] });
+    const reply = await answerQuestion(root, conceptual, { client });
+    assert.equal(reply.answer, fixedError);
+    assert.deepEqual(reply.fallback, { branch: 'classifier', reason: 'unsupportedAction', pass: 2 });
+    assert.deepEqual(reply.steps, []);
+    assert.equal(calls.answer, 2);
+    assert.equal(calls.safety, 1);
+    assert.equal(calls.triage, 1);
+  });
+});
+test('recuperação: rejeição do classificador não permite bypass de composição na segunda resposta', async () => {
+  await withBusiness(async () => {
+    const { client, calls } = fake((request, pass) => pass === 1 ? recoveredBody : conflictBody,
+      { safety: [{ mentionsSource: true, unsupportedAction: false }] });
+    const reply = await answerQuestion(root, conceptual, { client });
+    assert.equal(reply.answer, fixedError);
+    assert.deepEqual(reply.fallback, { branch: 'composition', reason: 'plan_conflict', pass: 2 });
+    assert.equal(calls.answer, 2);
+    assert.equal(calls.safety, 1);
+    assert.deepEqual(reply.steps, []);
+  });
+});
+for (const [second, branch, reason] of [
+  [conflictBody, 'composition', 'plan_conflict'],
+  [{ ...recoveredBody, plan: null }, 'composition', 'invalid_plan'],
+  ['throw', 'generation', 'exception'],
+]) {
+  test(`recuperação: segunda falha ${branch}/${reason} encerra com fallback seguro`, async () => {
+    const { client, calls } = fake((request, pass) => pass === 1 ? conflictBody : second);
+    const reply = await answerQuestion(root, 'Como configurar o CRM?', { client });
+    assert.equal(reply.answer, fixedError);
+    assert.deepEqual(reply.fallback, { branch, reason, pass: 2 });
+    assert.deepEqual(reply.steps, []);
+    assert.equal(reply.code, null);
+    assert.equal(calls.answer, 2);
+    assert.equal(calls.triage, 1);
+  });
+}
+test('recuperação: conflito de ramo opcional é corrigido com os mesmos obrigatórios', async () => {
+  const { client, calls } = fake((request, pass) => ({
+    plan: { intent: 'execute', optionalBranch: pass === 1 ? 'include' : 'skip' },
+    answer: 'Siga os passos abaixo.', steps: crm.documentedSteps.map(step), sources: [crmPath],
+  }));
+  const reply = await answerQuestion(root, 'Quero todos os passos para criar uma pipeline sem automação.', { client });
+  assert.equal(reply.fallback, undefined);
+  assert.deepEqual(reply.steps.map(({ text }) => text), mandatory);
+  assert.equal(calls.answer, 2);
+  assert.ok(hasReview(calls.requests[1], 'composition', 'plan_conflict'));
+});
+test('recuperação: router e feedback ficam isolados entre duas invocações/pessoas', async () => {
+  const { client, calls } = fake((request, pass) => pass % 2 ? conflictBody : recoveredBody);
+  for (const person of ['Quero entender o quadro.', 'Já tenho uma pipeline.']) {
+    const reply = await answerQuestion(root, conceptual, { client, history: [{ role: 'user', content: person }] });
+    assert.equal(reply.answer, recoveredBody.answer);
+    assert.equal(reply.fallback, undefined);
+  }
+  assert.equal(calls.answer, 4);
+  assert.equal(calls.triage, 2);
+  assert.equal(calls.safety, 2);
+  assert.ok(hasReview(calls.requests[1], 'composition', 'plan_conflict'));
+  assert.ok(hasReview(calls.requests[3], 'composition', 'plan_conflict'));
+  assert.equal(reviewOf(calls.requests[0]).includes('REVISÃO INTERNA'), false);
+  assert.equal(reviewOf(calls.requests[2]).includes('REVISÃO INTERNA'), false);
+});
+test('recuperação: caminho normal não ganha chamada nem feedback e prompt não manda revelar origem', async () => {
+  const { client, calls } = fake(recoveredBody);
+  const reply = await answerQuestion(root, conceptual, { client });
+  assert.equal(reply.answer, recoveredBody.answer);
+  assert.equal(calls.answer, 1);
+  assert.equal(calls.triage, 1);
+  assert.equal(calls.safety, 0);
+  assert.equal(reviewOf(calls.requests[0]).includes('REVISÃO INTERNA'), false);
+  assert.doesNotMatch(reviewOf(calls.requests[0]), /Diga o que a documentação permite afirmar/u);
+});
+test('recuperação: classifier inválido é técnico, sem segunda geração', async () => {
+  await withBusiness(async () => {
+    const { client, calls } = fake(recoveredBody, { safety: [{}] });
+    const reply = await answerQuestion(root, conceptual, { client });
+    assert.deepEqual(reply.fallback, { branch: 'classifier', reason: 'invalid', pass: 1 });
+    assert.equal(calls.answer, 1);
+    assert.equal(calls.safety, 1);
+  });
+});
