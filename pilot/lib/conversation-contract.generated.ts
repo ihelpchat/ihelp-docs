@@ -28,6 +28,10 @@ export type AssistantRequestV1 = {
   sessionId?: string;
   origin?: "faq" | "app";
   companyId?: number;
+  actor?: {
+  idRef?: string;
+  firstName?: string;
+};
   history?: Array<{
   role: "user" | "assistant";
   content: string;
@@ -39,11 +43,13 @@ export type AssistantRequestV1 = {
 };
   widgetContext?: {
   surface?: "faq" | "app";
-  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline";
+  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/atendimento/mobile";
   module?: "robots" | "users" | "channels" | "billing" | "campaigns" | "templates" | "conversations" | "settings";
   screen?: "list" | "create" | "edit" | "detail" | "connection" | "qr" | "unknown";
   role?: "owner" | "admin" | "manager" | "agent" | "unknown";
-  permissions?: Array<"robots.read" | "robots.create" | "users.read" | "users.manage" | "channels.read" | "channels.manage" | "billing.read" | "campaigns.read" | "campaigns.create" | "templates.read" | "templates.manage">;
+  permissions?: Array<"robots.read" | "robots.create" | "users.read" | "users.manage" | "channels.read" | "channels.manage" | "billing.read" | "campaigns.read" | "campaigns.create" | "templates.read" | "templates.manage" | "conversations.read" | "groups.read" | "groups.manage" | "settings.manage" | "departments.manage" | "tasks.read" | "contacts.read" | "crm.read">;
+  queue?: "mine" | "all" | "groups" | "other";
+  conversationKind?: "attendance" | "group" | "none";
   plan?: "trial" | "active" | "expired" | "limited" | "unknown";
   channels?: Array<{
   kind: "whatsapp" | "official_api" | "coexistence";
@@ -111,11 +117,13 @@ export type AssistantReplyV1 = {
   diagnosis: "usage" | "configuration" | "permission" | "plan" | "channel_qr" | "meta_coexistence" | "bug_incident" | "sensitive_action";
   state?: {
   surface?: "faq" | "app";
-  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline";
+  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/atendimento/mobile";
   module?: "robots" | "users" | "channels" | "billing" | "campaigns" | "templates" | "conversations" | "settings";
   screen?: "list" | "create" | "edit" | "detail" | "connection" | "qr" | "unknown";
   role?: "owner" | "admin" | "manager" | "agent" | "unknown";
-  permissions?: Array<"robots.read" | "robots.create" | "users.read" | "users.manage" | "channels.read" | "channels.manage" | "billing.read" | "campaigns.read" | "campaigns.create" | "templates.read" | "templates.manage">;
+  permissions?: Array<"robots.read" | "robots.create" | "users.read" | "users.manage" | "channels.read" | "channels.manage" | "billing.read" | "campaigns.read" | "campaigns.create" | "templates.read" | "templates.manage" | "conversations.read" | "groups.read" | "groups.manage" | "settings.manage" | "departments.manage" | "tasks.read" | "contacts.read" | "crm.read">;
+  queue?: "mine" | "all" | "groups" | "other";
+  conversationKind?: "attendance" | "group" | "none";
   plan?: "trial" | "active" | "expired" | "limited" | "unknown";
   channels?: Array<{
   kind: "whatsapp" | "official_api" | "coexistence";

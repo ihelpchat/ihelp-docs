@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import actions from './product-actions.json' with { type: 'json' };
 import canonicalGuideIds from './guide-ids.json' with { type: 'json' };
 import { resolveCatalogAction } from './catalog-action.mjs';
+import { widgetContextRoutes, widgetPermissions, actorFirstNamePattern, actorIdRefPattern } from './widget-context.mjs';
 
 export const schemaVersion = 1;
 export const legacyGuideAliases = Object.freeze({
@@ -68,11 +69,13 @@ export const productActionSchema = z.object({
 const historySchema = z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(20_000).transform((content) => content.slice(0, 3_000)) }).strict();
 const widgetContextSchema = z.object({
   surface: z.enum(['faq', 'app']).optional(),
-  route: z.enum([...new Set(Object.values(actions).map((action) => action.route))]).optional(),
+  route: z.enum(widgetContextRoutes).optional(),
   module: z.enum(['robots', 'users', 'channels', 'billing', 'campaigns', 'templates', 'conversations', 'settings']).optional(),
   screen: z.enum(['list', 'create', 'edit', 'detail', 'connection', 'qr', 'unknown']).optional(),
   role: z.enum(['owner', 'admin', 'manager', 'agent', 'unknown']).optional(),
-  permissions: z.array(z.enum(['robots.read', 'robots.create', 'users.read', 'users.manage', 'channels.read', 'channels.manage', 'billing.read', 'campaigns.read', 'campaigns.create', 'templates.read', 'templates.manage'])).max(12).optional(),
+  permissions: z.array(z.enum(widgetPermissions)).max(24).optional(),
+  queue: z.enum(['mine', 'all', 'groups', 'other']).optional(),
+  conversationKind: z.enum(['attendance', 'group', 'none']).optional(),
   plan: z.enum(['trial', 'active', 'expired', 'limited', 'unknown']).optional(),
   channels: z.array(z.object({ kind: z.enum(['whatsapp', 'official_api', 'coexistence']), state: z.enum(['connected', 'disconnected', 'qr_pending', 'blocked', 'syncing', 'unknown']) }).strict()).max(5).optional(),
   credit: z.enum(['available', 'low', 'empty', 'unknown']).optional(),
@@ -91,7 +94,11 @@ export const assistantRequestSchema = z.object({
   question: z.string().trim().min(1).max(500),
   sessionId: z.string().min(1).max(128).optional(),
   origin: z.enum(['faq', 'app']).optional(),
-  companyId: z.number().int().positive().optional(),
+  companyId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+  actor: z.object({
+    idRef: z.string().regex(actorIdRefPattern).optional(),
+    firstName: z.string().min(1).max(40).regex(actorFirstNamePattern).optional(),
+  }).strict().optional(),
   history: z.array(historySchema).max(6).optional(),
   scope: z.enum(['Tudo', 'Ajuda e FAQ', 'API', 'Tutoriais', 'Novidades']).optional(),
   page: z.object({ path: z.string().regex(/^\/(?!\/)[a-z0-9/_-]+$/i), title: z.string().max(200) }).strict().optional(),

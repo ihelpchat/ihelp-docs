@@ -9,7 +9,7 @@ import { buildServer } from './server.mjs';
 import { installCaptureRejectionSafety } from './capture-process-safety.mjs';
 import { answerQuestion } from './assistant-service.mjs';
 import { normalizeFeedback, saveFeedback, summarizeFeedback } from './feedback-service.mjs';
-import { sanitizeWidgetContext } from './real-state.mjs';
+import { sanitizeWidgetContext, sanitizeActor } from './real-state.mjs';
 import { saveSessionEvent, pruneSessionEvents } from './session-events.mjs';
 import { saveConversation, listConversations, pruneConversations, summarizeConversations } from './conversation-log.mjs';
 import { adminPage, adminLoginPage } from './conversation-admin.mjs';
@@ -255,9 +255,18 @@ export const httpServer = createServer(async (request, response) => {
         ? { path: pagePath, title: body.page.title }
         : undefined;
       const widgetContext = sanitizeWidgetContext(body.widgetContext);
+      const actor = sanitizeActor(body.actor);
+      const withoutActorIdentity = (text) => {
+        let safe = String(text).normalize('NFC');
+        for (const value of [actor?.firstName, actor?.idRef].filter(Boolean)) {
+          const escaped = value.normalize('NFC').replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+          safe = safe.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'giu'), '[identidade removida]');
+        }
+        return safe;
+      };
       let resolvedStep;
       const result = await answerQuestion(root, question, {
-        history, scope, page, guide: body.guide, widgetContext,
+        history, scope, page, guide: body.guide, widgetContext, actor,
         onResolvedStep: (step) => { resolvedStep = step; },
       });
       const topic = topicForQuestion(question);
@@ -272,7 +281,7 @@ export const httpServer = createServer(async (request, response) => {
         await saveConversation(conversationsFile, {
           at: new Date(recordedAt).toISOString(), eventId, sessionId: sessionOpaqueId, origin,
           ...(body.companyId ? { companyId: body.companyId } : {}), path: pagePath ?? '/assistente',
-          question: rawBody.question, answer: [result.answer, ...(result.steps ?? []).map((step) => step.text)].join('\n'),
+          question: withoutActorIdentity(rawBody.question), answer: withoutActorIdentity([result.answer, ...(result.steps ?? []).map((step) => step.text)].join('\n')),
           resolution, guideId: resolvedStep?.guideId ?? result.guide?.guideId,
           stepId: resolvedStep?.stepId ?? result.guide?.stepId,
           topic, action, issue, businessContextUsed: result.businessContextUsed === true,
@@ -299,6 +308,7 @@ export const httpServer = createServer(async (request, response) => {
         await saveSessionEvent(sessionEventsFile, {
           sessionId: sessionOpaqueId,
           origin,
+          ...(body.companyId ? { companyId: body.companyId, ...(actor?.idRef ? { actorId: opaqueId('actor', JSON.stringify([body.companyId, actor.idRef])) } : {}) } : {}),
           ...resolvedStep,
           durationMs: Math.min(now - startedAt, 300_000),
           result: ['complete', 'partial', 'not_found', 'in_progress'].includes(result.resolution) ? result.resolution : 'not_found',
