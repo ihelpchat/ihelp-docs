@@ -191,9 +191,9 @@ for (const intent of ['clarify', 'explain', 'confirm_completion']) {
 test('execute keeps a sourced API example with a token placeholder', async () => {
   const code = { language: 'bash', content: 'curl -H "Authorization: Bearer $IHELP_TOKEN" https://apiv3.ihelpchat.com/api/v2/crm/funnel' };
   const reply = await ask({ intent: 'execute', answer: 'Use a consulta de funis da API.',
-    question: 'Como listar funis e etapas pela API? Quero um exemplo curl.', withHistory: false,
-    sources: ['/api/crm/funis-e-etapas'], code });
+    question: 'Como listar funis pela API? Quero um exemplo curl.', withHistory: false,
+    sources: ['/api/crm/funis/listar-funis'], code });
   assert.deepEqual(reply.code, code);
   assert.equal(reply.fallback, undefined);
-  assert.ok(reply.sources.some(({ path }) => path === '/api/crm/funis-e-etapas'));
+  assert.ok(reply.sources.some(({ path }) => path === '/api/crm/funis/listar-funis'));
 });
