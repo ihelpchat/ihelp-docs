@@ -40,7 +40,8 @@ async function ask({ intent = 'confirm_completion', answer = 'A pipeline aparece
   } } };
   const reply = await answerQuestion(root, question ?? (intent === 'clarify' ? 'Não sei qual é a tela. Pode me ajudar?' : 'Terminei de criar. Como sei se deu certo? O robô já começa a responder?'),
     { client, history: withHistory ? history : [], budget: { file: join(owned, `${++invocation}.json`), dailyLimitUsd: 100, reserveUsd: 0.05, inputUsdPerMillion: 0, outputUsdPerMillion: 0 } });
-  assert.equal(calls.generation, 1, 'guard correction never adds another generation');
+  assert.equal(calls.generation, reply.fallback?.reason === 'plan_conflict' ? 2 : 1,
+    'normal replies use one generation; persistent content conflicts exhaust exactly two');
   return reply;
 }
 

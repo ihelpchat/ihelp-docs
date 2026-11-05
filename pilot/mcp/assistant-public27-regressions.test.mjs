@@ -405,7 +405,7 @@ for (const [second, branch, reason] of [
 ]) {
   test(`recuperação: segunda falha ${branch}/${reason} encerra com fallback seguro`, async () => {
     const { client, calls } = fake((request, pass) => pass === 1 ? conflictBody : second);
-    const reply = await answerQuestion(root, 'Como configurar o CRM?', { client });
+    const reply = await answerQuestion(root, conceptual, { client });
     assert.equal(reply.answer, fixedError);
     assert.deepEqual(reply.fallback, { branch, reason, pass: 2 });
     assert.deepEqual(reply.steps, []);
