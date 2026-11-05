@@ -248,7 +248,7 @@ export const httpServer = createServer(async (request, response) => {
         quota(assistantSessions, `${ip}:${sessionId}`, assistantSessionLimit, now),
         quota(assistantIps, ip, assistantIpLimit, now),
       ])) return;
-      const history = Array.isArray(body.history) ? body.history.slice(-6) : [];
+      const history = Array.isArray(body.history) ? body.history.slice(-12) : [];
       const scope = typeof body.scope === 'string' ? body.scope : 'Tudo';
       const pagePath = publishedPathOrNull(body.page?.path);
       const page = pagePath
@@ -277,7 +277,8 @@ export const httpServer = createServer(async (request, response) => {
           stepId: resolvedStep?.stepId ?? result.guide?.stepId,
           topic, action, issue, businessContextUsed: result.businessContextUsed === true,
           offeredHuman: Boolean(result.actions?.some((item) => item.destination === 'support') || result.escalation),
-          latencyMs: recordedAt - startedAt, model: result.model ?? process.env.OPENAI_MODEL ?? 'fixed',
+          latencyMs: recordedAt - startedAt, model: result.fixedResponse ? 'fixed' : result.model ?? 'fixed',
+          ...(result.fallback ? { fallback: result.fallback } : {}),
         });
       } catch {
         console.error('Falha ao registrar conversa');

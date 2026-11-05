@@ -1,6 +1,9 @@
 import test from 'node:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
-import { classifyAnswerSafety } from './answer-safety.mjs';
+import { classifyAnswerSafety, classifyAnswerSafetyResult } from './answer-safety.mjs';
 import { cases, documentedSteps } from './answer-safety-fixtures.mjs';
 
 test('20 respostas fictícias são enviadas ao classificador binário e falha fecha', async () => {
@@ -24,4 +27,21 @@ test('20 respostas fictícias são enviadas ao classificador binário e falha fe
   assert.equal(calls, 20);
   assert.equal(await classifyAnswerSafety({ responses: { create: async () => { throw Error('offline'); } } },
     { answer: 'Exemplo' }, documentedSteps), null);
+});
+
+
+test('resultado técnico preserva motivo, sem tratá-lo como rejeição de conteúdo', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'safety-reasons-'));
+  try {
+    let calls = 0;
+    const client = { responses: { create: async () => { calls++; return { status: 'completed', output_text: 'bad', usage: { input_tokens: 1, output_tokens: 1 } }; } } };
+    const budget = { file: join(dir, 'budget.json'), dailyLimitUsd: 10, reserveUsd: 0.1 };
+    assert.deepEqual(await classifyAnswerSafetyResult(client, {}, [], budget), { kind: 'unavailable', reason: 'invalid' });
+    assert.deepEqual(await classifyAnswerSafetyResult(client, {}, [], { ...budget, dailyLimitUsd: 0 }), { kind: 'unavailable', reason: 'budget_exhausted' });
+    const controller = new AbortController(); controller.abort();
+    assert.deepEqual(await classifyAnswerSafetyResult(client, {}, [], { ...budget, signal: controller.signal }), { kind: 'unavailable', reason: 'provider_failed' });
+    assert.equal(calls, 1, 'budget e abort não chamam provider');
+    const failed = { responses: { create: async () => ({ status: 'failed', output_text: '', usage: { input_tokens: 1, output_tokens: 1 } }) } };
+    assert.deepEqual(await classifyAnswerSafetyResult(failed, {}, [], budget), { kind: 'unavailable', reason: 'provider_failed' });
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

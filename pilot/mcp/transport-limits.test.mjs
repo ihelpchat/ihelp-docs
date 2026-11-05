@@ -18,7 +18,7 @@ const scratch = await mkdtemp(join(tmpdir(), 'claricia-limits-'));
 const fakeOpenAI = createServer((_request, response) => response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
   id: 'resp_fixture', object: 'response', created_at: 1, model: 'fixture', status: 'completed',
   output: [{ type: 'message', id: 'msg_fixture', status: 'completed', role: 'assistant',
-    content: [{ type: 'output_text', text: JSON.stringify({ answer: 'Pode continuar.', sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: 'complete', found: true }), annotations: [] }] }],
+    content: [{ type: 'output_text', text: JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Pode continuar.', sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: 'complete', found: true }), annotations: [] }] }],
 })));
 fakeOpenAI.listen(0, '127.0.0.1');
 await once(fakeOpenAI, 'listening');

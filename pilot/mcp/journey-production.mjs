@@ -2,6 +2,11 @@ const unavailable = 'não verificável';
 const identifier = /^[a-z0-9-]{1,80}$/iu;
 const hostname = /^[a-z0-9.-]+$/u;
 
+export function productionApiHostAllowed(host, frontendHost) {
+  return /^api(?:v\d+)?[.-]/u.test(host)
+    || frontendHost === 'betaapp.ihelpchat.com' && host === 'apiv3refactor.ihelpchat.com';
+}
+
 export function journeyTarget(env = process.env) {
   const mode = env.QA_TARGET ?? 'homolog';
   if (mode !== 'homolog' && mode !== 'producao') throw new Error('QA_TARGET inválido');
@@ -19,7 +24,7 @@ export function productionConfig(env = process.env) {
   const hosts = String(env.QA_PROD_ALLOWED_HOSTS ?? '').split(',').map((host) => host.trim());
   if (hosts.length < 1 || hosts.length > 2 || hosts.some((host) => !hostname.test(host) || host !== host.toLowerCase())
     || new Set(hosts).size !== hosts.length || !hosts.includes(url.hostname)
-    || hosts.some((host) => host !== url.hostname && !/^api(?:v\d+)?[.-]/u.test(host)))
+    || hosts.some((host) => host !== url.hostname && !productionApiHostAllowed(host, url.hostname)))
     throw new Error('hosts de produção inválidos');
   if (!env.QA_PROD_EMAIL || !env.QA_PROD_PASSWORD) throw new Error('credencial de produção ausente');
   const companyId = env.QA_PROD_COMPANY_ID;
