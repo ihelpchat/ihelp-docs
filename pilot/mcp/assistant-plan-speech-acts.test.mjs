@@ -27,7 +27,7 @@ const history = [
   { role: 'assistant', content: `A visibilidade define quem pode ver a pipeline.\nFonte usada: ${tutorial}` },
 ];
 let invocation = 0;
-async function ask({ intent = 'confirm_completion', answer = 'A pipeline aparece na lista.', sections = [], suggestions = [], optionalBranch = 'unspecified', steps = [], question, withHistory = true }) {
+async function ask({ intent = 'confirm_completion', answer = 'A pipeline aparece na lista.', sections = [], suggestions = [], optionalBranch = 'unspecified', steps = [], question, withHistory = true, code = null, sources = [path] }) {
   const calls = { router: 0, generation: 0, classifier: 0 };
   const client = { responses: { create: async (request) => {
     const name = request.text?.format?.name;
@@ -35,7 +35,7 @@ async function ask({ intent = 'confirm_completion', answer = 'A pipeline aparece
     if (name === 'triagem_fechada') { calls.router++; body = { choice: 'sem guia' }; }
     else if (name === 'seguranca_resposta') { calls.classifier++; body = { mentionsSource: false, unsupportedAction: false }; }
     else { calls.generation++; body = { plan: { intent, optionalBranch }, answer, sections, suggestions, steps,
-      sources: [path], code: null, resolution: 'complete', found: true }; }
+      sources, code, resolution: 'complete', found: true }; }
     return { status: 'completed', model: 'speech-act-fixture', usage: { input_tokens: 1, output_tokens: 1 }, output_text: JSON.stringify(body) };
   } } };
   const reply = await answerQuestion(root, question ?? (intent === 'clarify' ? 'Não sei qual é a tela. Pode me ajudar?' : 'Terminei de criar. Como sei se deu certo? O robô já começa a responder?'),
@@ -139,4 +139,61 @@ test('unrelated inspection does not make a preceding skip conditional', async ()
   const reply = await ask({ intent: 'execute', answer: 'Pule a automação e confirme se a pipeline aparece na lista.', steps: crm.documentedSteps.map(step), question: 'Quero ver todos os passos para criar uma pipeline.', withHistory: false });
   assert.equal(reply.fallback?.reason, 'plan_conflict');
   assert.deepEqual(reply.steps, []);
+});
+
+// F1–F3: modal operation, referred result, and executable code share the same plan boundary.
+for (const field of fields) {
+  for (const verb of ['criar uma nova pipeline', 'configurar a automação', 'publicar o robô']) {
+    test(`modal operation blocked in ${field}: ${verb}`, async () => {
+      const text = `Você pode ${verb} agora para começar.`;
+      const input = field === 'answer' ? { answer: text } : field === 'section'
+        ? { sections: [{ title: 'Próximo passo', items: [text] }] } : { suggestions: [text] };
+      const reply = await ask({ intent: 'clarify', ...input });
+      assert.equal(reply.fallback?.reason, 'plan_conflict');
+      assert.deepEqual(reply.steps, []);
+      assert.deepEqual(reply.sections, []);
+      assert.deepEqual(reply.suggestions, []);
+      assert.notEqual(reply.answer, text);
+    });
+  }
+}
+for (const answer of [
+  'Você pode ter vários cards do mesmo contato.',
+  'Você quer entender a API ou criar um quadro?',
+  'Você pode me dizer qual tela está aberta?',
+  'Confira se a pipeline que você acabou de criar aparece na lista.',
+]) {
+  test(`factual/dialogue/referred result survives: ${answer}`, async () => {
+    const reply = await ask({ answer });
+    assert.equal(reply.answer, answer);
+    assert.equal(reply.fallback, undefined);
+    assert.deepEqual(reply.steps, []);
+  });
+}
+for (const answer of [
+  'Confira se a pipeline que você acabou de criar aparece na lista e clique em Nova Pipeline.',
+  'Confira se a pipeline que você acabou de criar aparece na lista; você pode publicar o robô agora.',
+]) {
+  test(`referred result cannot hide another operation: ${answer}`, async () => {
+    assert.equal((await ask({ answer })).fallback?.reason, 'plan_conflict');
+  });
+}
+for (const intent of ['clarify', 'explain', 'confirm_completion']) {
+  test(`execution code is absent for ${intent}`, async () => {
+    const reply = await ask({ intent, answer: 'Você quer entender a API ou criar um quadro?',
+      question: 'Como configurar o CRM pela API?', withHistory: false,
+      code: { language: 'bash', content: 'curl -X POST https://example.invalid/create' } });
+    assert.equal(reply.code, null);
+    assert.deepEqual(reply.steps, []);
+    assert.equal(reply.fallback, undefined);
+  });
+}
+test('execute keeps a sourced API example with a token placeholder', async () => {
+  const code = { language: 'bash', content: 'curl -H "Authorization: Bearer $IHELP_TOKEN" https://apiv3.ihelpchat.com/api/v2/crm/funnel' };
+  const reply = await ask({ intent: 'execute', answer: 'Use a consulta de funis da API.',
+    question: 'Como listar funis e etapas pela API? Quero um exemplo curl.', withHistory: false,
+    sources: ['/api/crm/funis-e-etapas'], code });
+  assert.deepEqual(reply.code, code);
+  assert.equal(reply.fallback, undefined);
+  assert.ok(reply.sources.some(({ path }) => path === '/api/crm/funis-e-etapas'));
 });
