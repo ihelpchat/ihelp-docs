@@ -5,8 +5,8 @@
   "description": "Crie o usuário com o perfil e os departamentos adequados.",
   "source": {
     "repository": "ihelp-react",
-    "branch": "integration/grupos-redesign",
-    "sha": "730ec0c95c6653354f6ea532bddacfaf4cac9568"
+    "branch": "release/pre-production",
+    "sha": "3d00906c5315c91372914e0ea664a59372dfc10b"
   },
   "replaces": {
     "path": "docs/principais-motivos-de-suporte/usuario-acesso.mdx",
@@ -101,6 +101,17 @@
         "text": "Fale com uma pessoa do atendimento. Informe a opção bloqueada ou o acesso inesperado, sem enviar senha ou dados de clientes."
       }
     ]
+  },
+  "titlesByStep": {
+    "abrir-usuarios": "Abra Usuários",
+    "criar-usuario": "Clique em Novo usuário",
+    "preencher-dados": "Preencha os dados",
+    "escolher-perfil": "Escolha o perfil",
+    "escolher-departamento": "Escolha os departamentos",
+    "salvar-usuario": "Crie o usuário",
+    "revisar-acesso": "Revise o acesso",
+    "conferir-acesso": "Confira com a pessoa",
+    "pedir-ajuda": "Fale com uma pessoa"
   },
   "navigationByStep": {
     "abrir-usuarios": {

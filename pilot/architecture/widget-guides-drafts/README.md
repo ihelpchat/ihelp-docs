@@ -1,16 +1,16 @@
 # Roteiros v2 para o redesign de configurações
 
-Três propostas source-only, fora do catálogo publicado, preparadas com os controles e as rotas de `ihelp-react@730ec0c95c6653354f6ea532bddacfaf4cac9568` (`integration/grupos-redesign`). Não são aprovação editorial nem prova de jornada real. Não foi feita geração de IA, captura de tela, criação de usuário, conexão de WhatsApp, envio ou alteração em cliente.
+Três propostas source-only, fora do catálogo publicado, conferidas com os controles e as rotas de `ihelp-react@3d00906c5315c91372914e0ea664a59372dfc10b` (`release/pre-production`, 12/11/2026). A primeira versão foi escrita sobre `integration/grupos-redesign@730ec0c95`; a release mudou o modal de conexão por QR (escolha de histórico antes do código e passos por Android/iPhone), e o roteiro de reconexão foi ajustado a ela. Não são aprovação editorial nem prova de jornada real. Não foi feita geração de IA, captura de tela, criação de usuário, conexão de WhatsApp, envio ou alteração em cliente.
 
 | Arquivo / guideId | Versão | Primeiro passo | Mudança de fluxo |
 | --- | --- | --- | --- |
 | `recado-fora-do-horario.json` | 2 / treino | `abrir-horarios` | Horário em **Horários e feriados**; texto por departamento em **Mensagens automáticas → Fora de horário**. O cartão do departamento é leitura. |
 | `usuario-acesso.json` | 2 / treino | `abrir-usuarios` | **Novo usuário** leva a `/configuracoes/usuarios/novo`; a criação usa senha e perfis disponíveis, sem prometer convite por e-mail. |
-| `reconectar-canal-qr.json` | 2 / treino | `abrir-canais` | Reconexão do canal existente em `/configuracoes/canais/:idRef`; o botão da lista pede canal novo e API Oficial segue outro fluxo. |
+| `reconectar-canal-qr.json` | 2 / treino | `abrir-canais` | Reconexão do canal existente em `/configuracoes/canais/:idRef`; o botão da lista pede canal novo e API Oficial segue outro fluxo. Depois de **Conectar**, o modal pode pedir a escolha de histórico antes de **Gerar QR Code**. |
 
 ## Consumo local
 
-Cada envelope contém `guide` validável pelo `guideSchema` existente, `navigationByStep`, `transitionsByStep`, pré-requisitos e QA pendente. Os IDs antigos foram preservados e a versão subiu porque mudou o procedimento. `mode: treino` identifica o piloto; não concede autorização para executar ações reais. `publication` permanece false em todos os campos.
+Cada envelope contém `guide` validável pelo `guideSchema` existente, `titlesByStep` (título curto de cada passo para o cartão do guia; texto novo, também sujeito à revisão editorial), `navigationByStep`, `transitionsByStep`, pré-requisitos e QA pendente. Os IDs antigos foram preservados e a versão subiu porque mudou o procedimento. `mode: treino` identifica o piloto; não concede autorização para executar ações reais. `publication` permanece false em todos os campos.
 
 O piloto deve consumir **o envelope inteiro**, seguindo `transitionsByStep`: `continue` avança para `nextStepId`, `choices` exige uma escolha explícita, e `outcome` encerra em `complete`, `handoff` ou `paused`. Só a declaração da pessoa confirma a conclusão; navegar, achar um botão, renderizar um modal ou chegar a um passo não confirma salvamento/conexão/acesso. `handoff` e `paused` nunca viram sucesso.
 
@@ -28,6 +28,12 @@ node pilot/scripts/generate-guide-package.mjs --check
 ```
 
 O validator só lê JSON e blobs de Git locais. Não acessa rede, conta ou provider de IA. A validação source-only não substitui QA editorial nem prova de persistência, isolamento ou conexão.
+
+## Piloto no iHelp
+
+O front (`ihelp-react`, `src/features/help-assistant/task-guides.drafts.json`) carrega uma cópia compacta destes envelopes, gerada por `scripts/help-assistant-drafts.mjs` com o SHA deste repositório, e executa o grafo inteiro: `continue`, `choices` e os três outcomes. O piloto só aparece para as empresas listadas em `ASSISTANT_WIDGET_PILOT_COMPANY_IDS`, com os IDs em `ASSISTANT_WIDGET_PILOT_GUIDES` (`GET /assistant/config`, ver `mcp/README.md`). Sem essas duas variáveis ninguém vê os roteiros; não existe configuração que os libere para todas as empresas. Ligar o piloto para uma empresa interna serve à revisão editorial e à jornada autorizada; não é publicação nem aprovação.
+
+O piloto não envia estes roteiros ao `/assistant` como guias publicados e não marca `publication`. A conclusão só acontece pela declaração da pessoa no último passo.
 
 ## Condição de publicação
 

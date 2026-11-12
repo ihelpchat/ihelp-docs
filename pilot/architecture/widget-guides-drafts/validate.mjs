@@ -6,7 +6,7 @@ import { widgetContextRoutes } from '../widget-context.mjs';
 
 const frontend = process.argv[2];
 assert.ok(frontend, 'Informe o checkout local do frontend para conferir os blobs do SHA fonte.');
-const sourceSha = '730ec0c95c6653354f6ea532bddacfaf4cac9568';
+const sourceSha = '3d00906c5315c91372914e0ea664a59372dfc10b';
 const ids = ['recado-fora-do-horario', 'usuario-acesso', 'reconectar-canal-qr'];
 const routes = new Set([...widgetContextRoutes, '/configuracoes/usuarios/novo']);
 const outcomes = new Set(['complete', 'handoff', 'paused']);
@@ -26,6 +26,10 @@ for (const id of ids) {
   const steps = new Map(guide.steps.map((step) => [step.stepId, step]));
   assert.deepEqual(Object.keys(draft.transitionsByStep).sort(), [...steps.keys()].sort());
   assert.deepEqual(Object.keys(draft.evidenceByStep).sort(), [...steps.keys()].sort());
+  assert.deepEqual(Object.keys(draft.titlesByStep).sort(), [...steps.keys()].sort());
+  for (const [stepId, title] of Object.entries(draft.titlesByStep)) {
+    assert.ok(typeof title === 'string' && title.trim() === title && title.length >= 3 && title.length <= 48, `${id}/${stepId}: título do passo fora do limite`);
+  }
   const edges = new Map();
   for (const [stepId, step] of steps) {
     const transition = draft.transitionsByStep[stepId];
@@ -56,7 +60,7 @@ for (const id of ids) {
     edges.set(stepId, destinations);
     assert.ok(draft.evidenceByStep[stepId].length);
     for (const evidence of draft.evidenceByStep[stepId]) {
-      assert.match(evidence.path, /^src\/features\/configurations\/[A-Za-z0-9/_.-]+$/u);
+      assert.match(evidence.path, /^src\/(?:features\/configurations|components\/shared\/QrConexao)\/[A-Za-z0-9/_.-]+$/u);
       assert.ok(Number.isSafeInteger(evidence.line) && evidence.line > 0);
       if (!blobs.has(evidence.path)) blobs.set(evidence.path, execFileSync('git', ['--no-pager', 'show', `${sourceSha}:${evidence.path}`], { cwd: frontend, encoding: 'utf8' }).split('\n'));
       assert.ok(blobs.get(evidence.path)[evidence.line - 1]?.includes(evidence.fragment), `${id}/${stepId}: referência não corresponde ao blob fixado`);

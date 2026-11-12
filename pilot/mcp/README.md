@@ -108,6 +108,21 @@ O guia devolve `stateToken` assinado para cada passo. Avançar, escolher ramo ou
 
 Antes de produção, confira em staging que o tráfego público passa pelo proxy esperado e que ele **sobrescreve** `X-Real-IP` ou `X-Forwarded-For` (conforme o modo), inclusive quando o cliente envia um valor forjado. Envie 10 perguntas com o mesmo `sessionId` a partir de cada uma de duas redes distintas: a 11ª de cada rede deve receber 429 com `Retry-After` próximo do tempo restante da janela, enquanto uma sessão nova da outra rede ainda recebe 200. Confira no DevTools do FAQ em origem diferente que `Retry-After` está disponível para o JavaScript. Se a topologia não garantir a sobrescrita do header escolhido, use `socket` ou ajuste o proxy e repita a prova antes de publicar. Esta conferência de staging/deploy fica com o Bruno.
 
+### Exibição do widget do app
+
+O widget do iHelp consulta `GET /assistant/config?company=<id numérico>` antes de aparecer. A resposta é `{"schemaVersion":1,"widget":{"enabled":true,"pilotGuides":[]}}`, sem cache (`no-store`), sem chamada ao provider, sem leitura de disco e sem log por pedido. Esta é a fonte de verdade da exibição; o front não tem variável de build nem chave local que a substitua.
+
+| Variável | Efeito |
+| --- | --- |
+| `ASSISTANT_WIDGET_ENABLED` | `true` liga o widget. Ausente, `false` ou valor inválido mantêm o widget oculto (padrão fechado; valor inválido só gera aviso na subida). |
+| `ASSISTANT_WIDGET_COMPANY_IDS` | Opcional. IDs de empresa separados por vírgula. Presente, só essas empresas veem o widget; ausente, vale para todas. |
+| `ASSISTANT_WIDGET_PILOT_GUIDES` | Opcional. IDs dos roteiros de `architecture/widget-guides-drafts/` oferecidos como piloto. |
+| `ASSISTANT_WIDGET_PILOT_COMPANY_IDS` | Obrigatória para o piloto: só as empresas listadas recebem os roteiros acima. Não há como liberar roteiro de piloto para todas as empresas. |
+
+Para desligar: `ASSISTANT_WIDGET_ENABLED=false` (ou remover a variável) e reiniciar o serviço. O front revalida ao voltar para a aba, ao reconectar e no uso do widget, com prazo de 5 minutos por navegador; não há polling. Com o widget desligado, `POST /assistant` com `origin: "app"` responde 403 `{"code":"widget_disabled"}` antes da cota e do provider, e o front oculta o widget na hora. O FAQ (`origin: "faq"`) não é afetado. As listas de empresas não saem do servidor: cada pedido recebe só a própria decisão.
+
+A origem do app precisa estar em `ASSISTANT_ALLOWED_ORIGINS` para ler a configuração. `company` é informado pelo cliente e serve apenas para decidir exibição: não autentica o tenant nem autoriza operação.
+
 ### Contexto opcional do widget
 
 `POST /assistant` aceita `widgetContext` além de `question`, `history`, `scope` e `page`. Clientes antigos podem omiti-lo. Exemplo:

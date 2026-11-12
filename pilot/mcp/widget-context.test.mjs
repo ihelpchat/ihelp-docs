@@ -54,7 +54,9 @@ try {
   await once(fake, 'listening');
   Object.assign(process.env, { PORT: '0', OPENAI_API_KEY: 'fixture', OPENAI_BASE_URL: `http://127.0.0.1:${fake.address().port}/v1`,
     DOCS_ROOT: root, MCP_STATE_DIR: dir, SESSION_EVENTS_FILE: join(dir, 'events.jsonl'), CONVERSATIONS_FILE: join(dir, 'conversations.jsonl'),
-    FEEDBACK_FILE: join(dir, 'feedback.jsonl'), ASSISTANT_BUDGET_FILE: join(dir, 'budget.json'), DOCS_MCP_API_KEY: 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz' });
+    FEEDBACK_FILE: join(dir, 'feedback.jsonl'), ASSISTANT_BUDGET_FILE: join(dir, 'budget.json'), DOCS_MCP_API_KEY: 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz',
+    // O contexto do app só é atendido com o widget ligado na configuração central.
+    ASSISTANT_WIDGET_ENABLED: 'true' });
   ({ httpServer } = await import('./http.mjs'));
   if (!httpServer.listening) await once(httpServer, 'listening');
   const post = (body) => fetch(`http://127.0.0.1:${httpServer.address().port}/assistant`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

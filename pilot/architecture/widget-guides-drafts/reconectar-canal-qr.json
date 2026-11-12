@@ -5,8 +5,8 @@
   "description": "Abra o detalhe do canal desconectado e acompanhe a leitura do QR.",
   "source": {
     "repository": "ihelp-react",
-    "branch": "integration/grupos-redesign",
-    "sha": "730ec0c95c6653354f6ea532bddacfaf4cac9568"
+    "branch": "release/pre-production",
+    "sha": "3d00906c5315c91372914e0ea664a59372dfc10b"
   },
   "replaces": {
     "path": "docs/principais-motivos-de-suporte/reconectar-canal-qr.mdx",
@@ -60,7 +60,7 @@
       },
       {
         "stepId": "gerar-codigo",
-        "text": "No detalhe desse canal, clique em Conectar. Aguarde o modal Conectar canal mostrar o QR code. O botão Conectar canal da lista não é esta reconexão.",
+        "text": "No detalhe desse canal, clique em Conectar. No modal Conectar canal, se aparecer a opção de trazer conversas antigas, siga a orientação exibida e clique em Gerar QR Code. Aguarde o código aparecer. O botão Conectar canal da lista não é esta reconexão.",
         "choices": [
           {
             "id": "apareceu",
@@ -92,7 +92,7 @@
       },
       {
         "stepId": "ler-codigo",
-        "text": "Abra o WhatsApp no celular e siga as instruções exibidas no modal para Dispositivos conectados e Conectar dispositivo. Use essa função para ler o QR code da outra tela. Não envie o código pelo chat nem a terceiros."
+        "text": "No modal, escolha Android ou iPhone e siga os passos exibidos até Dispositivos conectados e Conectar dispositivo. Aponte a câmera do celular para o código da outra tela. Não envie o código pelo chat nem a terceiros."
       },
       {
         "stepId": "conferir-conexao",
@@ -139,6 +139,18 @@
       }
     ]
   },
+  "titlesByStep": {
+    "abrir-canais": "Abra Canais",
+    "abrir-canal-existente": "Abra o canal desconectado",
+    "conferir-tipo": "Confira o tipo do canal",
+    "gerar-codigo": "Gere o QR code",
+    "conferir-celular": "Tenha o celular em mãos",
+    "ler-codigo": "Leia o código no WhatsApp",
+    "conferir-conexao": "Confira a conexão",
+    "gerar-outro-codigo": "Gere outro código",
+    "sem-celular": "Aguarde o celular",
+    "pedir-ajuda": "Fale com uma pessoa"
+  },
   "navigationByStep": {
     "abrir-canais": {
       "route": "/configuracoes/canais",
@@ -177,77 +189,92 @@
       },
       {
         "path": "src/features/configurations/pages/Canais/CanalDetalhe.tsx",
-        "line": 241,
+        "line": 248,
         "fragment": "label={channel.connected ? \"Conectado\" : \"Desconectado\"}"
       }
     ],
     "conferir-tipo": [
       {
         "path": "src/features/configurations/pages/Canais/CanalDetalhe.tsx",
-        "line": 238,
+        "line": 245,
         "fragment": "subtitulo={`WhatsApp · ${channel.cloudApi ? \"API Oficial\" : \"QR code\"}`}"
       }
     ],
     "gerar-codigo": [
       {
         "path": "src/features/configurations/pages/Canais/CanalDetalhe.tsx",
-        "line": 263,
+        "line": 270,
         "fragment": "{conectando ? \"Conectando…\" : \"Conectar\"}"
       },
       {
         "path": "src/features/configurations/pages/Canais/CanalDetalhe.tsx",
-        "line": 203,
-        "fragment": "dispatch(connectChannel(channel))"
+        "line": 218,
+        "fragment": "setQrAberto(true);"
+      },
+      {
+        "path": "src/components/shared/QrConexao/QrGate/index.tsx",
+        "line": 23,
+        "fragment": "Gerar QR Code"
+      },
+      {
+        "path": "src/components/shared/QrConexao/HistorySyncBox/index.tsx",
+        "line": 63,
+        "fragment": "Trazer conversas dos últimos {days} dias"
       }
     ],
     "conferir-celular": [
       {
-        "path": "src/features/configurations/pages/Canais/components/QrConexaoModal.tsx",
-        "line": 20,
-        "fragment": "Abra o WhatsApp no celular"
+        "path": "src/components/shared/QrConexao/QrConnectionSteps/index.tsx",
+        "line": 11,
+        "fragment": "Pegue o celular que tem o WhatsApp"
       }
     ],
     "ler-codigo": [
       {
-        "path": "src/features/configurations/pages/Canais/components/QrConexaoModal.tsx",
-        "line": 22,
-        "fragment": "Mais opções → Dispositivos conectados"
+        "path": "src/components/shared/QrConexao/QrConnectionSteps/index.tsx",
+        "line": 84,
+        "fragment": "aria-label=\"Tipo de celular\""
       },
       {
-        "path": "src/features/configurations/pages/Canais/components/QrConexaoModal.tsx",
-        "line": 25,
-        "fragment": "Conectar dispositivo"
+        "path": "src/components/shared/QrConexao/QrConnectionSteps/index.tsx",
+        "line": 23,
+        "fragment": "Dispositivos conectados"
+      },
+      {
+        "path": "src/components/shared/QrConexao/QrConnectionSteps/index.tsx",
+        "line": 26,
+        "fragment": "Aponte a câmera do celular para este código."
       }
     ],
     "conferir-conexao": [
       {
         "path": "src/features/configurations/pages/Canais/components/QrConexaoModal.tsx",
-        "line": 158,
+        "line": 199,
         "fragment": "Canal conectado"
       },
       {
         "path": "src/features/configurations/pages/Canais/CanalDetalhe.tsx",
-        "line": 241,
+        "line": 248,
         "fragment": "label={channel.connected ? \"Conectado\" : \"Desconectado\"}"
       }
     ],
     "gerar-outro-codigo": [
       {
         "path": "src/features/configurations/pages/Canais/components/QrConexaoModal.tsx",
-        "line": 189,
+        "line": 242,
         "fragment": "Gerar novo código"
       },
       {
         "path": "src/features/configurations/pages/Canais/components/QrConexaoModal.tsx",
-        "line": 176,
-        "fragment": "backend não informa a validade do código"
+        "line": 233,
+        "fragment": "Aguardando leitura…"
       }
     ],
     "sem-celular": [
       {
-        "path": "src/features/configurations/pages/Canais/components/QrConexaoModal.tsx",
-        "line": 20,
-        "fragment": "Abra o WhatsApp no celular"
+        "path": "src/components/shared/QrConexao/QrConnectionSteps/index.tsx",
+        "line": 11,
+        "fragment": "Pegue o celular que tem o WhatsApp"
       }
     ],
     "pedir-ajuda": [
@@ -260,6 +287,7 @@
   },
   "runtimeQaPending": [
     "Validar detalhe de canal existente, erro de carga, botão Conectar e modal com um canal de teste reservado e autorizado.",
+    "Validar a escolha de histórico antes do QR (Trazer conversas dos últimos dias / Gerar QR Code) em canal de teste; o roteiro não recomenda uma opção além do que a tela informa.",
     "Validar leitura e estado conectado com fluxo real autorizado em Android/iPhone; nomes no celular não são prova deste source review.",
     "Validar falha/QR novo/sem celular e garantir que canal novo/API Oficial não entram no roteiro QR. Nenhuma conexão ou envio foi executado nesta preparação."
   ],

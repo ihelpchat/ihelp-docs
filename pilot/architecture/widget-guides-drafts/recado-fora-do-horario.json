@@ -5,8 +5,8 @@
   "description": "Confira horários e configure o texto para o departamento certo.",
   "source": {
     "repository": "ihelp-react",
-    "branch": "integration/grupos-redesign",
-    "sha": "730ec0c95c6653354f6ea532bddacfaf4cac9568"
+    "branch": "release/pre-production",
+    "sha": "3d00906c5315c91372914e0ea664a59372dfc10b"
   },
   "replaces": {
     "path": "docs/sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario.mdx",
@@ -129,6 +129,20 @@
         "text": "Fale com uma pessoa do atendimento e informe a seção e o passo em que parou. Não envie senha, dados de clientes ou conteúdo de conversas."
       }
     ]
+  },
+  "titlesByStep": {
+    "abrir-horarios": "Abra Horários e feriados",
+    "escolher-abrangencia": "Onde o horário precisa mudar?",
+    "ajustar-padrao": "Ajuste o horário padrão",
+    "salvar-padrao": "Salve e confira o horário",
+    "ajustar-excecao": "Abra a exceção do departamento",
+    "salvar-excecao": "Salve a exceção",
+    "abrir-mensagens": "Abra Mensagens automáticas",
+    "selecionar-departamento": "Escolha o departamento",
+    "escrever-recado": "Escreva o recado",
+    "salvar-recado": "Salve a mensagem",
+    "conferir-recado": "Confira o resultado",
+    "pedir-ajuda": "Fale com uma pessoa"
   },
   "navigationByStep": {
     "abrir-horarios": {

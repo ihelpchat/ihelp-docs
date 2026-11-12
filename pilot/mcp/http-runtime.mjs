@@ -23,9 +23,11 @@ import { authenticate, requestIdentity } from './access-control.mjs';
 import { conversationsRetentionDays, mcpCredentialsFromEnv, envCompatibility, productCheckoutRefreshHours } from './env-compat.mjs';
 import { readProductCheckoutState, restoreProductCheckouts, initializeProductCheckouts } from './product-checkouts.mjs';
 import { syncBusinessContext } from './business-context-sync.mjs';
+import { widgetConfigFromEnv, widgetConfigFor, companyFromQuery } from './widget-config.mjs';
 
 installCaptureRejectionSafety();
 const credentials = mcpCredentialsFromEnv();
+const widgetConfig = widgetConfigFromEnv();
 
 const mcpHandler = createMcpHandler(() => buildServer());
 const handler = toNodeHandler(mcpHandler);
@@ -233,6 +235,18 @@ export const httpServer = createServer(async (request, response) => {
     response.writeHead(204).end();
     return;
   }
+  if (pathname === '/assistant/config' && request.method === 'GET') {
+    // Leitura de configuração: tempo constante, sem provider, sem disco e sem log por pedido.
+    const company = companyFromQuery(new URL(request.url ?? '/', 'http://localhost').searchParams);
+    if (!company.ok) {
+      response.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+        .end(JSON.stringify({ error: 'Pedido inválido.' }));
+      return;
+    }
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+      .end(JSON.stringify(widgetConfigFor(widgetConfig, company.companyId)));
+    return;
+  }
   if (pathname === '/assistant' && request.method === 'POST') {
     try {
       const startedAt = Date.now();
@@ -240,6 +254,12 @@ export const httpServer = createServer(async (request, response) => {
       const body = parseAssistantRequest(rawBody);
       const question = typeof body.question === 'string' ? body.question.trim() : '';
       if (question.length < 1 || question.length > 500) throw new Error('A pergunta deve ter entre 1 e 500 caracteres.');
+      // Widget do app desligado: a pergunta para antes da cota e do provider. O FAQ (origin faq) não muda.
+      if (body.origin === 'app' && !widgetConfigFor(widgetConfig, body.companyId).widget.enabled) {
+        response.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+          .end(JSON.stringify({ error: 'Assistente indisponível.', code: 'widget_disabled' }));
+        return;
+      }
       const ip = clientIp(request);
       const sessionId = typeof body.sessionId === 'string' && /^[a-zA-Z0-9_-]{8,128}$/.test(body.sessionId)
         ? body.sessionId : 'anonymous';
