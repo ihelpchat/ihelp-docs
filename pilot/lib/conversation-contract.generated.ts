@@ -10,15 +10,25 @@ export type GuideV1 = {
   version: number;
   mode: "real" | "treino";
   initialStepId: string;
+  transitions?: "explicit";
+  prerequisites?: Array<string>;
   steps: Array<{
   stepId: string;
+  title?: string;
   text: string;
   actionId?: "importar-contatos" | "abrir-robos" | "abrir-usuarios" | "abrir-canais" | "abrir-campanhas" | "abrir-departamentos" | "abrir-atendimento" | "abrir-crm";
+  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/atendimento/mobile" | "/tarefas" | "/configuracoes/usuarios/novo";
   choices?: Array<{
   id: string;
   label: string;
   nextStepId?: string;
+  outcome?: "complete" | "handoff" | "paused";
 }>;
+  next?: {
+  nextStepId: string;
+} | {
+  outcome: "complete" | "handoff" | "paused";
+};
 }>;
 };
 

@@ -39,6 +39,19 @@
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
         },
+        "transitions": {
+          "type": "string",
+          "const": "explicit"
+        },
+        "prerequisites": {
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          }
+        },
         "steps": {
           "minItems": 1,
           "maxItems": 40,
@@ -49,6 +62,11 @@
               "stepId": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 48
               },
               "text": {
                 "type": "string",
@@ -66,6 +84,29 @@
                   "abrir-departamentos",
                   "abrir-atendimento",
                   "abrir-crm"
+                ]
+              },
+              "route": {
+                "type": "string",
+                "enum": [
+                  "/contact",
+                  "/bot",
+                  "/configuracoes/user",
+                  "/configuracoes/channel",
+                  "/campanhas",
+                  "/configuracoes/department",
+                  "/atendimento",
+                  "/crm/pipeline",
+                  "/configuracoes/canais",
+                  "/configuracoes/usuarios",
+                  "/configuracoes/departamentos",
+                  "/configuracoes/mensagens",
+                  "/configuracoes/horarios",
+                  "/configuracoes/primeiros-passos",
+                  "/configuracoes/perfis",
+                  "/atendimento/mobile",
+                  "/tarefas",
+                  "/configuracoes/usuarios/novo"
                 ]
               },
               "choices": {
@@ -86,6 +127,14 @@
                     "nextStepId": {
                       "type": "string",
                       "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "complete",
+                        "handoff",
+                        "paused"
+                      ]
                     }
                   },
                   "required": [
@@ -94,6 +143,40 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "next": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "nextStepId": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+                      }
+                    },
+                    "required": [
+                      "nextStepId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "enum": [
+                          "complete",
+                          "handoff",
+                          "paused"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "outcome"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
               }
             },
             "required": [
