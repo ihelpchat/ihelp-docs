@@ -1,6 +1,6 @@
 {
   "draftSchemaVersion": 1,
-  "status": "source-only-draft",
+  "status": "published",
   "title": "Cadastrar uma pessoa e conferir seu acesso",
   "description": "Crie o usuário com o perfil e os departamentos certos e confira o acesso com a pessoa.",
   "source": {
@@ -13,9 +13,12 @@
     "guideVersion": 1
   },
   "publication": {
-    "editorialApproved": false,
+    "editorialApproved": true,
+    "editorialApprovedBy": "Bruno",
+    "editorialApprovedAt": "2026-11-13",
     "runtimeValidated": false,
-    "published": false
+    "published": true,
+    "publishedPath": "docs/principais-motivos-de-suporte/usuario-acesso.mdx"
   },
   "prerequisites": [
     "Ter permissão para gerenciar usuários e vaga no limite do plano.",
@@ -304,9 +307,9 @@
     "conferir-acesso"
   ],
   "consumption": {
-    "localPilotOnly": true,
+    "localPilotOnly": false,
     "requiresExplicitTransitions": true,
-    "publishedEngineCompatible": false,
+    "publishedEngineCompatible": true,
     "automaticSideEffectsAllowed": false
   }
 }

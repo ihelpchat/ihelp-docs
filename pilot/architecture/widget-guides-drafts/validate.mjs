@@ -3,26 +3,38 @@ import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { guideSchema } from '../conversation-v1.mjs';
 import { widgetContextRoutes } from '../widget-context.mjs';
+import { portedGuides, portedPage } from '../../scripts/port-widget-guides.mjs';
 
 const frontend = process.argv[2];
 assert.ok(frontend, 'Informe o checkout local do frontend para conferir os blobs do SHA fonte.');
 const sourceSha = '3d00906c5315c91372914e0ea664a59372dfc10b';
 const ids = ['recado-fora-do-horario', 'usuario-acesso', 'reconectar-canal-qr'];
+// Publicados em 13/11/2026 com aprovação editorial do Bruno; a validação em runtime é registrada depois da jornada real.
+const published = new Map(portedGuides);
 const routes = new Set([...widgetContextRoutes, '/configuracoes/usuarios/novo']);
 const outcomes = new Set(['complete', 'handoff', 'paused']);
 const blobs = new Map();
 for (const id of ids) {
   const raw = await readFile(new URL(`./${id}.json`, import.meta.url), 'utf8');
   const draft = JSON.parse(raw);
-  assert.equal(draft.status, 'source-only-draft');
-  assert.deepEqual(draft.publication, { editorialApproved: false, runtimeValidated: false, published: false });
+  if (published.has(id)) {
+    assert.equal(draft.status, 'published');
+    assert.equal(draft.publication.editorialApproved, true);
+    assert.equal(draft.publication.published, true);
+    assert.equal(draft.consumption.publishedEngineCompatible, true);
+    const page = await readFile(new URL(`../../content/docs/docs/${published.get(id)}`, import.meta.url), 'utf8');
+    assert.equal(page, await portedPage(id, published.get(id)), `${id}: página MDX difere do rascunho publicado`);
+  } else {
+    assert.equal(draft.status, 'source-only-draft');
+    assert.deepEqual(draft.publication, { editorialApproved: false, runtimeValidated: false, published: false });
+    assert.equal(draft.consumption.publishedEngineCompatible, false);
+  }
   assert.equal(draft.source.sha, sourceSha);
-  assert.equal(draft.consumption.publishedEngineCompatible, false);
   assert.equal(draft.consumption.automaticSideEffectsAllowed, false);
   const guide = guideSchema.parse(draft.guide);
   assert.equal(guide.guideId, id);
   assert.equal(guide.version, 2);
-  assert.equal(guide.mode, 'treino');
+  assert.equal(guide.mode, 'treino', 'o rascunho fica em treino; a página publicada usa real');
   const steps = new Map(guide.steps.map((step) => [step.stepId, step]));
   assert.deepEqual(Object.keys(draft.transitionsByStep).sort(), [...steps.keys()].sort());
   assert.deepEqual(Object.keys(draft.evidenceByStep).sort(), [...steps.keys()].sort());
@@ -83,6 +95,6 @@ for (const id of ids) {
     }
     assert.ok(['button', 'heading', 'field'].includes(navigation.anchor.kind));
   }
-  console.log(`${id}: v2 treino; ${steps.size} passos; grafo completo, referências no SHA e publicação desativada`);
+  console.log(`${id}: v2; ${steps.size} passos; grafo completo, referências no SHA; ${published.has(id) ? 'publicado e igual à página' : 'publicação desativada'}`);
 }
-console.log(`SOURCE-ONLY: ${ids.length} drafts, ${blobs.size} blobs de produto; nenhuma jornada runtime executada.`);
+console.log(`${ids.length} drafts (${published.size} publicados), ${blobs.size} blobs de produto.`);

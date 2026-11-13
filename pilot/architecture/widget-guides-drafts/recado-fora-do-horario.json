@@ -1,6 +1,6 @@
 {
   "draftSchemaVersion": 1,
-  "status": "source-only-draft",
+  "status": "published",
   "title": "Colocar um recado fora do horário",
   "description": "Confira o horário de atendimento e escreva o recado fora do horário do departamento certo.",
   "source": {
@@ -13,9 +13,12 @@
     "guideVersion": 1
   },
   "publication": {
-    "editorialApproved": false,
+    "editorialApproved": true,
+    "editorialApprovedBy": "Bruno",
+    "editorialApprovedAt": "2026-11-13",
     "runtimeValidated": false,
-    "published": false
+    "published": true,
+    "publishedPath": "docs/sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario.mdx"
   },
   "prerequisites": [
     "Ter acesso às seções Horários e feriados e Mensagens automáticas pelas permissões efetivas.",
@@ -273,6 +276,11 @@
     ],
     "conferir-recado": [
       {
+        "path": "src/features/configurations/registry/sections.ts",
+        "line": 106,
+        "fragment": "label: \"Mensagens automáticas\""
+      },
+      {
         "path": "src/features/configurations/pages/Mensagens/mensagens.catalogo.ts",
         "line": 106,
         "fragment": "Um feriado com mensagem própria substitui esta."
@@ -378,9 +386,9 @@
     "pedir-ajuda"
   ],
   "consumption": {
-    "localPilotOnly": true,
+    "localPilotOnly": false,
     "requiresExplicitTransitions": true,
-    "publishedEngineCompatible": false,
+    "publishedEngineCompatible": true,
     "automaticSideEffectsAllowed": false
   }
 }

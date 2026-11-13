@@ -39,15 +39,15 @@ assert.deepEqual(widgetConfigFor(invalidOnly, 1), off, 'lista só com valores in
 assert.deepEqual(widgetConfigFor(widgetConfigFromEnv({ ASSISTANT_WIDGET_COMPANY_IDS: '1' }, silent), 1), off, 'lista sem a chave geral não liga');
 
 // Roteiros de piloto: só IDs dos drafts, só para empresas listadas, nunca para todos.
-assert.deepEqual(pilotGuideIds, ['recado-fora-do-horario', 'reconectar-canal-qr', 'usuario-acesso']);
-const pilotEnv = { ASSISTANT_WIDGET_ENABLED: 'true', ASSISTANT_WIDGET_PILOT_GUIDES: 'usuario-acesso, desconhecido,usuario-acesso,../segredo', ASSISTANT_WIDGET_PILOT_COMPANY_IDS: '1' };
+assert.deepEqual(pilotGuideIds, ['reconectar-canal-qr'], 'roteiros publicados saem do piloto');
+const pilotEnv = { ASSISTANT_WIDGET_ENABLED: 'true', ASSISTANT_WIDGET_PILOT_GUIDES: 'reconectar-canal-qr, desconhecido,reconectar-canal-qr,usuario-acesso,../segredo', ASSISTANT_WIDGET_PILOT_COMPANY_IDS: '1' };
 const pilot = widgetConfigFromEnv(pilotEnv, silent);
-assert.deepEqual(pilot.pilotGuides, ['usuario-acesso']);
-assert.deepEqual(widgetConfigFor(pilot, 1), { schemaVersion: 1, widget: { enabled: true, pilotGuides: ['usuario-acesso'] } });
+assert.deepEqual(pilot.pilotGuides, ['reconectar-canal-qr'], 'publicado não volta ao piloto');
+assert.deepEqual(widgetConfigFor(pilot, 1), { schemaVersion: 1, widget: { enabled: true, pilotGuides: ['reconectar-canal-qr'] } });
 assert.deepEqual(widgetConfigFor(pilot, 2), on, 'outra empresa vê o widget sem os roteiros de piloto');
 assert.deepEqual(widgetConfigFor(pilot), on);
 const pilotWithoutAudience = [];
-const noAudience = widgetConfigFromEnv({ ASSISTANT_WIDGET_ENABLED: 'true', ASSISTANT_WIDGET_PILOT_GUIDES: 'usuario-acesso' }, (line) => pilotWithoutAudience.push(line));
+const noAudience = widgetConfigFromEnv({ ASSISTANT_WIDGET_ENABLED: 'true', ASSISTANT_WIDGET_PILOT_GUIDES: 'reconectar-canal-qr' }, (line) => pilotWithoutAudience.push(line));
 assert.deepEqual(widgetConfigFor(noAudience, 1), on, 'piloto sem lista de empresas não é oferecido');
 assert.ok(pilotWithoutAudience.some((line) => line.includes(widgetConfigEnv.pilotCompanyIds)));
 const pilotDisabled = widgetConfigFromEnv({ ...pilotEnv, ASSISTANT_WIDGET_ENABLED: 'false' }, silent);
@@ -135,9 +135,9 @@ try {
   // 3. Lista de empresas e piloto: cada empresa só recebe a própria decisão.
   const staged = await start('staged', {
     ASSISTANT_WIDGET_ENABLED: 'true', ASSISTANT_WIDGET_COMPANY_IDS: '1,7',
-    ASSISTANT_WIDGET_PILOT_GUIDES: 'usuario-acesso,recado-fora-do-horario', ASSISTANT_WIDGET_PILOT_COMPANY_IDS: '1',
+    ASSISTANT_WIDGET_PILOT_GUIDES: 'reconectar-canal-qr', ASSISTANT_WIDGET_PILOT_COMPANY_IDS: '1',
   });
-  assert.deepEqual(await (await staged.config('?company=1')).json(), { schemaVersion: 1, widget: { enabled: true, pilotGuides: ['usuario-acesso', 'recado-fora-do-horario'] } });
+  assert.deepEqual(await (await staged.config('?company=1')).json(), { schemaVersion: 1, widget: { enabled: true, pilotGuides: ['reconectar-canal-qr'] } });
   assert.deepEqual(await (await staged.config('?company=7')).json(), on);
   assert.deepEqual(await (await staged.config('?company=2')).json(), off);
   assert.deepEqual(await (await staged.config()).json(), off);

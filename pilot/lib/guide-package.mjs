@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { guideSchema, legacyGuideAliases, schemaVersion } from '../architecture/conversation-v1.mjs';
+import { guideSchema, guideStepRoutes, legacyGuideAliases, schemaVersion } from '../architecture/conversation-v1.mjs';
 import { frontmatterFields } from '../mcp/article-fields.mjs';
 import { parseArticle } from '../mcp/editorial-standard.mjs';
 import { sensitiveKinds } from '../mcp/sensitive-data.mjs';
@@ -12,7 +12,8 @@ const packageVersion = 1;
 const canonical = (value) => JSON.stringify(value, (_, item) => item && !Array.isArray(item) && typeof item === 'object'
   ? Object.fromEntries(Object.entries(item).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)) : item);
 const contentSha256 = (value) => createHash('sha256').update(canonical(value)).digest('hex');
-const publicRoutes = new Set(Object.values(productActions).map(({ route }) => route));
+// Rotas públicas: as das ações de produto e as telas que um passo de roteiro pode indicar.
+const publicRoutes = new Set([...Object.values(productActions).map(({ route }) => route), ...guideStepRoutes]);
 const versionOf = (output) => output.manifest.contentSha256.slice(0, 12);
 const serialized = (value) => `${canonical(value)}\n`;
 

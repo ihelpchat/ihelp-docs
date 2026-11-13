@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 // Exibição do widget do app: decisão de configuração do serviço.
 // Não chama provider de IA, não lê conversa e não autoriza tenant nem operação.
@@ -11,10 +11,12 @@ export const widgetConfigEnv = Object.freeze({
 
 const companyIdPattern = /^[1-9]\d{0,14}$/u;
 
-/** Roteiros de piloto existentes: os drafts source-only, ainda sem aprovação editorial. */
+/** Roteiros de piloto: os drafts ainda `source-only-draft`. Rascunho publicado vale para todas as empresas. */
+const draftsDir = new URL('../architecture/widget-guides-drafts/', import.meta.url);
 export const pilotGuideIds = Object.freeze(
-  readdirSync(new URL('../architecture/widget-guides-drafts/', import.meta.url))
+  readdirSync(draftsDir)
     .filter((name) => /^[a-z0-9-]+\.json$/u.test(name))
+    .filter((name) => JSON.parse(readFileSync(new URL(name, draftsDir), 'utf8')).status === 'source-only-draft')
     .map((name) => name.slice(0, -'.json'.length))
     .sort(),
 );
