@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import actions from './product-actions.json' with { type: 'json' };
 import canonicalGuideIds from './guide-ids.json' with { type: 'json' };
 import { resolveCatalogAction } from './catalog-action.mjs';
+import { widgetContextRoutes, widgetPermissions, actorFirstNamePattern, actorIdRefPattern } from './widget-context.mjs';
 
 export const schemaVersion = 1;
 export const legacyGuideAliases = Object.freeze({
@@ -31,12 +32,21 @@ const stateSchema = z.object({
   choiceId: id.optional(),
   stateToken: z.string().max(128).optional(),
 }).strict();
-const choiceSchema = z.object({ id, label: z.string().trim().min(1).max(100), nextStepId: id.optional() }).strict();
+// Roteiros com `transitions: 'explicit'` declaram o grafo inteiro: cada escolha e cada passo sem
+// escolha apontam para um passo ou terminam em um outcome. Sem esse campo, vale o avanço por posição (v1).
+export const guideOutcomes = Object.freeze(['complete', 'handoff', 'paused']);
+const outcome = z.enum(guideOutcomes);
+export const guideStepRoutes = Object.freeze([...widgetContextRoutes, '/configuracoes/usuarios/novo']);
+const choiceSchema = z.object({ id, label: z.string().trim().min(1).max(100), nextStepId: id.optional(), outcome: outcome.optional() }).strict();
+const nextSchema = z.union([z.object({ nextStepId: id }).strict(), z.object({ outcome }).strict()]);
 const stepSchema = z.object({
   stepId: id,
+  title: z.string().trim().min(3).max(48).optional(),
   text: z.string().trim().min(1).max(1000),
   actionId: actionId.optional(),
+  route: z.enum(guideStepRoutes).optional(),
   choices: z.array(choiceSchema).max(6).optional(),
+  next: nextSchema.optional(),
 }).strict();
 export const guideSchema = z.object({
   schemaVersion: z.literal(schemaVersion),
@@ -44,6 +54,8 @@ export const guideSchema = z.object({
   version: z.number().int().positive(),
   mode,
   initialStepId: id,
+  transitions: z.literal('explicit').optional(),
+  prerequisites: z.array(z.string().trim().min(3).max(300)).max(6).optional(),
   steps: z.array(stepSchema).min(1).max(40),
 }).strict().superRefine((guide, context) => {
   const ids = new Set(guide.steps.map((step) => step.stepId));
@@ -53,7 +65,32 @@ export const guideSchema = z.object({
     const choices = step.choices ?? [];
     if (new Set(choices.map((choice) => choice.id)).size !== choices.length) context.addIssue({ code: 'custom', message: 'choice id duplicado' });
     for (const choice of choices) if (choice.nextStepId && !ids.has(choice.nextStepId)) context.addIssue({ code: 'custom', message: 'nextStepId desconhecido' });
+    for (const choice of choices) if (choice.nextStepId && choice.outcome) context.addIssue({ code: 'custom', message: 'escolha com destino e outcome' });
+    if (step.next?.nextStepId && !ids.has(step.next.nextStepId)) context.addIssue({ code: 'custom', message: 'nextStepId desconhecido' });
   }
+  const explicit = guide.transitions === 'explicit';
+  const usesGraph = guide.steps.some((step) => step.next || step.choices?.some((choice) => choice.outcome));
+  if (!explicit) {
+    if (usesGraph) context.addIssue({ code: 'custom', message: 'next/outcome exigem transitions explicit' });
+    return;
+  }
+  const edges = new Map();
+  for (const step of guide.steps) {
+    const choices = step.choices ?? [];
+    if (choices.length && step.next) context.addIssue({ code: 'custom', message: `${step.stepId}: passo com escolhas e next` });
+    if (!choices.length && !step.next) context.addIssue({ code: 'custom', message: `${step.stepId}: passo sem destino` });
+    for (const choice of choices) if (!choice.nextStepId && !choice.outcome) context.addIssue({ code: 'custom', message: `${step.stepId}/${choice.id}: escolha sem destino` });
+    edges.set(step.stepId, [...choices.map((choice) => choice.nextStepId), step.next?.nextStepId].filter(Boolean));
+  }
+  const reached = new Set();
+  const visit = (stepId, path) => {
+    if (path.has(stepId)) { context.addIssue({ code: 'custom', message: `ciclo em ${stepId}` }); return; }
+    if (reached.has(stepId)) return;
+    reached.add(stepId);
+    for (const next of edges.get(stepId) ?? []) visit(next, new Set([...path, stepId]));
+  };
+  if (ids.has(guide.initialStepId)) visit(guide.initialStepId, new Set());
+  if (reached.size !== ids.size) context.addIssue({ code: 'custom', message: 'passo inacessível' });
 });
 export const productActionSchema = z.object({
   id: actionId,
@@ -68,11 +105,13 @@ export const productActionSchema = z.object({
 const historySchema = z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(20_000).transform((content) => content.slice(0, 3_000)) }).strict();
 const widgetContextSchema = z.object({
   surface: z.enum(['faq', 'app']).optional(),
-  route: z.enum([...new Set(Object.values(actions).map((action) => action.route))]).optional(),
+  route: z.enum(widgetContextRoutes).optional(),
   module: z.enum(['robots', 'users', 'channels', 'billing', 'campaigns', 'templates', 'conversations', 'settings']).optional(),
   screen: z.enum(['list', 'create', 'edit', 'detail', 'connection', 'qr', 'unknown']).optional(),
   role: z.enum(['owner', 'admin', 'manager', 'agent', 'unknown']).optional(),
-  permissions: z.array(z.enum(['robots.read', 'robots.create', 'users.read', 'users.manage', 'channels.read', 'channels.manage', 'billing.read', 'campaigns.read', 'campaigns.create', 'templates.read', 'templates.manage'])).max(12).optional(),
+  permissions: z.array(z.enum(widgetPermissions)).max(24).optional(),
+  queue: z.enum(['mine', 'all', 'groups', 'other']).optional(),
+  conversationKind: z.enum(['attendance', 'group', 'none']).optional(),
   plan: z.enum(['trial', 'active', 'expired', 'limited', 'unknown']).optional(),
   channels: z.array(z.object({ kind: z.enum(['whatsapp', 'official_api', 'coexistence']), state: z.enum(['connected', 'disconnected', 'qr_pending', 'blocked', 'syncing', 'unknown']) }).strict()).max(5).optional(),
   credit: z.enum(['available', 'low', 'empty', 'unknown']).optional(),
@@ -91,7 +130,11 @@ export const assistantRequestSchema = z.object({
   question: z.string().trim().min(1).max(500),
   sessionId: z.string().min(1).max(128).optional(),
   origin: z.enum(['faq', 'app']).optional(),
-  companyId: z.number().int().positive().optional(),
+  companyId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+  actor: z.object({
+    idRef: z.string().regex(actorIdRefPattern).optional(),
+    firstName: z.string().min(1).max(40).regex(actorFirstNamePattern).optional(),
+  }).strict().optional(),
   history: z.array(historySchema).max(6).optional(),
   scope: z.enum(['Tudo', 'Ajuda e FAQ', 'API', 'Tutoriais', 'Novidades']).optional(),
   page: z.object({ path: z.string().regex(/^\/(?!\/)[a-z0-9/_-]+$/i), title: z.string().max(200) }).strict().optional(),

@@ -57,6 +57,8 @@ try {
   process.env.CONVERSATIONS_RETENTION_DAYS = '1';
   process.env.SESSION_EVENTS_FILE = sessionFile;
   process.env.FEEDBACK_FILE = join(dir, 'feedback.jsonl');
+  // Perguntas com origin app só passam com o widget ligado na configuração central.
+  process.env.ASSISTANT_WIDGET_ENABLED = 'true';
   await saveConversation(file, { at: '2020-01-01T00:00:00.000Z', question: 'registro antigo', origin: 'faq' });
   const { httpServer } = await import('./http.mjs');
   try {

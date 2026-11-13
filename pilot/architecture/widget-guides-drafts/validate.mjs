@@ -1,0 +1,100 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { guideSchema } from '../conversation-v1.mjs';
+import { widgetContextRoutes } from '../widget-context.mjs';
+import { portedGuides, portedPage } from '../../scripts/port-widget-guides.mjs';
+
+const frontend = process.argv[2];
+assert.ok(frontend, 'Informe o checkout local do frontend para conferir os blobs do SHA fonte.');
+const sourceSha = '3d00906c5315c91372914e0ea664a59372dfc10b';
+const ids = ['recado-fora-do-horario', 'usuario-acesso', 'reconectar-canal-qr'];
+// Publicados em 13/11/2026 com aprovação editorial do Bruno; a validação em runtime é registrada depois da jornada real.
+const published = new Map(portedGuides);
+const routes = new Set([...widgetContextRoutes, '/configuracoes/usuarios/novo']);
+const outcomes = new Set(['complete', 'handoff', 'paused']);
+const blobs = new Map();
+for (const id of ids) {
+  const raw = await readFile(new URL(`./${id}.json`, import.meta.url), 'utf8');
+  const draft = JSON.parse(raw);
+  if (published.has(id)) {
+    assert.equal(draft.status, 'published');
+    assert.equal(draft.publication.editorialApproved, true);
+    assert.equal(draft.publication.published, true);
+    assert.equal(draft.consumption.publishedEngineCompatible, true);
+    const page = await readFile(new URL(`../../content/docs/docs/${published.get(id)}`, import.meta.url), 'utf8');
+    assert.equal(page, await portedPage(id, published.get(id)), `${id}: página MDX difere do rascunho publicado`);
+  } else {
+    assert.equal(draft.status, 'source-only-draft');
+    assert.deepEqual(draft.publication, { editorialApproved: false, runtimeValidated: false, published: false });
+    assert.equal(draft.consumption.publishedEngineCompatible, false);
+  }
+  assert.equal(draft.source.sha, sourceSha);
+  assert.equal(draft.consumption.automaticSideEffectsAllowed, false);
+  const guide = guideSchema.parse(draft.guide);
+  assert.equal(guide.guideId, id);
+  assert.equal(guide.version, 2);
+  assert.equal(guide.mode, 'treino', 'o rascunho fica em treino; a página publicada usa real');
+  const steps = new Map(guide.steps.map((step) => [step.stepId, step]));
+  assert.deepEqual(Object.keys(draft.transitionsByStep).sort(), [...steps.keys()].sort());
+  assert.deepEqual(Object.keys(draft.evidenceByStep).sort(), [...steps.keys()].sort());
+  assert.deepEqual(Object.keys(draft.titlesByStep).sort(), [...steps.keys()].sort());
+  for (const [stepId, title] of Object.entries(draft.titlesByStep)) {
+    assert.ok(typeof title === 'string' && title.trim() === title && title.length >= 3 && title.length <= 48, `${id}/${stepId}: título do passo fora do limite`);
+  }
+  const edges = new Map();
+  for (const [stepId, step] of steps) {
+    const transition = draft.transitionsByStep[stepId];
+    assert.equal(Object.keys(transition).length, 1, `${id}/${stepId}: transição ambígua`);
+    const destinations = [];
+    const checkTarget = (target) => {
+      assert.equal(Object.keys(target).length, 1);
+      if (target.nextStepId) {
+        assert.ok(steps.has(target.nextStepId), `${id}/${stepId}: próximo passo desconhecido`);
+        destinations.push(target.nextStepId);
+      } else assert.ok(outcomes.has(target.outcome), `${id}/${stepId}: outcome desconhecido`);
+    };
+    if (step.choices?.length) {
+      assert.ok(transition.choices);
+      assert.deepEqual(Object.keys(transition.choices).sort(), step.choices.map((choice) => choice.id).sort());
+      for (const choice of step.choices) {
+        const target = transition.choices[choice.id];
+        if (choice.nextStepId) assert.equal(target.nextStepId, choice.nextStepId);
+        else assert.equal(target.outcome, 'complete');
+        checkTarget(target);
+      }
+    } else if (transition.continue) checkTarget(transition.continue);
+    else {
+      assert.ok(outcomes.has(transition.outcome));
+      if (stepId === 'pedir-ajuda') assert.equal(transition.outcome, 'handoff');
+      if (stepId === 'sem-celular') assert.equal(transition.outcome, 'paused');
+    }
+    edges.set(stepId, destinations);
+    assert.ok(draft.evidenceByStep[stepId].length);
+    for (const evidence of draft.evidenceByStep[stepId]) {
+      assert.match(evidence.path, /^src\/(?:features\/configurations|components\/shared\/QrConexao)\/[A-Za-z0-9/_.-]+$/u);
+      assert.ok(Number.isSafeInteger(evidence.line) && evidence.line > 0);
+      if (!blobs.has(evidence.path)) blobs.set(evidence.path, execFileSync('git', ['--no-pager', 'show', `${sourceSha}:${evidence.path}`], { cwd: frontend, encoding: 'utf8' }).split('\n'));
+      assert.ok(blobs.get(evidence.path)[evidence.line - 1]?.includes(evidence.fragment), `${id}/${stepId}: referência não corresponde ao blob fixado`);
+    }
+  }
+  const reached = new Set();
+  const visit = (stepId, path = new Set()) => {
+    assert.ok(!path.has(stepId), `${id}: ciclo no roteiro`);
+    reached.add(stepId);
+    for (const next of edges.get(stepId)) visit(next, new Set([...path, stepId]));
+  };
+  visit(guide.initialStepId);
+  assert.equal(reached.size, steps.size, `${id}: passo inacessível`);
+  for (const [stepId, navigation] of Object.entries(draft.navigationByStep)) {
+    assert.ok(steps.has(stepId));
+    if (navigation.route) assert.ok(routes.has(navigation.route));
+    else {
+      assert.equal(navigation.routeTemplate, '/configuracoes/canais/:idRef');
+      assert.equal(navigation.requiresUserSelection, true);
+    }
+    assert.ok(['button', 'heading', 'field'].includes(navigation.anchor.kind));
+  }
+  console.log(`${id}: v2; ${steps.size} passos; grafo completo, referências no SHA; ${published.has(id) ? 'publicado e igual à página' : 'publicação desativada'}`);
+}
+console.log(`${ids.length} drafts (${published.size} publicados), ${blobs.size} blobs de produto.`);

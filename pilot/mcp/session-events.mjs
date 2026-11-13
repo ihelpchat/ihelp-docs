@@ -16,6 +16,8 @@ const ISSUES = new Set(['usage', 'incident', 'permission', 'account_state', 'unk
 export const sessionEventSchema = z.object({
   sessionId: z.string().regex(ID),
   origin: z.enum(['faq', 'app']),
+  companyId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+  actorId: z.string().regex(/^actor-[a-f0-9]{16}$/u).optional(),
   guideId: z.string().optional(),
   stepId: z.string().regex(ID).optional(),
   durationMs: z.number().int().min(0).max(300_000),
@@ -40,6 +42,8 @@ export function normalizeSessionEvent(input, { now = Date.now() } = {}) {
   if (!sessionEventSchema.safeParse(safeInput).success
     || !input || typeof input !== 'object' || Array.isArray(input)
     || Object.keys(input).some((key) => !FIELDS.has(key))
+    || (input.companyId !== undefined && input.origin !== 'app')
+    || (input.actorId !== undefined && input.companyId === undefined)
     || !ID.test(input.sessionId ?? '') || !ORIGINS.has(input.origin)
     || (input.guideId !== undefined && !GUIDE_IDS.has(input.guideId))
     || (input.stepId !== undefined && !ID.test(input.stepId))
@@ -52,6 +56,8 @@ export function normalizeSessionEvent(input, { now = Date.now() } = {}) {
   return {
     sessionId: input.sessionId,
     origin: input.origin,
+    ...(input.companyId === undefined ? {} : { companyId: input.companyId }),
+    ...(input.actorId === undefined ? {} : { actorId: input.actorId }),
     ...(input.guideId === undefined ? {} : { guideId: input.guideId }),
     ...(input.stepId === undefined ? {} : { stepId: input.stepId }),
     durationMs: input.durationMs,

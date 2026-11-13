@@ -1,10 +1,10 @@
 ---
 mcpGeneratedSha: 0a5204cd94352d0f198f830d988bf45ed40d330d
-title: "Colocar uma pessoa da equipe no departamento dela"
-description: "Crie um usuário, escolha o departamento e confira o acesso."
+title: Cadastrar uma pessoa e conferir seu acesso
+description: Crie o usuário com o perfil e os departamentos certos e confira o acesso com a pessoa.
 source: produto
 contentType: guia
-assistantQuestion: "Como gerenciar usuário e acesso?"
+assistantQuestion: Como gerenciar usuário e acesso?
 assistantAliases:
   - cadastrar secretária
   - colocar pessoa da equipe
@@ -13,7 +13,15 @@ assistantAliases:
   - clientes do departamento
   - acesso da atendente
 assistantRouting:
-  anchors: [departamento, setor, só ver os clientes dela, só ver os clientes dele, ver só os atendimentos, restringir o acesso, permissão de usuário, usuário e acesso]
+  anchors:
+    - departamento
+    - setor
+    - só ver os clientes dela
+    - só ver os clientes dele
+    - ver só os atendimentos
+    - restringir o acesso
+    - permissão de usuário
+    - usuário e acesso
   actions:
     - só pode ver
     - só deve ver
@@ -25,77 +33,135 @@ assistantRouting:
     - separar
     - departamento dela
     - cadastrar
-  objects: [secretária, funcionário, atendente, usuário, equipe, vendedor, pessoa]
-  ownFeatures: [usuário, usuários, equipe, departamento, departamentos, atendente]
-assistantOverview: "Em Usuários, crie a pessoa, escolha o departamento e revise as opções de acesso."
+  objects:
+    - secretária
+    - funcionário
+    - atendente
+    - usuário
+    - equipe
+    - vendedor
+    - pessoa
+  ownFeatures:
+    - usuário
+    - usuários
+    - equipe
+    - departamento
+    - departamentos
+    - atendente
+assistantOverview: Crie o usuário com o perfil e os departamentos certos e confira o acesso com a pessoa.
 assistantSuggestions:
-  - "Como escolher o departamento da pessoa?"
-  - "O botão Novo usuário está bloqueado; o que faço?"
+  - Como escolher o departamento da pessoa?
+  - O botão Novo usuário está bloqueado; o que faço?
 assistantInitialSteps: 1
 assistantResolution: partial
 guide:
   schemaVersion: 1
   guideId: usuario-acesso
-  version: 1
+  version: 2
   mode: real
   initialStepId: abrir-usuarios
+  transitions: explicit
+  prerequisites:
+    - Ter permissão para gerenciar usuários e vaga no limite do plano.
+    - Definir com o responsável quais departamentos e permissões a pessoa deve receber.
   steps:
     - stepId: abrir-usuarios
-      text: "Abra Configurações e depois Usuários. Você precisa entrar como administrador."
+      title: Abra Usuários
+      text: Abra Configurações e depois Usuários. Se Usuários não aparecer para você, peça a um administrador da empresa para conferir seu acesso.
       actionId: abrir-usuarios
+      route: /configuracoes/usuarios
+      next:
+        nextStepId: criar-usuario
     - stepId: criar-usuario
-      text: "Clique em Novo usuário. Se o botão estiver bloqueado, fale com uma pessoa."
+      title: Clique em Novo usuário
+      text: "Clique em Novo usuário para abrir o formulário. Se o botão estiver bloqueado, a tela mostra o motivo: só administradores criam usuários, ou o plano chegou ao limite. No limite, desative quem não atende mais ou fale com o nosso time."
       choices:
         - id: abriu
-          label: "Abriu"
+          label: O formulário abriu
           nextStepId: preencher-dados
         - id: bloqueado
-          label: "Está bloqueado"
+          label: Está bloqueado
           nextStepId: pedir-ajuda
     - stepId: preencher-dados
-      text: "Preencha nome, contato, e-mail e senha no formulário do iHelp. Escolha o perfil Atendente. Não envie a senha no chat."
+      title: Preencha os dados
+      text: "No formulário Novo usuário, preencha Nome e E-mail. Defina Senha e Confirmar senha. O iHelp não avisa a pessoa: combine com ela como passar o e-mail e a senha, fora deste chat."
+      route: /configuracoes/usuarios/novo
+      next:
+        nextStepId: escolher-perfil
+    - stepId: escolher-perfil
+      title: Escolha o perfil
+      text: No cartão Acesso, escolha em Perfil o perfil que combina com o trabalho da pessoa. Se aparecer o cartão Tipo de conta, ou o Perfil estiver em Usar tipo de conta legado, escolha o Tipo de conta. Não dê acesso de administrador só para concluir o cadastro.
+      next:
+        nextStepId: escolher-departamento
     - stepId: escolher-departamento
-      text: "Em Departamentos, adicione apenas o setor dessa pessoa. Remova outro setor que tenha sido selecionado por engano."
-    - stepId: revisar-acesso
-      text: "Revise as opções de acesso. Desative o acesso que não for necessário e peça à pessoa para entrar e conferir a restrição antes de usar."
+      title: Escolha os departamentos
+      text: No cartão Atendimento, em Departamentos, selecione os setores em que a pessoa vai atender. Pelo menos um é obrigatório. A pessoa só vê e atende conversas dos departamentos escolhidos.
+      next:
+        nextStepId: salvar-usuario
     - stepId: salvar-usuario
-      text: "Clique em Salvar Alterações. Peça à pessoa para entrar e conferir o que aparece."
+      title: Crie o usuário
+      text: Confira os dados e clique em Criar usuário, no alto da página. Depois de criado, o iHelp abre a página da pessoa ou volta para a lista de usuários.
       choices:
-        - id: funcionou
-          label: "Funcionou"
-        - id: acesso-errado
-          label: "Acesso errado"
+        - id: criado
+          label: A pessoa foi criada
+          nextStepId: revisar-acesso
+        - id: falhou
+          label: Não consegui criar
+          nextStepId: pedir-ajuda
+    - stepId: revisar-acesso
+      title: Revise o acesso
+      text: "Se você voltou para a lista, abra a pessoa que acabou de criar. No cartão Acesso, confira o Perfil: trocar o perfil muda o acesso na hora. Se a pessoa precisar de algo diferente do perfil, use Ajustar em Exceções desta pessoa e clique em Salvar exceções."
+      next:
+        nextStepId: conferir-acesso
+    - stepId: conferir-acesso
+      title: Confira com a pessoa
+      text: Peça à pessoa para entrar no iHelp com o e-mail e a senha combinados e conferir se vê o menu e os atendimentos esperados. Não compartilhe a senha neste chat. Se ela vir algo que não deveria, escolha Há acesso inesperado.
+      choices:
+        - id: conferiu
+          label: O acesso está correto
+          outcome: complete
+        - id: incorreto
+          label: Há acesso inesperado
           nextStepId: pedir-ajuda
     - stepId: pedir-ajuda
-      text: "Falar com uma pessoa. Informe qual opção ficou bloqueada ou qual área apareceu fora do esperado. Não envie senha."
+      title: Fale com uma pessoa
+      text: "Fale com uma pessoa do atendimento e diga em qual passo parou: botão bloqueado, erro ao criar ou acesso inesperado. Não envie senha nem dados de clientes."
+      next:
+        outcome: handoff
 ---
 
-Só um administrador pode criar usuários. O setor é chamado de **departamento** no iHelp. Cadastre a pessoa no setor certo e peça a ela para conferir o acesso. A escolha do departamento, sozinha, não comprova que outros dados ficaram invisíveis.
+Crie o usuário com o perfil e os departamentos certos e confira o acesso com a pessoa.
 
 ## Pré-requisitos
 
-Entre como administrador e confirme qual departamento a pessoa deve atender. Não envie dados de acesso à Claricia.
+- Ter permissão para gerenciar usuários e vaga no limite do plano.
+- Definir com o responsável quais departamentos e permissões a pessoa deve receber.
 
 <ProductAction id="abrir-usuarios" label="Abrir a tela Usuários" route="/configuracoes/user" />
 
-1. Em Configurações, abra Usuários. Entre como administrador.
-{/* fonte: abrir-usuarios | front@9c3690b98d81:src/store/slices/tab/tab.slice.ts:21 | alvo: Usuários */}
-2. Clique em **Novo usuário**. Se o botão estiver bloqueado, toque em **Falar com uma pessoa** no iHelp.
-{/* fonte: criar-usuario | front@9c3690b98d81:src/components/pages/Configuration/components/TabUser/index.tsx:128 | alvo: Novo usuário */}
-3. Preencha nome, contato, e-mail e senha **no formulário do iHelp**. Escolha o perfil **Atendente**. Não envie a senha à Claricia nem ao suporte.
-{/* fonte: preencher-dados | front@9c3690b98d81:src/components/pages/Configuration/pages/UserById/components/UserData/index.tsx:79 | alvo: Perfil */}
-4. Em **Departamentos**, selecione só o setor dessa pessoa. Remova os demais, se houver.
-{/* fonte: escolher-departamento | front@9c3690b98d81:src/components/pages/Configuration/pages/UserById/components/UserData/index.tsx:262 | alvo: Departamentos */}
-5. Revise as opções de acesso. Em **Visualizar Departamentos**, confira se a pessoa deve ver os atendimentos do seu setor. Não libere outras funções sem necessidade.
-{/* fonte: revisar-acesso | front@9c3690b98d81:src/components/pages/Configuration/pages/UserById/components/UserConfigExtras/index.tsx:116 | alvo: Visualizar Departamentos */}
-6. Clique em **Salvar Alterações**. Peça à pessoa para entrar e conferir o menu e os atendimentos visíveis.
-{/* fonte: salvar-usuario | front@9c3690b98d81:src/components/pages/Configuration/pages/UserById/components/UserData/index.tsx:293 | alvo: Salvar Alterações */}
+## Passo a passo
+
+1. Abra Configurações e depois Usuários. Se Usuários não aparecer para você, peça a um administrador da empresa para conferir seu acesso.
+{/* fonte: abrir-usuarios | front@3d00906c5315:src/features/configurations/registry/sections.ts:218 | alvo: Usuários */}
+2. Clique em Novo usuário para abrir o formulário. Se o botão estiver bloqueado, a tela mostra o motivo: só administradores criam usuários, ou o plano chegou ao limite. No limite, desative quem não atende mais ou fale com o nosso time.
+{/* fonte: criar-usuario | front@3d00906c5315:src/features/configurations/pages/Usuarios/index.tsx:234 | alvo: Novo usuário */}
+3. No formulário Novo usuário, preencha Nome e E-mail. Defina Senha e Confirmar senha. O iHelp não avisa a pessoa: combine com ela como passar o e-mail e a senha, fora deste chat.
+{/* fonte: preencher-dados | front@3d00906c5315:src/features/configurations/pages/Usuarios/UsuarioNovo.tsx:269 | alvo: Confirmar senha */}
+4. No cartão Acesso, escolha em Perfil o perfil que combina com o trabalho da pessoa. Se aparecer o cartão Tipo de conta, ou o Perfil estiver em Usar tipo de conta legado, escolha o Tipo de conta. Não dê acesso de administrador só para concluir o cadastro.
+{/* fonte: escolher-perfil | front@3d00906c5315:src/features/configurations/pages/Usuarios/UsuarioNovo.tsx:303 | alvo: Perfil */}
+5. No cartão Atendimento, em Departamentos, selecione os setores em que a pessoa vai atender. Pelo menos um é obrigatório. A pessoa só vê e atende conversas dos departamentos escolhidos.
+{/* fonte: escolher-departamento | front@3d00906c5315:src/features/configurations/pages/Usuarios/UsuarioNovo.tsx:337 | alvo: Departamentos */}
+6. Confira os dados e clique em Criar usuário, no alto da página. Depois de criado, o iHelp abre a página da pessoa ou volta para a lista de usuários.
+{/* fonte: salvar-usuario | front@3d00906c5315:src/features/configurations/pages/Usuarios/UsuarioNovo.tsx:187 | alvo: Criar usuário */}
+7. Se você voltou para a lista, abra a pessoa que acabou de criar. No cartão Acesso, confira o Perfil: trocar o perfil muda o acesso na hora. Se a pessoa precisar de algo diferente do perfil, use Ajustar em Exceções desta pessoa e clique em Salvar exceções.
+{/* fonte: revisar-acesso | front@3d00906c5315:src/features/configurations/pages/Usuarios/components/AcessoCard.tsx:155 | alvo: Salvar exceções */}
 
 ## Se não funcionar
 
-**Acesso inesperado ou botão bloqueado:** toque em **Falar com uma pessoa** no iHelp. Informe o nome da opção que apareceu. Não amplie permissões para testar.
-{/* fonte: pedir-ajuda | front@9c3690b98d81:src/components/pages/Configuration/components/TabUser/index.tsx:67 | alvo: Apenas administradores podem criar usuários */}
+Fale com uma pessoa do atendimento e diga em qual passo parou: botão bloqueado, erro ao criar ou acesso inesperado. Não envie senha nem dados de clientes.
+{/* fonte: pedir-ajuda | front@3d00906c5315:src/features/configurations/hooks/useTeamAccess.tsx:66 | alvo: Fale com uma pessoa */}
 
 ## Como confirmar
 
-O usuário aparece na lista. Ao entrar, vê as áreas e os atendimentos esperados. A restrição aos clientes do departamento precisa ser conferida com a conta dessa pessoa; o menu sozinho não comprova o isolamento.
+Peça à pessoa para entrar no iHelp com o e-mail e a senha combinados e conferir se vê o menu e os atendimentos esperados. Não compartilhe a senha neste chat. Se ela vir algo que não deveria, escolha Há acesso inesperado.
+{/* fonte: conferir-acesso | front@3d00906c5315:src/features/configurations/pages/Usuarios/UsuarioNovo.tsx:338 | alvo: Atendimento */}
