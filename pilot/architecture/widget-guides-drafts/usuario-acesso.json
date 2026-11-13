@@ -2,7 +2,7 @@
   "draftSchemaVersion": 1,
   "status": "source-only-draft",
   "title": "Cadastrar uma pessoa e conferir seu acesso",
-  "description": "Crie o usuário com o perfil e os departamentos adequados.",
+  "description": "Crie o usuário com o perfil e os departamentos certos e confira o acesso com a pessoa.",
   "source": {
     "repository": "ihelp-react",
     "branch": "release/pre-production",
@@ -30,12 +30,12 @@
     "steps": [
       {
         "stepId": "abrir-usuarios",
-        "text": "Abra Configurações e depois Usuários. Se a seção estiver indisponível, peça ao responsável para verificar seu acesso à Equipe.",
+        "text": "Abra Configurações e depois Usuários. Se Usuários não aparecer para você, peça a um administrador da empresa para conferir seu acesso.",
         "actionId": "abrir-usuarios"
       },
       {
         "stepId": "criar-usuario",
-        "text": "Clique em Novo usuário para abrir o formulário. Se o botão estiver bloqueado, confirme a permissão e o limite de usuários do plano.",
+        "text": "Clique em Novo usuário para abrir o formulário. Se o botão estiver bloqueado, a tela mostra o motivo: só administradores criam usuários, ou o plano chegou ao limite. No limite, desative quem não atende mais ou fale com o nosso time.",
         "choices": [
           {
             "id": "abriu",
@@ -51,19 +51,19 @@
       },
       {
         "stepId": "preencher-dados",
-        "text": "No formulário Novo usuário, preencha Nome e E-mail. Defina Senha e Confirmar senha no próprio iHelp. Não envie senha pelo chat. A criação atual usa esse e-mail e essa senha; ela não promete enviar convite por e-mail."
+        "text": "No formulário Novo usuário, preencha Nome e E-mail. Defina Senha e Confirmar senha. O iHelp não avisa a pessoa: combine com ela como passar o e-mail e a senha, fora deste chat."
       },
       {
         "stepId": "escolher-perfil",
-        "text": "No cartão Acesso, escolha o Perfil adequado entre os perfis da empresa. Se o cartão não aparecer ou ficar em Usar tipo de conta legado, revise Tipo de conta e as opções disponíveis; não escolha acesso de administrador apenas para liberar o cadastro."
+        "text": "No cartão Acesso, escolha em Perfil o perfil que combina com o trabalho da pessoa. Se aparecer o cartão Tipo de conta, ou o Perfil estiver em Usar tipo de conta legado, escolha o Tipo de conta. Não dê acesso de administrador só para concluir o cadastro."
       },
       {
         "stepId": "escolher-departamento",
-        "text": "No cartão Atendimento, em Departamentos, selecione os setores em que a pessoa deve trabalhar. Pelo menos um departamento é obrigatório. A seleção do setor sozinha não comprova isolamento de todos os dados."
+        "text": "No cartão Atendimento, em Departamentos, selecione os setores em que a pessoa vai atender. Pelo menos um é obrigatório. A pessoa só vê e atende conversas dos departamentos escolhidos."
       },
       {
         "stepId": "salvar-usuario",
-        "text": "Confira os dados e clique em Criar usuário no cabeçalho. Aguarde a confirmação. O iHelp abre o detalhe da pessoa criada, ou a lista se a resposta não trouxer o detalhe.",
+        "text": "Confira os dados e clique em Criar usuário, no alto da página. Depois de criado, o iHelp abre a página da pessoa ou volta para a lista de usuários.",
         "choices": [
           {
             "id": "criado",
@@ -79,11 +79,11 @@
       },
       {
         "stepId": "revisar-acesso",
-        "text": "Se a criação voltou à lista, abra a pessoa que acabou de criar. No detalhe, revise o cartão Acesso. Perfil define o pacote de permissões; uma troca de Perfil é aplicada na hora. Em Exceções desta pessoa, use Ajustar apenas para uma diferença necessária e confirme em Salvar exceções. Não amplie permissões por tentativa."
+        "text": "Se você voltou para a lista, abra a pessoa que acabou de criar. No cartão Acesso, confira o Perfil: trocar o perfil muda o acesso na hora. Se a pessoa precisar de algo diferente do perfil, use Ajustar em Exceções desta pessoa e clique em Salvar exceções."
       },
       {
         "stepId": "conferir-acesso",
-        "text": "Peça à pessoa para entrar pelo fluxo de acesso combinado com a empresa e conferir menu e atendimentos esperados. Não compartilhe a senha neste chat. Se houver acesso inesperado, pare e peça revisão ao responsável.",
+        "text": "Peça à pessoa para entrar no iHelp com o e-mail e a senha combinados e conferir se vê o menu e os atendimentos esperados. Não compartilhe a senha neste chat. Se ela vir algo que não deveria, escolha Há acesso inesperado.",
         "choices": [
           {
             "id": "conferiu",
@@ -98,7 +98,7 @@
       },
       {
         "stepId": "pedir-ajuda",
-        "text": "Fale com uma pessoa do atendimento. Informe a opção bloqueada ou o acesso inesperado, sem enviar senha ou dados de clientes."
+        "text": "Fale com uma pessoa do atendimento e diga em qual passo parou: botão bloqueado, erro ao criar ou acesso inesperado. Não envie senha nem dados de clientes."
       }
     ]
   },

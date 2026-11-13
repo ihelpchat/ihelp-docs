@@ -8,6 +8,17 @@ Três propostas source-only, fora do catálogo publicado, conferidas com os cont
 | `usuario-acesso.json` | 2 / treino | `abrir-usuarios` | **Novo usuário** leva a `/configuracoes/usuarios/novo`; a criação usa senha e perfis disponíveis, sem prometer convite por e-mail. |
 | `reconectar-canal-qr.json` | 2 / treino | `abrir-canais` | Reconexão do canal existente em `/configuracoes/canais/:idRef`; o botão da lista pede canal novo e API Oficial segue outro fluxo. Depois de **Conectar**, o modal pode pedir a escolha de histórico antes de **Gerar QR Code**. |
 
+## Revisão editorial (13/11/2026)
+
+Feita a pedido do Bruno, com os nomes de botões, cartões e avisos conferidos no código das telas em `release/pre-production@712e50c34` (as telas referenciadas não mudaram desde `3d00906c5`). Régua: rubrica do FAQ no propósito passo a passo (tarefas completas, clareza, coerência) e as regras do dono L001–L009 de `faq-regua/guia-aprendido.json`. Mudou só o texto dos passos e a descrição de cada roteiro; IDs, títulos, escolhas, grafo, navegação e evidências ficaram iguais.
+
+- Saíram do texto para o cliente as notas internas e de ensaio (L001, L003, L009): "a criação atual não promete convite", "não comprova isolamento", "não conclua o roteiro como resolvido", "não tente adivinhar prazo", "não altere outro departamento para testar".
+- Bloqueio diz o motivo e a saída que a tela oferece (L008): só administradores criam usuários, limite do plano, API Oficial, sem o celular.
+- Ação diz o efeito quando ele decide o próximo passo (L005): departamentos limitam as conversas que a pessoa vê, o padrão vale para a empresa toda, texto em branco não envia recado, feriado com mensagem própria prevalece, o progresso fica guardado na pausa.
+- Os três roteiros terminam em resultado que a pessoa vê (L002): acesso conferido por quem entrou, texto e horário reabertos, canal em Conectado.
+
+`publication.editorialApproved` continua `false`: a aprovação do texto é do responsável editorial (`faq-regua/responsaveis.md`), e a jornada real em conta autorizada continua pendente.
+
 ## Consumo local
 
 Cada envelope contém `guide` validável pelo `guideSchema` existente, `titlesByStep` (título curto de cada passo para o cartão do guia; texto novo, também sujeito à revisão editorial), `navigationByStep`, `transitionsByStep`, pré-requisitos e QA pendente. Os IDs antigos foram preservados e a versão subiu porque mudou o procedimento. `mode: treino` identifica o piloto; não concede autorização para executar ações reais. `publication` permanece false em todos os campos.

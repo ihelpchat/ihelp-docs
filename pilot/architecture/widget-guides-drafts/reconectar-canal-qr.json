@@ -2,7 +2,7 @@
   "draftSchemaVersion": 1,
   "status": "source-only-draft",
   "title": "Reconectar um canal existente por QR code",
-  "description": "Abra o detalhe do canal desconectado e acompanhe a leitura do QR.",
+  "description": "Reconecte pelo QR code um canal de WhatsApp que já existe e confira que ele voltou a Conectado.",
   "source": {
     "repository": "ihelp-react",
     "branch": "release/pre-production",
@@ -30,16 +30,16 @@
     "steps": [
       {
         "stepId": "abrir-canais",
-        "text": "Abra Configurações e depois Canais. Este roteiro reconecta um canal que já existe; Conectar canal na lista abre o pedido de um canal novo.",
+        "text": "Abra Configurações e depois Canais. Aqui você reconecta um canal que já existe; o botão Conectar canal da lista serve para pedir um canal novo.",
         "actionId": "abrir-canais"
       },
       {
         "stepId": "abrir-canal-existente",
-        "text": "Na lista, abra o canal do número que está Desconectado. Confira o nome e o número antes de continuar. Não desconecte um canal que já está funcionando."
+        "text": "Na lista, abra o canal que aparece como Desconectado. Confira o nome e o número antes de continuar. Não desconecte um canal que está funcionando."
       },
       {
         "stepId": "conferir-tipo",
-        "text": "No detalhe, confira o tipo logo abaixo do nome do canal. Continue aqui apenas se for WhatsApp · QR code. Se for API Oficial, use o atendimento responsável por essa conexão.",
+        "text": "No detalhe, confira o tipo logo abaixo do nome do canal. Este guia vale para WhatsApp · QR code. A API Oficial tem outro processo de conexão: escolha É API Oficial para falar com uma pessoa.",
         "choices": [
           {
             "id": "qr-code",
@@ -60,7 +60,7 @@
       },
       {
         "stepId": "gerar-codigo",
-        "text": "No detalhe desse canal, clique em Conectar. No modal Conectar canal, se aparecer a opção de trazer conversas antigas, siga a orientação exibida e clique em Gerar QR Code. Aguarde o código aparecer. O botão Conectar canal da lista não é esta reconexão.",
+        "text": "No detalhe do canal, clique em Conectar. No modal Conectar canal, se aparecer Trazer conversas dos últimos dias, marque só se faltar conversa no iHelp. Clique em Gerar QR Code e aguarde o código aparecer.",
         "choices": [
           {
             "id": "apareceu",
@@ -76,7 +76,7 @@
       },
       {
         "stepId": "conferir-celular",
-        "text": "Tenha o celular com esse WhatsApp e outra tela exibindo o código do iHelp. O celular está disponível?",
+        "text": "Para ler o código, você precisa do celular com o WhatsApp deste número e do código aberto na tela do iHelp. O celular está com você?",
         "choices": [
           {
             "id": "disponivel",
@@ -92,11 +92,11 @@
       },
       {
         "stepId": "ler-codigo",
-        "text": "No modal, escolha Android ou iPhone e siga os passos exibidos até Dispositivos conectados e Conectar dispositivo. Aponte a câmera do celular para o código da outra tela. Não envie o código pelo chat nem a terceiros."
+        "text": "No modal, escolha Android ou iPhone e siga os passos mostrados até Dispositivos conectados e Conectar dispositivo. Aponte a câmera do celular para o código na tela do iHelp. Não envie o código pelo chat nem para outras pessoas."
       },
       {
         "stepId": "conferir-conexao",
-        "text": "No detalhe do mesmo canal, confira Conectado. Se o modal ainda estiver aberto, ele mostra Conectado! ou Canal conectado. Se o canal não conectou, não conclua o roteiro como resolvido.",
+        "text": "No detalhe do mesmo canal, confira se aparece Conectado. Com o modal ainda aberto, ele mostra Conectado! e Canal conectado. Se continuar Desconectado, escolha Preciso de outro QR ou Preciso de ajuda.",
         "choices": [
           {
             "id": "conectou",
@@ -116,7 +116,7 @@
       },
       {
         "stepId": "gerar-outro-codigo",
-        "text": "Se o QR não puder ser lido, use Gerar novo código no modal. Leia o novo código pelo WhatsApp do celular e confira de novo o estado do mesmo canal. Não tente adivinhar prazo de validade.",
+        "text": "Clique em Gerar novo código no modal, leia o novo código pelo WhatsApp e confira de novo se o canal aparece como Conectado.",
         "choices": [
           {
             "id": "conectou",
@@ -131,11 +131,11 @@
       },
       {
         "stepId": "sem-celular",
-        "text": "Espere até ter o celular com esse número antes de concluir a leitura. Não declare a conexão concluída. Se precisar, fale com uma pessoa do atendimento."
+        "text": "Sem o celular deste número não dá para ler o código. Seu progresso fica guardado: quando estiver com ele, retome o guia. Se precisar, fale com uma pessoa do atendimento."
       },
       {
         "stepId": "pedir-ajuda",
-        "text": "Fale com uma pessoa do atendimento e informe qual canal e em qual etapa parou. Não envie QR code, código de conexão, senha ou conteúdo de conversas."
+        "text": "Fale com uma pessoa do atendimento e diga qual canal e em que passo parou. Não envie o QR code, o código de conexão, senhas nem conteúdo de conversas."
       }
     ]
   },
