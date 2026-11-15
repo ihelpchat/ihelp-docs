@@ -156,7 +156,8 @@ export async function routeMessage(question, { catalog, client, budget, history 
       controller.abort();
       return lexicalFallback(safeQuestion, catalog);
     }
-    if (result.kind !== 'ok') return { kind: 'provider_failed' };
+    // Orçamento esgotado não é falha do provider: a resposta diz "tente de novo" só quando for.
+    if (result.kind !== 'ok') return { kind: 'provider_failed', ...(result.kind === 'budget_exhausted' ? { reason: 'budget_exhausted' } : {}) };
     let parsed;
     try { parsed = JSON.parse(result.response.output_text); } catch { return NONE; }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)

@@ -65,8 +65,10 @@ function usageCost(usage, config) {
 export async function createBudgetedResponse(client, payload, options = {}) {
   const config = settings(options);
   const day = config.now().toISOString().slice(0, 10);
+  // ~3 bytes por token em português com JSON: contar 1 byte = 1 token reservava 3 a 4
+  // vezes o custo real e recusava chamadas que cabiam no limite (jornada de 14/11).
   const reserve = Math.max(config.reserve, Math.ceil(
-    Buffer.byteLength(JSON.stringify(payload), 'utf8') * config.inputRate
+    Math.ceil(Buffer.byteLength(JSON.stringify(payload), 'utf8') / 3) * config.inputRate
       + Number(payload.max_output_tokens ?? 0) * config.outputRate,
   ));
   for (let attempt = 0; attempt < 2; attempt++) {

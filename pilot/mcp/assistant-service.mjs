@@ -585,6 +585,7 @@ export async function answerQuestion(root, question, options = {}) {
   }
   const published = await publishedGuideCatalog(root);
   let routerFailed = false;
+  let routerOutOfBudget = false;
   if (published.length) {
     const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
     const client = options.client ?? (apiKey ? new OpenAI({ apiKey, maxRetries: 0,
@@ -605,6 +606,7 @@ export async function answerQuestion(root, question, options = {}) {
     // Sem guia escolhido ("none") ou pergunta ambígua para a triagem ("perguntar"): segue para a
     // resposta pelo conteúdo do FAQ. A triagem só escolhe guia; ela não decide que não há resposta.
     routerFailed = route.kind === 'provider_failed';
+    routerOutOfBudget = route.reason === 'budget_exhausted';
   }
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   const scope = Object.hasOwn(ASSISTANT_SCOPES, options.scope ?? '') ? options.scope : 'Tudo';
@@ -679,18 +681,21 @@ export async function answerQuestion(root, question, options = {}) {
     };
   }
 
-  const fixedFallback = (failed = false) => ({
-    answer: failed ? 'Tive um problema, tente de novo. Você pode seguir o guia abaixo ou falar com uma pessoa.'
-      : 'Siga o guia abaixo. Se precisar, fale com uma pessoa.',
+  // Resposta sem IA. `fallbackReason` é só para o registro de conversas e, como
+  // `businessContextUsed`, não é enumerável: não vai na resposta pública.
+  const fixedFallback = (failed = false, fallbackReason = failed ? 'provider_failed' : 'no_client') => Object.defineProperty({
+    answer: failed ? 'Tive um problema, tente de novo. Você pode seguir o passo a passo abaixo ou falar com uma pessoa.'
+      : 'Este é o passo a passo da Central de Ajuda. Se precisar, fale com uma pessoa.',
     sections: [],
-    steps: sources[0]?.documentedSteps.slice(0, 3).map((text) => ({ text })) ?? [],
+    // Todos os passos documentados: cortar em 3 deixava o procedimento pela metade.
+    steps: sources[0]?.documentedSteps.slice(0, MAX_GUIDE_STEPS).map((text) => ({ text })) ?? [],
     code: null,
     sources: sources.slice(0, 3).map(({ title, path, description }) => ({ title, path, kind: kindOf(path), excerpt: description })),
     suggestions: [],
     actions: [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }],
     resolution: 'partial', found: true,
-  });
-  if (routerFailed) return fixedFallback(true);
+  }, 'fallbackReason', { value: fallbackReason });
+  if (routerFailed) return routerOutOfBudget ? fixedFallback(false, 'budget_exhausted') : fixedFallback(true, 'router_failed');
   const client = options.client ?? (apiKey ? new OpenAI({ apiKey, maxRetries: 0, ...(options.baseURL ? { baseURL: options.baseURL } : {}) }) : null);
   const context = sources.map((source, index) => [
     `FONTE ${index + 1}: ${source.title}`,
@@ -747,7 +752,7 @@ export async function answerQuestion(root, question, options = {}) {
       ? { kind: 'ok', response: await client.responses.create(payload) }
       : await createBudgetedResponse(client, payload, options.budget);
   } catch { return fixedFallback(true); }
-  if (budgeted.kind !== 'ok') return fixedFallback(budgeted.kind === 'provider_failed');
+  if (budgeted.kind !== 'ok') return fixedFallback(budgeted.kind === 'provider_failed', budgeted.kind);
   const response = budgeted.response;
 
   const parsed = parseAnswer(response.output_text);
