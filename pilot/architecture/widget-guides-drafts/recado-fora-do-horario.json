@@ -16,7 +16,9 @@
     "editorialApproved": true,
     "editorialApprovedBy": "Bruno",
     "editorialApprovedAt": "2026-11-13",
-    "runtimeValidated": false,
+    "runtimeValidated": true,
+    "runtimeValidatedAt": "2026-11-14",
+    "runtimeValidation": "Jornada real em produção (empresa 1, FAQ staging): ramo de ajuda e caminho até concluir, com limpeza conferida pela API. Script front-react scripts/help-assistant-real-journey.mjs; relatório na PR #89.",
     "published": true,
     "publishedPath": "docs/sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario.mdx"
   },

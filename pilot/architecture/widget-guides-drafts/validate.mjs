@@ -9,7 +9,7 @@ const frontend = process.argv[2];
 assert.ok(frontend, 'Informe o checkout local do frontend para conferir os blobs do SHA fonte.');
 const sourceSha = '3d00906c5315c91372914e0ea664a59372dfc10b';
 const ids = ['recado-fora-do-horario', 'usuario-acesso', 'reconectar-canal-qr'];
-// Publicados em 13/11/2026 com aprovação editorial do Bruno; a validação em runtime é registrada depois da jornada real.
+// Publicados em 13/11/2026 com aprovação editorial do Bruno; jornada real em produção concluída em 14/11/2026.
 const published = new Map(portedGuides);
 const routes = new Set([...widgetContextRoutes, '/configuracoes/usuarios/novo']);
 const outcomes = new Set(['complete', 'handoff', 'paused']);
@@ -21,6 +21,7 @@ for (const id of ids) {
     assert.equal(draft.status, 'published');
     assert.equal(draft.publication.editorialApproved, true);
     assert.equal(draft.publication.published, true);
+    assert.equal(draft.publication.runtimeValidated, true, `${id}: publicado sem jornada real`);
     assert.equal(draft.consumption.publishedEngineCompatible, true);
     const page = await readFile(new URL(`../../content/docs/docs/${published.get(id)}`, import.meta.url), 'utf8');
     assert.equal(page, await portedPage(id, published.get(id)), `${id}: página MDX difere do rascunho publicado`);

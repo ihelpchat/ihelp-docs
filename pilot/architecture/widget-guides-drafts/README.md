@@ -48,7 +48,7 @@ O piloto não envia estes roteiros ao `/assistant` como guias publicados e não 
 
 ## Situação em 13/11/2026
 
-- `usuario-acesso` e `recado-fora-do-horario`: **publicados**. Texto aprovado pelo Bruno em 13/11/2026; as páginas MDX são geradas destes rascunhos por `scripts/port-widget-guides.mjs` (o validador exige que página e rascunho batam). O formato publicado e o motor passaram a ler o grafo explícito (`transitions: explicit`, `next`/`outcome`). `runtimeValidated` só vira `true` depois da jornada real autorizada, com relatório anexado à PR.
+- `usuario-acesso` e `recado-fora-do-horario`: **publicados**. Texto aprovado pelo Bruno em 13/11/2026; as páginas MDX são geradas destes rascunhos por `scripts/port-widget-guides.mjs` (o validador exige que página e rascunho batam). O formato publicado e o motor passaram a ler o grafo explícito (`transitions: explicit`, `next`/`outcome`). Jornada real em produção concluída em 14/11/2026 (`runtimeValidated: true`): os dois roteiros foram até o fim e pelo ramo de ajuda, com usuário temporário apagado e o departamento usado restaurado e conferido pela API.
 - `reconectar-canal-qr`: segue em piloto. Só sai depois de uma pessoa ler o QR com um celular de teste.
 
 ## Condição de publicação
