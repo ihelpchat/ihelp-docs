@@ -1,5 +1,6 @@
+import { processTimeoutMs } from './test-process.mjs';
 import assert from 'node:assert/strict';
-import { copyFile, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -71,9 +72,20 @@ const transport = new StdioClientTransport({
   stderr: 'pipe',
 });
 const client = new Client({ name: 'm5-01-roundtrip', version: '1.0.0' });
-await client.connect(transport);
-const call = (name, args) => client.callTool({ name, arguments: args });
+// Rendering and validating an entire article is CPU/I/O work, not a latency contract.
+// Keep a finite configurable test budget; retain every roundtrip/write assertion.
+const call = async (name, args) => {
+  const started = performance.now();
+  try {
+    return await client.callTool({ name, arguments: args }, { timeout: processTimeoutMs });
+  } finally {
+    console.error(`[mcp-test] ${name} ${args.path ?? ''} after ${Math.round(performance.now() - started)} ms`);
+  }
+};
 try {
+  const started = performance.now();
+  await client.connect(transport, { timeout: processTimeoutMs });
+  console.error(`[mcp-test] stdio connected after ${Math.round(performance.now() - started)} ms`);
   for (const path of paths) {
     const original = await readArticle(root, path);
     // O gate novo revalida o MDX inteiro: o fixture legado precisa retirar rótulos não aprovados.
@@ -225,5 +237,6 @@ try {
   assert.equal(await readFile(join(root, 'writes.log'), 'utf8'), before, 'rejeição não pode escrever no GitHub');
 } finally {
   await client.close();
+  await rm(root, { recursive: true, force: true });
 }
 console.log('M5.01: roundtrip de QR, CRM, API e blog; menu e rejeição sem writes.');
