@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { waitForMcpStartup } from './test-process.mjs';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 const legacyKey = 'legacy-test-abcdefghijklmnopqrstuvwxyz-123456';
 const writerKey = 'writer-test-abcdefghijklmnopqrstuvwxyz-123456';
 const actor = 'service:migration-test';
+const stateDirs = [];
 const baseEnv = { ...process.env };
 delete baseEnv.DOCS_MCP_API_KEY;
 delete baseEnv.DOCS_MCP_CREDENTIALS;
@@ -26,6 +28,7 @@ async function freePort() {
 async function start(extraEnv, shouldStart = true) {
   const port = await freePort();
   const stateDir = await mkdtemp(join(tmpdir(), 'm514-migration-'));
+  stateDirs.push(stateDir);
   const child = spawn(process.execPath, [new URL('./http.mjs', import.meta.url).pathname], {
     env: { ...baseEnv, PORT: String(port), MCP_STATE_DIR: stateDir, ...extraEnv },
     stdio: ['ignore', 'ignore', 'pipe'],
@@ -33,21 +36,13 @@ async function start(extraEnv, shouldStart = true) {
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += chunk; });
   const url = new URL(`http://127.0.0.1:${port}/mcp`);
-  for (let attempt = 0; attempt < 100; attempt++) {
-    if (child.exitCode !== null) break;
-    try {
-      const response = await fetch(url);
-      if (shouldStart) return { child, url, stateDir, stderr: () => stderr };
-      child.kill('SIGINT');
-      await once(child, 'exit');
-      assert.fail('MCP started without credentials');
-    } catch (error) {
-      if (error.code === 'ERR_ASSERTION') throw error;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
+  try {
+    await waitForMcpStartup(child, { expectExit: !shouldStart });
+    if (!shouldStart) assert.notEqual(child.exitCode, 0);
+  } catch (error) {
+    await stop(child);
+    throw error;
   }
-  if (shouldStart) assert.fail(`MCP failed to start: ${stderr}`);
-  assert.notEqual(child.exitCode, 0);
   return { child, url, stateDir, stderr: () => stderr };
 }
 
@@ -63,6 +58,7 @@ async function stop(child) {
   await once(child, 'exit');
 }
 
+try {
 const absent = await start({}, false);
 assert.match(absent.stderr(), /DOCS_MCP_(?:CREDENTIALS|API_KEY)/);
 assert.doesNotMatch(absent.stderr(), /MCP ouvindo/);
@@ -107,3 +103,7 @@ try {
   assert.match(both.stderr(), /DOCS_MCP_API_KEY.*ignorad/i);
   assert.equal(both.stderr().includes(legacyKey), false);
 } finally { await stop(both.child); }
+
+} finally {
+  await Promise.all(stateDirs.map(path => rm(path, { recursive: true, force: true })));
+}

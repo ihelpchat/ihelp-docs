@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { waitForMcpStartup } from './test-process.mjs';
 import { test } from 'node:test';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -38,16 +39,10 @@ async function healthOnce(extra = {}) {
       DOCS_MCP_API_KEY: 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz', ...extra },
     stdio: ['ignore', 'ignore', 'pipe'],
   });
-  let stderr = '';
-  child.stderr.on('data', (chunk) => { stderr += chunk; });
   try {
-    for (let attempt = 0; attempt < 100; attempt++) {
-      try {
-        const response = await fetch(`http://127.0.0.1:${port}/health`);
-        return { status: response.status, body: await response.json() };
-      } catch { await new Promise((resolve) => setTimeout(resolve, 30)); }
-    }
-    assert.fail(`servidor não iniciou: ${stderr}`);
+    await waitForMcpStartup(child);
+    const response = await fetch(`http://127.0.0.1:${port}/health`);
+    return { status: response.status, body: await response.json() };
   } finally {
     if (child.exitCode === null) {
       const exited = once(child, 'exit');
