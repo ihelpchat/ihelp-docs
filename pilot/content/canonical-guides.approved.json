@@ -1,7 +1,7 @@
 {
   "aprovadoPor": "Bruno",
-  "aprovadoEm": "2026-11-13",
-  "geradoEm": "2026-11-13T16:14:45.981Z",
+  "aprovadoEm": "2026-11-15",
+  "geradoEm": "2026-11-15T22:29:46.174Z",
   "guides": {
     "reconectar-canal-qr": [
       {"sentence":"O quadrado com pontinhos é o código que liga o WhatsApp do celular ao iHelp.","hash":"b62f75c69411216a77fcecc29cbdae34f9eb0368df733ebe6262574306901aab"},
@@ -29,6 +29,11 @@
       {"sentence":"Toque em Falar com uma pessoa no iHelp.","hash":"bd87a1757d087929b4159cde2bab2831822aa9dd039e3aa289777d21df35c7fd"},
       {"sentence":"Não apareceu ou não conectou: não desconecte outros aparelhos por tentativa.","hash":"65efafeb7a270bcd8a9e0bb3e347d5788cf7e41453a542f094a39cf54b61c5d3"},
       {"sentence":"Toque em Falar com uma pessoa no iHelp e diga em qual passo parou.","hash":"24b33fea945331f23693a94d27f8b3a5b315ce986226ed49e2a71da7c9e32bf9"},
+      {"sentence":"Por que o QR code expira?","hash":"438657f0b7464c540aadbe23ccc6f10944ea831105609e1455dcbbe73dfa9322"},
+      {"sentence":"Por segurança, o WhatsApp troca o código a cada poucos segundos.","hash":"6caeab1af7181d4f111147185219b3a4feacd76cfc5f3177536976c9b9dcafc1"},
+      {"sentence":"Assim, um código fotografado ou compartilhado não consegue conectar outro aparelho.","hash":"46262a7f1ed06f68a8f7c922b999085319eb86d1dabccedae5e4c89d5afb6263"},
+      {"sentence":"Antes de gerar o código, deixe o celular aberto em Aparelhos conectados Conectar um aparelho e leia o código assim que ele aparecer.","hash":"e92226e7b5c068cc70692a4452f4e863e26eb4a23630889964d075c285f28f41"},
+      {"sentence":"Se ele parar de funcionar, clique em Gerar novo código no próprio modal.","hash":"281b0da19339981ffdb9b9ffd2a35c0397b80417c201116990d23d24cb56f33f"},
       {"sentence":"Como confirmar","hash":"182b860eedb398abf05f30bfc1194fcf5397cc050fc6b077e1fafcebee74cecd"},
       {"sentence":"O número aparece como Conectado em Canais.","hash":"f3a2c4ccfea4e52c92cadedace14f67cf76bf841a63e45f3fcc8cb4bab2b569b"},
       {"sentence":"As mensagens enviadas enquanto o WhatsApp estava desconectado podem não aparecer no iHelp.","hash":"cce1da9cb5a53af1129d8e59194e66aaa95e304315b32b23fa36c284f20ca892"},

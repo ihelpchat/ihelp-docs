@@ -86,6 +86,9 @@ for (const [question, slug, intent, action, count, moduleName] of cases) {
   ];
   const next = await ask('sim, pode me guiar', { history });
   assert.equal(next.steps.length, 1, question);
+  // O botão fixo da oferta de guia entra no modo guiado (um passo), não na lista completa.
+  const guideButton = await ask('Sim, me guie passo a passo', { history });
+  assert.deepEqual(guideButton.steps.map(({ text }) => text), next.steps.map(({ text }) => text), question);
   const walk = [...history];
   for (let index = 1; index < count; index++) {
     const input = slug === 'crm' && index === 8 ? 'quero automação' : 'Concluí este passo';

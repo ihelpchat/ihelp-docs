@@ -4413,6 +4413,17 @@ button {
   background: var(--ih-ink);
 }
 
+/* Pergunta da IA citada acima da escolha da pessoa ("Sim", "Encontrei"). */
+.ih-ai-user-quote {
+  display: block;
+  margin-bottom: 6px;
+  padding-left: 8px;
+  border-left: 2px solid rgba(253, 255, 252, 0.45);
+  color: rgba(253, 255, 252, 0.72);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .ih-ai-row {
   display: flex;
   align-items: flex-start;

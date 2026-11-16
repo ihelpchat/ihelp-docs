@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchContext } from 'fumadocs-ui/contexts/search';
 import { useAssistant, type ChatMessage } from '@/components/assistant/assistant-context';
 import { setPendingQuery } from '@/lib/search-query';
-import { clickablesFor, type AssistantReply } from '@/lib/assistant';
+import { clickablesFor, replyQuoteFor, type AssistantReply } from '@/lib/assistant';
 import { supportUrl, supportLink, supportGuideFromPage, supportGuideFromReply } from '@/lib/links';
 import { productActionUrl } from '@/lib/links';
 import { assistantDisplayName } from '@/lib/assistant-name';
@@ -266,9 +266,18 @@ export function AssistantThread({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="ih-ai-thread" aria-live="polite" data-compact={compact || undefined}>
-      {messages.map((message) => {
+      {messages.map((message, index) => {
         if (message.role === 'user') {
-          return <div key={message.id} className="ih-ai-user"><p>{message.text}</p></div>;
+          const previous = messages[index - 1];
+          const quote = previous?.role === 'ai' ? replyQuoteFor(previous.reply.answer, message.text) : null;
+          return (
+            <div key={message.id} className="ih-ai-user">
+              <p>
+                {quote ? <span className="ih-ai-user-quote">{quote}</span> : null}
+                {message.text}
+              </p>
+            </div>
+          );
         }
         if (message.role === 'ai') {
           return <AiMessage key={message.id} message={message} last={message.id === lastAi && messages.at(-1)?.id === message.id} compact={compact} />;

@@ -355,3 +355,14 @@ export async function requestAnswer(request: AssistantRequest, signal?: AbortSig
   }
   throw new AssistantError('Tive um problema. Tente de novo.', 502);
 }
+
+/**
+ * Quando a resposta termina perguntando algo e a pessoa responde curto ("Sim", "Encontrei"),
+ * a bolha dela cita a pergunta: a escolha fica legível sem parecer que ela escreveu a oferta.
+ */
+export function replyQuoteFor(previousAnswer: string | undefined, text: string): string | null {
+  const answer = String(previousAnswer ?? '').trim();
+  if (!answer.endsWith('?') || text.trim().length > 60) return null;
+  const question = answer.split(/(?<=[.!?])\s+/).at(-1)?.trim() ?? '';
+  return question.length >= 3 && question.length <= 160 ? question : null;
+}

@@ -359,7 +359,7 @@ const ANSWER_SCHEMA = {
       ],
     },
     sources: { type: 'array', items: { type: 'string' }, description: 'URLs das fontes realmente usadas, copiadas da lista.' },
-    suggestions: { type: 'array', items: { type: 'string' }, description: 'Até 3 perguntas curtas de continuação.' },
+    suggestions: { type: 'array', items: { type: 'string' }, description: 'Até 3 continuações curtas escritas como a própria pessoa digitaria (primeira pessoa), nunca perguntas do assistente para ela.' },
     resolution: {
       type: 'string',
       enum: ['complete', 'partial', 'not_found'],
@@ -521,9 +521,30 @@ function proceduralQuestion(question) {
   return /\b(?:como|criar|configurar|fazer|editar|alterar|importar|publicar|montar|passo|guiar|continuar)\b/i.test(normalize(question));
 }
 
+const GUIDE_REQUEST = /^(?:sim )?(?:pode )?me (?:guie|guiar)\b/;
+const ASSISTANT_VOICE = /^(?:quer|queres|deseja|gostaria|prefere|consegue|conseguiu|encontrou|achou|sabia)\b|\b(?:voce|vc|te|lhe|seu|sua|seus|suas)\b/;
+
+/**
+ * Sugestões viram mensagem da pessoa ao clicar, então precisam estar na voz dela.
+ * Oferta de guia na voz do assistente vira o botão fixo que entra no modo guiado;
+ * qualquer outra pergunta do assistente para a pessoa é descartada.
+ */
+export function personVoiceSuggestions(suggestions, answer = '') {
+  const offersQuestion = /\?\s*$/.test(String(answer).trim());
+  const result = [];
+  for (const suggestion of suggestions) {
+    const value = normalize(suggestion).replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!ASSISTANT_VOICE.test(value)) result.push(suggestion);
+    else if (/\b(?:gui(?:e|ar|o)|passo a passo|etapa por etapa)\b/.test(value)) {
+      result.push(offersQuestion ? 'Sim, me guie passo a passo' : 'Me guie passo a passo');
+    }
+  }
+  return [...new Set(result)].slice(0, 3);
+}
+
 function guidedContinuation(question, history) {
   const value = normalize(question).replace(/[^a-z0-9]+/g, ' ').trim();
-  return history.length > 0 && /^(?:sim(?: (?:pode )?me (?:guiar|ajudar))?|vamos(?: continuar)?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?|continue|continuar|comece|comecar|proximo(?: passo)?|(?:(?:ainda )?nao )?encontrei(?: .*)?|conclui(?: (?:este )?passo)?|preciso de ajuda|preenchi(?: .*)?|terminei|pronto|feito)$/.test(value);
+  return history.length > 0 && /^(?:sim(?: (?:pode )?me (?:guiar|ajudar|guie)(?: .*)?)?|vamos(?: continuar)?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?|continue|continuar|comece|comecar|proximo(?: passo)?|(?:(?:ainda )?nao )?encontrei(?: .*)?|conclui(?: (?:este )?passo)?|preciso de ajuda|preenchi(?: .*)?|terminei|pronto|feito)$/.test(value);
 }
 
 function guidedStepIndex(history, documentedSteps, firstShown = false) {
@@ -563,6 +584,8 @@ function activeAssistantText(history, question) {
 }
 
 function detailedProcedureQuestion(question) {
+  // "Sim, me guie passo a passo" pede o modo guiado (um passo por vez), não a lista completa.
+  if (GUIDE_REQUEST.test(normalize(question).replace(/[^a-z0-9]+/g, ' ').trim())) return false;
   return /\b(?:passo a passo|todos os passos|passos completos?|detalhad[oa]|do inicio ao fim|de uma vez)\b/i.test(normalize(question));
 }
 
@@ -736,7 +759,7 @@ export async function answerQuestion(root, question, options = {}) {
           continuation ? 'MODO: acompanhamento guiado. Entregue somente a próxima pequena ação em steps e termine perguntando se a pessoa encontrou ou concluiu aquilo antes de avançar.' : '',
           !overviewProcedure && !continuation ? 'Para perguntas de “como fazer”, use todos os PASSOS DOCUMENTADOS relevantes: não troque um procedimento detalhado por um resumo. Escreva um passo por ação, em ordem única, dizendo o texto exato de menus e botões, o resultado esperado e como confirmar que funcionou.' : '',
           'O primeiro passo sempre deve dizer onde começar. Use actionId somente quando uma AÇÃO fornecida levar exatamente ao local daquele passo; nunca invente IDs. Quando houver TELAS DOCUMENTADAS, associe cada tela ao passo que ela realmente ilustra, copiando o imagePath sem alterar; use null apenas quando nenhuma tela apoiar aquele passo. Para perguntas técnicas de API, inclua code com um exemplo que use $IHELP_TOKEN, apenas com endpoints presentes nas fontes.',
-          'Mantenha a conversa aberta. Em suggestions, ofereça de 2 a 3 continuações específicas, incluindo acompanhamento passo a passo quando houver procedimento. Se o histórico mostrar que a pessoa aceitou ser guiada, entregue apenas a próxima pequena etapa e pergunte se ela encontrou o botão ou concluiu o passo antes de avançar.',
+          'Mantenha a conversa aberta. Em suggestions, ofereça de 2 a 3 continuações específicas escritas na voz da pessoa, como ela mesma digitaria (ex.: “Me guie passo a passo”, “Como confirmo que deu certo?”); nunca escreva perguntas suas para ela (“Quer que eu…?”, “Você encontrou…?”). Inclua acompanhamento passo a passo quando houver procedimento. Se o histórico mostrar que a pessoa aceitou ser guiada, entregue apenas a próxima pequena etapa e pergunte se ela encontrou o botão ou concluiu o passo antes de avançar.',
           'Evite parágrafos densos e não repita a mesma informação entre answer, sections e steps. Em sources, liste só as URLs das fontes que você realmente usou (1 a 3). Texto simples: sem asteriscos, backticks, tabelas ou headings.',
           page ? `A pessoa está vendo a página "${page.title || page.path}" (${page.path}). “Esta página” ou “este artigo” se refere a ela.` : '',
         ].filter(Boolean).join(' '),
@@ -783,7 +806,7 @@ export async function answerQuestion(root, question, options = {}) {
   const stuck = /^(?:ainda )?nao encontrei\b/.test(intent);
   const needsHelp = intent === 'preciso de ajuda' || stuck;
   const foundButton = /^encontrei (?:o |esse )?botao\b/.test(intent);
-  const startGuide = /^(?:sim(?: (?:pode )?me (?:guiar|ajudar))?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?)$/.test(intent);
+  const startGuide = /^(?:sim(?: (?:pode )?me (?:guiar|ajudar|guie)(?: .*)?)?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?)$/.test(intent);
   const diagnosticFollowup = Boolean(choice && (activeDiagnosis || activeResume));
   const blockedFollowup = Boolean(activeBlocked && (choice || recovery));
   const progressIndex = continuation && fallbackSource
@@ -852,10 +875,10 @@ export async function answerQuestion(root, question, options = {}) {
     ? ['Concluí este passo', 'Preciso de ajuda']
     : overviewProcedure
       ? [...new Set(['Pode me guiar etapa por etapa', 'Quero ver todos os passos', ...(used[0]?.assistantSuggestions ?? [])])].slice(0, 5)
-      : parsed.suggestions.length
-        ? parsed.suggestions
+      : personVoiceSuggestions(parsed.suggestions, parsed.answer).length
+        ? personVoiceSuggestions(parsed.suggestions, parsed.answer)
         : responseSteps.length
-          ? ['Quero fazer isso passo a passo com você', 'Não encontrei onde começar', 'Como confirmo que deu certo?']
+          ? ['Me guie passo a passo', 'Não encontrei onde começar', 'Como confirmo que deu certo?']
           : [];
 
   const result = {
