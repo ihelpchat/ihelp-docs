@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { waitForMcpStartup } from './test-process.mjs';
+import { processTimeoutMs, waitForMcpStartup } from './test-process.mjs';
 import { test } from 'node:test';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -128,10 +128,11 @@ try {
               sha: match.sha }] }] : [] }) }) } } });
       process.stdout.write(JSON.stringify({ status: plan.status, files: plan.productContext?.files ?? [] }));
       process.exit(0);
-    `], { cwd: new URL('../..', import.meta.url).pathname, encoding: 'utf8', timeout: 30_000,
+    `], { cwd: new URL('../..', import.meta.url).pathname, encoding: 'utf8', timeout: processTimeoutMs,
       env: { ...process.env, MCP_STATE_DIR: stateDir, GITHUB_READ_TOKEN: '', PRODUCT_LOCAL_CHECKOUT: '',
         BACKEND_LOCAL_CHECKOUT: '', PORT: '0', DOCS_ROOT: root, OPENAI_API_KEY: '',
         DOCS_MCP_API_KEY: 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz' } });
+    assert.ifError(probe.error);
     assert.equal(probe.status, 0, probe.stderr);
     assert.equal(JSON.parse(probe.stdout).status, 'ready');
     assert.ok(JSON.parse(probe.stdout).files.some((file) => file.includes('src/pages/Widget.tsx')),
