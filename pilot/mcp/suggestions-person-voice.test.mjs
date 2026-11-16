@@ -26,7 +26,7 @@ assert.deepEqual(
 // Pergunta do assistente sem oferta de guia é descartada; duplicatas somem.
 assert.deepEqual(
   personVoiceSuggestions(['Você já tem o QR code em mãos?', 'Gostaria de saber mais sobre planos?', 'Quer que eu te guie?', 'Pode me guiar?'], 'Quer ajuda?'),
-  ['Sim, me guie passo a passo', 'Pode me guiar?'],
+  ['Gostaria de saber mais sobre planos?', 'Sim, me guie passo a passo', 'Pode me guiar?'],
 );
 
 console.log('suggestions-person-voice: ok');

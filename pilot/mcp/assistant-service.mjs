@@ -521,8 +521,8 @@ function proceduralQuestion(question) {
   return /\b(?:como|criar|configurar|fazer|editar|alterar|importar|publicar|montar|passo|guiar|continuar)\b/i.test(normalize(question));
 }
 
-const GUIDE_REQUEST = /^(?:sim )?(?:pode )?me (?:guie|guiar)\b/;
-const ASSISTANT_VOICE = /^(?:quer|queres|deseja|gostaria|prefere|consegue|conseguiu|encontrou|achou|sabia)\b|\b(?:voce|vc|te|lhe|seu|sua|seus|suas)\b/;
+const GUIDE_REQUEST = /^(?:sim )?(?:pode )?me (?:guie|guiar)(?: passo a passo| etapa por etapa)?$/;
+const ASSISTANT_VOICE = /^(?:quer|queres|deseja|prefere|consegue|conseguiu|encontrou|achou|sabia)\b|^gostaria que eu\b|\b(?:voce|vc|te|lhe|seu|sua|seus|suas)\b/;
 
 /**
  * Sugestões viram mensagem da pessoa ao clicar, então precisam estar na voz dela.
@@ -535,7 +535,7 @@ export function personVoiceSuggestions(suggestions, answer = '') {
   for (const suggestion of suggestions) {
     const value = normalize(suggestion).replace(/[^a-z0-9]+/g, ' ').trim();
     if (!ASSISTANT_VOICE.test(value)) result.push(suggestion);
-    else if (/\b(?:gui(?:e|ar|o)|passo a passo|etapa por etapa)\b/.test(value)) {
+    else if (/\b(?:gui(?:as?|e|ar|o)|passo a passo|etapa por etapa)\b/.test(value)) {
       result.push(offersQuestion ? 'Sim, me guie passo a passo' : 'Me guie passo a passo');
     }
   }
@@ -544,7 +544,7 @@ export function personVoiceSuggestions(suggestions, answer = '') {
 
 function guidedContinuation(question, history) {
   const value = normalize(question).replace(/[^a-z0-9]+/g, ' ').trim();
-  return history.length > 0 && /^(?:sim(?: (?:pode )?me (?:guiar|ajudar|guie)(?: .*)?)?|vamos(?: continuar)?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?|continue|continuar|comece|comecar|proximo(?: passo)?|(?:(?:ainda )?nao )?encontrei(?: .*)?|conclui(?: (?:este )?passo)?|preciso de ajuda|preenchi(?: .*)?|terminei|pronto|feito)$/.test(value);
+  return history.length > 0 && /^(?:sim(?: (?:pode )?me (?:guiar|ajudar|guie)(?: passo a passo| etapa por etapa)?)?|vamos(?: continuar)?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?|continue|continuar|comece|comecar|proximo(?: passo)?|(?:(?:ainda )?nao )?encontrei(?: .*)?|conclui(?: (?:este )?passo)?|preciso de ajuda|preenchi(?: .*)?|terminei|pronto|feito)$/.test(value);
 }
 
 function guidedStepIndex(history, documentedSteps, firstShown = false) {
@@ -806,7 +806,7 @@ export async function answerQuestion(root, question, options = {}) {
   const stuck = /^(?:ainda )?nao encontrei\b/.test(intent);
   const needsHelp = intent === 'preciso de ajuda' || stuck;
   const foundButton = /^encontrei (?:o |esse )?botao\b/.test(intent);
-  const startGuide = /^(?:sim(?: (?:pode )?me (?:guiar|ajudar|guie)(?: .*)?)?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?)$/.test(intent);
+  const startGuide = /^(?:sim(?: (?:pode )?me (?:guiar|ajudar|guie)(?: passo a passo| etapa por etapa)?)?|pode me guiar(?: .*)?|(?:me )?guie(?: .*)?)$/.test(intent);
   const diagnosticFollowup = Boolean(choice && (activeDiagnosis || activeResume));
   const blockedFollowup = Boolean(activeBlocked && (choice || recovery));
   const progressIndex = continuation && fallbackSource
