@@ -226,7 +226,29 @@ export function kindOf(path) {
   return 'Ajuda';
 }
 
-export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo', page, preferredPaths = [], requiredPath } = {}) {
+const SEMANTIC_BOOST = Number(process.env.ASSISTANT_SEMANTIC_BOOST ?? 60);
+const SEMANTIC_TIMEOUT_MS = Number(process.env.ASSISTANT_SEMANTIC_TIMEOUT_MS ?? 1_500);
+const SEMANTIC_STEP = Number(process.env.ASSISTANT_SEMANTIC_STEP ?? 8);
+
+/** Posição de cada página pública na busca por sentido + palavra da base de conhecimento. Falha vira mapa vazio. */
+export async function semanticRanksFor(search, question) {
+  if (!search || String(question ?? '').trim().length < 2) return new Map();
+  try {
+    // A busca por sentido não pode atrasar a resposta: passou do prazo, a Claricia segue só por palavra.
+    const result = await Promise.race([search({ query: question, visibility: 'publica', limit: 24 }),
+      new Promise((resolve) => setTimeout(() => resolve(null), SEMANTIC_TIMEOUT_MS).unref?.())]);
+    if (!result) return new Map();
+    const { hits } = result;
+    const ranks = new Map();
+    for (const { chunk } of hits) {
+      const path = `/${String(chunk.ref.path ?? '').replace(/^\//, '')}`;
+      if (!ranks.has(path)) ranks.set(path, ranks.size + 1);
+    }
+    return ranks;
+  } catch { return new Map(); }
+}
+
+export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo', page, preferredPaths = [], requiredPath, semanticRanks } = {}) {
   const contentRoot = join(root, 'content/docs');
   const normalizedQuestion = normalize(question);
   const searchQuestion = normalizedQuestion.replace(/\brecados?\b/g, 'mensagem');
@@ -234,7 +256,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
   const terms = [...new Set(searchQuestion.split(/[^a-z0-9]+/).filter((term) => term.length > 2
     && !STOP_WORDS.has(term) && !['nao', 'nem'].includes(term)
     && !negatedTerms.some((negated) => term.replace(/s$/, '') === negated)))];
-  if (!terms.length && !page?.path && !preferredPaths.length) return [];
+  if (!terms.length && !page?.path && !preferredPaths.length && !semanticRanks?.size) return [];
 
   const ranked = [];
   for (const file of await walk(contentRoot)) {
@@ -251,7 +273,9 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
     const descriptionText = normalize(description);
     const bodyText = normalize(body);
     const matches = terms.filter((term) => titleText.includes(term) || descriptionText.includes(term) || bodyText.includes(term));
-    if (!matches.length && !onPage && !fromConversation) continue;
+    // Base de conhecimento: página achada pelo sentido entra mesmo sem palavra em comum com a pergunta.
+    const semanticRank = semanticRanks?.get(path) ?? 0;
+    if (!matches.length && !onPage && !fromConversation && !semanticRank) continue;
     const apiQuestion = terms.some((term) => ['api', 'endpoint', 'token', 'bearer', 'curl'].includes(term));
     // Pergunta de produto não deve cair na referência da API (o CRM tem uma página por endpoint, muitas com "Criar" no título).
     const sectionBoost = apiQuestion ? (path.startsWith('/api/') ? 8 : 0) : (path.startsWith('/docs/') ? 5 : path.startsWith('/api/') ? -8 : 0);
@@ -278,7 +302,8 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       + (titleTerms.length ? Math.round(12 * matchedTitleTerms / titleTerms.length) : 0)
       + (frontmatterValue(raw, 'contentType') === 'guia' && titleMatch ? 20 : 0)
       + (frontmatterValue(raw, 'assistantOverview') && titleMatch ? 15 : 0)
-      + (phraseMatch ? 30 : 0);
+      + (phraseMatch ? 30 : 0)
+      + (semanticRank ? Math.max(0, SEMANTIC_BOOST - (semanticRank - 1) * SEMANTIC_STEP) : 0);
     const screenshots = screenshotsOf(raw);
     const documentedSteps = documentedStepsOf(raw);
     ranked.push({
@@ -629,6 +654,7 @@ export async function answerQuestion(root, question, options = {}) {
   const preferredPaths = sourcePathsFromHistory(history);
   let sources = await retrieveContext(root, question, 8, {
     scope, page, preferredPaths, requiredPath: generalContinuation || choice || recovery ? preferredPaths.at(-1) : undefined,
+    semanticRanks: await semanticRanksFor(options.knowledgeSearch, question),
   });
   let business = '';
   if (!options.withoutBusinessContext && !procedure && !generalContinuation && !choice && !recovery && !detailedProcedure && sources.length) {

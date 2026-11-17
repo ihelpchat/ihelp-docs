@@ -183,7 +183,7 @@ export async function getInventory(root) {
   };
 }
 
-async function githubRequest(path, init = {}, allowNotFound = false) {
+export async function githubRequest(path, init = {}, allowNotFound = false) {
   const token = githubWriteToken();
   if (!token) throw new SubmitArticleError('GITHUB_NOT_CONFIGURED', 'GITHUB_TOKEN não configurado');
   const response = await fetch(`https://api.github.com${path}`, {
@@ -201,6 +201,7 @@ async function githubRequest(path, init = {}, allowNotFound = false) {
     const status = Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : 'desconhecido';
     throw new SubmitArticleError('GITHUB_HTTP_ERROR', `GitHub API ${status} rejeitou operação`);
   }
+  if (response.status === 204) return null;
   return response.json();
 }
 

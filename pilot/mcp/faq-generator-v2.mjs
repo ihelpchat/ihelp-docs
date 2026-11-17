@@ -25,7 +25,7 @@ const pageSchema = object({ title: { type: 'string' }, titleEvidenceIds: { type:
   heading: { type: 'string' }, headingEvidenceIds: { type: 'array', items: { type: 'string' } },
   taskId: { type: ['string', 'null'] }, units: { type: 'array', items: unitSchema },
 }) } });
-const factSchema = object({ claims: { type: 'array', items: object({ id: { type: 'string' },
+export const factSchema = object({ claims: { type: 'array', items: object({ id: { type: 'string' },
   status: { type: 'string', enum: ['sustentada', 'a confirmar', 'contradiz a fonte'] },
   reason: { type: 'string' }, sourceMention: { type: 'boolean' },
   evidenceIds: { type: 'array', items: { type: 'string' } },
@@ -74,7 +74,7 @@ function publishedFields(page) {
   return [...fields, ...metadata].flatMap((field) => [field, ...[...String(field.text ?? '').matchAll(markdownLabels)]
     .map((match) => ({ ...field, text: match[2], field: `${field.field}.${match[1] ? 'imageAlt' : 'linkText'}` }))]);
 }
-const faqFrontmatter = (page) => `---\ntitle: ${JSON.stringify(page.title)}\n${page.description
+export const faqFrontmatter = (page) => `---\ntitle: ${JSON.stringify(page.title)}\n${page.description
   ? `description: ${JSON.stringify(page.description)}\n` : ''}---\n\n`;
 function renderPage(page) {
   return [`# ${page.title}`, ...page.sections.map((section) => {

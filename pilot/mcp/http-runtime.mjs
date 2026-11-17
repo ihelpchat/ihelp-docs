@@ -258,6 +258,7 @@ export const httpServer = createServer(async (request, response) => {
       let resolvedStep;
       const result = await answerQuestion(root, question, {
         history, scope, page, guide: body.guide, widgetContext,
+        knowledgeSearch,
         onResolvedStep: (step) => { resolvedStep = step; },
       });
       const topic = topicForQuestion(question);
@@ -366,6 +367,17 @@ export const httpServer = createServer(async (request, response) => {
   await requestIdentity.run(identity, () => handler(request, response));
 });
 
+// Base de conhecimento (sentido + palavra) para a Claricia. Carrega em segundo plano na primeira pergunta
+// que precisa de busca (guia não precisa); até ficar pronta, ou com ASSISTANT_KNOWLEDGE_BASE=off, a busca segue como antes.
+let knowledgeBase = null;
+let knowledgeLoading = null;
+const knowledgeSearch = process.env.ASSISTANT_KNOWLEDGE_BASE !== 'off' && process.env.OPENAI_API_KEY ? (query) => {
+  if (knowledgeBase) return knowledgeBase.search(query);
+  knowledgeLoading ??= import('./kb-store.mjs').then(({ sharedKnowledgeBase }) => sharedKnowledgeBase(root))
+    .then((base) => { knowledgeBase = base; console.error(`base de conhecimento pronta: ${base.index.chunks.length} trechos, ${base.withVectors} com vetor`); })
+    .catch((error) => console.error(`base de conhecimento indisponível: ${error instanceof Error ? error.message : 'erro'}`));
+  return null;
+} : null;
 httpServer.listen(port, '0.0.0.0', () => console.error(`iHelp Docs MCP ouvindo na porta ${port}`));
 
 process.on('SIGINT', async () => {

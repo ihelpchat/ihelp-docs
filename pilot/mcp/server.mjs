@@ -6,6 +6,7 @@ import { articleSchema } from './article-fields.mjs';
 import { auditOperation, deleteArticle, getInventory, isSafeRequestedBy, searchContent, SubmitArticleError, submitArticle, submitContentPackage, validateArticle } from './content-service.mjs';
 import { auditContent, readArticle } from './editorial-standard.mjs';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
+import { faqPedir, faqRascunho, faqResponder, faqStatus } from './agent-service.mjs';
 import { getIhelpContext, publicProductContext } from './product-context-service.mjs';
 import { authorizeTool, registerToolPolicy, requestIdentity } from './access-control.mjs';
 import { createGuide } from './create-guide.mjs';
@@ -31,7 +32,7 @@ const probeCurrentJourneyAccount = async () => {
   return probeJourneyAccount(process.env);
 };
 const lockedJourneyProbe = () => withJourneyGate(probeCurrentJourneyAccount);
-const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_generate_faq_v2', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto']);
+const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_generate_faq_v2', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto', 'faq_pedir', 'faq_rascunho', 'faq_responder', 'faq_status']);
 const requestedBySchema = z.string().optional().describe('Ator opcional; se informado, deve coincidir com o ator da credencial');
 const confirmationsSchema = z.array(z.string().max(300)).max(8).optional();
 const contentRequestSchema = z.object({
@@ -135,6 +136,49 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     description: 'Busca conteúdo existente antes de criar ou duplicar um FAQ.',
     inputSchema: z.object({ query: z.string().min(2), limit: z.number().int().min(1).max(20).default(8) }),
   }, async ({ query, limit }) => textResult({ results: await searchContent(root, query, limit) }));
+
+  const sessionId = z.string().regex(/^[a-f0-9]{32}$/).describe('Id devolvido por faq_pedir');
+  const agentTool = (name, config, run) => registerTool(name, config, async (args) => {
+    await auditOperation(root, { actor: args.requestedBy, operation: name, target: args.sessao ?? 'nova', result: 'attempt' });
+    try {
+      const result = await run(args);
+      await auditOperation(root, { actor: args.requestedBy, operation: name, target: result.sessao, result: result.estado });
+      return textResult(result);
+    } catch (error) {
+      await auditOperation(root, { actor: args.requestedBy, operation: name, target: args.sessao ?? 'nova', result: 'failure' });
+      return textResult({ error: error instanceof Error ? error.message : 'falha no agente' }, true);
+    }
+  });
+
+  agentTool('faq_pedir', {
+    mutates: true,
+    description: 'Peça um conteúdo de ajuda em linguagem livre (ex.: "FAQ sobre campanha, com um tópico sobre QR ser mais suscetível a bloqueio"). Um agente busca o que já existe, lê o que precisar e devolve um plano ou perguntas. Responde na hora com o id da sessão; acompanhe por faq_status.',
+    inputSchema: z.strictObject({ pedido: z.string().min(10).max(2_000), modulo: z.string().min(2).max(80).optional(), requestedBy: requestedBySchema }),
+  }, (args) => faqPedir(root, args));
+
+  agentTool('faq_responder', {
+    mutates: true,
+    description: 'Responde às perguntas do agente e/ou manda uma sugestão livre ("inclui um exemplo de loja", "prefiro FAQ novo"). O agente retoma o trabalho.',
+    inputSchema: z.strictObject({ sessao: sessionId,
+      respostas: z.array(z.strictObject({ perguntaId: z.string().regex(/^[a-f0-9]{12}$/), texto: z.string().min(1).max(2_000) })).max(8).optional(),
+      sugestao: z.string().max(2_000).optional(), requestedBy: requestedBySchema }),
+  }, (args) => faqResponder(root, args));
+
+  agentTool('faq_rascunho', {
+    mutates: true,
+    description: 'Com o plano fechado, manda o agente escrever o texto e passar pelos juízes (fatos, editorial, segurança). Chame de novo para ver o rascunho, o resultado dos juízes e a revisão que será publicada.',
+    inputSchema: z.strictObject({ sessao: sessionId, requestedBy: requestedBySchema,
+      previa: z.boolean().optional().describe('true publica o rascunho aprovado numa branch pública e no site de staging, para ver no layout real') }),
+  }, (args) => faqRascunho(root, args));
+
+  registerTool('faq_status', {
+    mutates: false,
+    description: 'Mostra o estado da sessão do agente: plano, perguntas abertas e o que ele já fez.',
+    inputSchema: z.strictObject({ sessao: sessionId, requestedBy: requestedBySchema }),
+  }, async (args) => {
+    try { return textResult(await faqStatus(root, args)); }
+    catch (error) { return textResult({ error: error instanceof Error ? error.message : 'falha no agente' }, true); }
+  });
 
   registerTool('docs_get_article', {
     mutates: false,

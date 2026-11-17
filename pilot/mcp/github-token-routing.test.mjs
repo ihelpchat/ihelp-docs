@@ -71,6 +71,8 @@ async function exercise(label, readToken) {
 
   const reached = new Map();
   for (const [name, { config, callback }] of tools) {
+    // Tools do agente editor têm entrada própria e não falam com o GitHub nesta fase.
+    if (name.startsWith('faq_')) continue;
     const start = calls.length;
     const source = name === 'docs_delete_article' ? { ...request, path: 'docs/teste/remocao-isolada' }
       : name === 'docs_generate_faq_v2' ? { ...request, module: 'contatos' }
