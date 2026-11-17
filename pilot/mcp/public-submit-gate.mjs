@@ -58,7 +58,7 @@ function checkLabelBlock(node, path) {
   }
 }
 
-function checkInterfaceLabels(body, path) {
+export function checkInterfaceLabels(body, path = '') {
   visit(parseMdx(body), (node) => {
     if (!PHRASING.has(node.type) && node.children?.some((child) => PHRASING.has(child.type))) checkLabelBlock(node, path);
     if (node.type !== 'mdxJsxFlowElement' && node.type !== 'mdxJsxTextElement') return;

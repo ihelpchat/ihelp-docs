@@ -45,7 +45,7 @@ export function normalizeSessionEvent(input, { now = Date.now() } = {}) {
     || (input.companyId !== undefined && input.origin !== 'app')
     || (input.actorId !== undefined && input.companyId === undefined)
     || !ID.test(input.sessionId ?? '') || !ORIGINS.has(input.origin)
-    || (input.guideId !== undefined && !GUIDE_IDS.has(input.guideId))
+    || (input.guideId !== undefined && !GUIDE_IDS.has(input.guideId) && !/^gen-[a-f0-9]{12}$/.test(input.guideId))
     || (input.stepId !== undefined && !ID.test(input.stepId))
     || !Number.isInteger(input.durationMs) || input.durationMs < 0 || input.durationMs > 300_000
     || !RESULTS.has(input.result) || !PATH.test(input.path ?? '')) invalid();

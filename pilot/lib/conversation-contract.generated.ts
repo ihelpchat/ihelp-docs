@@ -4,6 +4,38 @@ export type ActionId = "importar-contatos" | "abrir-robos" | "abrir-usuarios" | 
 
 export type GuideId = "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
 
+export type GeneratedGuideV1 = {
+  schemaVersion: 1;
+  guideId: `gen-${string}`;
+  version: number;
+  mode: "gerado";
+  initialStepId: string;
+  transitions: "explicit";
+  steps: Array<{
+  stepId: string;
+  title: string;
+  text: string;
+  route: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/atendimento/mobile" | "/tarefas" | "/configuracoes/usuarios/novo";
+  choices?: Array<{
+  id: string;
+  label: string;
+  nextStepId?: string;
+  outcome?: "complete" | "handoff" | "paused";
+}>;
+  next?: {
+  nextStepId: string;
+} | {
+  outcome: "complete" | "handoff" | "paused";
+};
+  locator: {
+  kind: "button" | "field" | "link" | "tab" | "menuitem" | "heading";
+  name: string;
+  within?: string;
+};
+  advanceOn?: "click" | "change";
+}>;
+};
+
 export type GuideV1 = {
   schemaVersion: 1;
   guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
@@ -70,10 +102,10 @@ export type AssistantRequestV1 = {
   incidents?: Array<"channel_outage" | "message_delivery" | "billing" | "robot" | "app">;
 };
   guide?: {
-  guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
+  guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm" | string;
   stepId: string;
   version: number;
-  mode: "real" | "treino";
+  mode: "real" | "treino" | "gerado";
   pendingChoiceId?: string;
   pendingChoice?: string;
   choiceId?: string;
@@ -144,18 +176,49 @@ export type AssistantReplyV1 = {
   incidents?: Array<"channel_outage" | "message_delivery" | "billing" | "robot" | "app">;
 };
   attempts: Array<"documented_guide" | "reported_stuck">;
-  guideId?: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
+  guideId?: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm" | string;
   stepId?: string;
 };
   guide?: {
-  guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
+  guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm" | string;
   stepId: string;
   version: number;
-  mode: "real" | "treino";
+  mode: "real" | "treino" | "gerado";
   pendingChoiceId?: string;
   pendingChoice?: string;
   choiceId?: string;
   stateToken?: string;
+};
+  generatedGuide?: {
+  schemaVersion: 1;
+  guideId: `gen-${string}`;
+  version: number;
+  mode: "gerado";
+  initialStepId: string;
+  transitions: "explicit";
+  steps: Array<{
+  stepId: string;
+  title: string;
+  text: string;
+  route: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/atendimento/mobile" | "/tarefas" | "/configuracoes/usuarios/novo";
+  choices?: Array<{
+  id: string;
+  label: string;
+  nextStepId?: string;
+  outcome?: "complete" | "handoff" | "paused";
+}>;
+  next?: {
+  nextStepId: string;
+} | {
+  outcome: "complete" | "handoff" | "paused";
+};
+  locator: {
+  kind: "button" | "field" | "link" | "tab" | "menuitem" | "heading";
+  name: string;
+  within?: string;
+};
+  advanceOn?: "click" | "change";
+}>;
 };
   guideChoices?: Array<{
   id: string;

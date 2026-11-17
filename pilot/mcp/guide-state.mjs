@@ -1,13 +1,22 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseDocument } from 'yaml';
-import { parseGuide } from '../architecture/conversation-v1.mjs';
+import { generatedGuideSchema, parseGuide } from '../architecture/conversation-v1.mjs';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
 import actions from '../architecture/product-actions.json' with { type: 'json' };
 import canonicalGuideIds from '../architecture/guide-ids.json' with { type: 'json' };
 import { diagnoseState, escalationFor, sanitizeWidgetContext } from './real-state.mjs';
 import { guideStateToken, guideStatePath } from './opaque-id.mjs';
 
+const generatedSessions = new Map();
+const ttl = 30 * 60 * 1000;
+export function cacheSessionGuide(sessionId, source) {
+  if (!sessionId) return false;
+  for (const [key, entry] of generatedSessions) if (entry.expires < Date.now()) generatedSessions.delete(key);
+  if (generatedSessions.size >= 1000) generatedSessions.delete(generatedSessions.keys().next().value);
+  generatedSessions.set(`${sessionId}:${source.guide.guideId}`, { source: { ...source, guide: generatedGuideSchema.parse(source.guide) }, expires: Date.now() + ttl });
+  return true;
+}
 const plain = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 export function requestsHuman(value) {
   const text = plain(value);
@@ -67,6 +76,7 @@ function reply(source, step, answer, options = {}) {
     sources: [{ title: source.title, path: source.path }],
     suggestions: step.choices?.map((choice) => choice.label) ?? stepSuggestions(source.guide, step),
     resolution: 'in_progress', found: true, guide: state,
+    ...(source.guide.mode === 'gerado' ? { generatedGuide: source.guide } : {}),
     ...(step.choices?.length ? { guideChoices: step.choices.map(({ id, label }) => ({ id, label })) } : {}),
     ...rest,
   };
@@ -98,7 +108,8 @@ function guideLastStep(guide, step) {
 
 export async function answerGuide(root, question, state, options = {}) {
   const command = plain(question);
-  const source = await publishedGuide(root, state.guideId);
+  const cached = generatedSessions.get(`${options.sessionId}:${state.guideId}`);
+  const source = state.guideId.startsWith('gen-') ? (cached?.expires > Date.now() ? cached.source : null) : await publishedGuide(root, state.guideId);
   const context = sanitizeWidgetContext(options.widgetContext);
   const guide = source?.guide;
   const current = guide?.steps.find((step) => step.stepId === state.stepId);
@@ -158,6 +169,8 @@ export async function answerGuide(root, question, state, options = {}) {
   if (state.pendingChoiceId && state.pendingChoiceId !== current.stepId) {
     return safe;
   }
+  if (guide.mode === 'gerado' && /^(?:pausar|pausa)$/.test(command)) return finish('paused', path);
+  if (guide.mode === 'gerado' && (command === 'preciso de ajuda' || /nao encontrei/.test(command))) return finish('handoff', path);
   if (command === 'preciso de ajuda' || /nao encontrei/.test(command)) {
     return reply(source, current, 'Vamos conferir esta etapa. Veja a ação abaixo e me diga onde parou.', { path: path ?? [current.stepId] });
   }

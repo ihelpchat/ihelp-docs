@@ -1,3 +1,4 @@
+import { generateGuide } from './generated-guide.mjs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import OpenAI from 'openai';
@@ -720,6 +721,10 @@ export async function answerQuestion(root, question, options = {}) {
   }, 'fallbackReason', { value: fallbackReason });
   if (routerFailed) return routerOutOfBudget ? fixedFallback(false, 'budget_exhausted') : fixedFallback(true, 'router_failed');
   const client = options.client ?? (apiKey ? new OpenAI({ apiKey, maxRetries: 0, ...(options.baseURL ? { baseURL: options.baseURL } : {}) }) : null);
+  if (procedure && !routerFailed) {
+    const generated = await generateGuide(root, question, sources, client, options);
+    if (generated) return generated;
+  }
   const context = sources.map((source, index) => [
     `FONTE ${index + 1}: ${source.title}`,
     `URL: ${source.path}`,
