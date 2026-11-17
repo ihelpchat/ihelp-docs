@@ -25,14 +25,19 @@ if (approved && (!approved.frontSha || !approved.backSha || !approved.manifest |
 }
 const current = await buildProductMap({ frontRoot: front, backRoot: back, guides, actions: actionCatalog, baseline: approved?.manifest });
 const sha = (dir) => execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-const report = { frontSha: sha(front), backSha: sha(back), ...current };
+const report = { schemaVersion: 2, frontSha: sha(front), backSha: sha(back), ...current };
+report.sourceRevisions = Object.fromEntries(['front', 'back'].map((side) => [side,
+  [...new Set([report[`${side}Sha`], approved?.[`${side}Sha`],
+    ...(Array.isArray(approved?.sourceRevisions?.[side]) ? approved.sourceRevisions[side] : [])])]
+    .filter((value) => typeof value === 'string' && /^[a-f0-9]{40}$/u.test(value)).sort(),
+]));
 if (approving) {
   await mkdir(dirname(approvedFile), { recursive: true });
-  await writeFile(approvedFile, `${JSON.stringify({ frontSha: report.frontSha, backSha: report.backSha, manifest: report.manifest })}\n`);
+  await writeFile(approvedFile, `${JSON.stringify({ schemaVersion: 2, frontSha: report.frontSha, backSha: report.backSha, sourceRevisions: report.sourceRevisions, manifest: report.manifest })}\n`);
 }
 await writeFile(output, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
 console.log(`front ${report.frontSha}; back ${report.backSha}`);
-console.log(`rotas ${report.manifest.routes.length}; rótulos ${report.manifest.labels.length}; marcadores ${report.manifest.markers.length}; permissões ${report.manifest.permissions.length}`);
+console.log(`rotas ${report.manifest.routes.length}; rótulos ${report.manifest.labels.length}; elementos ${report.manifest.elements.length}; marcadores ${report.manifest.markers.length}; permissões ${report.manifest.permissions.length}`);
 for (const change of report.changes) console.log(`mudança: ${change}`);
 for (const item of report.informational) console.log(`informação: ${item}`);
 for (const pending of report.pending) console.log(`pendência: ${pending}`);

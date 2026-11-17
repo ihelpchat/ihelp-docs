@@ -919,3 +919,6 @@ function groupsIn(value, groups = SYNONYMS) {
 function sameGroup(left, right, groups = SYNONYMS) {
   return groupsIn(left, groups).some((group) => groupsIn(right, groups).includes(group));
 }
+
+// Shared by the product-map static route graph; keep import resolution consistent.
+export { resolveImport as resolveFrontImport };

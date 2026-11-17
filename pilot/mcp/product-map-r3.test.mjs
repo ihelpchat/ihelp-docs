@@ -34,6 +34,16 @@ try {
   const run = () => spawnSync(process.execPath, args, { encoding: 'utf8' });
   assert.equal(spawnSync(process.execPath, [...args, '--approve'], { encoding: 'utf8' }).status, 0, 'approve writes persistent baseline');
   assert.deepEqual((JSON.parse(await readFile(approvedFile, 'utf8'))).manifest, approved);
+  const firstSnapshot = JSON.parse(await readFile(approvedFile, 'utf8'));
+  assert.equal(firstSnapshot.schemaVersion, 2);
+  assert.ok(firstSnapshot.sourceRevisions.front.includes(firstSnapshot.frontSha));
+  execFileSync('git', ['-C', front, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'next fixture revision']);
+  assert.equal(spawnSync(process.execPath, [...args, '--approve'], { encoding: 'utf8' }).status, 0);
+  const nextSnapshot = JSON.parse(await readFile(approvedFile, 'utf8'));
+  assert.notEqual(nextSnapshot.frontSha, firstSnapshot.frontSha);
+  assert.ok(nextSnapshot.sourceRevisions.front.includes(firstSnapshot.frontSha), 'previous approved source revision is retained');
+  assert.ok(nextSnapshot.sourceRevisions.front.includes(nextSnapshot.frontSha));
+  assert.deepEqual(nextSnapshot.manifest, approved, 'revision metadata cannot change the product inventory');
   assert.equal(run().status, 0, 'A: protected endpoint matches approved baseline');
   await writeFile(backFile, (await readFile(backFile, 'utf8')).replace('[Authorize(Policy = "Channels.Read")]', ''));
   assert.notEqual(run().status, 0, 'B: lost authorization must fail');

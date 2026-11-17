@@ -1,8 +1,9 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { join, relative, posix } from 'node:path';
 import { sensitiveKinds } from '../mcp/sensitive-data.mjs';
 import ts from 'typescript';
 import { readCsharpEndpoints } from './csharp-endpoints.mjs';
+import { resolveFrontImport } from '../mcp/front-screen-facts.mjs';
 
 const safe = (value, pattern = /^[\p{L}\p{N} ._:/-]{1,100}$/u) => {
   if (!pattern.test(value) || Object.values(sensitiveKinds(value)).some(Boolean)) return null;
@@ -35,6 +36,9 @@ function differences(before, after, kind, key) {
 
 export async function buildProductMap({ frontRoot, backRoot, guides, actions, baseline }) {
   const routes = [];
+  const records = new Map();
+  const seeds = [];
+  const sections = new Map();
   const markers = [];
   const labels = [];
   const permissions = [];
@@ -50,6 +54,8 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
     const path = relative(frontRoot, file);
     const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : file.endsWith('.jsx') ? ts.ScriptKind.JSX : file.endsWith('.ts') ? ts.ScriptKind.TS : ts.ScriptKind.JS;
     const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
+    const record = { provided: new Set(), imports: new Map(), exports: new Map(), importedNames: new Map(), rendered: new Set(), modalUses: new Map(), elements: [] };
+    records.set(path, record);
     const constants = new Map();
     const ambiguousConstants = new Set();
     const addLabel = (value) => {
@@ -99,7 +105,116 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
       const element = node.parent;
       return ts.isJsxElement(element) && /^(button|Button|Title|Label|strong|StyledGreenSpan)$/u.test(element.openingElement.tagName.getText(ast));
     };
+    const prop = (node, name) => node.properties?.find((item) => ts.isPropertyAssignment(item) && item.name.getText(ast).replace(/^['"]|['"]$/gu, '') === name)?.initializer;
+    const routeText = (node) => {
+      if (node && ts.isIdentifier(node) && node.text === 'CONFIG_V4_PREFIX') return registryPrefix;
+      if (node && ts.isTemplateExpression(node) && node.head.text === '' && node.templateSpans.length === 1 && node.templateSpans[0].expression.getText(ast) === 'CONFIG_V4_PREFIX' && registryPrefix)
+        return registryPrefix + node.templateSpans[0].literal.text;
+      return staticText(node)[0];
+    };
+    const tags = (node) => {
+      const found = [];
+      const walk = (child) => {
+        if (ts.isJsxOpeningElement(child) || ts.isJsxSelfClosingElement(child)) found.push(child.tagName.getText(ast));
+        ts.forEachChild(child, walk);
+      };
+      if (node) walk(node);
+      return found;
+    };
     const visit = (node) => {
+      if (node.modifiers?.some((item) => item.kind === ts.SyntaxKind.ExportKeyword)) {
+        if (node.modifiers.some((item) => item.kind === ts.SyntaxKind.DefaultKeyword)) record.provided.add('default');
+        if (node.name && ts.isIdentifier(node.name)) record.provided.add(node.name.text);
+        if (ts.isVariableStatement(node)) for (const item of node.declarationList.declarations)
+          if (ts.isIdentifier(item.name)) record.provided.add(item.name.text);
+      }
+      if (ts.isExportAssignment(node) && !node.isExportEquals) record.provided.add('default');
+      if (ts.isExportDeclaration(node) && !node.moduleSpecifier && node.exportClause && ts.isNamedExports(node.exportClause))
+        for (const item of node.exportClause.elements) record.provided.add(item.name.text);
+      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+        const clause = node.importClause;
+        if (clause?.name) { record.imports.set(clause.name.text, node.moduleSpecifier.text); record.importedNames.set(clause.name.text, 'default'); }
+        if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings))
+          for (const item of clause.namedBindings.elements) { record.imports.set(item.name.text, node.moduleSpecifier.text); record.importedNames.set(item.name.text, item.propertyName?.text ?? item.name.text); }
+      }
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+        const findLazy = (child) => {
+          if (ts.isCallExpression(child) && child.expression.kind === ts.SyntaxKind.ImportKeyword && ts.isStringLiteral(child.arguments[0]))
+            { record.imports.set(node.name.text, child.arguments[0].text); record.importedNames.set(node.name.text, 'default'); }
+          ts.forEachChild(child, findLazy);
+        };
+        findLazy(node.initializer);
+      }
+      if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && !node.isTypeOnly) {
+        if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+          for (const item of node.exportClause.elements) if (!item.isTypeOnly)
+            record.exports.set(item.name.text, { specifier: node.moduleSpecifier.text, name: item.propertyName?.text ?? item.name.text });
+        } else if (!node.exportClause) record.exports.set(`*:${node.pos}`, { specifier: node.moduleSpecifier.text, name: '*' });
+      }
+      if (ts.isObjectLiteralExpression(node)) {
+        const route = routeText(prop(node, 'path'));
+        const title = staticText(prop(node, 'title'))[0];
+        let routeOwner = path === 'src/features/configurations/routes.tsx';
+        for (let parent = node.parent; parent; parent = parent.parent)
+          if (ts.isVariableDeclaration(parent) && /^(?:pagesData|[A-Za-z0-9_]*[Rr]outes)$/u.test(parent.name.getText(ast))) routeOwner = true;
+        if (routeOwner && route?.startsWith('/') && safe(route, /^\/[A-Za-z0-9_/:.-]{1,120}$/u) && title && safe(title)) {
+          routes.push({ path: route, label: title });
+          for (const component of tags(prop(node, 'element'))) seeds.push({ path, component, route });
+        }
+        if (path === registryFile && route && prop(node, 'id')) {
+          const id = staticText(prop(node, 'id'))[0];
+          const legacy = prop(node, 'legacyPaths');
+          sections.set(id, [route, ...(legacy && ts.isArrayLiteralExpression(legacy) ? legacy.elements.flatMap((item) => staticText(item)) : [])]);
+        }
+      }
+      if (path === 'src/features/configurations/registry/elements.tsx' && ts.isPropertyAssignment(node)) {
+        const id = node.name.getText(ast).replace(/^['"]|['"]$/gu, '');
+        for (const component of tags(node.initializer)) seeds.push({ path, component, section: id });
+      }
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const tag = node.tagName.getText(ast);
+        record.rendered.add(tag);
+        let inModal = false;
+        for (let parent = node; parent; parent = parent.parent) {
+          const name = parent.name?.getText(ast) ?? (ts.isJsxElement(parent) ? parent.openingElement.tagName.getText(ast) : '');
+          if (/Modal|Dialog|Drawer|Sidebar/iu.test(name)) inModal = true;
+        }
+        // A component used both inside and outside a dialog has no proven global modal scope.
+        record.modalUses.set(tag, record.modalUses.has(tag) ? record.modalUses.get(tag) && inModal : inModal);
+        const attrs = new Map(node.attributes.properties.filter(ts.isJsxAttribute).map((item) => [item.name.getText(ast), item.initializer && ts.isJsxExpression(item.initializer) ? item.initializer.expression : item.initializer]));
+        const role = staticText(attrs.get('role'))[0];
+        const kind = ['button', 'field', 'link', 'tab', 'menuitem', 'heading'].includes(role) ? role
+          : /^(?:button|Button|ButtonIconAction|ButtonWithIcon|IconButton|MenuButton)$/u.test(tag) ? 'button'
+          : /^(?:a|Link|NavLink)$/u.test(tag) ? 'link'
+          : /^(?:input|select|textarea|Input\w*|Select\w*|Textarea\w*|TextArea\w*|LegacySelect\w*|MultiSelectSystem)$/u.test(tag) && !/(?:Container|Wrapper|Group|Label|Node|Option|Content|Icon|Provider|Context|Props)$/u.test(tag) ? 'field'
+          : /^(?:Tab|TabItem)$/u.test(tag) ? 'tab'
+          : tag === 'MenuItem' ? 'menuitem'
+          : /^(?:h[1-6]|Title|DialogTitle)$/u.test(tag) ? 'heading' : null;
+        if (kind) {
+          let names = [];
+          for (const key of ['aria-label', 'label', 'labelText', 'tooltipTitle', 'placeholder', 'title']) {
+            names = staticText(attrs.get(key));
+            if (names.length) break;
+          }
+          if (!names.length && ts.isJsxOpeningElement(node)) {
+            const combine = (children) => {
+              let variants = [''];
+              for (const child of children) {
+                const parts = text(child);
+                if (!parts.length || variants.length * parts.length > 32) return [];
+                variants = variants.flatMap((prefix) => parts.map((part) => `${prefix} ${part}`));
+              }
+              return variants;
+            };
+            const text = (child) => ts.isJsxText(child) ? [child.getText(ast)]
+              : ts.isJsxExpression(child) ? (child.expression ? staticText(child.expression) : [''])
+              : ts.isJsxElement(child) || ts.isJsxFragment(child) ? combine(child.children) : [''];
+            names = combine(node.parent.children);
+          }
+          names = [...new Set(names.map((name) => safe(name.replace(/\s+/gu, ' ').trim(), /^[\p{L}\p{N}\p{P}\p{S} ]{1,160}$/u)).filter(Boolean))];
+          record.elements.push(...(names.length ? names : [null]).map((name) => ({ kind, name, source: `${path}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`, column: ast.getLineAndCharacterOfPosition(node.getStart(ast)).character + 1, inModal, component: tag })));
+        }
+      }
       if (ts.isVariableDeclaration(node) && /^(?:pagesData|[A-Za-z0-9_]*[Rr]outes)$/u.test(node.name.getText(ast)) && node.initializer && ts.isArrayLiteralExpression(node.initializer)) {
           for (const entry of node.initializer.elements) {
             if (!ts.isObjectLiteralExpression(entry)) continue;
@@ -146,7 +261,7 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
       if (ts.isJsxExpression(node) && screenText(node)) {
         for (const value of staticText(node.expression)) addLabel(value);
       }
-      if (ts.isJsxAttribute(node) && /^(labelText|label|title|placeholder|aria-label)$/u.test(node.name.text)) {
+      if (ts.isJsxAttribute(node) && /^(labelText|label|title|placeholder|aria-label|tooltipTitle)$/u.test(node.name.text)) {
         const value = node.initializer && ts.isJsxExpression(node.initializer) ? node.initializer.expression : node.initializer;
         for (const label of staticText(value)) addLabel(label);
       }
@@ -168,7 +283,73 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
       else informational.push(`permissão não resolvida: ${relative(backRoot, file)}`);
     }
   }
+  // Follow only rendered imports, not every dependency (services/hooks do not own UI).
+  // Like front-screen-facts, seed routes from pagesData and resolve local/@ imports.
+  const sourcePaths = new Set(records.keys());
+  const resolveImport = (from, specifier) => {
+    const existing = resolveFrontImport(from, specifier ?? '', sourcePaths);
+    if (existing) return existing;
+    if (!specifier?.startsWith('.') && !specifier?.startsWith('@/')) return null;
+    const base = specifier.startsWith('@/') ? `src/${specifier.slice(2)}` : posix.normalize(posix.join(posix.dirname(from), specifier));
+    return [base, ...['.tsx', '.ts', '.jsx', '.js', '/index.tsx', '/index.ts'].map((suffix) => base + suffix)].find((candidate) => records.has(candidate));
+  };
+  const componentFile = (from, local, seen = new Set()) => {
+    const record = records.get(from);
+    const path = resolveImport(from, record?.imports.get(local));
+    if (!path) return null;
+    const follow = (path, name) => {
+      const key = `${path}:${name}`;
+      if (seen.has(key)) return null;
+      seen.add(key);
+      const target = records.get(path);
+      const exported = target.exports.get(name);
+      if (exported) {
+        const next = resolveImport(path, exported.specifier);
+        return next ? follow(next, exported.name) : null;
+      }
+      if (target.provided.has(name) && (target.elements.length || target.rendered.size)) return path;
+      for (const [key, item] of target.exports) if (key.startsWith('*:')) {
+        const next = resolveImport(path, item.specifier);
+        const found = next && follow(next, name);
+        if (found) return found;
+      }
+      return null;
+    };
+    return follow(path, record.importedNames.get(local) ?? 'default');
+  };
+  const assigned = new Map();
+  for (const seed of seeds) for (const route of seed.section ? sections.get(seed.section) ?? [] : [seed.route]) {
+    if (!safe(route ?? '', /^\/[A-Za-z0-9_/:.-]{1,120}$/u)) continue;
+    const start = componentFile(seed.path, seed.component);
+    const queue = start ? [[start, /Modal|Dialog|Drawer|Sidebar/iu.test(seed.component)]] : [];
+    const seen = new Set();
+    while (queue.length) {
+      const [path, modal] = queue.shift();
+      if (seen.has(`${path}:${modal}`)) continue;
+      seen.add(`${path}:${modal}`);
+      if (!assigned.has(path)) assigned.set(path, new Map());
+      assigned.get(path).set(route, assigned.get(path).has(route) ? modal && assigned.get(path).get(route) : modal);
+      const record = records.get(path);
+      for (const name of record.imports.keys()) if (record.rendered.has(name)) {
+        const target = componentFile(path, name);
+        if (target) queue.push([target, modal || record.modalUses.get(name) || /Modal|Dialog|Drawer|Sidebar/iu.test(name)]);
+      }
+    }
+  }
+  const elements = [];
+  for (const [path, record] of records) for (const element of record.elements) {
+    const assignments = assigned.get(path);
+    if (!assignments?.size) elements.push({ ...element, route: null, shared: true });
+    else for (const [route, modal] of assignments) elements.push({ ...element, route, inModal: modal || element.inModal });
+  }
+  const counts = new Map();
+  for (const element of elements) if (element.route && element.name) {
+    const key = JSON.stringify([element.route, element.kind, element.name]);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  for (const element of elements) element.duplicates = element.route && element.name ? counts.get(JSON.stringify([element.route, element.kind, element.name])) : 0;
   const manifest = {
+    schemaVersion: 2, elements: ordered(elements),
     routes: ordered(routes), markers: ordered(markers), labels: ordered(labels), permissions: ordered(permissions),
   };
   const markerIds = new Set(manifest.markers.map(({ id }) => id));
