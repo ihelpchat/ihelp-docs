@@ -59,3 +59,9 @@ O piloto não envia estes roteiros ao `/assistant` como guias publicados e não 
 4. Depois da aprovação e dos checks, gerar um novo pacote imutável em `public/guides` pelo fluxo existente. Não sobrescrever versões antigas. Publicação/deploy ficam fora desta preparação.
 
 Os três MDX de produção, o ledger de aprovação e `public/guides` permanecem inalterados. Os loaders atuais leem `content/docs`; este diretório em `architecture` não entra na recuperação, triagem ou catálogo público.
+
+## Propostas F5 (17/11/2026)
+
+`PROPOSTA-TEXTOS-F5.md` registra a revisão editorial sem aplicar mudanças aos roteiros existentes. Os novos `iniciar-atendimento`, `transferir-atendimento` e `finalizar-atendimento` são source-only v2: não publicados, aprovação e jornada pendentes. As evidências usam o SHA próprio de cada envelope, validado em blobs Git. O catálogo de piloto descobre os novos IDs, mas só os oferece quando explicitamente configurados para empresas autorizadas; o pacote público permanece igual.
+
+`schema.mjs` preserva as refinements do contrato e permite IDs de propostas apenas no validador source-only. A allowlist canônica e o conversor de publicação não passam a aceitar esses IDs.

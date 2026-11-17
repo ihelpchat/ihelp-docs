@@ -1,0 +1,403 @@
+{
+  "draftSchemaVersion": 1,
+  "status": "source-only-draft",
+  "title": "Iniciar um atendimento",
+  "description": "Iniciar um atendimento com confirmação do resultado na tela.",
+  "source": {
+    "repository": "ihelp-react",
+    "branch": "release/pre-production",
+    "sha": "84755969b9b54caa044da6a70b2cdba35eca78ec"
+  },
+  "publication": {
+    "editorialApproved": false,
+    "runtimeValidated": false,
+    "published": false
+  },
+  "prerequisites": [
+    "Ter acesso a Atendimento e permissão para executar a ação.",
+    "Escolher o contato correto; este roteiro não se aplica a grupos."
+  ],
+  "guide": {
+    "schemaVersion": 1,
+    "guideId": "iniciar-atendimento",
+    "version": 2,
+    "mode": "treino",
+    "initialStepId": "abrir-atendimento",
+    "steps": [
+      {
+        "stepId": "abrir-atendimento",
+        "text": "Abra Atendimento e clique em Iniciar um novo atendimento. Se já houver uma conversa aberta, volte à tela inicial de Atendimento.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "escolher-contato"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "escolher-contato",
+        "text": "Busque o contato pelo nome ou número e selecione a pessoa certa. Confira o número antes de continuar.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "escolher-departamento"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "escolher-departamento",
+        "text": "Em Selecione um departamento, escolha a equipe responsável pelo atendimento.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "escolher-canal"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "escolher-canal",
+        "text": "Em Selecione um canal, escolha o número da empresa que vai falar com o contato.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "preparar-mensagem"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "preparar-mensagem",
+        "text": "Escreva a primeira mensagem. Se a tela pedir uma mensagem pré-definida para a API Oficial do WhatsApp, escolha uma e preencha os campos solicitados.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "abrir-conversa"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "abrir-conversa",
+        "text": "Confira o contato e a mensagem. Clique em Abrir atendimento. Se aparecer Enviar template, confira a mensagem pré-definida antes de enviar.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "conferir-resultado"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "conferir-resultado",
+        "text": "Confira se o atendimento do contato certo abriu e se a mensagem aparece na conversa. Se houver aviso de envio sem abertura, peça ajuda antes de tentar enviar de novo.",
+        "choices": [
+          {
+            "id": "conferi",
+            "label": "Conferi o resultado"
+          },
+          {
+            "id": "falhou",
+            "label": "Não consegui conferir",
+            "nextStepId": "pedir-ajuda"
+          }
+        ]
+      },
+      {
+        "stepId": "pedir-ajuda",
+        "text": "Fale com uma pessoa do atendimento e diga em qual passo parou. Não envie senhas nem conteúdo de conversas."
+      },
+      {
+        "stepId": "pausar",
+        "text": "Retome o guia quando puder continuar. Se abriu um formulário sem salvar, clique em Cancelar antes de sair."
+      }
+    ]
+  },
+  "titlesByStep": {
+    "abrir-atendimento": "Abra Atendimento",
+    "escolher-contato": "Escolha o contato",
+    "escolher-departamento": "Escolha o departamento",
+    "escolher-canal": "Escolha o canal",
+    "preparar-mensagem": "Prepare a mensagem",
+    "abrir-conversa": "Abra a conversa",
+    "conferir-resultado": "Confira o resultado",
+    "pedir-ajuda": "Peça ajuda",
+    "pausar": "Continue depois"
+  },
+  "navigationByStep": {
+    "abrir-atendimento": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "button",
+        "name": "Iniciar um novo atendimento"
+      }
+    },
+    "escolher-contato": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "field",
+        "name": "Procure por contato ou digite o número do whatsapp"
+      }
+    },
+    "escolher-departamento": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "field",
+        "name": "Selecione um departamento"
+      }
+    },
+    "escolher-canal": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "field",
+        "name": "Selecione um canal"
+      }
+    },
+    "abrir-conversa": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "button",
+        "name": "Abrir atendimento"
+      }
+    }
+  },
+  "evidenceByStep": {
+    "abrir-atendimento": [
+      {
+        "path": "src/components/shared/Attendance/sections/components/AttendanceSectionChat/components/AttendanceSectionChatStart/index.tsx",
+        "line": 33,
+        "fragment": "labelText=\"Iniciar um novo atendimento\""
+      }
+    ],
+    "escolher-contato": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarNewAttendance/index.tsx",
+        "line": 1057,
+        "fragment": "<SearchInputSmartList"
+      }
+    ],
+    "escolher-departamento": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarNewAttendance/index.tsx",
+        "line": 1122,
+        "fragment": "label=\"Selecione um departamento\""
+      }
+    ],
+    "escolher-canal": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarNewAttendance/index.tsx",
+        "line": 1136,
+        "fragment": "label=\"Selecione um canal\""
+      }
+    ],
+    "preparar-mensagem": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarNewAttendance/index.tsx",
+        "line": 1151,
+        "fragment": "templateHelperDescription="
+      }
+    ],
+    "abrir-conversa": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarNewAttendance/index.tsx",
+        "line": 105,
+        "fragment": "text: \"Abrir atendimento\""
+      }
+    ],
+    "conferir-resultado": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarNewAttendance/index.tsx",
+        "line": 105,
+        "fragment": "text: \"Abrir atendimento\""
+      }
+    ],
+    "pedir-ajuda": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarNewAttendance/index.tsx",
+        "line": 105,
+        "fragment": "text: \"Abrir atendimento\""
+      }
+    ],
+    "pausar": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarNewAttendance/index.tsx",
+        "line": 105,
+        "fragment": "text: \"Abrir atendimento\""
+      }
+    ]
+  },
+  "transitionsByStep": {
+    "abrir-atendimento": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "escolher-contato"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "escolher-contato": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "escolher-departamento"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "escolher-departamento": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "escolher-canal"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "escolher-canal": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "preparar-mensagem"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "preparar-mensagem": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "abrir-conversa"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "abrir-conversa": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "conferir-resultado"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "conferir-resultado": {
+      "choices": {
+        "conferi": {
+          "outcome": "complete"
+        },
+        "falhou": {
+          "nextStepId": "pedir-ajuda"
+        }
+      }
+    },
+    "pedir-ajuda": {
+      "outcome": "handoff"
+    },
+    "pausar": {
+      "outcome": "paused"
+    }
+  },
+  "editorialSteps": [
+    "conferir-resultado",
+    "pedir-ajuda",
+    "pausar"
+  ],
+  "consumption": {
+    "localPilotOnly": true,
+    "requiresExplicitTransitions": true,
+    "publishedEngineCompatible": false,
+    "automaticSideEffectsAllowed": false
+  },
+  "runtimeQaPending": [
+    "Aprovação editorial do Bruno.",
+    "Jornada autorizada em 360×640: sucesso, bloqueio, pausa, voltar e handoff.",
+    "Conferir persistência e permissões com contas de teste; ações reais e envios não foram executados."
+  ]
+}

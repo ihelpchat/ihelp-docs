@@ -39,7 +39,7 @@ assert.deepEqual(widgetConfigFor(invalidOnly, 1), off, 'lista só com valores in
 assert.deepEqual(widgetConfigFor(widgetConfigFromEnv({ ASSISTANT_WIDGET_COMPANY_IDS: '1' }, silent), 1), off, 'lista sem a chave geral não liga');
 
 // Roteiros de piloto: só IDs dos drafts, só para empresas listadas, nunca para todos.
-assert.deepEqual(pilotGuideIds, ['reconectar-canal-qr'], 'roteiros publicados saem do piloto');
+assert.deepEqual(pilotGuideIds, ['finalizar-atendimento', 'iniciar-atendimento', 'reconectar-canal-qr', 'transferir-atendimento'], 'roteiros publicados saem do piloto');
 const pilotEnv = { ASSISTANT_WIDGET_ENABLED: 'true', ASSISTANT_WIDGET_PILOT_GUIDES: 'reconectar-canal-qr, desconhecido,reconectar-canal-qr,usuario-acesso,../segredo', ASSISTANT_WIDGET_PILOT_COMPANY_IDS: '1' };
 const pilot = widgetConfigFromEnv(pilotEnv, silent);
 assert.deepEqual(pilot.pilotGuides, ['reconectar-canal-qr'], 'publicado não volta ao piloto');

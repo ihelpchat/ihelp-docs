@@ -1,0 +1,403 @@
+{
+  "draftSchemaVersion": 1,
+  "status": "source-only-draft",
+  "title": "Finalizar um atendimento",
+  "description": "Finalizar um atendimento com confirmação do resultado na tela.",
+  "source": {
+    "repository": "ihelp-react",
+    "branch": "release/pre-production",
+    "sha": "84755969b9b54caa044da6a70b2cdba35eca78ec"
+  },
+  "publication": {
+    "editorialApproved": false,
+    "runtimeValidated": false,
+    "published": false
+  },
+  "prerequisites": [
+    "Ter acesso a Atendimento e permissão para executar a ação.",
+    "Escolher o contato correto; este roteiro não se aplica a grupos."
+  ],
+  "guide": {
+    "schemaVersion": 1,
+    "guideId": "finalizar-atendimento",
+    "version": 2,
+    "mode": "treino",
+    "initialStepId": "abrir-atendimento",
+    "steps": [
+      {
+        "stepId": "abrir-atendimento",
+        "text": "Em Atendimento, abra a conversa que você quer encerrar. Confira o nome e o número do contato.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "abrir-encerramento"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "abrir-encerramento",
+        "text": "Nas ações da conversa, clique em Encerrar atendimento.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "escolher-motivo"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "escolher-motivo",
+        "text": "Se aparecer Motivo do encerramento, escolha o motivo adequado. Se aparecer Submotivo, escolha também o detalhe.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "anotar-contexto"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "anotar-contexto",
+        "text": "Se aparecer Observação (opcional), escreva o que precisa ficar registrado sobre o encerramento.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "conferir-envios"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "conferir-envios",
+        "text": "Confira Enviar mensagem de encerramento e, se aparecer, Enviar pesquisa de satisfação. Deixe marcado apenas o que deve ser enviado ao cliente.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "confirmar-encerramento"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "confirmar-encerramento",
+        "text": "Confira o contato e clique em Encerrar. Aguarde a confirmação antes de sair.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "conferir-resultado"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "conferir-resultado",
+        "text": "Confira se aparece Atendimento encerrado. Se houver erro, o atendimento continua aberto; peça ajuda antes de repetir.",
+        "choices": [
+          {
+            "id": "conferi",
+            "label": "Conferi o resultado"
+          },
+          {
+            "id": "falhou",
+            "label": "Não consegui conferir",
+            "nextStepId": "pedir-ajuda"
+          }
+        ]
+      },
+      {
+        "stepId": "pedir-ajuda",
+        "text": "Fale com uma pessoa do atendimento e diga em qual passo parou. Não envie senhas nem conteúdo de conversas."
+      },
+      {
+        "stepId": "pausar",
+        "text": "Retome o guia quando puder continuar. Se abriu um formulário sem salvar, clique em Cancelar antes de sair."
+      }
+    ]
+  },
+  "titlesByStep": {
+    "abrir-atendimento": "Abra a conversa",
+    "abrir-encerramento": "Abra o encerramento",
+    "escolher-motivo": "Escolha o motivo",
+    "anotar-contexto": "Registre o contexto",
+    "conferir-envios": "Confira as mensagens",
+    "confirmar-encerramento": "Encerre o atendimento",
+    "conferir-resultado": "Confira o resultado",
+    "pedir-ajuda": "Peça ajuda",
+    "pausar": "Continue depois"
+  },
+  "navigationByStep": {
+    "abrir-encerramento": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "button",
+        "name": "Encerrar atendimento"
+      }
+    },
+    "escolher-motivo": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "field",
+        "name": "Motivo do encerramento"
+      }
+    },
+    "anotar-contexto": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "field",
+        "name": "Observação (opcional)"
+      }
+    },
+    "conferir-envios": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "button",
+        "name": "Enviar mensagem de encerramento"
+      }
+    },
+    "confirmar-encerramento": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "button",
+        "name": "Encerrar"
+      }
+    }
+  },
+  "evidenceByStep": {
+    "abrir-atendimento": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceWrapper/index.tsx",
+        "line": 516,
+        "fragment": "data-tour-id=\"tour-atendimento-chat\""
+      }
+    ],
+    "abrir-encerramento": [
+      {
+        "path": "src/components/shared/Attendance/sections/components/AttendanceSectionDetails/components/AcoesTab/index.tsx",
+        "line": 169,
+        "fragment": "title=\"Encerrar atendimento\""
+      }
+    ],
+    "escolher-motivo": [
+      {
+        "path": "src/components/ui/components/Modal/components/ModalAttendanceClosed/index.tsx",
+        "line": 354,
+        "fragment": "Motivo do encerramento"
+      }
+    ],
+    "anotar-contexto": [
+      {
+        "path": "src/components/ui/components/Modal/components/ModalAttendanceClosed/index.tsx",
+        "line": 410,
+        "fragment": "label=\"Observação (opcional)\""
+      }
+    ],
+    "conferir-envios": [
+      {
+        "path": "src/components/ui/components/Modal/components/ModalAttendanceClosed/index.tsx",
+        "line": 447,
+        "fragment": "Enviar mensagem de encerramento"
+      }
+    ],
+    "confirmar-encerramento": [
+      {
+        "path": "src/components/ui/components/Modal/components/ModalAttendanceClosed/index.tsx",
+        "line": 478,
+        "fragment": "\"Encerrar\""
+      }
+    ],
+    "conferir-resultado": [
+      {
+        "path": "src/components/ui/components/Modal/components/ModalAttendanceClosed/index.tsx",
+        "line": 478,
+        "fragment": "\"Encerrar\""
+      }
+    ],
+    "pedir-ajuda": [
+      {
+        "path": "src/components/ui/components/Modal/components/ModalAttendanceClosed/index.tsx",
+        "line": 478,
+        "fragment": "\"Encerrar\""
+      }
+    ],
+    "pausar": [
+      {
+        "path": "src/components/ui/components/Modal/components/ModalAttendanceClosed/index.tsx",
+        "line": 478,
+        "fragment": "\"Encerrar\""
+      }
+    ]
+  },
+  "transitionsByStep": {
+    "abrir-atendimento": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "abrir-encerramento"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "abrir-encerramento": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "escolher-motivo"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "escolher-motivo": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "anotar-contexto"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "anotar-contexto": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "conferir-envios"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "conferir-envios": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "confirmar-encerramento"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "confirmar-encerramento": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "conferir-resultado"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "conferir-resultado": {
+      "choices": {
+        "conferi": {
+          "outcome": "complete"
+        },
+        "falhou": {
+          "nextStepId": "pedir-ajuda"
+        }
+      }
+    },
+    "pedir-ajuda": {
+      "outcome": "handoff"
+    },
+    "pausar": {
+      "outcome": "paused"
+    }
+  },
+  "editorialSteps": [
+    "conferir-resultado",
+    "pedir-ajuda",
+    "pausar"
+  ],
+  "consumption": {
+    "localPilotOnly": true,
+    "requiresExplicitTransitions": true,
+    "publishedEngineCompatible": false,
+    "automaticSideEffectsAllowed": false
+  },
+  "runtimeQaPending": [
+    "Aprovação editorial do Bruno.",
+    "Jornada autorizada em 360×640: sucesso, bloqueio, pausa, voltar e handoff.",
+    "Conferir persistência e permissões com contas de teste; ações reais e envios não foram executados."
+  ]
+}

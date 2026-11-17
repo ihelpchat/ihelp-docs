@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { guideSchema } from '../conversation-v1.mjs';
+import { draftGuideSchema } from './schema.mjs';
 import { widgetContextRoutes } from '../widget-context.mjs';
 import { portedGuides, portedPage } from '../../scripts/port-widget-guides.mjs';
 
 const frontend = process.argv[2];
 assert.ok(frontend, 'Informe o checkout local do frontend para conferir os blobs do SHA fonte.');
 const sourceSha = '3d00906c5315c91372914e0ea664a59372dfc10b';
-const ids = ['recado-fora-do-horario', 'usuario-acesso', 'reconectar-canal-qr'];
+const ids = (await readdir(new URL('./', import.meta.url))).filter((name) => /^[a-z0-9-]+\.json$/u.test(name)).map((name) => name.slice(0, -5)).sort();
 // Publicados em 13/11/2026 com aprovação editorial do Bruno; jornada real em produção concluída em 14/11/2026.
 const published = new Map(portedGuides);
 const routes = new Set([...widgetContextRoutes, '/configuracoes/usuarios/novo']);
@@ -30,9 +31,10 @@ for (const id of ids) {
     assert.deepEqual(draft.publication, { editorialApproved: false, runtimeValidated: false, published: false });
     assert.equal(draft.consumption.publishedEngineCompatible, false);
   }
-  assert.equal(draft.source.sha, sourceSha);
+  assert.match(draft.source.sha, /^[a-f0-9]{40}$/u);
+  if (['recado-fora-do-horario', 'usuario-acesso', 'reconectar-canal-qr'].includes(id)) assert.equal(draft.source.sha, sourceSha);
   assert.equal(draft.consumption.automaticSideEffectsAllowed, false);
-  const guide = guideSchema.parse(draft.guide);
+  const guide = (published.has(id) ? guideSchema : draftGuideSchema).parse(draft.guide);
   assert.equal(guide.guideId, id);
   assert.equal(guide.version, 2);
   assert.equal(guide.mode, 'treino', 'o rascunho fica em treino; a página publicada usa real');
@@ -73,10 +75,11 @@ for (const id of ids) {
     edges.set(stepId, destinations);
     assert.ok(draft.evidenceByStep[stepId].length);
     for (const evidence of draft.evidenceByStep[stepId]) {
-      assert.match(evidence.path, /^src\/(?:features\/configurations|components\/shared\/QrConexao)\/[A-Za-z0-9/_.-]+$/u);
+      assert.match(evidence.path, /^src\/(?:features\/configurations|components\/shared\/(?:QrConexao|Attendance)|components\/ui\/components\/Modal\/components\/ModalAttendanceClosed)\/[A-Za-z0-9/_.-]+$/u);
       assert.ok(Number.isSafeInteger(evidence.line) && evidence.line > 0);
-      if (!blobs.has(evidence.path)) blobs.set(evidence.path, execFileSync('git', ['--no-pager', 'show', `${sourceSha}:${evidence.path}`], { cwd: frontend, encoding: 'utf8' }).split('\n'));
-      assert.ok(blobs.get(evidence.path)[evidence.line - 1]?.includes(evidence.fragment), `${id}/${stepId}: referência não corresponde ao blob fixado`);
+      const blobKey = `${draft.source.sha}:${evidence.path}`;
+      if (!blobs.has(blobKey)) blobs.set(blobKey, execFileSync('git', ['--no-pager', 'show', blobKey], { cwd: frontend, encoding: 'utf8' }).split('\n'));
+      assert.ok(blobs.get(blobKey)[evidence.line - 1]?.includes(evidence.fragment), `${id}/${stepId}: referência não corresponde ao blob fixado`);
     }
   }
   const reached = new Set();
