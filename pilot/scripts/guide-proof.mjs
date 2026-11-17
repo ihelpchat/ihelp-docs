@@ -448,7 +448,8 @@ async function selectField(page, area, field) {
   await option.click();
 }
 
-export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fixtureLogin = false, credentials, appSha = 'unverified', packageRoot }) {
+export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fixtureLogin = false, credentials, appSha = 'unverified', packageRoot, actionTimeoutMs = Number(process.env.GUIDE_PROOF_ACTION_TIMEOUT_MS ?? 30_000) }) {
+  if (!Number.isFinite(actionTimeoutMs) || actionTimeoutMs <= 0) throw new Error('Invalid GUIDE_PROOF_ACTION_TIMEOUT_MS');
   const target = assertAllowedTarget(baseUrl);
   if (fixture !== target.local) throw new Error('Destino recusado: modo e host incompatíveis');
   if (!fixture && (!credentials?.authorized?.email || !credentials?.authorized?.password || !credentials?.denied?.email || !credentials?.denied?.password)) {
@@ -463,6 +464,8 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
   try {
     for (const role of ['authorized', 'denied']) {
       const context = await browser.newContext({ serviceWorkers: 'block' });
+      context.setDefaultTimeout(actionTimeoutMs);
+      context.setDefaultNavigationTimeout(actionTimeoutMs);
       const networkGuard = await installQaNetworkGuard(context, target);
       const blocked = networkGuard.blocked;
       const page = await context.newPage();
@@ -490,7 +493,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
             if (blocked.length || current.origin !== target.url) throw new Error(`${guide.guideId}: navegação fora do host autorizado`);
             if (plan.control.marker) {
               const marker = page.locator(`[data-tour-id="${plan.control.marker}"], [data-help-id="${plan.control.marker}"]`);
-              await marker.waitFor({ state: 'visible', timeout: 5000 });
+              await marker.waitFor({ state: 'visible', timeout: actionTimeoutMs });
               if (await marker.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: marcador ausente ${plan.control.marker}`);
             }
             const instruction = plan.control;
@@ -510,7 +513,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
               continue;
             }
             if (control) {
-              await control.waitFor({ state: 'visible', timeout: 5000 });
+              await control.waitFor({ state: 'visible', timeout: actionTimeoutMs });
               if (await control.count() !== 1) throw new Error(`${guide.guideId}/${step.stepId}: controle ambíguo ${instruction.name}`);
             }
             if (instruction.type === 'fields') {
@@ -552,7 +555,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
               const readField = async () => source.verifySelector ? (await field.count() ? field.textContent() : '') : field.inputValue();
               const candidate = filled.get(fieldStep);
               const before = original.get(fieldStep);
-              await control.click({ timeout: 3000 });
+              await control.click({ timeout: actionTimeoutMs });
               if (guide.guideId === 'usuario-acesso') {
                 created = candidate;
                 await page.reload({ waitUntil: 'domcontentloaded' });
@@ -605,7 +608,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
             } else {
               if (role === 'authorized' && !(await control.isEnabled())) throw new Error(`${guide.guideId}/${step.stepId}: perfil autorizado bloqueado`);
               const before = role === 'authorized' && !fixture ? await page.locator('body').innerHTML() : null;
-              await control.click({ timeout: 3000 });
+              await control.click({ timeout: actionTimeoutMs });
               if (before !== null && await page.locator('body').innerHTML() === before) throw new Error(`${guide.guideId}/${step.stepId}: ação web não concluiu`);
               if (fixture && role === 'authorized' && step.stepId !== 'criar-usuario' && await control.getAttribute('data-done') !== 'yes') throw new Error(`${guide.guideId}/${step.stepId}: ação web não concluiu`);
             }
@@ -627,7 +630,7 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
               await page.reload({ waitUntil: 'domcontentloaded' });
               const before = await page.locator('body').innerHTML();
               const save = saves.nth(saveIndex);
-              if (await save.isEnabled()) await save.click({ timeout: 3000 });
+              if (await save.isEnabled()) await save.click({ timeout: actionTimeoutMs });
               await page.reload({ waitUntil: 'domcontentloaded' });
               if (await page.locator('body').innerHTML() !== before) throw new Error(`${guide.guideId}: perfil negado alterou dados`);
             }
@@ -638,10 +641,10 @@ export async function runGuideProof({ baseUrl, evidenceDir, fixture = false, fix
             try {
               const row = fixture ? page.locator(`[data-proof-item="${created}"]`) : page.getByText(created, { exact: true }).locator('xpath=ancestor::tr[1]');
               if (await row.count() !== 1) throw new Error('item criado não encontrado');
-              if (fixture) await row.getByRole('button', { name: /Excluir|Remover/u }).click({ timeout: 3000 });
+              if (fixture) await row.getByRole('button', { name: /Excluir|Remover/u }).click({ timeout: actionTimeoutMs });
               else {
-                await row.locator('a[title="Excluir"], [title="Excluir"] a').click({ timeout: 3000 });
-                await page.getByRole('button', { name: /Confirmar|Sim|Excluir/u }).click({ timeout: 3000 });
+                await row.locator('a[title="Excluir"], [title="Excluir"] a').click({ timeout: actionTimeoutMs });
+                await page.getByRole('button', { name: /Confirmar|Sim|Excluir/u }).click({ timeout: actionTimeoutMs });
               }
               await page.reload({ waitUntil: 'domcontentloaded' });
               if (await (fixture ? page.locator(`[data-proof-item="${created}"]`) : page.getByText(created, { exact: false })).count()) throw new Error('item criado ainda aparece');

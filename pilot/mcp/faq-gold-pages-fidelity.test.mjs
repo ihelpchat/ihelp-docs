@@ -43,6 +43,6 @@ test('rótulos em negrito dos passos de Contatos e Robôs pertencem aos fatos do
   };
   for (const page of pages) check(page, article(page));
   assert.throws(() => check('robo-de-atendimento.mdx',
-    article('robo-de-atendimento.mdx').replace('**Buscar robô**', '**Buscar canal**')),
-  /rótulo ausente no front: Buscar canal/u);
+    article('robo-de-atendimento.mdx').replace('**Buscar robô**', '**Buscar planeta**')),
+  /rótulo ausente no front: Buscar planeta/u);
 });

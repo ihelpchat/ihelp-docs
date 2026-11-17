@@ -1,0 +1,403 @@
+{
+  "draftSchemaVersion": 1,
+  "status": "source-only-draft",
+  "title": "Transferir um atendimento",
+  "description": "Transferir um atendimento com confirmação do resultado na tela.",
+  "source": {
+    "repository": "ihelp-react",
+    "branch": "release/pre-production",
+    "sha": "84755969b9b54caa044da6a70b2cdba35eca78ec"
+  },
+  "publication": {
+    "editorialApproved": false,
+    "runtimeValidated": false,
+    "published": false
+  },
+  "prerequisites": [
+    "Ter acesso a Atendimento e permissão para executar a ação.",
+    "Escolher o contato correto; este roteiro não se aplica a grupos."
+  ],
+  "guide": {
+    "schemaVersion": 1,
+    "guideId": "transferir-atendimento",
+    "version": 2,
+    "mode": "treino",
+    "initialStepId": "abrir-atendimento",
+    "steps": [
+      {
+        "stepId": "abrir-atendimento",
+        "text": "Em Atendimento, abra a conversa do contato que você quer transferir. Confira o nome e o número.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "abrir-transferencia"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "abrir-transferencia",
+        "text": "Nas ações da conversa, clique em Transferir. Com a barra lateral recolhida, o botão se chama Transferir atendimento.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "escolher-departamento"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "escolher-departamento",
+        "text": "Em Departamento, escolha a equipe que vai receber o atendimento.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "escolher-pessoa"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "escolher-pessoa",
+        "text": "Em Usuário (opcional), escolha a pessoa. Para deixar o atendimento com a equipe, mantenha Qualquer usuário do departamento.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "anotar-contexto"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "anotar-contexto",
+        "text": "Se precisar, preencha Observação para o próximo atendente com o que a pessoa precisa saber para continuar.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "confirmar-transferencia"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "confirmar-transferencia",
+        "text": "Confira o destino e Enviar mensagem de transferência: marcada, a opção envia uma mensagem ao cliente. Clique em Transferir e aguarde o resultado.",
+        "choices": [
+          {
+            "id": "seguir",
+            "label": "Continuar",
+            "nextStepId": "conferir-resultado"
+          },
+          {
+            "id": "bloqueado",
+            "label": "Não encontrei / está bloqueado",
+            "nextStepId": "pedir-ajuda"
+          },
+          {
+            "id": "pausar",
+            "label": "Continuar depois",
+            "nextStepId": "pausar"
+          }
+        ]
+      },
+      {
+        "stepId": "conferir-resultado",
+        "text": "Confira se o departamento e, quando escolhido, o atendente mudaram para o destino esperado. Se não conseguir conferir, peça ajuda.",
+        "choices": [
+          {
+            "id": "conferi",
+            "label": "Conferi o resultado"
+          },
+          {
+            "id": "falhou",
+            "label": "Não consegui conferir",
+            "nextStepId": "pedir-ajuda"
+          }
+        ]
+      },
+      {
+        "stepId": "pedir-ajuda",
+        "text": "Fale com uma pessoa do atendimento e diga em qual passo parou. Não envie senhas nem conteúdo de conversas."
+      },
+      {
+        "stepId": "pausar",
+        "text": "Retome o guia quando puder continuar. Se abriu um formulário sem salvar, clique em Cancelar antes de sair."
+      }
+    ]
+  },
+  "titlesByStep": {
+    "abrir-atendimento": "Abra a conversa",
+    "abrir-transferencia": "Abra a transferência",
+    "escolher-departamento": "Escolha o destino",
+    "escolher-pessoa": "Escolha quem vai atender",
+    "anotar-contexto": "Deixe uma observação",
+    "confirmar-transferencia": "Confirme a transferência",
+    "conferir-resultado": "Confira o resultado",
+    "pedir-ajuda": "Peça ajuda",
+    "pausar": "Continue depois"
+  },
+  "navigationByStep": {
+    "abrir-transferencia": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "button",
+        "name": "Transferir"
+      }
+    },
+    "escolher-departamento": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "field",
+        "name": "Departamento"
+      }
+    },
+    "escolher-pessoa": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "field",
+        "name": "Usuário (opcional)"
+      }
+    },
+    "anotar-contexto": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "field",
+        "name": "Observação para o próximo atendente"
+      }
+    },
+    "confirmar-transferencia": {
+      "route": "/atendimento",
+      "anchor": {
+        "kind": "button",
+        "name": "Transferir"
+      }
+    }
+  },
+  "evidenceByStep": {
+    "abrir-atendimento": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceWrapper/index.tsx",
+        "line": 516,
+        "fragment": "data-tour-id=\"tour-atendimento-chat\""
+      }
+    ],
+    "abrir-transferencia": [
+      {
+        "path": "src/components/shared/Attendance/sections/components/AttendanceSectionDetails/components/AcoesTab/index.tsx",
+        "line": 129,
+        "fragment": "title=\"Transferir\""
+      }
+    ],
+    "escolher-departamento": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarTransferAttendance/index.tsx",
+        "line": 320,
+        "fragment": "label=\"Departamento\""
+      }
+    ],
+    "escolher-pessoa": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarTransferAttendance/index.tsx",
+        "line": 353,
+        "fragment": "label=\"Usuário (opcional)\""
+      }
+    ],
+    "anotar-contexto": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarTransferAttendance/index.tsx",
+        "line": 400,
+        "fragment": "label=\"Observação para o próximo atendente\""
+      }
+    ],
+    "confirmar-transferencia": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarTransferAttendance/index.tsx",
+        "line": 424,
+        "fragment": "labelText=\"Transferir\""
+      }
+    ],
+    "conferir-resultado": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarTransferAttendance/index.tsx",
+        "line": 424,
+        "fragment": "labelText=\"Transferir\""
+      }
+    ],
+    "pedir-ajuda": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarTransferAttendance/index.tsx",
+        "line": 424,
+        "fragment": "labelText=\"Transferir\""
+      }
+    ],
+    "pausar": [
+      {
+        "path": "src/components/shared/Attendance/core/AttendanceSidebarLayout/components/AttendanceSidebar/components/sections/AttendanceSidebarTransferAttendance/index.tsx",
+        "line": 424,
+        "fragment": "labelText=\"Transferir\""
+      }
+    ]
+  },
+  "transitionsByStep": {
+    "abrir-atendimento": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "abrir-transferencia"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "abrir-transferencia": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "escolher-departamento"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "escolher-departamento": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "escolher-pessoa"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "escolher-pessoa": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "anotar-contexto"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "anotar-contexto": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "confirmar-transferencia"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "confirmar-transferencia": {
+      "choices": {
+        "seguir": {
+          "nextStepId": "conferir-resultado"
+        },
+        "bloqueado": {
+          "nextStepId": "pedir-ajuda"
+        },
+        "pausar": {
+          "nextStepId": "pausar"
+        }
+      }
+    },
+    "conferir-resultado": {
+      "choices": {
+        "conferi": {
+          "outcome": "complete"
+        },
+        "falhou": {
+          "nextStepId": "pedir-ajuda"
+        }
+      }
+    },
+    "pedir-ajuda": {
+      "outcome": "handoff"
+    },
+    "pausar": {
+      "outcome": "paused"
+    }
+  },
+  "editorialSteps": [
+    "conferir-resultado",
+    "pedir-ajuda",
+    "pausar"
+  ],
+  "consumption": {
+    "localPilotOnly": true,
+    "requiresExplicitTransitions": true,
+    "publishedEngineCompatible": false,
+    "automaticSideEffectsAllowed": false
+  },
+  "runtimeQaPending": [
+    "Aprovação editorial do Bruno.",
+    "Jornada autorizada em 360×640: sucesso, bloqueio, pausa, voltar e handoff.",
+    "Conferir persistência e permissões com contas de teste; ações reais e envios não foram executados."
+  ]
+}

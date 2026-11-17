@@ -40,6 +40,11 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
   const permissions = [];
   const pending = [];
   const informational = [];
+  // Configurações (redesign v4): as telas vêm de um registro de seções com `path: \`${CONFIG_V4_PREFIX}/…\``
+  // e `legacyPaths` que redirecionam. O prefixo é lido do próprio front; sem ele, o registro é ignorado.
+  const registryFile = 'src/features/configurations/registry/sections.ts';
+  const registryPrefix = await readFile(join(frontRoot, 'src/features/configurations/registry/prefix.ts'), 'utf8')
+    .then((raw) => raw.match(/export const CONFIG_V4_PREFIX = ['"](\/[a-z0-9-]+)['"]/u)?.[1] ?? null).catch(() => null);
   for (const file of await files(join(frontRoot, 'src'), ['.tsx', '.jsx', '.ts', '.js'])) {
     const source = await readFile(file, 'utf8');
     const path = relative(frontRoot, file);
@@ -111,6 +116,23 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
             if (route && label) routes.push({ path: route, label });
             else informational.push(`rota ou rótulo não verificável: ${path}`);
           }
+      }
+      if (registryPrefix && path === registryFile && ts.isObjectLiteralExpression(node)) {
+        const property = (name) => node.properties.find((item) => ts.isPropertyAssignment(item) && item.name.getText(ast) === name);
+        const pathNode = property('path')?.initializer;
+        const labelNode = property('label')?.initializer;
+        if (pathNode && ts.isTemplateExpression(pathNode) && pathNode.head.text === '' && pathNode.templateSpans.length === 1
+            && pathNode.templateSpans[0].expression.getText(ast) === 'CONFIG_V4_PREFIX' && labelNode && ts.isStringLiteral(labelNode)) {
+          const label = safe(labelNode.text);
+          if (label) labels.push({ label, file: path });
+          const legacy = property('legacyPaths')?.initializer;
+          const paths = [registryPrefix + pathNode.templateSpans[0].literal.text,
+            ...(legacy && ts.isArrayLiteralExpression(legacy) ? legacy.elements.filter(ts.isStringLiteral).map((item) => item.text) : [])];
+          for (const candidate of paths) {
+            const route = safe(candidate, /^\/[A-Za-z0-9_/:.-]{1,120}$/u);
+            if (route && label) routes.push({ path: route, label });
+          }
+        }
       }
       if (ts.isJsxAttribute(node) && /^(data-tour-id|data-help-id)$/u.test(node.name.text)) {
         const kind = node.name.text === 'data-tour-id' ? 'tour' : 'help';

@@ -1,19 +1,21 @@
-import { catalogActions } from './product-actions.mjs';
+import { widgetContextRoutes, widgetPermissions, actorFirstNamePattern, actorIdRefPattern } from '../architecture/widget-context.mjs';
 
 const choices = {
   surface: ['faq', 'app'], module: ['robots', 'users', 'channels', 'billing', 'campaigns', 'templates', 'conversations', 'settings'],
   screen: ['list', 'create', 'edit', 'detail', 'connection', 'qr', 'unknown'],
   role: ['owner', 'admin', 'manager', 'agent', 'unknown'],
+  queue: ['mine', 'all', 'groups', 'other'],
+  conversationKind: ['attendance', 'group', 'none'],
   plan: ['trial', 'active', 'expired', 'limited', 'unknown'],
   credit: ['available', 'low', 'empty', 'unknown'],
   templates: ['none', 'pending', 'approved', 'rejected', 'unknown'],
 };
-const permissions = new Set(['robots.read', 'robots.create', 'users.read', 'users.manage', 'channels.read', 'channels.manage', 'billing.read', 'campaigns.read', 'campaigns.create', 'templates.read', 'templates.manage']);
+const permissions = new Set(widgetPermissions);
 const channelKinds = new Set(['whatsapp', 'official_api', 'coexistence']);
 const channelStates = new Set(['connected', 'disconnected', 'qr_pending', 'blocked', 'syncing', 'unknown']);
 const incidentKinds = new Set(['channel_outage', 'message_delivery', 'billing', 'robot', 'app']);
-const routes = new Set(catalogActions().map(({ route }) => route));
-const keys = new Set(['surface', 'route', 'module', 'screen', 'role', 'permissions', 'plan', 'channels', 'credit', 'templates', 'incidents']);
+const routes = new Set(widgetContextRoutes);
+const keys = new Set(['surface', 'route', 'module', 'screen', 'role', 'permissions', 'queue', 'conversationKind', 'plan', 'channels', 'credit', 'templates', 'incidents']);
 const own = (value) => value && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
 const allowed = (value, list) => value === undefined || list.includes(value);
 
@@ -21,12 +23,21 @@ const allowed = (value, list) => value === undefined || list.includes(value);
 export function sanitizeWidgetContext(value) {
   if (value === undefined || value === null) return undefined;
   if (!own(value) || Object.keys(value).some((key) => !keys.has(key)) || JSON.stringify(value).length > 1500) return undefined;
-  for (const key of ['surface', 'module', 'screen', 'role', 'plan', 'credit', 'templates']) if (!allowed(value[key], choices[key])) return undefined;
+  for (const key of ['surface', 'module', 'screen', 'role', 'queue', 'conversationKind', 'plan', 'credit', 'templates']) if (!allowed(value[key], choices[key])) return undefined;
   if (value.route !== undefined && (typeof value.route !== 'string' || !routes.has(value.route))) return undefined;
-  if (value.permissions !== undefined && (!Array.isArray(value.permissions) || value.permissions.length > 12 || value.permissions.some((item) => !permissions.has(item)))) return undefined;
+  if (value.permissions !== undefined && (!Array.isArray(value.permissions) || value.permissions.length > 24 || value.permissions.some((item) => !permissions.has(item)))) return undefined;
   if (value.incidents !== undefined && (!Array.isArray(value.incidents) || value.incidents.length > 5 || value.incidents.some((item) => !incidentKinds.has(item)))) return undefined;
   if (value.channels !== undefined && (!Array.isArray(value.channels) || value.channels.length > 5 || value.channels.some((item) => !own(item) || Object.keys(item).some((key) => !['kind', 'state'].includes(key)) || !channelKinds.has(item.kind) || !channelStates.has(item.state)))) return undefined;
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, Array.isArray(item) ? item.map((entry) => own(entry) ? { ...entry } : entry) : item]));
+}
+
+/** Only the bounded first name may reach the model; idRef is for tenant-scoped metrics. */
+export function sanitizeActor(value) {
+  if (!own(value) || Object.keys(value).some((key) => !['idRef', 'firstName'].includes(key))) return undefined;
+  const actor = {};
+  if (typeof value.idRef === 'string' && actorIdRefPattern.test(value.idRef)) actor.idRef = value.idRef;
+  if (typeof value.firstName === 'string' && value.firstName.length <= 40 && actorFirstNamePattern.test(value.firstName)) actor.firstName = value.firstName;
+  return Object.keys(actor).length ? actor : undefined;
 }
 
 const plain = (value) => String(value).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();

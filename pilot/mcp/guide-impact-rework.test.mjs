@@ -24,13 +24,13 @@ const guides = compiled.catalog.guides;
 assert.equal(guides.length, 3, 'usar os três guias publicados da base');
 const index = buildGuideReferenceIndex(guides, actions, compiled.sources, snapshot.manifest);
 const recado = index.find(({ guideId }) => guideId === 'recado-fora-do-horario');
-assert.ok(recado.references.some(({ kind, key }) => kind === 'label' && key.endsWith(':Salvar Alterações')), 'fonte do MDX associa rótulo ao guia');
+assert.ok(recado.references.some(({ kind, key }) => kind === 'label' && key.endsWith(':Salvar')), 'fonte do MDX associa rótulo ao guia');
 assert.ok(!recado.references.some(({ kind }) => kind === 'permission'), 'rota de front sem prova não associa endpoint');
 
 const labelAfter = structuredClone(snapshot);
 labelAfter.frontSha = 'c'.repeat(40);
-labelAfter.manifest.labels = labelAfter.manifest.labels.map((item) => item.label === 'Salvar Alterações' &&
-  item.file === 'src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx'
+labelAfter.manifest.labels = labelAfter.manifest.labels.map((item) => item.label === 'Salvar' &&
+  item.file === 'src/features/configurations/layout/UnsavedChangesBar.tsx'
   ? { ...item, label: 'Salvar modificações' } : item);
 const labelImpact = calculateGuideImpact({ before: snapshot, after: labelAfter, guides, actions, sources: compiled.sources });
 assert.equal(JSON.stringify(labelImpact), JSON.stringify(calculateGuideImpact({ before: snapshot, after: labelAfter, guides, actions, sources: compiled.sources })), 'replay do par real é idêntico');
@@ -44,8 +44,14 @@ permissionAfter.manifest.permissions = permissionAfter.manifest.permissions.map(
 const permissionImpact = calculateGuideImpact({ before: snapshot, after: permissionAfter, guides, actions, sources: compiled.sources });
 assert.ok(!permissionImpact.proposals.some((item) => item.guideId === 'usuario-acesso' && item.dependency === 'permission'));
 assert.ok(permissionImpact.info.some((item) => item.includes('usuario-acesso: permissão não mapeada')));
-assert.ok(!permissionImpact.pending.some((item) => item.includes('rótulo da fonte não encontrado no manifest')),
-  'manifest aprovado inclui os rótulos dos três guias');
+// Passos editoriais (orientação sem controle próprio na tela, declarados no rascunho v2) citam o título do passo.
+const editorial = new Set();
+for (const id of ['usuario-acesso', 'recado-fora-do-horario']) {
+  const draft = JSON.parse(await readFile(join(root, `architecture/widget-guides-drafts/${id}.json`), 'utf8'));
+  for (const stepId of draft.editorialSteps ?? []) editorial.add(`${id} ${stepId} `);
+}
+assert.ok(!permissionImpact.pending.some((item) => item.includes('rótulo da fonte não encontrado no manifest') && ![...editorial].some((prefix) => item.startsWith(prefix))),
+  'manifest aprovado inclui os rótulos dos três guias, exceto passos editoriais');
 
 const dir = await mkdtemp(join(tmpdir(), 'guide-impact-'));
 try {

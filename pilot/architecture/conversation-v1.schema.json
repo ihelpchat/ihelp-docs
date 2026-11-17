@@ -39,6 +39,19 @@
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
         },
+        "transitions": {
+          "type": "string",
+          "const": "explicit"
+        },
+        "prerequisites": {
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          }
+        },
         "steps": {
           "minItems": 1,
           "maxItems": 40,
@@ -49,6 +62,11 @@
               "stepId": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 48
               },
               "text": {
                 "type": "string",
@@ -66,6 +84,29 @@
                   "abrir-departamentos",
                   "abrir-atendimento",
                   "abrir-crm"
+                ]
+              },
+              "route": {
+                "type": "string",
+                "enum": [
+                  "/contact",
+                  "/bot",
+                  "/configuracoes/user",
+                  "/configuracoes/channel",
+                  "/campanhas",
+                  "/configuracoes/department",
+                  "/atendimento",
+                  "/crm/pipeline",
+                  "/configuracoes/canais",
+                  "/configuracoes/usuarios",
+                  "/configuracoes/departamentos",
+                  "/configuracoes/mensagens",
+                  "/configuracoes/horarios",
+                  "/configuracoes/primeiros-passos",
+                  "/configuracoes/perfis",
+                  "/atendimento/mobile",
+                  "/tarefas",
+                  "/configuracoes/usuarios/novo"
                 ]
               },
               "choices": {
@@ -86,6 +127,14 @@
                     "nextStepId": {
                       "type": "string",
                       "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "complete",
+                        "handoff",
+                        "paused"
+                      ]
                     }
                   },
                   "required": [
@@ -94,6 +143,40 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "next": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "nextStepId": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+                      }
+                    },
+                    "required": [
+                      "nextStepId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "outcome": {
+                        "type": "string",
+                        "enum": [
+                          "complete",
+                          "handoff",
+                          "paused"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "outcome"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
               }
             },
             "required": [
@@ -143,6 +226,22 @@
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
+        },
+        "actor": {
+          "type": "object",
+          "properties": {
+            "idRef": {
+              "type": "string",
+              "pattern": "^(?!(?:sk[-_]|gh[pousr]_|github_pat_|AIza))(?=.*[A-Za-z])[A-Za-z0-9_-]{3,128}$"
+            },
+            "firstName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "pattern": "^\\p{L}[\\p{L}\\p{M}]*(?:['’\\-]\\p{L}[\\p{L}\\p{M}]*)*$"
+            }
+          },
+          "additionalProperties": false
         },
         "history": {
           "maxItems": 6,
@@ -217,7 +316,16 @@
                 "/campanhas",
                 "/configuracoes/department",
                 "/atendimento",
-                "/crm/pipeline"
+                "/crm/pipeline",
+                "/configuracoes/canais",
+                "/configuracoes/usuarios",
+                "/configuracoes/departamentos",
+                "/configuracoes/mensagens",
+                "/configuracoes/horarios",
+                "/configuracoes/primeiros-passos",
+                "/configuracoes/perfis",
+                "/atendimento/mobile",
+                "/tarefas"
               ]
             },
             "module": {
@@ -256,7 +364,7 @@
               ]
             },
             "permissions": {
-              "maxItems": 12,
+              "maxItems": 24,
               "type": "array",
               "items": {
                 "type": "string",
@@ -271,9 +379,35 @@
                   "campaigns.read",
                   "campaigns.create",
                   "templates.read",
-                  "templates.manage"
+                  "templates.manage",
+                  "conversations.read",
+                  "groups.read",
+                  "groups.send",
+                  "groups.manage",
+                  "settings.manage",
+                  "departments.manage",
+                  "tasks.read",
+                  "contacts.read",
+                  "crm.read"
                 ]
               }
+            },
+            "queue": {
+              "type": "string",
+              "enum": [
+                "mine",
+                "all",
+                "groups",
+                "other"
+              ]
+            },
+            "conversationKind": {
+              "type": "string",
+              "enum": [
+                "attendance",
+                "group",
+                "none"
+              ]
             },
             "plan": {
               "type": "string",
@@ -701,7 +835,16 @@
                     "/campanhas",
                     "/configuracoes/department",
                     "/atendimento",
-                    "/crm/pipeline"
+                    "/crm/pipeline",
+                    "/configuracoes/canais",
+                    "/configuracoes/usuarios",
+                    "/configuracoes/departamentos",
+                    "/configuracoes/mensagens",
+                    "/configuracoes/horarios",
+                    "/configuracoes/primeiros-passos",
+                    "/configuracoes/perfis",
+                    "/atendimento/mobile",
+                    "/tarefas"
                   ]
                 },
                 "module": {
@@ -740,7 +883,7 @@
                   ]
                 },
                 "permissions": {
-                  "maxItems": 12,
+                  "maxItems": 24,
                   "type": "array",
                   "items": {
                     "type": "string",
@@ -755,9 +898,35 @@
                       "campaigns.read",
                       "campaigns.create",
                       "templates.read",
-                      "templates.manage"
+                      "templates.manage",
+                      "conversations.read",
+                      "groups.read",
+                      "groups.send",
+                      "groups.manage",
+                      "settings.manage",
+                      "departments.manage",
+                      "tasks.read",
+                      "contacts.read",
+                      "crm.read"
                     ]
                   }
+                },
+                "queue": {
+                  "type": "string",
+                  "enum": [
+                    "mine",
+                    "all",
+                    "groups",
+                    "other"
+                  ]
+                },
+                "conversationKind": {
+                  "type": "string",
+                  "enum": [
+                    "attendance",
+                    "group",
+                    "none"
+                  ]
                 },
                 "plan": {
                   "type": "string",

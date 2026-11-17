@@ -22,6 +22,10 @@ const compile = async (metadata) => {
 };
 
 await compile(base);
+await compile({ ...base, guide: { ...guide, steps: [{ ...guide.steps[0], text: 'Abra Configurações → Canais.' }] } });
+for (const arrow of ['←', '⇒', '↪']) {
+  await assert.rejects(compile({ ...base, guide: { ...guide, steps: [{ ...guide.steps[0], text: `Abra Configurações ${arrow} Canais.` }] } }), /caractere privado proibido/u, 'aprovação de → não libera outros símbolos');
+}
 for (const [field, value] of [
   ['title', 'Acesse /admin/operacoes'],
   ['description', 'Acesse /configuracoes/channel%2f..%2fadmin'],

@@ -14,7 +14,7 @@ const { normalizeReply, supportMessageFor } = await import(`data:text/javascript
 const root = new URL('../', import.meta.url).pathname;
 const cases = [
   ['Como consultar cobrança e plano?', 'cobranca-plano', 'billing', null, 2, /cobrança|plano|fatura/i],
-  ['Como gerenciar usuário e acesso?', 'usuario-acesso', 'manage_users', 'abrir-usuarios', 6, /Usuários/],
+  ['Como gerenciar usuário e acesso?', 'usuario-acesso', 'manage_users', 'abrir-usuarios', 7, /Usuários/],
   ['Como reconectar canal pelo QR?', 'reconectar-canal-qr', 'connect_channel', 'abrir-canais', 6, /Canais/],
   ['Como comparar API Oficial e QR?', 'api-oficial-qr-coexistencia', 'connect_channel', 'abrir-canais', 3, /Canais/],
   ['Como criar uma campanha?', 'campanhas', 'campaigns', 'abrir-campanhas', 7, /Campanhas/],
@@ -86,6 +86,9 @@ for (const [question, slug, intent, action, count, moduleName] of cases) {
   ];
   const next = await ask('sim, pode me guiar', { history });
   assert.equal(next.steps.length, 1, question);
+  // O botão fixo da oferta de guia entra no modo guiado (um passo), não na lista completa.
+  const guideButton = await ask('Sim, me guie passo a passo', { history });
+  assert.deepEqual(guideButton.steps.map(({ text }) => text), next.steps.map(({ text }) => text), question);
   const walk = [...history];
   for (let index = 1; index < count; index++) {
     const input = slug === 'crm' && index === 8 ? 'quero automação' : 'Concluí este passo';

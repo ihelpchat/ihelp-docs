@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { waitForMcpStartup } from './test-process.mjs';
 import { test } from 'node:test';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -60,11 +61,8 @@ async function scenario(providerStatus, withKey = true, { spent = 0, retry = fal
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += chunk; });
   try {
-    let response;
-    for (let attempt = 0; attempt < 300; attempt++) {
-      try { response = await fetch(`http://127.0.0.1:${port}/health`); break; }
-      catch { await new Promise((resolve) => setTimeout(resolve, 30)); }
-    }
+    await waitForMcpStartup(child);
+    const response = await fetch(`http://127.0.0.1:${port}/health`);
     assert.ok(response, `servidor não iniciou: ${stderr}`);
     const first = { status: response.status, body: await response.json() };
     const second = await fetch(`http://127.0.0.1:${port}/health`);

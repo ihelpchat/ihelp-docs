@@ -1,10 +1,10 @@
 ---
 mcpGeneratedSha: 0a5204cd94352d0f198f830d988bf45ed40d330d
-title: "Colocar um recado fora do horário"
-description: "Escolha o horário do departamento e escreva o recado para quando ele estiver fechado."
+title: Colocar um recado fora do horário
+description: Confira o horário de atendimento e escreva o recado fora do horário do departamento certo.
 source: produto
 contentType: guia
-assistantQuestion: "Como colocar uma resposta automática quando meu atendimento está fechado?"
+assistantQuestion: Como colocar uma resposta automática quando meu atendimento está fechado?
 assistantAliases:
   - recado fora do horário
   - resposta automática quando fechado
@@ -13,7 +13,19 @@ assistantAliases:
   - domingo sem atendimento
   - aviso de férias
 assistantRouting:
-  anchors: [fora do horário, horário de atendimento, fechado, fechada, quando fechar, depois das horas, à noite, fim de semana, feriado, expediente]
+  anchors:
+    - fora do horário
+    - fora de horário
+    - horário de atendimento
+    - horários de atendimento
+    - fechado
+    - fechada
+    - quando fechar
+    - depois das horas
+    - à noite
+    - fim de semana
+    - feriado
+    - expediente
   actions:
     - avisar
     - aviso
@@ -25,63 +37,171 @@ assistantRouting:
     - fim de semana
     - feriado
     - recado automático
-  objects: [loja, salão, horário, mensagem, recado, cliente, atendimento]
-  ownFeatures: [departamento, departamentos, atendimento, horário, recado, mensagem automática]
-assistantOverview: "Abra Departamentos para configurar o horário e escrever o recado que aparece quando a equipe está fechada."
+    - fora de horário
+    - configuro
+    - configurar
+    - mudo
+    - mudar
+    - altero
+    - alterar
+  objects:
+    - loja
+    - salão
+    - horário
+    - horários
+    - mensagem
+    - recado
+    - cliente
+    - atendimento
+  ownFeatures:
+    - departamento
+    - departamentos
+    - atendimento
+    - horário
+    - recado
+    - mensagem automática
+assistantOverview: Confira o horário de atendimento e escreva o recado fora do horário do departamento certo.
 assistantSuggestions:
-  - "Como ajusto o horário de atendimento?"
-  - "Onde escrevo o recado fora do horário?"
+  - Como ajusto o horário de atendimento?
+  - Onde escrevo o recado fora do horário?
 assistantInitialSteps: 1
 assistantResolution: partial
 guide:
   schemaVersion: 1
   guideId: recado-fora-do-horario
-  version: 1
+  version: 2
   mode: real
-  initialStepId: abrir-departamentos
+  initialStepId: abrir-horarios
+  transitions: explicit
+  prerequisites:
+    - Ter acesso às seções Horários e feriados e Mensagens automáticas pelas permissões efetivas.
+    - Confirmar o departamento e o alcance da mudança antes de salvar.
   steps:
-    - stepId: abrir-departamentos
-      text: "Abra Configurações e depois Departamentos. Escolha o setor que receberá o recado."
-      actionId: abrir-departamentos
-    - stepId: configurar-horario
-      text: "Confira os horários de atendimento de segunda a sexta. Se houver pausa, ajuste o horário dela."
-    - stepId: escrever-recado
-      text: "Ative Mensagem automática fora de horário de atendimento e escreva o recado."
+    - stepId: abrir-horarios
+      title: Abra Horários e feriados
+      text: Abra Configurações → Horários e feriados. Se estiver no departamento, clique em Abrir Horários e feriados.
+      route: /configuracoes/horarios
+      next:
+        nextStepId: escolher-abrangencia
+    - stepId: escolher-abrangencia
+      title: Onde o horário precisa mudar?
+      text: Escolha onde mudar o horário. O Horário padrão da empresa vale para todos os departamentos sem exceção. Se só um setor precisa mudar, escolha Só um departamento.
       choices:
-        - id: escrevi
-          label: "Escrevi"
-          nextStepId: salvar-recado
-        - id: nao-achei
-          label: "Não achei"
-          nextStepId: pedir-ajuda
-    - stepId: salvar-recado
-      text: "Clique em Salvar Alterações. Confira se o horário e o recado continuam na tela."
+        - id: empresa
+          label: Padrão da empresa
+          nextStepId: ajustar-padrao
+        - id: departamento
+          label: Só um departamento
+          nextStepId: ajustar-excecao
+        - id: correto
+          label: O horário já está correto
+          nextStepId: abrir-mensagens
+    - stepId: ajustar-padrao
+      title: Ajuste o horário padrão
+      text: Em Horário padrão da empresa, ajuste Segunda a sexta, Sábado e Domingo. Ative apenas os dias de atendimento. Para mudar só um setor, volte e escolha Só um departamento.
+      next:
+        nextStepId: salvar-padrao
+    - stepId: salvar-padrao
+      title: Salve e confira o horário
+      text: Clique em Salvar na barra de alterações. Aguarde Horário padrão salvo e confira os horários.
       choices:
-        - id: salvou
-          label: "Salvou"
+        - id: salvo
+          label: Conferi o horário
+          nextStepId: abrir-mensagens
         - id: falhou
-          label: "Não salvou"
+          label: Não consegui salvar
+          nextStepId: pedir-ajuda
+    - stepId: ajustar-excecao
+      title: Abra a exceção do departamento
+      text: Em Exceções por departamento, clique em Editar ou Adicionar exceção e escolha o setor. Se aparecer Ainda não há padrão, peça ao responsável para definir o horário da empresa antes de seguir.
+      next:
+        nextStepId: salvar-excecao
+    - stepId: salvar-excecao
+      title: Salve a exceção
+      text: Ajuste o horário e a pausa do setor. Confira Sábado e Domingo. Clique em Salvar ou Criar exceção, conforme o botão exibido, e confira o resumo.
+      choices:
+        - id: salvo
+          label: Conferi a exceção
+          nextStepId: abrir-mensagens
+        - id: falhou
+          label: Não consegui configurar
+          nextStepId: pedir-ajuda
+    - stepId: abrir-mensagens
+      title: Abra Mensagens automáticas
+      text: Abra Configurações → Mensagens automáticas → Fora de horário.
+      route: /configuracoes/mensagens
+      next:
+        nextStepId: selecionar-departamento
+    - stepId: selecionar-departamento
+      title: Escolha o departamento
+      text: Em Departamento, escolha o setor que terá o recado. Confira o nome para não alterar outra equipe.
+      next:
+        nextStepId: escrever-recado
+    - stepId: escrever-recado
+      title: Escreva o recado
+      text: Em Texto da mensagem, escreva quando a equipe volta e confira a prévia. Deixe em branco apenas se esse departamento não deve enviar recado fora do horário.
+      next:
+        nextStepId: salvar-recado
+    - stepId: salvar-recado
+      title: Salve a mensagem
+      text: Clique em Salvar na barra de alterações e aguarde Mensagem salva. Se houver erro, anote o aviso para pedir ajuda.
+      next:
+        nextStepId: conferir-recado
+    - stepId: conferir-recado
+      title: Confira o resultado
+      text: Reabra Fora de horário no mesmo Departamento e confira o texto. Confira o horário em Horários e feriados. Se o feriado tiver mensagem própria, ela substitui este recado.
+      choices:
+        - id: conferi
+          label: Conferi texto e horário
+          outcome: complete
+        - id: falhou
+          label: Não consegui conferir
           nextStepId: pedir-ajuda
     - stepId: pedir-ajuda
-      text: "Falar com uma pessoa. Diga qual departamento e qual opção não apareceu."
+      title: Fale com uma pessoa
+      text: Fale com uma pessoa do atendimento e diga em qual tela e passo parou. Não envie senhas, dados de clientes nem conteúdo de conversas.
+      next:
+        outcome: handoff
 ---
 
-O recado fora do horário é configurado por departamento. Ele serve para avisar quando a equipe não está atendendo. Confira o horário antes de escrever o texto.
+Confira o horário de atendimento e escreva o recado fora do horário do departamento certo.
+
+## Pré-requisitos
+
+- Ter acesso às seções Horários e feriados e Mensagens automáticas pelas permissões efetivas.
+- Confirmar o departamento e o alcance da mudança antes de salvar.
 
 <ProductAction id="abrir-departamentos" label="Abrir a tela Departamentos" route="/configuracoes/department" />
 
-1. Em Configurações, abra **Departamentos**. Escolha o departamento que recebe essas mensagens.
-{/* fonte: abrir-departamentos | front@9c3690b98d81:src/store/slices/tab/tab.slice.ts:16 | alvo: Departamentos */}
-2. Confira o **Horário de atendimento de Seg à Sex**. Preencha início e fim. Se houver pausa, confira o horário de pausa também.
-{/* fonte: configurar-horario | front@9c3690b98d81:src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:63 | alvo: Horário de atendimento de Seg à Sex */}
-3. Ative **Mensagem automática fora de horário de atendimento**. Escreva um recado curto, por exemplo: “Olá! Estamos fora do horário de atendimento. Responderemos quando a equipe voltar.”
-{/* fonte: escrever-recado | front@9c3690b98d81:src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:353 | alvo: Mensagem automática fora de horário de atendimento */}
-4. Clique em **Salvar Alterações**. Volte ao departamento e confira se o horário e o recado continuam preenchidos.
-{/* fonte: salvar-recado | front@9c3690b98d81:src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:472 | alvo: Salvar Alterações */}
+## Passo a passo
 
-**Não achei a opção ou não salvou:** toque em **Falar com uma pessoa** no iHelp. Informe qual departamento e qual opção faltou.
-{/* fonte: pedir-ajuda | front@9c3690b98d81:src/components/pages/Configuration/pages/DepartmentById/components/DepartmentConfigExtras/index.tsx:353 | alvo: Mensagem automática fora de horário de atendimento */}
+1. Abra Configurações → Horários e feriados. Se estiver no departamento, clique em Abrir Horários e feriados.
+{/* fonte: abrir-horarios | front@3d00906c5315:src/features/configurations/pages/Departamentos/components/HorarioCard.tsx:106 | alvo: Abrir Horários e feriados */}
+2. Escolha onde mudar o horário. O Horário padrão da empresa vale para todos os departamentos sem exceção. Se só um setor precisa mudar, escolha Só um departamento.
+{/* fonte: escolher-abrangencia | front@3d00906c5315:src/features/configurations/pages/Horarios/components/HorarioDaEmpresaCard.tsx:57 | alvo: Horário padrão da empresa */}
+3. Em Horário padrão da empresa, ajuste Segunda a sexta, Sábado e Domingo. Ative apenas os dias de atendimento. Para mudar só um setor, volte e escolha Só um departamento.
+{/* fonte: ajustar-padrao | front@3d00906c5315:src/features/configurations/pages/Horarios/components/HorarioDaEmpresaCard.tsx:94 | alvo: Segunda a sexta */}
+4. Clique em Salvar na barra de alterações. Aguarde Horário padrão salvo e confira os horários.
+{/* fonte: salvar-padrao | front@3d00906c5315:src/features/configurations/layout/UnsavedChangesBar.tsx:22 | alvo: Salvar */}
+5. Em Exceções por departamento, clique em Editar ou Adicionar exceção e escolha o setor. Se aparecer Ainda não há padrão, peça ao responsável para definir o horário da empresa antes de seguir.
+{/* fonte: ajustar-excecao | front@3d00906c5315:src/features/configurations/pages/Horarios/components/ExcecoesPorDepartamentoCard.tsx:57 | alvo: Exceções por departamento */}
+6. Ajuste o horário e a pausa do setor. Confira Sábado e Domingo. Clique em Salvar ou Criar exceção, conforme o botão exibido, e confira o resumo.
+{/* fonte: salvar-excecao | front@3d00906c5315:src/features/configurations/pages/Horarios/components/ExcecaoModal.tsx:175 | alvo: Tem pausa no meio do expediente */}
+7. Abra Configurações → Mensagens automáticas → Fora de horário.
+{/* fonte: abrir-mensagens | front@3d00906c5315:src/features/configurations/registry/sections.ts:111 | alvo: Mensagens automáticas */}
+8. Em Departamento, escolha o setor que terá o recado. Confira o nome para não alterar outra equipe.
+{/* fonte: selecionar-departamento | front@3d00906c5315:src/features/configurations/pages/Mensagens/index.tsx:681 | alvo: departamento */}
+9. Em Texto da mensagem, escreva quando a equipe volta e confira a prévia. Deixe em branco apenas se esse departamento não deve enviar recado fora do horário.
+{/* fonte: escrever-recado | front@3d00906c5315:src/features/configurations/pages/Mensagens/index.tsx:743 | alvo: departamento */}
+10. Clique em Salvar na barra de alterações e aguarde Mensagem salva. Se houver erro, anote o aviso para pedir ajuda.
+{/* fonte: salvar-recado | front@3d00906c5315:src/features/configurations/layout/UnsavedChangesBar.tsx:45 | alvo: Salvar */}
+
+## Se não funcionar
+
+Fale com uma pessoa do atendimento e diga em qual tela e passo parou. Não envie senhas, dados de clientes nem conteúdo de conversas.
+{/* fonte: pedir-ajuda | front@3d00906c5315:src/features/configurations/pages/Mensagens/index.tsx:474 | alvo: Fale com uma pessoa */}
 
 ## Como confirmar
 
-O horário e o recado aparecem ao abrir o departamento novamente. Peça a alguém que envie uma mensagem de outro celular para esse número fora do horário configurado. Confira com essa pessoa se recebeu o recado.
+Reabra Fora de horário no mesmo Departamento e confira o texto. Confira o horário em Horários e feriados. Se o feriado tiver mensagem própria, ela substitui este recado.
+{/* fonte: conferir-recado | front@3d00906c5315:src/features/configurations/registry/sections.ts:106 | alvo: Mensagens automáticas */}

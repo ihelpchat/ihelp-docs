@@ -6,7 +6,7 @@ import { approvedGuideSentences, validateCanonicalGuide } from '../lib/canonical
 const root = new URL('../content/docs/docs/', import.meta.url);
 const cases = [
   ['principais-motivos-de-suporte/reconectar-canal-qr.mdx', 'reconectar-canal-qr', ['Android', 'iPhone', 'sem o celular', 'outra tela']],
-  ['principais-motivos-de-suporte/usuario-acesso.mdx', 'usuario-acesso', ['criar', 'departamento', 'restrição']],
+  ['principais-motivos-de-suporte/usuario-acesso.mdx', 'usuario-acesso', ['criar', 'departamento', 'perfil']],
   ['sobre-o-sistema/configuracoes/departamentos/recado-fora-do-horario.mdx', 'recado-fora-do-horario', ['horário', 'mensagem', 'Salvar']],
 ];
 
@@ -17,7 +17,7 @@ for (const [file, id, required] of cases) {
   assert.ok(guide.steps.length >= 3);
   for (const word of required) assert.match(raw, new RegExp(word, 'iu'), `${id}: ${word}`);
   assert.throws(() => validateCanonicalGuide(raw.replace(/\{\/\* fonte:[^\n]+\*\/\}/u, ''), id), /fonte/iu, 'remover fonte de passo reprova');
-  assert.throws(() => validateCanonicalGuide(raw.replace('## Como confirmar', 'As mensagens recebidas enquanto o canal estava desconectado serão recuperadas.\n\n## Como confirmar'), id), /mensagens|recuperad/iu, 'promessa de recuperação reprova');
+  assert.throws(() => validateCanonicalGuide(raw.replace('## Se não funcionar', 'As mensagens recebidas enquanto o canal estava desconectado serão recuperadas.\n\n## Se não funcionar'), id), /mensagens|recuperad/iu, 'promessa de recuperação reprova');
 }
 
 const qr = await readFile(join(root.pathname, cases[0][0]), 'utf8');
@@ -60,7 +60,7 @@ for (const [file, id] of cases) {
   const raw = await readFile(join(root.pathname, file), 'utf8');
   for (const sentence of approvedGuideSentences[id]) {
     if (!/[.!?]$/u.test(sentence)) continue; // Títulos sem pontuação já são validados no guia original.
-    assert.doesNotThrow(() => validateCanonicalGuide(raw.replace('## Como confirmar', `${sentence}\n\n## Como confirmar`), id),
+    assert.doesNotThrow(() => validateCanonicalGuide(raw.replace('## Se não funcionar', `${sentence}\n\n## Se não funcionar`), id),
       `${id}: frase aprovada: ${sentence}`);
   }
 }

@@ -64,6 +64,16 @@ try {
   assert.ok(fallback.sources.length > 0 && fallback.steps.length > 0, 'guia fixo continua disponível');
   assert.deepEqual(fallback.suggestions, [], 'humano não é pergunta nova');
   assert.deepEqual(fallback.actions, [{ type: 'link', destination: 'support', label: 'Falar com uma pessoa' }], 'humano continua disponível');
+  assert.equal(fallback.fallbackReason, 'budget_exhausted', 'motivo registrado para o log de conversas');
+  assert.match(fallback.answer, /^Este é o passo a passo da Central de Ajuda\./u, 'sem prometer um guia que não existe');
+  assert.ok(fallback.steps.length > 3, 'procedimento inteiro, não cortado em 3 passos');
+
+  // Reserva estima ~3 bytes por token: payload de 30 kB com taxa 10/M reserva ~0,10, não 0,30.
+  const big = { input: 'x'.repeat(30_000), max_output_tokens: 0 };
+  const estimateFile = join(dir, 'estimate.json');
+  const estimate = { file: estimateFile, dailyLimitUsd: 0.15, reserveUsd: 0.01, inputUsdPerMillion: 10, outputUsdPerMillion: 10 };
+  const admittedBig = await createBudgetedResponse({ responses: { create: async () => ok } }, big, estimate);
+  assert.equal(admittedBig.kind, 'ok', 'payload grande cabe quando o custo estimado cabe no limite');
 } finally {
   await rm(dir, { recursive: true, force: true });
 }

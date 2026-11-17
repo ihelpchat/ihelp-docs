@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { waitForMcpStartup } from './test-process.mjs';
 import { test } from 'node:test';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -47,15 +49,25 @@ try {
     }
   });
 
-  await test('esforço inválido impede inicialização com motivo', () => {
-    const started = performance.now();
-    const result = spawnSync(process.execPath, [new URL('./http.mjs', import.meta.url).pathname], {
+  await test('esforço inválido impede inicialização com motivo', async () => {
+    const child = spawn(process.execPath, [new URL('./http.mjs', import.meta.url).pathname], {
       env: { ...process.env, DOCS_MCP_API_KEY: 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz', ASSISTANT_ROUTER_EFFORT: 'foo', PORT: '0' },
-      encoding: 'utf8', timeout: 2000,
+      stdio: ['ignore', 'ignore', 'pipe'],
     });
-    assert.ok(performance.now() - started < 1000, 'configuração inválida deve ser recusada em menos de 1000 ms');
-    assert.notEqual(result.status, 0, 'http.mjs deve rejeitar foo antes de ouvir porta');
-    assert.match(result.stderr, /ASSISTANT_ROUTER_EFFORT.*foo/u, 'erro deve nomear configuração e valor');
+    try {
+      // Prove fail-fast by lifecycle ordering, not scheduler-dependent wall time:
+      // invalid configuration must exit normally with an error, without listening.
+      const result = await waitForMcpStartup(child, { expectExit: true });
+      assert.notEqual(result.exitCode, 0, 'http.mjs deve rejeitar foo antes de ouvir porta');
+      assert.doesNotMatch(result.stderr, /MCP ouvindo na porta/u);
+      assert.match(result.stderr, /ASSISTANT_ROUTER_EFFORT.*foo/u, 'erro deve nomear configuração e valor');
+    } finally {
+      if (child.exitCode === null) {
+        const exited = once(child, 'exit');
+        child.kill('SIGTERM');
+        await exited;
+      }
+    }
   });
 
   await test('entrada HTTP não carrega captura estaticamente', async () => {

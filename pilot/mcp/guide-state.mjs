@@ -65,16 +65,24 @@ function reply(source, step, answer, options = {}) {
     answer,
     steps: [{ text: step.text, ...(step.actionId ? { action: resolveCatalogAction({ id: step.actionId, route: actions[step.actionId].route }) } : {}) }],
     sources: [{ title: source.title, path: source.path }],
-    suggestions: step.choices?.map((choice) => choice.label)
-      ?? (guideLastStep(source.guide, step) ? ['Deu certo? Sim', 'Deu certo? Não', 'Preciso de ajuda'] : ['Concluí este passo', 'Preciso de ajuda']),
+    suggestions: step.choices?.map((choice) => choice.label) ?? stepSuggestions(source.guide, step),
     resolution: 'in_progress', found: true, guide: state,
     ...(step.choices?.length ? { guideChoices: step.choices.map(({ id, label }) => ({ id, label })) } : {}),
     ...rest,
   };
 }
 
+const explicitGraph = (guide) => guide.transitions === 'explicit';
+
+function stepSuggestions(guide, step) {
+  if (explicitGraph(guide) && step.next?.outcome === 'handoff') return ['Falar com uma pessoa', 'Voltar'];
+  if (explicitGraph(guide) && step.next?.outcome === 'paused') return ['Recomeçar', 'Falar com uma pessoa'];
+  return guideLastStep(guide, step) ? ['Deu certo? Sim', 'Deu certo? Não', 'Preciso de ajuda'] : ['Concluí este passo', 'Preciso de ajuda'];
+}
+
 function nextStep(guide, step) {
   if (step.choices?.length) return null;
+  if (explicitGraph(guide)) return step.next?.nextStepId ? guide.steps.find((candidate) => candidate.stepId === step.next.nextStepId) : null;
   const parent = guide.steps.find((candidate) => candidate.choices?.some((choice) => choice.nextStepId === step.stepId));
   if (parent) {
     const lastBranch = Math.max(...parent.choices.map((choice) => guide.steps.findIndex((candidate) => candidate.stepId === choice.nextStepId)));
@@ -84,6 +92,7 @@ function nextStep(guide, step) {
 }
 
 function guideLastStep(guide, step) {
+  if (explicitGraph(guide)) return step.next?.outcome === 'complete';
   return !step.choices?.length && !nextStep(guide, step);
 }
 
@@ -132,6 +141,13 @@ export async function answerGuide(root, question, state, options = {}) {
   if (!source || !current || state.version !== guide.version || state.mode !== guide.mode) return safe;
   const path = guideStatePath(state.stateToken, guide, current.stepId);
   const tokenValid = Boolean(path);
+  const finish = (outcome, finalPath) => {
+    if (outcome === 'complete') return reply(source, current, 'Você concluiu o guia.', { path: finalPath, steps: [], suggestions: [], resolution: 'complete' });
+    if (outcome === 'paused') return reply(source, current, 'Guia pausado. Quando puder, recomece deste passo.', { path: finalPath, steps: [], suggestions: ['Recomeçar', 'Falar com uma pessoa'], resolution: 'partial' });
+    return reply(source, current, 'Vou passar seu caso a uma pessoa com o guia e o passo em que você parou.', {
+      path: finalPath, steps: [], suggestions: [], resolution: 'partial', diagnosis, escalation: handoff(),
+    });
+  };
   if ((state.stateToken && !tokenValid) || (current.stepId !== guide.initialStepId && !tokenValid)) return safe;
   const advancing = /(?:avancar|proximo|conclui|feito)/.test(command);
   const concluding = /(?:deu certo\? sim|deu certo|finalizar|concluir guia)/.test(command);
@@ -154,12 +170,15 @@ export async function answerGuide(root, question, state, options = {}) {
   if (current.choices?.length) {
     const choice = current.choices.find((item) => item.id === state.choiceId && state.pendingChoiceId === current.stepId);
     if (!choice) return reply(source, current, 'Escolha uma das opções deste passo.', { path });
+    if (choice.outcome) return finish(choice.outcome, path);
     const selected = guide.steps.find((step) => step.stepId === choice.nextStepId) ?? current;
     options.onResolvedStep?.({ guideId: guide.guideId, stepId: selected.stepId });
     return reply(source, selected, 'Vamos seguir pela opção escolhida.', { path: [...path, selected.stepId] });
   }
   if (state.choiceId) return safe;
   const next = nextStep(guide, current);
+  const ending = explicitGraph(guide) ? current.next?.outcome : undefined;
+  if (ending && ending !== 'complete' && (advancing || concluding)) return finish(ending, path);
   if (concluding) {
     if (next) return safe;
     return reply(source, current, 'Você concluiu o guia.', { path, steps: [], suggestions: [], resolution: 'complete' });

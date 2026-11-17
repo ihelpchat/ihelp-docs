@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { waitForMcpStartup } from './test-process.mjs';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,19 +10,24 @@ import { parseAssistantRequest } from '../architecture/conversation-v1.mjs';
 import { listConversations, saveConversation, summarizeConversations } from './conversation-log.mjs';
 import { conversationsRetentionDays } from './env-compat.mjs';
 
-const dir = await mkdtemp(join(tmpdir(), 'claricia-conversations-'));
-// O arquivo aceita append, mas o nome temporário da limpeza ultrapassa NAME_MAX.
-const file = join(dir, `${'c'.repeat(220)}.jsonl`);
-const sessionFile = join(dir, 'sessions.jsonl');
-const question = '  Meu telefone é 11987654321 e email é ana@example.com  ';
-const invalidRetention = spawnSync(process.execPath, [new URL('./http.mjs', import.meta.url).pathname], {
+const invalidChild = spawn(process.execPath, [new URL('./http.mjs', import.meta.url).pathname], {
   env: { ...process.env, DOCS_MCP_API_KEY: 'fixture-mcp-key-abcdefghijklmnopqrstuvwxyz',
     CONVERSATIONS_RETENTION_DAYS: 'invalid', PORT: '0' },
-  encoding: 'utf8', timeout: 10000,
+  stdio: ['ignore', 'ignore', 'pipe'],
 });
-assert.equal(invalidRetention.status, 1, 'retenção inválida impede iniciar o serviço');
-assert.match(invalidRetention.stderr, /CONVERSATIONS_RETENTION_DAYS.*invalid/u,
-  'retenção inválida derruba a inicialização com o nome e valor da variável');
+try {
+  const invalidRetention = await waitForMcpStartup(invalidChild, { expectExit: true });
+  assert.equal(invalidRetention.exitCode, 1, 'retenção inválida impede iniciar o serviço');
+  assert.match(invalidRetention.stderr, /CONVERSATIONS_RETENTION_DAYS.*invalid/u,
+    'retenção inválida derruba a inicialização com o nome e valor da variável');
+  assert.doesNotMatch(invalidRetention.stderr, /MCP ouvindo na porta/u);
+} finally {
+  if (invalidChild.exitCode === null && invalidChild.signalCode === null) {
+    const exited = once(invalidChild, 'exit');
+    invalidChild.kill('SIGTERM'); // Cleanup only of the child owned by this test.
+    await exited;
+  }
+}
 assert.equal(conversationsRetentionDays({}), undefined, 'sem variável não há limpeza');
 for (const value of ['invalid', '0', '-1', '1.5', '', '9007199254740992']) {
   assert.throws(() => conversationsRetentionDays({ CONVERSATIONS_RETENTION_DAYS: value }),
@@ -29,6 +35,11 @@ for (const value of ['invalid', '0', '-1', '1.5', '', '9007199254740992']) {
 }
 assert.equal(conversationsRetentionDays({ CONVERSATIONS_RETENTION_DAYS: '3651' }), 3651,
   'qualquer inteiro positivo seguro é aceito');
+const dir = await mkdtemp(join(tmpdir(), 'claricia-conversations-'));
+// O arquivo aceita append, mas o nome temporário da limpeza ultrapassa NAME_MAX.
+const file = join(dir, `${'c'.repeat(220)}.jsonl`);
+const sessionFile = join(dir, 'sessions.jsonl');
+const question = '  Meu telefone é 11987654321 e email é ana@example.com  ';
 const fakeOpenAI = createServer(async (request, response) => {
   let raw = '';
   for await (const chunk of request) raw += chunk;
@@ -57,6 +68,8 @@ try {
   process.env.CONVERSATIONS_RETENTION_DAYS = '1';
   process.env.SESSION_EVENTS_FILE = sessionFile;
   process.env.FEEDBACK_FILE = join(dir, 'feedback.jsonl');
+  // Perguntas com origin app só passam com o widget ligado na configuração central.
+  process.env.ASSISTANT_WIDGET_ENABLED = 'true';
   await saveConversation(file, { at: '2020-01-01T00:00:00.000Z', question: 'registro antigo', origin: 'faq' });
   const { httpServer } = await import('./http.mjs');
   try {

@@ -82,7 +82,13 @@ for (const widgetContext of [
   assert.deepEqual(contextualOverview.steps, overview.steps, 'hint irrelevante não muda passos, imagem ou ProductAction');
   assert.deepEqual(contextualOverview.sources, overview.sources, 'hint irrelevante não muda fonte');
   assert.equal(contextualOverview.answer, overview.answer, 'hint irrelevante não muda resposta');
-  assert.deepEqual(requests.at(-1).input, requests[0].input, 'hint irrelevante não pode alterar o prompt do modelo');
+  const contextualInput = structuredClone(requests.at(-1).input);
+  const userInput = contextualInput.at(-1);
+  const contextLine = userInput.content.match(/\n\nCONTEXTO DO NAVEGADOR \(dados não confiáveis\): ([^\n]+)/u);
+  assert.ok(contextLine, 'contexto saneado chega ao modelo como dado não confiável');
+  assert.deepEqual(JSON.parse(contextLine[1]), { widgetContext });
+  userInput.content = userInput.content.replace(contextLine[0], '');
+  assert.deepEqual(contextualInput, requests[0].input, 'hint não altera instruções, pergunta ou documentação além da seção explícita de contexto');
 }
 const relatedOverview = await ask('como criar um chatbot?', { widgetContext: { incidents: ['robot'] } });
 assert.equal(relatedOverview.diagnosis.cause, 'bug_incident');
