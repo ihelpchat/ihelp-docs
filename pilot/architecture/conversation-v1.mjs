@@ -92,7 +92,7 @@ export const assistantRequestSchema = z.object({
   sessionId: z.string().min(1).max(128).optional(),
   origin: z.enum(['faq', 'app']).optional(),
   companyId: z.number().int().positive().optional(),
-  history: z.array(historySchema).max(6).optional(),
+  history: z.array(historySchema).max(12).optional(),
   scope: z.enum(['Tudo', 'Ajuda e FAQ', 'API', 'Tutoriais', 'Novidades']).optional(),
   page: z.object({ path: z.string().regex(/^\/(?!\/)[a-z0-9/_-]+$/i), title: z.string().max(200) }).strict().optional(),
   widgetContext: widgetContextSchema.optional(),

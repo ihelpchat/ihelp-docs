@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 
 const cents = (value) => Math.round(value * 1_000_000);
@@ -39,7 +40,7 @@ function settings(options) {
   const numeric = (value, fallback) => value === undefined ? fallback : Number(value);
   const config = {
     file: options.file ?? process.env.ASSISTANT_BUDGET_FILE ?? (process.env.RAILWAY_ENVIRONMENT_NAME
-      ? '/data/claricia-budget.json' : `/tmp/claricia-budget-dev-${process.pid}.json`),
+      ? '/data/claricia-budget.json' : join(tmpdir(), `claricia-budget-dev-${process.pid}.json`)),
     dailyLimit: cents(numeric(options.dailyLimitUsd ?? process.env.ASSISTANT_DAILY_LIMIT_USD,
       process.env.RAILWAY_ENVIRONMENT_NAME ? 1 : 100)),
     reserve: cents(numeric(options.reserveUsd ?? process.env.ASSISTANT_RESERVE_USD, 1)),

@@ -3,6 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { answerQuestion, parseAnswer, retrieveContext } from './assistant-service.mjs';
+import { stateNarration, documentedSteps, firstSourcePath } from './fixtures/state-echo-client.mjs';
 import { renderArticle, validateArticle } from './content-service.mjs';
 import allowedActions from '../architecture/product-actions.json' with { type: 'json' };
 
@@ -44,7 +45,7 @@ await writeFile(join(actionDir, 'sugestoes.mdx'), `---\ntitle: "Roteiro editoria
 const suggestionSource = (await retrieveContext(testRoot, 'roteiro editorial de sugestões'))
   .find((source) => source.path === '/docs/teste/sugestoes');
 assert.deepEqual(suggestionSource?.assistantSuggestions, ['Primeira dúvida', 'Segunda dúvida'], 'lista do frontmatter deve ser lida com separador e sem duplicatas');
-await writeFile(join(actionDir, 'importar-contatos.mdx'), `---\ntitle: "Importar contatos"\ndescription: "Aprenda a importar contatos pela tela correta do iHelp."\nsource: produto\ncontentType: tutorial\n---\n\nAbra a lista de contatos e use o menu de opções para iniciar a importação.\n\n<ProductAction id="importar-contatos" label="Ir para importar contatos" route="/contact" target="contacts-more-options" />\n`);
+await writeFile(join(actionDir, 'importar-contatos.mdx'), `---\ntitle: "Importar contatos"\ndescription: "Aprenda a importar contatos pela tela correta do iHelp."\nsource: produto\ncontentType: tutorial\n---\n\nAbra a lista de contatos e use o menu de opções para iniciar a importação.\n\n1. Abra Contatos no menu lateral.\n2. Clique em Mais opções e escolha Importar contatos.\n3. Acesse Contatos pelo menu lateral e escolha Exportar.\n\n<ProductAction id="importar-contatos" label="Ir para importar contatos" route="/contact" target="contacts-more-options" />\n`);
 
 const beginnerClient = {
   responses: {
@@ -56,7 +57,7 @@ const beginnerClient = {
       return {
         model: 'gpt-test',
         output_text: JSON.stringify({
-          answer: 'Comece abrindo Contatos no menu lateral.',
+          plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Comece abrindo Contatos no menu lateral.',
           sections: [],
           steps: [
             { text: 'Abra Contatos no menu lateral.', actionId: 'importar-contatos' },
@@ -74,7 +75,9 @@ const beginnerClient = {
     },
   },
 };
-const beginnerReply = await answerQuestion(testRoot, 'como importar contatos', { client: beginnerClient });
+// A pergunta cobre as duas operações documentadas na página de teste (importar e exportar): o passo de Exportar não é
+// um controle fora de propósito, é parte do que a pessoa perguntou.
+const beginnerReply = await answerQuestion(testRoot, 'como importar e exportar contatos', { client: beginnerClient });
 assert.equal(beginnerReply.steps.length, 3, 'verbos equivalentes devem consolidar o mesmo destino sem apagar resultado diferente');
 assert.match(beginnerReply.steps[2].text, /Exportar/, 'ação com resultado diferente deve permanecer');
 assert.doesNotMatch(beginnerReply.answer, /comece abrindo contatos no menu lateral/i, 'answer não pode repetir a instrução do primeiro passo');
@@ -90,20 +93,28 @@ assert.deepEqual(beginnerReply.steps[0], {
 });
 assert.doesNotMatch(beginnerReply.steps[0].action.label, /importar contatos/i, 'CTA não pode prometer a importação quando só abre Contatos');
 
+// Contrato dinâmico (Bruno, 2026-11-03): o modelo escreve a narração e escolhe os passos iniciais; o serviço
+// ancora os passos no texto documentado e não troca a resposta pelo assistantOverview nem preenche passos
+// sozinho. Este fixture narra a partir dos fatos do prompt (ESTADO DO GUIA) e copia os três primeiros
+// PASSOS DOCUMENTADOS da FONTE 1, como um modelo que segue a fonte.
+const guidedAnswer = 'Você monta o robô como uma árvore de atendimento: o Menu de opções mostra escolhas e cada escolha abre um caminho. Saudação seguida de encaminhamento é o exemplo mais simples.';
 const guidedRequests = [];
 const guidedClient = {
   responses: {
     create: async (request) => {
       guidedRequests.push(request);
+      // Como um modelo real: cita a fonte do assunto (robô) ou a primeira fonte apresentada, e copia os passos dela.
+      const question = request.input.at(-1).content.match(/^Pergunta: (.+)$/m)?.[1] ?? '';
+      const cited = /chatbot|rob[oô]/i.test(question) ? '/docs/sobre-o-sistema/robo-de-atendimento' : firstSourcePath(request);
       return {
         model: 'gpt-test',
         output_text: JSON.stringify({
-          answer: 'Basta criar uma saudação e encaminhar para um atendente. Use o bloco Condição para ramificar.',
-          sections: [{ title: 'O caminho', items: ['Saudação', 'Condição', 'Encaminhamento'] }],
-          steps: [],
+          plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: stateNarration(request, guidedAnswer),
+          sections: [],
+          steps: documentedSteps(request, 3, cited),
           code: null,
-          sources: ['/docs/sobre-o-sistema/robo-de-atendimento'],
-          suggestions: ['Quer que eu acompanhe você...'],
+          sources: [cited],
+          suggestions: ['Pode me guiar etapa por etapa', 'Quero ver todos os passos'],
           resolution: 'complete',
           found: true,
         }),
@@ -118,15 +129,16 @@ assert.match(guidedRequests[0].input.at(-1).content, /TELAS DOCUMENTADAS:/);
 assert.match(guidedRequests[0].input.at(-1).content, /MÍDIA DISPONÍVEL: vídeo/i);
 assert.match(guidedRequests[0].input[0].content, /visão geral conversacional/i, 'pedido amplo deve iniciar com visão geral, sem despejar o manual');
 assert.match(guidedRequests[0].input[0].content, /explique.*termo/i, 'resposta para iniciante deve explicar termos do produto quando aparecem');
-assert.equal(guidedReply.steps.length, 3, 'primeira resposta ampla deve mostrar os três passos iniciais documentados');
+assert.equal(guidedReply.steps.length, 3, 'os três passos escolhidos pelo modelo aparecem com o texto documentado');
 assert.match(guidedReply.steps[0].text, /Robôs[\s\S]*Criar novo Robô/i);
 assert.match(guidedReply.steps[1].text, /Título do Robô/i);
 assert.match(guidedReply.steps[2].text, /Canais[\s\S]*número[\s\S]*Adicionar robô/i);
 assert.match(guidedReply.answer, /Menu de opções/i, 'visão geral deve explicar a possibilidade de ramificação');
-assert.match(guidedReply.answer, /^Você pode montar um robô como uma árvore de atendimento:/, 'visão deve começar pela possibilidade do produto');
+assert.equal(guidedReply.answer, guidedAnswer, 'a narração é do modelo; o assistantOverview é só referência no prompt');
+assert.match(guidedRequests[0].input.at(-1).content, /VISÃO INICIAL: Você pode montar um robô como uma árvore/, 'a visão editorial chega ao modelo como apoio');
 assert.match(guidedReply.answer, /(?:caminhos|ramifica|árvore)/i);
 assert.match(guidedReply.answer, /(?:mais simples|exemplo básico)/i, 'saudação e encaminhamento são apenas um exemplo');
-assert.doesNotMatch(JSON.stringify(guidedReply), /Condição|filtro/i, 'bloco inativo não pode aparecer na resposta');
+assert.doesNotMatch(JSON.stringify(guidedReply), /Condição|filtro/i, 'nada além do que o modelo grounded escreveu e a fonte documenta');
 assert.doesNotMatch(JSON.stringify(guidedReply), /\b(?:Continuar|Testar robô|Ativo)\b/i, 'visão não pode inventar botões ou status');
 assert.ok(guidedReply.answer.length < 300, 'introdução deve permanecer curta');
 assert.equal(guidedReply.steps[0].action?.id, 'abrir-robos');
@@ -137,7 +149,7 @@ assert.deepEqual(guidedReply.suggestions, [
   'Pode me guiar etapa por etapa',
   'Quero ver todos os passos',
   'Quero montar um menu com opções',
-], 'visão ampla deve trazer a terceira sugestão da fonte, sem sugestão do modelo');
+], 'continuações do modelo, na voz da pessoa, mais a sugestão editorial da fonte');
 
 const shownSteps = guidedReply.steps.map((step, index) => `${index + 1}. ${step.text}`).join('\n');
 const fullRobotSteps = (await retrieveContext(testRoot, 'como criar chatbot'))
@@ -150,7 +162,8 @@ const nextReply = await answerQuestion(testRoot, 'próximo passo', { client: gui
 assert.equal(nextReply.steps.length, 1, 'continuação entrega uma ação por vez');
 assert.match(nextReply.steps[0].text, /Iniciar Fluxo[\s\S]*Mensagem do Cliente/i, 'próximo passo deve avançar após os três já mostrados');
 const restartedReply = await answerQuestion(testRoot, 'sim, pode me guiar', { client: guidedClient, history: guidedHistory });
-assert.equal(restartedReply.answer, 'Vamos começar pelo primeiro passo.', 'entrada no guia não deve anunciar avanço antes de começar');
+assert.match(guidedRequests.at(-1).input.at(-1).content, /ESTADO DO GUIA[\s\S]*o passo 1 será mostrado/, 'o modelo recebe como fato que o guia começa pelo passo 1');
+assert.equal(restartedReply.answer, guidedAnswer, 'a narração da entrada no guia é do modelo, não uma frase fixa');
 assert.equal(restartedReply.steps.length, 1, 'entrada no guia entrega uma única ação');
 assert.match(restartedReply.steps[0].text, /Criar novo Robô/i, 'aceitar guia progressivo começa pelo primeiro passo');
 assert.ok(restartedReply.steps[0].image, 'primeira etapa guiada deve manter o screenshot documentado');
@@ -161,7 +174,8 @@ const afterFirstReply = await answerQuestion(testRoot, 'Concluí este passo', {
   client: guidedClient,
   history: [guidedHistory[0], { role: 'assistant', content: `1. ${restartedReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
 });
-assert.equal(afterFirstReply.answer, 'Vamos para a próxima ação.', 'confirmação deve anunciar avanço');
+assert.match(guidedRequests.at(-1).input.at(-1).content, /concluiu o passo 1; o passo 2 será mostrado/, 'o avanço vai ao modelo como fato');
+assert.equal(afterFirstReply.answer, guidedAnswer, 'a narração do avanço é do modelo, não uma frase fixa');
 assert.match(afterFirstReply.steps[0].text, /Título do Robô/i, 'confirmação no guia avança uma ação');
 assert.equal(afterFirstReply.steps[0].image?.src, '/img/help/Vc7GpOtHK4rebqsNycJs.png', 'Título usa o screenshot do formulário, não a lista de Robôs');
 assert.deepEqual(afterFirstReply.suggestions, guideSuggestions);
@@ -203,18 +217,22 @@ const finishedReply = await answerQuestion(testRoot, 'Concluí este passo', {
 });
 assert.deepEqual(finishedReply.steps, [], 'após Salvar/Publicar o guia não reinicia no primeiro passo');
 assert.match(finishedReply.answer, /Publicar[\s\S]*online/i);
-assert.match(finishedReply.answer, /Salvar[\s\S]*inativo/i);
+assert.match(finishedReply.answer, /antes da primeira publicação[\s\S]*Salvar só guarda/i);
+assert.match(finishedReply.answer, /já estiver publicado[\s\S]*Salvar pode atualizar o fluxo em atendimento/i);
 assert.doesNotMatch(JSON.stringify(finishedReply), /Testar robô|status Ativo/i);
-const falseActivationClient = { responses: { create: async () => ({
+// Modelo hostil: a narração é dele (contrato dinâmico), mas passo inventado nunca entra e o fato documentado
+// da conclusão (Salvar/Publicar) chega ao prompt para ele narrar.
+const hostileRequests = [];
+const falseActivationClient = { responses: { create: async (request) => { hostileRequests.push(request); return {
   model: 'gpt-test', output_text: JSON.stringify({
-    answer: 'Clique em Ativar robô para deixar o status Ativo.', sections: [],
+    plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Clique em Ativar robô para deixar o status Ativo.', sections: [],
     steps: [{ text: 'Clique em Ativar robô.', actionId: null, imagePath: null }],
     code: null, sources: ['/docs/sobre-o-sistema/robo-de-atendimento'], suggestions: [], resolution: 'complete', found: true,
   }),
-}) } };
+}; } } };
 const falseFoundClient = { responses: { create: async () => ({
   model: 'gpt-test', output_text: JSON.stringify({
-    answer: 'Use a busca da Central.', sections: [],
+    plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Use a busca da Central.', sections: [],
     steps: [{ text: 'Abra a busca da Central.', actionId: null, imagePath: null }],
     code: null, sources: ['/docs/teste/busca-central'], suggestions: [], resolution: 'not_found', found: false,
   }),
@@ -227,16 +245,17 @@ assert.deepEqual(falseFoundHelp.steps, [], 'historyGuide válido leva a diagnós
 assert.deepEqual(falseFoundHelp.sources.map(({ path }) => path), ['/docs/sobre-o-sistema/robo-de-atendimento']);
 assert.equal(falseFoundHelp.found, true);
 assert.equal(falseFoundHelp.resolution, 'complete');
-assert.doesNotMatch(falseFoundHelp.answer, /busca da Central/i);
+assert.doesNotMatch(falseFoundHelp.answer, /busca da Central/i, 'instrução que não ancora em passo documentado não entra na narração');
 for (const alias of ['Concluí', 'feito', 'terminei', 'pronto', 'preenchi os campos']) {
   const aliasReply = await answerQuestion(testRoot, alias, {
     client: falseActivationClient,
     history: [guidedHistory[0], { role: 'assistant', content: `1. ${currentGuideReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
   });
   assert.deepEqual(aliasReply.steps, [], `${alias}: último passo não pode reiniciar`);
-  assert.match(aliasReply.answer, /Publicar[\s\S]*online/i, `${alias}: conclusão deve ser grounded`);
-  assert.match(aliasReply.answer, /Salvar[\s\S]*inativo/i, `${alias}: conclusão deve distinguir salvar`);
-  assert.doesNotMatch(JSON.stringify(aliasReply), /Ativar robô|status Ativo/i);
+  assert.match(hostileRequests.at(-1).input.at(-1).content, /Como confirmar: [^\n]*Publicar[^\n]*online[^\n]*antes da primeira publicação[^\n]*Salvar só guarda/i, `${alias}: o fato documentado da conclusão vai ao modelo`);
+  assert.match(aliasReply.answer, /Publicar[\s\S]*online/i, `${alias}: sem narração ancorada, vale a conclusão documentada`);
+  assert.match(aliasReply.answer, /antes da primeira publicação[\s\S]*Salvar só guarda/i, `${alias}: conclusão deve distinguir salvar`);
+  assert.doesNotMatch(JSON.stringify(aliasReply), /Ativar robô|status Ativo/i, `${alias}: instrução ou status inventado não aparece em nenhuma parte`);
 }
 for (const prompt of ['próximo passo', 'continuar', 'Encontrei o botão']) {
   const afterLastReply = await answerQuestion(testRoot, prompt, {
@@ -244,15 +263,16 @@ for (const prompt of ['próximo passo', 'continuar', 'Encontrei o botão']) {
     history: [guidedHistory[0], { role: 'assistant', content: `1. ${currentGuideReply.steps[0].text}\nFonte usada: /docs/sobre-o-sistema/robo-de-atendimento` }],
   });
   assert.deepEqual(afterLastReply.steps, [], `${prompt}: não avança após o último passo`);
+  assert.match(hostileRequests.at(-1).input.at(-1).content, /Como confirmar: [^\n]*Publicar[^\n]*online/i, `${prompt}: conclusão documentada vai ao modelo`);
   assert.match(afterLastReply.answer, /Publicar[\s\S]*online/i);
-  assert.match(afterLastReply.answer, /Salvar[\s\S]*inativo/i);
+  assert.match(afterLastReply.answer, /antes da primeira publicação[\s\S]*Salvar só guarda/i);
   assert.doesNotMatch(JSON.stringify(afterLastReply), /Ativar robô|status Ativo/i);
 }
 
 const hostileGuideClient = { responses: { create: async (request) => {
   const helping = /Pergunta: Preciso de ajuda/.test(request.input.at(-1).content);
   return { model: 'gpt-test', output_text: JSON.stringify({
-    answer: helping ? 'Use a busca da Central.' : 'Ativar robô deixa o status Ativo.',
+    plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: helping ? 'Use a busca da Central.' : 'Ativar robô deixa o status Ativo.',
     sections: [],
     steps: [
       { text: 'Abra Robôs e depois me diga se encontrou o botão.', actionId: null, imagePath: null },
@@ -274,7 +294,7 @@ const hostileHelp = await answerQuestion(testRoot, 'Preciso de ajuda', {
 });
 assert.deepEqual(hostileHelp.steps, [], 'ajuda não aceita passo reescrito pelo modelo');
 assert.deepEqual(hostileHelp.sources.map(({ path }) => path), ['/docs/sobre-o-sistema/robo-de-atendimento'], 'ajuda mantém fonte do histórico');
-assert.doesNotMatch(hostileHelp.answer, /busca da Central|Ativar robô/i);
+assert.doesNotMatch(JSON.stringify(hostileHelp), /busca da Central|Ativar robô/i, 'ajuda não mostra instrução ou controle inventado em nenhuma parte');
 for (let index = 1; index < fullRobotSteps.length; index += 1) {
   hostileReply = await answerQuestion(testRoot, 'Concluí este passo', {
     client: hostileGuideClient,
@@ -300,7 +320,7 @@ assert.deepEqual(
 );
 const verboseGuideClient = { responses: { create: async () => ({
   model: 'gpt-test', output_text: JSON.stringify({
-    answer: 'Vamos por etapas.', sections: [],
+    plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Vamos por etapas.', sections: [],
     steps: [
       { text: fullRobotSteps[0], actionId: 'abrir-robos', imagePath: null },
       { text: fullRobotSteps[1], actionId: null, imagePath: null },
@@ -322,9 +342,9 @@ const changedTopicClient = {
       return {
         model: 'gpt-test',
         output_text: JSON.stringify({
-          answer: 'Vamos preparar sua primeira campanha.',
+          plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Vamos preparar sua primeira campanha.',
           sections: [],
-          steps: [],
+          steps: [{ text: 'Abra Campanhas e clique em Nova Campanha.', actionId: null, imagePath: null }],
           code: null,
           sources: ['/docs/principais-motivos-de-suporte/campanhas'],
           suggestions: ['Como preparo a planilha?'],
@@ -344,15 +364,15 @@ const changedTopicReply = await answerQuestion(testRoot, 'Pode explicar como cri
 });
 assert.doesNotMatch(changedTopicRequests[0].input[0].content, /MODO: acompanhamento guiado/i, 'troca de assunto não pode continuar o guia anterior');
 assert.match(changedTopicRequests[0].input[0].content, /MODO: visão geral conversacional/i, 'novo procedimento amplo deve iniciar uma nova visão geral');
-assert.equal(changedTopicReply.steps.length, 1, 'procedimento em prosa deve fornecer a primeira ação mesmo se o modelo omitir steps');
+assert.equal(changedTopicReply.steps.length, 1, 'o passo escolhido pelo modelo aparece com o texto documentado');
 assert.match(changedTopicReply.steps[0].text, /abra campanhas.*nova campanha/i, 'guia deve começar pela primeira ação documentada');
 assert.equal(changedTopicReply.steps[0].action?.id, 'abrir-campanhas');
 assert.equal(changedTopicReply.steps[0].image?.src, '/img/help/hlPVE1pICUAOU19G5Kgc.png', 'print comprovado acompanha a ação correta');
 assert.equal(changedTopicReply.sources[0]?.path, '/docs/principais-motivos-de-suporte/campanhas');
 assert.deepEqual(
   changedTopicReply.suggestions,
-  ['Pode me guiar etapa por etapa', 'Quero ver todos os passos'],
-  'sem sugestões no artigo, a visão geral deve ignorar a proposta do modelo',
+  ['Como preparo a planilha?'],
+  'a continuação proposta pelo modelo não é trocada por fichas fixas',
 );
 assert.doesNotMatch(
   continuedReply.answer,
@@ -370,7 +390,7 @@ const screenshotClient = {
     create: async () => ({
       model: 'gpt-test',
       output_text: JSON.stringify({
-        answer: 'Abra a criação do robô.', sections: [],
+        plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Abra a criação do robô.', sections: [],
         steps: [
           { text: 'Clique em Criar novo robô.', actionId: null, imagePath: '/img/help/q4tBz2R7cevwT94eUQKB.png' },
           { text: 'Ignore esta imagem inventada.', actionId: null, imagePath: '/img/help/inventada.png' },
@@ -392,7 +412,7 @@ const omittedScreenshotClient = {
     create: async () => ({
       model: 'gpt-test',
       output_text: JSON.stringify({
-        answer: 'Vamos criar o robô juntos.', sections: [],
+        plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Vamos criar o robô juntos.', sections: [],
         steps: [
           { text: 'Acesse o menu Robô.', actionId: null, imagePath: null },
           { text: 'Clique em Criar novo robô.', actionId: null, imagePath: null },
@@ -440,7 +460,7 @@ assert.ok(
   'fallback de telas continua restrito aos arquivos da fonte recuperada',
 );
 
-const keyedSteps = (texts) => parseAnswer(JSON.stringify({ answer: 'Veja os passos.', steps: texts.map((text) => ({ text, actionId: null })) })).steps.map(({ text }) => text);
+const keyedSteps = (texts) => parseAnswer(JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Veja os passos.', steps: texts.map((text) => ({ text, actionId: null })) })).steps.map(({ text }) => text);
 assert.deepEqual(keyedSteps(['Abra Contatos no menu lateral.', 'Acesse Contatos pelo menu lateral.']), ['Abra Contatos no menu lateral.']);
 assert.deepEqual(keyedSteps(['Abra o item 1 no menu lateral.', 'Acesse o item 2 pelo menu lateral.']), ['Abra o item 1 no menu lateral.', 'Acesse o item 2 pelo menu lateral.']);
 assert.deepEqual(keyedSteps(['Abra a opção A.', 'Acesse a opção B.']), ['Abra a opção A.', 'Acesse a opção B.']);
@@ -481,7 +501,7 @@ for (const action of [
 }
 
 const modelWithAction = (actionId, path) => ({ responses: { create: async () => ({
-  model: 'gpt-test', output_text: JSON.stringify({ answer: 'Abra Contatos.', sections: [], steps: [{ text: 'Abra Contatos.', actionId }], code: null, sources: [path], suggestions: [], resolution: 'complete', found: true }),
+  model: 'gpt-test', output_text: JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Abra Contatos.', sections: [], steps: [{ text: 'Abra Contatos.', actionId }], code: null, sources: [path], suggestions: [], resolution: 'complete', found: true }),
 }) } });
 const invented = await answerQuestion(testRoot, 'importar contatos', { client: modelWithAction('acao-inventada', '/docs/teste/importar-contatos') });
 assert.equal(invented.steps[0].action, undefined, 'actionId inventado não pode usar a primeira ação da fonte');

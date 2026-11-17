@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import tasksCatalog from '../architecture/faq-regua/tarefas-ouro.json' with { type: 'json' };
 import { getIhelpContext } from './product-context-service.mjs';
+import { maskedShare, MASKED_SHARE_LIMIT } from './screenshot-mask.mjs';
 import { loadBusinessContext, judgeClaims, splitClaims } from './faq-editorial.mjs';
 import { judgeEditorial, consolidateEditorialReadings, FAQ_WRITER_GLOSSARY } from './faq-editorial-judge.mjs';
 import { readJourney } from './journey-service.mjs';
@@ -190,6 +191,10 @@ export async function runFaqJudgment(page, evidence, providers, { plan } = {}) {
 const visible = (value) => typeof value === 'string' && value.trim() && value !== '[conteúdo oculto]'
   ? value.trim() : null;
 const uniqueVisible = (values) => [...new Set(values.map(visible).filter(Boolean))];
+// Vocabulários conhecidos da jornada: metadado fora deles não é projetado.
+const ACTION_TYPES = new Set(['click', 'fill', 'select', 'press', 'upload_csv']);
+const CONTROL_ROLES = new Set(['button', 'link', 'combobox', 'option', 'textbox', 'checkbox', 'radio', 'menuitem',
+  'tab', 'switch', 'listbox', 'searchbox']);
 
 export function projectFaqEvidence(plan, journeys, context, business) {
   const evidence = [];
@@ -201,12 +206,29 @@ export function projectFaqEvidence(plan, journeys, context, business) {
     if (!journey) continue;
     if (item.status !== 'concluída') continue;
     const screens = journey.screens ?? [];
+    // Sequência na ordem registrada e com repetições: o mesmo rótulo em posições distintas tem propósitos
+    // distintos, que só a posição na sequência e a documentação explicam. O registro observa telas sem agir
+    // e pode concluir sem observar (journey-service), então nenhuma tela é atribuída a uma ação específica.
+    // Nunca projeta value; tipo/papel só quando pertencem aos vocabulários conhecidos.
+    const acoes = (journey.actions ?? []).map((action) => {
+      const nome = visible(action?.name);
+      if (!nome) return null;
+      return { ...(ACTION_TYPES.has(action.type) ? { tipo: action.type } : {}),
+        ...(CONTROL_ROLES.has(action.role) ? { papel: action.role } : {}), nome };
+    }).filter(Boolean);
     const product = {
-      acoes: uniqueVisible((journey.actions ?? []).map(({ name }) => name)),
+      acoes,
       campos: uniqueVisible(screens.flatMap(({ fields }) => (fields ?? []).map(({ name }) => name))),
       telas: uniqueVisible(screens.map(({ title }) => title)),
       mensagens: uniqueVisible(screens.flatMap(({ messages }) => messages ?? [])),
-      estadoVisivelDepois: {
+      // A primeira observação precede qualquer ação (journey-service observa antes de agir): fase comprovada.
+      estadoVisivelAntes: {
+        titulos: uniqueVisible([journey.before?.headings, screens[0]?.state?.headings]),
+        mensagens: uniqueVisible(screens[0]?.messages ?? []),
+      },
+      // A última tela e `after` podem vir da observação anterior à última ação (atalhos de conclusão sem nova
+      // observação). Fase desconhecida: dados preservados como última observação, sem afirmar "depois".
+      ultimaObservacao: {
         titulos: uniqueVisible([journey.after?.headings, screens.at(-1)?.state?.headings]),
         controles: uniqueVisible((screens.at(-1)?.controlsOffered ?? []).map(({ name }) =>
           typeof name === 'string' ? name : null)),
@@ -261,7 +283,7 @@ export function faqWriterInput(plan, tasks, evidence, screenshots) {
 export function faqWriterInstructions(rules) {
   return `Escreva a página INTEIRA em português para clientes iniciantes. ${learnedWriterContract()} Regras: ${rules.join('\n')}
   Glossário versionado do redator: ${JSON.stringify(FAQ_WRITER_GLOSSARY)}. Use os termos preferidos na prosa, preservando rótulos literais de controles do produto. Nunca transforme a mecânica da verificação em instrução ao cliente. A conclusão da tarefa é apenas um fato estruturado; detalhes de como a equipe a confirmou não são evidência de texto para a página.
-  Use somente evidenceIds existentes. Dê evidência também para title, description (ou null) e cada heading; textos de links e legendas também serão julgados. Para cada tarefa concluída, escreva o resultado do produto que a conclusão estruturada confirma em uma unidade kind depois com o ID da jornada; explique o efeito da ação para a pessoa, sem descrever como a equipe verificou. Apoie detalhes no estado visível, nas mensagens e nos controles oferecidos. Se esse estado não mostrar um detalhe, não o invente. O que acontece depois deve agregar ao leitor. Não numere o texto de unidades kind passo: a montagem numera os passos. Imagens mascaradas são referência visual; não publique sem aprovação. Se tarefa estiver sem jornada, escreva somente contexto, sem passo ou efeito: explique a finalidade da tarefa, por que e quando usar o recurso, sustentado pelos fatos do front e do negócio; não liste controles da tela nem invente passo ou efeito. Inclua O que é, Para que serve, casos concretos sustentados por evidência e um guia por tarefa; não suponha uso de WhatsApp ou CRM sem evidência. As seções sem taskId (O que é, Para que serve e Casos de uso) não descrevem ação na tela nem resultado de tarefa. Um caso de uso que dependa de executar uma tarefa vai para o guia dela, com o taskId da tarefa, ou fica só como necessidade e benefício, sem procedimento. O taskId pertence à seção e cada unidade herda o taskId da sua seção; use somente taskId da pauta. Em Casos de uso, traga situações concretas e distintas entre si, sem repetir o benefício já dito em Para que serve. Condição de acesso ou permissão documentada pode aparecer como contexto, mas não vira instrução para conferir, habilitar ou configurar acesso sem jornada concluída própria para isso. Descreva somente os cliques, sequências e confirmações observados na jornada, na ordem em que ela os registra; nomes de controles e telas não autorizam etapas extras. Ordene as tarefas pela pauta. Em cada guia, dê contexto, passos e efeito no mesmo fluxo; não substitua uma ação por referência a outro guia. Evite repetir a mesma orientação em guias diferentes. Faça a página seguir uma sequência lógica do uso inicial ao resultado. Cada frase deve ser uma unidade com evidência. Não mencione fonte, ensaio, staging nem pendência interna na página.`;
+  Use somente evidenceIds existentes. Dê evidência também para title, description (ou null) e cada heading; textos de links e legendas também serão julgados. Para cada tarefa concluída, escreva o resultado do produto que a conclusão estruturada confirma em uma unidade kind depois com o ID da jornada; explique o efeito da ação para a pessoa, sem descrever como a equipe verificou. Apoie detalhes no estado visível, nas mensagens e nos controles oferecidos. Se esse estado não mostrar um detalhe, não o invente. Estado já presente em estadoVisivelAntes, antes da primeira ação, não é efeito da tarefa; se o citar no resultado, condicione-o a essa situação de partida observada e não o apresente como regra válida para qualquer situação. ultimaObservacao é a última tela registrada e o registro não garante que ela seja posterior à última ação: não a apresente como efeito final nem deduza estado final dela, das mensagens achatadas ou de estadoVisivelAntes; o resultado fica restrito ao que a conclusão estruturada confirma. O que acontece depois deve agregar ao leitor: quando tarefas distintas têm o mesmo resultado confirmado pela conclusão estruturada, descreva o efeito completo uma vez e, nas demais, só o que aquela tarefa muda, sem fecho repetido. Não numere o texto de unidades kind passo: a montagem numera os passos. Imagens mascaradas são referência visual; não publique sem aprovação. Se tarefa estiver sem jornada, escreva somente contexto, sem passo ou efeito: explique a finalidade da tarefa, por que e quando usar o recurso, sustentado pelos fatos do front e do negócio; não liste controles da tela nem invente passo ou efeito. Em tarefa sem jornada, fatos do front e do negócio sustentam apenas finalidade, público, quando usar e pré-requisitos escritos como requisito (por exemplo, "exige um canal conectado"), nunca o funcionamento nem o resultado da tarefa (para onde a conversa vai, o que é enviado, o que muda de estado), mesmo que a fonte de negócio descreva esse funcionamento: isso é efeito e exige jornada concluída da própria tarefa. Também em tarefa sem jornada, não oriente a executar a tarefa nem a encaixá-la em um processo ou planejamento ("considere", "inclua", "faça"): descreva finalidade e condições, sem imperativo nem recomendação. Ainda em tarefa sem jornada, não detalhe critérios de busca, campos ou modo de operação do recurso como se fossem finalidade; escreva apenas finalidade, público, condições e pré-requisitos documentados, e deixe os passos observados para as tarefas concluídas. Ao descrever uma escolha em lista, menu ou opção já observada na jornada de uma tarefa concluída, diga o que essa escolha define para a tarefa (o destino, o canal, o modelo), com base no rótulo do controle e nos fatos do front ou do negócio, e encadeie a ação seguinte; esses fatos só explicam o papel da escolha observada e não autorizam efeito ou funcionamento sem jornada; não deixe "a opção desejada" sem dizer o que ela representa nem invente campo, etapa ou valor que o registro não tem. Explique um termo do produto ou da empresa na primeira vez em que ele aparece na página, em uma oração curta sustentada pela fonte e mantendo o rótulo real; depois use-o sem repetir a explicação. Prefira palavras usuais e sujeito concreto; se a fonte não sustenta um benefício concreto, fique na finalidade documentada, sem frase circular. Cada unidade acrescenta uma informação: não escreva unidade que só reformula a anterior nem repita a mesma abertura em unidades vizinhas; preserve as pontes que distinguem passos repetidos (por exemplo, "para começar" e "para concluir a inclusão"). Inclua O que é, Para que serve, casos concretos sustentados por evidência e um guia por tarefa; não suponha uso de WhatsApp ou CRM sem evidência. As seções sem taskId (O que é, Para que serve e Casos de uso) não descrevem ação na tela nem resultado de tarefa. Um caso de uso que dependa de executar uma tarefa vai para o guia dela, com o taskId da tarefa, ou fica só como necessidade e benefício, sem procedimento. O taskId pertence à seção e cada unidade herda o taskId da sua seção; use somente taskId da pauta. Em Casos de uso, traga situações concretas e distintas entre si, sem repetir o benefício já dito em Para que serve. Cada caso concreto liga uma situação distinta ao recurso escolhido e à finalidade ou ao benefício documentado, com linguagem própria e evidência, sem ação na tela, execução recomendada ou resultado obtido sem jornada; nomear o recurso e sua finalidade é permitido; evite repetir o benefício já apresentado em Para que serve. Condição de acesso ou permissão documentada pode aparecer como contexto, mas não vira instrução para conferir, habilitar ou configurar acesso sem jornada concluída própria para isso. Descreva somente os cliques, sequências e confirmações observados na jornada, na ordem em que acoes os registra, inclusive quando o mesmo controle aparece mais de uma vez; o propósito de cada passo vem só da posição na sequência observada e da documentação do produto, e o registro não vincula controles ou mensagens a uma ação específica: não atribua a uma ação o que a tela mostrou em outro momento; o sufixo "(cabeçalho)", "(janela)" ou "(linha N)", com ou sem número, acrescentado pela captura para distinguir nomes repetidos, não é rótulo nem posição real na tela, e parênteses que fazem parte do texto do produto permanecem; nomes de controles e telas não autorizam etapas extras e nenhuma ação ausente de acoes pode ser inventada. A ausência de um valor ou de um nome na captura sanitizada não prova que nada foi escolhido ou feito, nem que a ação observada fica fora do guia: não negue uma seleção ou uma ação por falta de valor, não infira um valor oculto e não amplie o resultado além da sequência observada e da conclusão estruturada. Limites reais continuam explícitos quando vêm de política, status ou contexto documentado, e a tarefa sem jornada continua descrita com honestidade. Ordene as tarefas pela pauta. Em cada guia, dê contexto, passos e efeito no mesmo fluxo; não substitua uma ação por referência a outro guia. Evite repetir a mesma orientação em guias diferentes. Faça a página seguir uma sequência lógica do uso inicial ao resultado. Cada frase deve ser uma unidade com evidência. Não mencione fonte, ensaio, staging nem pendência interna na página.`;
 }
 
 export async function generateFaqV2(root, module, { client = new OpenAI(),
@@ -271,10 +293,15 @@ export async function generateFaqV2(root, module, { client = new OpenAI(),
   const tasks = tasksCatalog.tarefas.filter((item) => item.modulo === module);
   const journeyRoot = resolve(process.env.MCP_STATE_DIR ?? '/data', 'journeys');
   const identity = configuredJourneyIdentity(process.env).credentialHash;
+  // Uma prova de conta fresca por invocação: a primeira leitura dispara o probe e as demais leituras desta
+  // invocação compartilham a mesma promessa, inclusive quando rejeita ou devolve null (falha fechada, sem nova
+  // tentativa: readJourney continua recusando ou marcando identityVerified=false). Nada é reaproveitado entre
+  // invocações nem gravado no cache global do servidor; readJourney, gate e validações não mudam.
+  const invocationProbe = probeAccount ? (() => { let shared; return () => shared ??= Promise.resolve().then(probeAccount); })() : undefined;
   const journeys = [];
   for (const task of tasks) {
     try { journeys.push(await (journeyReader ?? readJourney)({ root: journeyRoot, module, task: task.id,
-      accountHash: identity, probeAccount })); } catch { journeys.push({ task: task.id, status: 'inconclusiva' }); }
+      accountHash: identity, probeAccount: invocationProbe })); } catch { journeys.push({ task: task.id, status: 'inconclusiva' }); }
   }
   const plan = planFaqPage(module, tasks, journeys);
   const context = await contextLoader(root, `FAQ ${module}`, module, { requireLocal: true });
@@ -288,6 +315,8 @@ export async function generateFaqV2(root, module, { client = new OpenAI(),
     if (!screen?.screenshotId || !/^[a-f0-9]{64}$/u.test(screen.screenshotId)) continue;
     const image = await readFile(join(journeyRoot, module, `${screen.screenshotId}.png`)).catch(() => null);
     if (!image) continue;
+    // Captura inteiramente coberta pela máscara de privacidade não é evidência visual: fora dos dois arrays.
+    if (maskedShare(image) >= MASKED_SHARE_LIMIT) continue;
     imageItems.push({ type: 'input_image', image_url: `data:image/png;base64,${image.toString('base64')}` });
     screenshots.push({ task: journey.task, screenshotId: screen.screenshotId, approval: 'pendente' });
   }
@@ -350,7 +379,7 @@ export async function generateFaqV2(root, module, { client = new OpenAI(),
       rewrite: async (page, report) => {
         corrections++;
         const result = await requestModel('faq_rewrite_v2', pageSchema, [
-          { role: 'developer', content: `${instructions}\nReescreva a página inteira UMA vez. Preserve fatos sustentados e corrija apenas o diagnóstico. Não invente passos.` },
+          { role: 'developer', content: `${instructions}\nReescreva a página inteira UMA vez. Preserve fatos sustentados e corrija apenas o diagnóstico. Não invente passos. Para cada item a confirmar por falta de jornada concluída, remova a frase ou reduza-a a finalidade ou pré-requisito, sem funcionamento, resultado ou orientação de execução; não a reformule mantendo o efeito ou a orientação.` },
           { role: 'user', content: JSON.stringify({ page, report, plan, evidence: publicEvidence(evidence) }) },
         ]);
         return result.value;
