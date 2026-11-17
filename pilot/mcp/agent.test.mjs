@@ -284,6 +284,8 @@ assert.equal(view.previewUrl, null, 'site ainda não serve o commit');
 assert.match(view.previa, /sendo publicado/);
 view = await faqRascunho(root, { sessao: draft.sessao, previa: true, requestedBy: actor }, { preview });
 assert.equal(calls.length, 6, 'pedir de novo não republica');
+view = await faqRascunho(root, { sessao: draft.sessao, previa: true, requestedBy: actor }, { preview, now: Date.now() + 16 * 60_000 });
+assert.equal(calls.length, 12, 'deploy que não chegou ao ar em 15 minutos é republicado a pedido');
 live = 'c'.repeat(40);
 view = await faqRascunho(root, { sessao: draft.sessao, requestedBy: actor }, { preview });
 assert.equal(view.previewUrl, 'https://staging.example.test/ihelp-docs/docs/sobre-o-sistema/campanhas');

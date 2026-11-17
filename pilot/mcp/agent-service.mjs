@@ -8,6 +8,7 @@ import { containsSensitiveData } from './sensitive-data.mjs';
 // O turno roda em segundo plano; quem chamou acompanha por faq_status.
 
 const running = new Map();
+const PREVIEW_RETRY_MS = () => Number(process.env.AGENT_PREVIEW_RETRY_MS ?? 15 * 60_000);
 
 async function defaults(root, options) {
   const { readArticle } = await import('./editorial-standard.mjs');
@@ -102,8 +103,11 @@ export async function faqRascunho(root, { sessao, previa = false, requestedBy },
   if (session.rascunho && ['rascunho_pronto', 'reprovado'].includes(session.estado)) {
     const { startPreview, checkPreview } = await import('./agent-preview.mjs');
     const atual = session.previa?.revisao === session.rascunho.revisao ? session.previa : null;
-    if (previa && (!atual || atual.estado === 'substituida')) {
-      session.previa = await startPreview(session, options.preview);
+    const agora = options.now ?? Date.now();
+    // Deploy que não chegou ao ar no prazo (falhou ou foi cancelado): pedir a prévia de novo republica.
+    const travada = atual?.estado === 'publicando' && agora - Date.parse(atual.iniciadaEm) > PREVIEW_RETRY_MS();
+    if (previa && (!atual || atual.estado === 'substituida' || travada)) {
+      session.previa = await startPreview(session, { ...options.preview, now: agora });
       logStep(session, 'previa', `rascunho enviado para o site de staging (branch ${session.previa.branch})`);
       await saveSession(root, session);
     } else if (atual) {

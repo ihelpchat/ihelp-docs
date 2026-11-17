@@ -96,7 +96,7 @@ export function draftView(session) {
   const { revisao, mdx, gates, pendencias } = session.rascunho;
   const previa = session.previa?.revisao === revisao ? session.previa : null;
   const aviso = !previa ? (gates.aprovado ? 'Para ver no layout do site, chame faq_rascunho com previa: true. O texto vai para uma branch pública e para o site de staging.' : 'Prévia só para rascunho aprovado.')
-    : previa.estado === 'publicando' ? 'O site de staging está sendo publicado (alguns minutos). Chame faq_rascunho de novo para conferir.'
+    : previa.estado === 'publicando' ? 'O site de staging está sendo publicado (alguns minutos). Chame faq_rascunho de novo para conferir; se passar de 15 minutos, chame com previa: true para republicar.'
       : previa.estado === 'substituida' ? 'Outra publicação entrou no staging por cima desta prévia. Chame faq_rascunho com previa: true para republicar.' : null;
   return { sessao: session.id, estado: session.estado, ...(session.motivo ? { motivo: session.motivo } : {}),
     revisao, mdx, gates, pendencias, previewUrl: previa?.estado === 'pronta' ? previa.previewUrl : null,
