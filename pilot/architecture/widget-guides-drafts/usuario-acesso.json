@@ -35,12 +35,12 @@
     "steps": [
       {
         "stepId": "abrir-usuarios",
-        "text": "Abra Configurações e depois Usuários. Se Usuários não aparecer para você, peça a um administrador da empresa para conferir seu acesso.",
+        "text": "Abra Configurações → Usuários. Se a opção não aparecer, peça a um administrador para conferir seu acesso.",
         "actionId": "abrir-usuarios"
       },
       {
         "stepId": "criar-usuario",
-        "text": "Clique em Novo usuário para abrir o formulário. Se o botão estiver bloqueado, a tela mostra o motivo: só administradores criam usuários, ou o plano chegou ao limite. No limite, desative quem não atende mais ou fale com o nosso time.",
+        "text": "Clique em Novo usuário. Se estiver bloqueado, a tela mostra o motivo: só administradores criam usuários, ou o plano chegou ao limite.",
         "choices": [
           {
             "id": "abriu",
@@ -56,19 +56,19 @@
       },
       {
         "stepId": "preencher-dados",
-        "text": "No formulário Novo usuário, preencha Nome e E-mail. Defina Senha e Confirmar senha. O iHelp não avisa a pessoa: combine com ela como passar o e-mail e a senha, fora deste chat."
+        "text": "Preencha Nome, E-mail, Senha e Confirmar senha. Combine com a pessoa como entregar o acesso com segurança. O iHelp não envia esses dados para ela."
       },
       {
         "stepId": "escolher-perfil",
-        "text": "No cartão Acesso, escolha em Perfil o perfil que combina com o trabalho da pessoa. Se aparecer o cartão Tipo de conta, ou o Perfil estiver em Usar tipo de conta legado, escolha o Tipo de conta. Não dê acesso de administrador só para concluir o cadastro."
+        "text": "Em Acesso → Perfil, escolha o acesso adequado ao trabalho da pessoa. Se aparecer Tipo de conta ou Usar tipo de conta legado, escolha o Tipo de conta. Evite acesso de administrador sem necessidade."
       },
       {
         "stepId": "escolher-departamento",
-        "text": "No cartão Atendimento, em Departamentos, selecione os setores em que a pessoa vai atender. Pelo menos um é obrigatório. A pessoa só vê e atende conversas dos departamentos escolhidos."
+        "text": "Em Atendimento → Departamentos, selecione pelo menos um setor. A pessoa só vê e atende conversas dos departamentos escolhidos."
       },
       {
         "stepId": "salvar-usuario",
-        "text": "Confira os dados e clique em Criar usuário, no alto da página. Depois de criado, o iHelp abre a página da pessoa ou volta para a lista de usuários.",
+        "text": "Confira os dados e clique em Criar usuário, no alto da página. Aguarde abrir a página da pessoa ou a lista de usuários.",
         "choices": [
           {
             "id": "criado",
@@ -84,11 +84,11 @@
       },
       {
         "stepId": "revisar-acesso",
-        "text": "Se você voltou para a lista, abra a pessoa que acabou de criar. No cartão Acesso, confira o Perfil: trocar o perfil muda o acesso na hora. Se a pessoa precisar de algo diferente do perfil, use Ajustar em Exceções desta pessoa e clique em Salvar exceções."
+        "text": "Abra o usuário criado e confira Acesso → Perfil. A troca de perfil muda o acesso na hora. Para uma permissão diferente, use Exceções desta pessoa → Ajustar e depois Salvar exceções."
       },
       {
         "stepId": "conferir-acesso",
-        "text": "Peça à pessoa para entrar no iHelp com o e-mail e a senha combinados e conferir se vê o menu e os atendimentos esperados. Não compartilhe a senha neste chat. Se ela vir algo que não deveria, escolha Há acesso inesperado.",
+        "text": "Peça à pessoa para entrar no iHelp e conferir os menus e atendimentos disponíveis. Se ela vir algo indevido, escolha Há acesso inesperado. Não envie a senha ao atendimento.",
         "choices": [
           {
             "id": "conferiu",
@@ -103,7 +103,7 @@
       },
       {
         "stepId": "pedir-ajuda",
-        "text": "Fale com uma pessoa do atendimento e diga em qual passo parou: botão bloqueado, erro ao criar ou acesso inesperado. Não envie senha nem dados de clientes."
+        "text": "Fale com uma pessoa do atendimento e diga em qual passo parou. Não envie senhas nem dados de clientes."
       }
     ]
   },

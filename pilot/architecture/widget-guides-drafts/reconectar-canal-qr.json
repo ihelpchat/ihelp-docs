@@ -30,16 +30,16 @@
     "steps": [
       {
         "stepId": "abrir-canais",
-        "text": "Abra Configurações e depois Canais. Aqui você reconecta um canal que já existe; o botão Conectar canal da lista serve para pedir um canal novo.",
+        "text": "Abra Configurações → Canais. Use este guia para reconectar um canal existente. Conectar canal, na lista, serve para pedir um canal novo.",
         "actionId": "abrir-canais"
       },
       {
         "stepId": "abrir-canal-existente",
-        "text": "Na lista, abra o canal que aparece como Desconectado. Confira o nome e o número antes de continuar. Não desconecte um canal que está funcionando."
+        "text": "Abra o canal Desconectado e confira o nome e o número. Mantenha conectados os canais que estão funcionando."
       },
       {
         "stepId": "conferir-tipo",
-        "text": "No detalhe, confira o tipo logo abaixo do nome do canal. Este guia vale para WhatsApp · QR code. A API Oficial tem outro processo de conexão: escolha É API Oficial para falar com uma pessoa.",
+        "text": "Confira o tipo abaixo do nome do canal. Para WhatsApp · QR code, escolha É QR code. Para API Oficial, escolha É API Oficial e peça ajuda.",
         "choices": [
           {
             "id": "qr-code",
@@ -60,7 +60,7 @@
       },
       {
         "stepId": "gerar-codigo",
-        "text": "No detalhe do canal, clique em Conectar. No modal Conectar canal, se aparecer Trazer conversas dos últimos dias, marque só se faltar conversa no iHelp. Clique em Gerar QR Code e aguarde o código aparecer.",
+        "text": "Clique em Conectar. Se aparecer Trazer conversas dos últimos dias, marque só se faltar conversa no iHelp. Clique em Gerar QR Code.",
         "choices": [
           {
             "id": "apareceu",
@@ -76,7 +76,7 @@
       },
       {
         "stepId": "conferir-celular",
-        "text": "Para ler o código, você precisa do celular com o WhatsApp deste número e do código aberto na tela do iHelp. O celular está com você?",
+        "text": "Tenha em mãos o celular com o WhatsApp deste número. O celular está com você?",
         "choices": [
           {
             "id": "disponivel",
@@ -92,11 +92,11 @@
       },
       {
         "stepId": "ler-codigo",
-        "text": "No modal, escolha Android ou iPhone e siga os passos mostrados até Dispositivos conectados e Conectar dispositivo. Aponte a câmera do celular para o código na tela do iHelp. Não envie o código pelo chat nem para outras pessoas."
+        "text": "Escolha Android ou iPhone e siga as instruções até Conectar dispositivo. Aponte a câmera para o QR code do iHelp. Não compartilhe o código."
       },
       {
         "stepId": "conferir-conexao",
-        "text": "No detalhe do mesmo canal, confira se aparece Conectado. Com o modal ainda aberto, ele mostra Conectado! e Canal conectado. Se continuar Desconectado, escolha Preciso de outro QR ou Preciso de ajuda.",
+        "text": "Confira se o mesmo canal aparece como Conectado. Se continuar Desconectado, escolha Preciso de outro QR ou Preciso de ajuda.",
         "choices": [
           {
             "id": "conectou",
@@ -116,7 +116,7 @@
       },
       {
         "stepId": "gerar-outro-codigo",
-        "text": "Clique em Gerar novo código no modal, leia o novo código pelo WhatsApp e confira de novo se o canal aparece como Conectado.",
+        "text": "Clique em Gerar novo código. Leia o novo QR code pelo WhatsApp e confira se o canal aparece como Conectado.",
         "choices": [
           {
             "id": "conectou",
@@ -131,11 +131,11 @@
       },
       {
         "stepId": "sem-celular",
-        "text": "Sem o celular deste número não dá para ler o código. Seu progresso fica guardado: quando estiver com ele, retome o guia. Se precisar, fale com uma pessoa do atendimento."
+        "text": "Retome o guia quando estiver com o celular deste número. Seu progresso fica guardado. Se precisar, fale com uma pessoa do atendimento."
       },
       {
         "stepId": "pedir-ajuda",
-        "text": "Fale com uma pessoa do atendimento e diga qual canal e em que passo parou. Não envie o QR code, o código de conexão, senhas nem conteúdo de conversas."
+        "text": "Fale com uma pessoa do atendimento e diga qual canal e passo precisa de ajuda. Não envie QR code, código de conexão, senhas nem conteúdo de conversas."
       }
     ]
   },

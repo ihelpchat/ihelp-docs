@@ -26,8 +26,8 @@ for (const id of ids) {
   assert.equal(guide.steps.find((step) => step.stepId === 'conferir-resultado').choices.find((choice) => choice.id === 'conferi').outcome, 'complete');
 }
 const manifest = JSON.parse(await readFile(new URL('../public/guides/manifest.json', import.meta.url)));
-assert.equal(manifest.current, 'df4c501f54e2');
+assert.equal(manifest.current, '7bcb2036a4b2');
 const catalog = await readFile(new URL(`../public/guides/${manifest.current}/catalog.json`, import.meta.url), 'utf8');
-assert.equal(JSON.parse(catalog).contentSha256, 'df4c501f54e21d77b43a91b21aa998a83342df8ae14fa2fc0ad374d19af1563f');
+assert.equal(JSON.parse(catalog).contentSha256, '7bcb2036a4b208f325894ecbe0451374ea596b7cea732a053faef1d8f14f1b99');
 for (const id of ids) assert.ok(!catalog.includes(`"${id}"`), `${id}: rascunho entrou no pacote publicado`);
 console.log('widget-guides-drafts: 3 rascunhos, ações com bloqueio/pausa, confirmação e pacote preservado');

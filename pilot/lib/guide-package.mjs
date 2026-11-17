@@ -17,7 +17,7 @@ const publicRoutes = new Set([...Object.values(productActions).map(({ route }) =
 const versionOf = (output) => output.manifest.contentSha256.slice(0, 12);
 const serialized = (value) => `${canonical(value)}\n`;
 
-const allowedCharacters = /^[A-Za-zÀÁÂÃÇÉÊÍÓÔÕÚÜàáâãçéêíóôõúü0-9 .,;:!?()\[\]{}'"“”‘’…•●○◉—–\-_/\\@#%&+=*<>|$]+$/u;
+const allowedCharacters = /^[A-Za-zÀÁÂÃÇÉÊÍÓÔÕÚÜàáâãçéêíóôõúü0-9 .,;:!?()\[\]{}'"“”‘’…•●○◉—–→\-_/\\@#%&+=*<>|$]+$/u;
 export const routeSentenceEndPunctuation = /[.,;:!?)[\]}"'`“”‘’…]+$/u;
 
 export function validatePublicArtifact(artifact, name) {
