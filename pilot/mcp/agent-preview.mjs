@@ -45,7 +45,7 @@ export async function checkPreview(previa, path, { fetcher = fetch, env = proces
     const response = await fetcher(`${site}/release.json`, { headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(8_000) });
     if (response.ok) codeSha = (await response.json()).codeSha ?? null;
   } catch { return previa; }
-  if (codeSha === previa.commitSha) return { ...previa, estado: 'pronta', previewUrl: `${site}/${path}` };
+  if (codeSha === previa.commitSha) return { ...previa, estado: 'pronta', previewUrl: `${site}/${path}/` };
   // Já esteve no ar e o site mudou: outra prévia ou um deploy de staging entrou por cima.
   if (previa.estado === 'pronta') return { ...previa, estado: 'substituida', previewUrl: null };
   return previa;
