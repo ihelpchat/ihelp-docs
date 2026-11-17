@@ -292,7 +292,7 @@ jobs:
           # um token de outro ambiente publicaria o rascunho no lugar errado.
           scope=$(curl -fsS https://backboard.railway.com/graphql/v2 -H "Project-Access-Token: $RAILWAY_TOKEN" -H 'Content-Type: application/json' \
             -d '{"query":"{ projectToken { projectId environmentId } }"}' | node -e 'let s="";process.stdin.on("data",(c)=>s+=c).on("end",()=>{const t=JSON.parse(s).data?.projectToken??{};console.log(`${t.projectId}/${t.environmentId}`)})')
-          test "$scope" = "$RAILWAY_PROJECT_ID/$RAILWAY_ENVIRONMENT_ID" || { echo "RAILWAY_TOKEN não é do ambiente de staging deste projeto"; exit 1; }
+          test "$scope" = "$RAILWAY_PROJECT_ID/$RAILWAY_ENVIRONMENT_ID" || { echo "RAILWAY_TOKEN não é do ambiente de staging deste projeto (token aponta para projeto/ambiente: ${scope:-não identificado})"; exit 1; }
           railway up . --path-as-root --ci --service "$RAILWAY_DOCS_SERVICE_ID" -m "docs $GITHUB_SHA"
           node scripts/release.mjs site out "$CLARICIA_DOCS_URL"
 
