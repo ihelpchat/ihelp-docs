@@ -762,7 +762,9 @@ export async function judgeClaims(sections, context, provider) {
     const groups = key === 'passos' ? (sections.passos ?? []).flatMap((task) => [
       ['sobre', task.sobre ?? []], ['passos', task.passos ?? []], ['depois', task.depois ?? []]]) : [[key, sections[key] ?? []]];
     for (const [section, units] of groups) for (const unit of units) for (const phrase of splitClaims(unit.text))
-      claims.push({ id: `c${claims.length + 1}`, section, text: phrase });
+      claims.push({ id: `c${claims.length + 1}`, section, text: phrase,
+        ...(unit.field !== undefined ? { field: unit.field, kind: unit.kind,
+          taskId: unit.taskId, taskStatus: unit.taskStatus } : {}) });
   }
   const answer = await provider(claims, context);
   if (!Array.isArray(answer?.claims) || answer.claims.length !== claims.length) throw new Error('juiz: número de frases inválido');

@@ -9,7 +9,7 @@ import { topicForQuestion } from './closed-router.mjs';
 const article = `---\ntitle: Carteira de contatos\ndescription: Entenda a carteira de contatos.\n---\nA carteira organiza contatos. Para criar uma carteira:\n1. Abra Contatos.\n`;
 const response = (answer = 'A carteira organiza os contatos por responsável.') => ({
   model: 'fixture', status: 'completed', usage: { input_tokens: 1, output_tokens: 1 },
-  output_text: JSON.stringify({ answer, sections: [], steps: [], code: null,
+  output_text: JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer, sections: [], steps: [], code: null,
     sources: ['/docs/sobre-o-sistema/agenda-de-contatos'], suggestions: [], resolution: 'complete', found: true }),
 });
 
@@ -50,7 +50,7 @@ test('contexto fictício de negócio apoia resposta sem virar fonte ou passo', a
       responses: { create: async (payload) => payload.text.format.name === 'seguranca_resposta'
         ? { ...response(), output_text: JSON.stringify({ mentionsSource: false, unsupportedAction: false }) }
         : ({ ...response(), output_text: JSON.stringify({
-        answer: 'A carteira organiza contatos.', sections: [], steps: [{ text: 'Clique no botão invisível.' }],
+        plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'A carteira organiza contatos.', sections: [], steps: [{ text: 'Clique no botão invisível.' }],
         code: null, sources: ['/docs/sobre-o-sistema/agenda-de-contatos'], suggestions: [],
         resolution: 'complete', found: true,
       }) }) },
@@ -61,7 +61,7 @@ test('contexto fictício de negócio apoia resposta sem virar fonte ou passo', a
       responses: { create: async (payload) => payload.text.format.name === 'seguranca_resposta'
         ? { ...response(), output_text: JSON.stringify({ mentionsSource: false, unsupportedAction: false }) }
         : { ...response(), output_text: JSON.stringify({
-          answer: 'A carteira organiza contatos.', sections: [], steps: [
+          plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'A carteira organiza contatos.', sections: [], steps: [
             { text: 'Abra Contatos.', sourceStepId: 'faq-1-step-1', actionId: null, imagePath: null },
             { text: 'Clique no botão invisível.', sourceStepId: 'faq-1-step-1', actionId: null, imagePath: null },
             { text: 'Abra Contatos.', sourceStepId: 'faq-9-step-1', actionId: null, imagePath: null },
@@ -182,7 +182,7 @@ test('atribuição indireta e instrução sem lastro não chegam ao cliente', as
         return response('A carteira organiza os contatos.');
       } },
     } });
-    assert.equal(answerCalls, 2, 'falha do classificador provoca uma única tentativa sem contexto');
+    assert.equal(answerCalls, 1, 'falha técnica do classificador fecha sem nova geração');
     assert.match(failedClassifier.answer, /guia abaixo|Tive um problema/iu);
     assert.equal(failedClassifier.businessContextUsed, undefined);
   } finally {

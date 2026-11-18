@@ -21,10 +21,11 @@ assert.deepEqual(parseAssistantRequest(request).history, request.history);
 assert.deepEqual(parseAssistantRequest({ ...request, guide: { guideId: 'robo-de-atendimento', stepId: 'abrir-robos', version: 1, mode: 'treino', pendingChoice: 'achei' } }).guide.pendingChoice, 'achei');
 assert.throws(() => parseAssistantRequest({ ...request, history: [{ ...request.history[0], hidden: true }] }));
 
-const serviceReply = await answerQuestion(root, request.question, { client: { responses: { create: async (payload) => ({
+// A fixture do contrato nasce como a UI pede: com a página aberta, a fonte do robô é recuperada e o passo do modelo ancora nela.
+const serviceReply = await answerQuestion(root, request.question, { page: request.page, client: { responses: { create: async (payload) => ({
   model: 'gpt-test', status: 'completed', usage: { input_tokens: 1, output_tokens: 1 },
   output_text: payload.text?.format?.name === 'triagem_fechada' ? '{"choice":"sem guia"}'
-    : JSON.stringify({ answer: 'Abra Robôs.', sections: [], steps: [], code: null, sources: ['/docs/sobre-o-sistema/robo-de-atendimento'], suggestions: [], resolution: 'complete', found: true }),
+    : JSON.stringify({ plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Abra Robôs.', sections: [], steps: [{ text: 'No menu, abra Robôs e clique em Criar novo robô.', actionId: 'abrir-robos', imagePath: null }], code: null, sources: ['/docs/sobre-o-sistema/robo-de-atendimento'], suggestions: [], resolution: 'complete', found: true }),
 }) } } });
 assert.ok(serviceReply.steps.length && serviceReply.sources.length, 'fixture gravada pelo serviço tem passos e fontes');
 assert.deepEqual(parseAssistantReply(serviceReply).steps, serviceReply.steps, 'resposta real do serviço passa inteira');

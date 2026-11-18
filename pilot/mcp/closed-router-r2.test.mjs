@@ -75,7 +75,7 @@ Abra Departamentos para configurar o recado.
 
   const noGuideClient = { responses: { create: async (payload) => ({ status: 'completed',
     output_text: payload.text.format.name === 'triagem_fechada' ? '{"choice":"sem guia"}' : JSON.stringify({
-      answer: 'Abra Departamentos para configurar o recado.', sections: [], steps: [], code: null,
+      plan: { intent: 'execute', optionalBranch: 'unspecified' }, answer: 'Abra Departamentos para configurar o recado.', sections: [], steps: [], code: null,
       sources: ['/docs/guias/recado'], suggestions: [], resolution: 'complete', found: true,
     }), usage: { input_tokens: 1, output_tokens: 1 } }) } };
   const cida = await answerQuestion(root, 'NÃO é campanha, quero configurar recado fora do horário no WhatsApp', {

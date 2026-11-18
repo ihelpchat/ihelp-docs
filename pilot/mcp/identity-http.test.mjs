@@ -44,6 +44,9 @@ try {
   const deniedPrivateRead = await writer.callTool({ name: 'docs_product_context', arguments: { topic: 'atendimento', module: 'atendimento', requestedBy: 'user:writer-http' } });
   assert.equal(deniedPrivateRead.isError, true);
   assert.match(deniedPrivateRead.content[0].text, /forbidden/);
+  const deniedGenerator = await writer.callTool({ name: 'docs_generate_faq_v2', arguments: { module: 'contatos', requestedBy: 'user:writer-http' } });
+  assert.equal(deniedGenerator.isError, true);
+  assert.match(deniedGenerator.content[0].text, /forbidden/);
   const forged = await writer.callTool({ name: 'docs_delete_article', arguments: { path: 'docs/teste/ausente', mode: 'draft', requestedBy: 'user:reader-http' } });
   assert.equal(forged.isError, true);
   assert.match(forged.content[0].text, /requestedBy/);
@@ -71,7 +74,10 @@ try {
     capturar_telas: { path: 'docs/contatos', module: 'Contatos' },
     gravar_jornada: { module: 'contatos', tasks: ['contatos.cadastrar'] },
     enviar_tela: { page: 'contatos', step: 'abrir', alt: 'Botão Abrir contato', base64: 'aGVsbG8=' },
-    aprovar_tela: { page: 'contatos', step: 'abrir', adminToken: 'admin-token-de-teste-com-mais-de-24' },
+    aprovar_tela: { page: 'contatos', step: 'abrir', adminToken: 'admin-token-de-teste-com-mais-de-24' },    faq_pedir: { pedido: 'Preciso de um FAQ sobre campanhas' },
+    faq_responder: { sessao: 'a'.repeat(32), sugestao: 'Inclua um exemplo' },
+    faq_rascunho: { sessao: 'a'.repeat(32) },
+    faq_publicar: { sessao: 'a'.repeat(32), revisao: 'a'.repeat(64) },
   };
   for (const [name, config] of registered) {
     assert.equal(typeof config.mutates, 'boolean', `${name} deve declarar mutates explicitamente`);

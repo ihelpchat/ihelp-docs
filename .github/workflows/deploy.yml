@@ -12,6 +12,11 @@ on:
         type: choice
         options: [staging, production]
         default: staging
+      scope:
+        description: 'site = só o site, sem republicar o serviço: prévia de rascunho (staging) ou publicação de FAQ (production)'
+        type: choice
+        options: [full, site]
+        default: full
 
 permissions:
   contents: read
@@ -23,7 +28,7 @@ concurrency:
 jobs:
   build:
     name: Build Next.js + Fumadocs
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
+    if: (github.event_name != 'pull_request' && inputs.scope != 'site') || contains(github.event.pull_request.labels.*.name, 'ci')
     runs-on: ${{ fromJSON(startsWith(github.ref, 'refs/heads/lote/') && vars.CI_LOTE_RUNS_ON || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
@@ -103,7 +108,7 @@ jobs:
   release-build:
     name: Build release for selected environment
     needs: build
-    if: github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') && vars.CLARICIA_DEPLOY_ENABLED == 'true'
+    if: github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') && inputs.scope != 'site' && vars.CLARICIA_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'staging' }}
     steps:
@@ -166,7 +171,7 @@ jobs:
   deploy-service:
     name: Deploy Claricia and check versions
     needs: release-build
-    if: github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') && vars.CLARICIA_DEPLOY_ENABLED == 'true'
+    if: github.event_name != 'pull_request' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') && inputs.scope != 'site' && vars.CLARICIA_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'staging' }}
     steps:
@@ -203,7 +208,7 @@ jobs:
   deploy-docs-staging:
     name: Deploy staging docs and check content SHA
     needs: [release-build, deploy-service]
-    if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.target == 'staging')) && vars.CLARICIA_DEPLOY_ENABLED == 'true'
+    if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.target == 'staging')) && inputs.scope != 'site' && vars.CLARICIA_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -230,6 +235,64 @@ jobs:
           test -n "$RAILWAY_TOKEN" && test -n "$RAILWAY_PROJECT_ID" && test -n "$RAILWAY_DOCS_SERVICE_ID" && test -n "$CLARICIA_DOCS_URL"
           railway up . --path-as-root --ci --project "$RAILWAY_PROJECT_ID" --environment staging --service "$RAILWAY_DOCS_SERVICE_ID" -m "docs $GITHUB_SHA"
           node scripts/release.mjs site out "$CLARICIA_DOCS_URL"
+
+  deploy-docs-preview:
+    name: Deploy draft preview to staging docs (site only)
+    # Prévia de rascunho: interruptor próprio (CLARICIA_PREVIEW_ENABLED), independente do deploy da Claricia.
+    # O site passa de 250 MB (vídeos) e não cabe no upload do Railway: sobe só um Dockerfile, e o próprio Railway
+    # baixa o commit do rascunho deste repositório público e constrói o site.
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'staging' && inputs.scope == 'site' && vars.CLARICIA_PREVIEW_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+      - name: Write build context
+        env:
+          NEXT_PUBLIC_ASSISTANT_URL: ${{ vars.NEXT_PUBLIC_ASSISTANT_URL }}
+        run: |
+          test -n "$NEXT_PUBLIC_ASSISTANT_URL"
+          mkdir context
+          cat > context/Dockerfile.docs <<EOF
+          FROM node:22-bookworm-slim AS build
+          RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+          WORKDIR /source
+          RUN git init -q . && git remote add origin https://github.com/$GITHUB_REPOSITORY.git \\
+              && git fetch --depth=1 origin $GITHUB_SHA && git checkout -q --detach FETCH_HEAD \\
+              && test "\$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          WORKDIR /source/pilot
+          RUN npm ci --no-audit --no-fund
+          ENV GITHUB_SHA=$GITHUB_SHA NEXT_PUBLIC_BASE_PATH=/ihelp-docs NEXT_PUBLIC_ASSISTANT_URL=$NEXT_PUBLIC_ASSISTANT_URL CLARICIA_DEPLOY_ENABLED=true
+          RUN node scripts/release.mjs prepare && npm run build && node scripts/release.mjs artifact out "\$NEXT_PUBLIC_ASSISTANT_URL"
+          FROM nginx:1.29-alpine
+          COPY --from=build /source/pilot/out /usr/share/nginx/html/ihelp-docs
+          EXPOSE 80
+          EOF
+      - name: Deploy staging site and verify SHA
+        working-directory: context
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+          RAILWAY_DOCS_SERVICE_ID: ${{ vars.RAILWAY_DOCS_SERVICE_ID }}
+          RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+          CLARICIA_DOCS_URL: ${{ vars.CLARICIA_DOCS_URL }}
+        run: |
+          test -n "$RAILWAY_TOKEN" && test -n "$RAILWAY_PROJECT_ID" && test -n "$RAILWAY_DOCS_SERVICE_ID" && test -n "$RAILWAY_ENVIRONMENT_ID" && test -n "$CLARICIA_DOCS_URL"
+          # O token de projeto já define o ambiente. Antes de publicar, confere que ele é o de staging deste projeto:
+          # um token de outro ambiente publicaria o rascunho no lugar errado.
+          scope=$(curl -fsS https://backboard.railway.com/graphql/v2 -H "Project-Access-Token: $RAILWAY_TOKEN" -H 'Content-Type: application/json' \
+            -d '{"query":"{ projectToken { projectId environmentId } }"}' | node -e 'let s="";process.stdin.on("data",(c)=>s+=c).on("end",()=>{const t=JSON.parse(s).data?.projectToken??{};console.log(`${t.projectId}/${t.environmentId}`)})')
+          test "$scope" = "$RAILWAY_PROJECT_ID/$RAILWAY_ENVIRONMENT_ID" || { echo "RAILWAY_TOKEN não é do ambiente de staging deste projeto (token aponta para projeto/ambiente: ${scope:-não identificado})"; exit 1; }
+          railway up . --path-as-root --ci --service "$RAILWAY_DOCS_SERVICE_ID" -m "docs $GITHUB_SHA"
+          for attempt in $(seq 1 30); do
+            live=$(curl -fsS -H 'Cache-Control: no-cache' "${CLARICIA_DOCS_URL%/}/release.json" | node -e 'let s="";process.stdin.on("data",(c)=>s+=c).on("end",()=>{try{console.log(JSON.parse(s).codeSha??"")}catch{console.log("")}})' || true)
+            test "$live" = "$GITHUB_SHA" && exit 0
+            sleep 10
+          done
+          echo "site de staging não passou a servir o commit $GITHUB_SHA (no ar: ${live:-nada})"; exit 1
 
   deploy-production-vercel:
     name: Deploy production docs to Vercel and check content SHA
@@ -272,6 +335,64 @@ jobs:
           echo 'ready=true' >> "$GITHUB_OUTPUT"
       - name: Verify published content SHA
         if: steps.deployment.outputs.ready == 'true'
+        working-directory: pilot
+        env:
+          CLARICIA_DOCS_URL: ${{ vars.CLARICIA_DOCS_URL }}
+        run: node scripts/release.mjs site out "$CLARICIA_DOCS_URL"
+
+  publish-docs-production:
+    name: Publish docs to production (site only)
+    # Publicação de FAQ pelo MCP (faq_publicar): interruptor próprio (CLARICIA_PUBLISH_ENABLED). Constrói o site da
+    # branch base e publica só o site de produção. O environment "production" pede a aprovação de um revisor.
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'production' && inputs.scope == 'site' && vars.CLARICIA_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: pilot/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: pilot
+      - name: Validate content coverage
+        run: npm run content:validate
+        working-directory: pilot
+      - name: Prepare release metadata
+        run: node scripts/release.mjs prepare
+        working-directory: pilot
+        env:
+          CLARICIA_DEPLOY_ENABLED: 'true'
+          NEXT_PUBLIC_ASSISTANT_URL: ${{ vars.NEXT_PUBLIC_ASSISTANT_URL }}
+      - name: Build website
+        run: npm run build
+        working-directory: pilot
+        env:
+          NEXT_PUBLIC_BASE_PATH: /ihelp-docs
+          NEXT_PUBLIC_ASSISTANT_URL: ${{ vars.NEXT_PUBLIC_ASSISTANT_URL }}
+      - name: Smoke public artifact
+        run: node scripts/release.mjs artifact out "$NEXT_PUBLIC_ASSISTANT_URL"
+        working-directory: pilot
+        env:
+          CLARICIA_DEPLOY_ENABLED: 'true'
+          NEXT_PUBLIC_ASSISTANT_URL: ${{ vars.NEXT_PUBLIC_ASSISTANT_URL }}
+      - name: Package verified static artifact for Vercel
+        working-directory: pilot
+        run: node scripts/prepare-vercel-release.mjs out deploy-vercel
+      - name: Deploy prebuilt artifact to Vercel
+        working-directory: pilot
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_SCOPE: ${{ vars.VERCEL_SCOPE }}
+        run: |
+          test -n "$VERCEL_TOKEN" && test -n "$VERCEL_PROJECT_ID" && test -n "$VERCEL_SCOPE"
+          npx vercel@60.1.3 deploy deploy-vercel --prebuilt --prod --yes --token "$VERCEL_TOKEN" --scope "$VERCEL_SCOPE" --project "$VERCEL_PROJECT_ID"
+      - name: Verify published content SHA
         working-directory: pilot
         env:
           CLARICIA_DOCS_URL: ${{ vars.CLARICIA_DOCS_URL }}

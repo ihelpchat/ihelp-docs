@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 
 const cents = (value) => Math.round(value * 1_000_000);
@@ -39,7 +40,7 @@ function settings(options) {
   const numeric = (value, fallback) => value === undefined ? fallback : Number(value);
   const config = {
     file: options.file ?? process.env.ASSISTANT_BUDGET_FILE ?? (process.env.RAILWAY_ENVIRONMENT_NAME
-      ? '/data/claricia-budget.json' : `/tmp/claricia-budget-dev-${process.pid}.json`),
+      ? '/data/claricia-budget.json' : join(tmpdir(), `claricia-budget-dev-${process.pid}.json`)),
     dailyLimit: cents(numeric(options.dailyLimitUsd ?? process.env.ASSISTANT_DAILY_LIMIT_USD,
       process.env.RAILWAY_ENVIRONMENT_NAME ? 1 : 100)),
     reserve: cents(numeric(options.reserveUsd ?? process.env.ASSISTANT_RESERVE_USD, 1)),
@@ -59,6 +60,12 @@ function usageCost(usage, config) {
   const output = Number(usage?.output_tokens);
   if (!Number.isSafeInteger(input) || input < 0 || !Number.isSafeInteger(output) || output < 0) return null;
   return Math.ceil(input * config.inputRate + output * config.outputRate);
+}
+
+/** Custo em US$ de uma resposta, pelas mesmas tarifas do ledger; null se o usage vier inválido. */
+export function responseCostUsd(usage, options = {}) {
+  const cost = usageCost(usage, settings(options));
+  return cost === null ? null : cost / 1_000_000;
 }
 
 /** Reserva antes da chamada; timeout e usage inválido mantêm o valor inteiro reservado. */
@@ -105,6 +112,9 @@ export async function createBudgetedResponse(client, payload, options = {}) {
     if (response.status === 'completed' && typeof response.output_text === 'string' && response.output_text.trim()) {
       return { kind: 'ok', response };
     }
+    // Agente com ferramentas: resposta só com chamadas de função não traz texto e é válida.
+    if (options.acceptToolCalls && response.status === 'completed'
+      && response.output?.some((item) => item.type === 'function_call')) return { kind: 'ok', response };
     if (options.acceptIncomplete && response.status === 'incomplete') return { kind: 'ok', response };
     if (options.signal?.aborted || response.status !== 'incomplete') return { kind: 'provider_failed' };
   }

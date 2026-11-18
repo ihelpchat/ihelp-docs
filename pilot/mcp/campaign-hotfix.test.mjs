@@ -6,7 +6,7 @@ import { answerQuestion, parseAnswer, retrieveContext } from './assistant-servic
 const root = new URL('../', import.meta.url).pathname;
 const guide = '/docs/principais-motivos-de-suporte/campanhas';
 const legacy = '/docs/sobre-o-sistema/campanhas';
-const payload = {
+const payload = { plan: { intent: 'execute', optionalBranch: 'unspecified' },
   answer: 'Abra Campanhas para preparar o envio.', sections: [],
   steps: [{ text: 'Abra Campanhas.', actionId: null, imagePath: null }],
   code: null, sources: [legacy], suggestions: [], resolution: 'complete', found: true,

@@ -2,6 +2,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { launch } from './visual/measure.mjs';
 import { envCompatibility } from '../mcp/env-compat.mjs';
+import { productionApiHostAllowed } from '../mcp/journey-production.mjs';
 import productActions from '../architecture/product-actions.json' with { type: 'json' };
 
 const root = new URL('../public/guides/', import.meta.url);
@@ -80,7 +81,7 @@ export function assertAllowedTarget(value, env = process.env, { allowProduction 
     const hosts = String(env.QA_PROD_ALLOWED_HOSTS ?? '').split(',').map((item) => item.trim());
     if (env.QA_PROD_ENABLED !== 'true' || hosts.length < 1 || hosts.length > 2
       || new Set(hosts).size !== hosts.length || !hosts.includes(url.hostname)
-      || hosts.some((host) => host !== url.hostname && !/^api(?:v\d+)?[.-]/u.test(host))
+      || hosts.some((host) => host !== url.hostname && !productionApiHostAllowed(host, url.hostname))
       || !env.QA_PROD_EMAIL || !env.QA_PROD_PASSWORD) throw new Error('Destino recusado: produção desabilitada');
     target = { ...target, url: url.origin, mode: 'producao', allowedHosts: hosts };
   }
@@ -97,6 +98,11 @@ const productionHost = (host) => host === 'ihelpchat.com' || host === 'ihelpchat
 const productionStaticCdns = new Set(['stackpath.bootstrapcdn.com', 'use.fontawesome.com',
   'cdn.tiny.cloud', 'fonts.googleapis.com', 'fonts.gstatic.com']);
 const staticResourceTypes = new Set(['script', 'stylesheet', 'font', 'image']);
+// betaapp's public import map and login HTML load these shared scripts from app.
+// This is a static resource exception; app remains outside the account hosts.
+const betaSharedScripts = new Set(['runtime.min.js', 'jquery-3.3.1.slim.min.js', 'popper.min.js',
+  'import-map-overrides.js', 'system.min.js', 'amd.min.js', 'react.production.min.js',
+  'react-dom.production.min.js', 'single-spa.min.js'].map((name) => `/javascripts/hidden-dist-js/${name}`));
 export function qaStaticCdnAllowed(request, target, env = process.env) {
   if (target.mode !== 'producao' || env.QA_TARGET !== 'producao' || env.QA_PROD_ENABLED !== 'true'
     || request.method().toUpperCase() !== 'GET'
@@ -105,8 +111,11 @@ export function qaStaticCdnAllowed(request, target, env = process.env) {
   let url;
   try { url = new URL(request.url()); } catch { return false; }
   const headers = request.headers();
+  const betaSharedScript = new URL(target.url).origin === 'https://betaapp.ihelpchat.com'
+    && url.hostname === 'app.ihelpchat.com' && request.resourceType?.() === 'script'
+    && !url.search && !url.hash && betaSharedScripts.has(url.pathname);
   return url.protocol === 'https:' && !url.port && !url.username && !url.password
-    && productionStaticCdns.has(url.hostname)
+    && (productionStaticCdns.has(url.hostname) || betaSharedScript)
     && !Object.keys(headers).some((key) => /^(authorization|cookie|proxy-authorization)$/iu.test(key));
 }
 
@@ -119,7 +128,7 @@ export function qaRequestDecision(value, target, env = process.env, { fixtureAll
     const valid = Array.isArray(allowed) && allowed.length >= 1 && allowed.length <= 2
       && new Set(allowed).size === allowed.length && allowed.includes(new URL(target.url).hostname)
       && allowed.every((item) => /^[a-z0-9.-]+$/u.test(item)
-        && (item === new URL(target.url).hostname || /^api(?:v\d+)?[.-]/u.test(item)));
+        && (item === new URL(target.url).hostname || productionApiHostAllowed(item, new URL(target.url).hostname)));
     return { allowed: Boolean(valid && env.QA_TARGET === 'producao' && env.QA_PROD_ENABLED === 'true'
       && url.protocol === 'https:' && !url.port && !url.username
       && !url.password && allowed.includes(url.hostname)), host,

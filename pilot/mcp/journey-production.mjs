@@ -2,6 +2,11 @@ const unavailable = 'não verificável';
 const identifier = /^[a-z0-9-]{1,80}$/iu;
 const hostname = /^[a-z0-9.-]+$/u;
 
+export function productionApiHostAllowed(host, frontendHost) {
+  return /^api(?:v\d+)?[.-]/u.test(host)
+    || frontendHost === 'betaapp.ihelpchat.com' && host === 'apiv3refactor.ihelpchat.com';
+}
+
 export function journeyTarget(env = process.env) {
   const mode = env.QA_TARGET ?? 'homolog';
   if (mode !== 'homolog' && mode !== 'producao') throw new Error('QA_TARGET inválido');
@@ -19,7 +24,7 @@ export function productionConfig(env = process.env) {
   const hosts = String(env.QA_PROD_ALLOWED_HOSTS ?? '').split(',').map((host) => host.trim());
   if (hosts.length < 1 || hosts.length > 2 || hosts.some((host) => !hostname.test(host) || host !== host.toLowerCase())
     || new Set(hosts).size !== hosts.length || !hosts.includes(url.hostname)
-    || hosts.some((host) => host !== url.hostname && !/^api(?:v\d+)?[.-]/u.test(host)))
+    || hosts.some((host) => host !== url.hostname && !productionApiHostAllowed(host, url.hostname)))
     throw new Error('hosts de produção inválidos');
   if (!env.QA_PROD_EMAIL || !env.QA_PROD_PASSWORD) throw new Error('credencial de produção ausente');
   const companyId = env.QA_PROD_COMPANY_ID;
@@ -52,6 +57,27 @@ const ownerAttestationDate = (raw, channels) => {
     || value.channelIds.length !== actual.size || new Set(value.channelIds).size !== actual.size
     || value.channelIds.some((id) => !actual.has(id))) return null;
   return value.date;
+};
+
+const realCompanyAttestation = (raw, companyId, counts) => {
+  let value;
+  try { value = JSON.parse(raw); } catch { return null; }
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).sort().join(',') !== 'aceiteEmpresaReal,data,empresa,limites'
+    || value.aceiteEmpresaReal !== true || value.empresa !== companyId
+    || typeof value.data !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(value.data)
+    || !value.limites || typeof value.limites !== 'object' || Array.isArray(value.limites)
+    || Object.keys(value.limites).sort().join(',') !== 'automacoes,canaisConectados,integracoes') return null;
+  const date = Date.parse(`${value.data}T00:00:00.000Z`);
+  const ageDays = (Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`) - date) / 86400_000;
+  if (!Number.isFinite(date) || new Date(date).toISOString().slice(0, 10) !== value.data
+    || ageDays < 0 || ageDays > 7) return null;
+  for (const [key, actual] of [['automacoes', counts.activeAutomations],
+    ['integracoes', counts.activeIntegrations], ['canaisConectados', counts.connectedChannels]]) {
+    const limit = value.limites[key];
+    if (!Number.isSafeInteger(limit) || limit < 0 || typeof actual !== 'number' || actual > limit) return null;
+  }
+  return value.data;
 };
 
 export async function productionPreflight({ env = process.env, identity, get }) {
@@ -101,10 +127,14 @@ export async function productionPreflight({ env = process.env, identity, get }) 
     connectedChannels, activeAutomations: typeof activeBots === 'number' && typeof activeRules === 'number'
       ? activeBots + activeRules : unavailable, activeIntegrations: active(integrations, 'status') };
   if (!config.companyId) return { mode: 'confirmacao', companyId, companyName, counts };
+  const realCompanyDate = realCompanyAttestation(env.QA_PROD_OWNER_ATTESTATION, companyId, counts);
   const checks = { contacts: counts.contacts, channels: counts.connectedChannels,
     automations: counts.activeAutomations, integrations: counts.activeIntegrations };
   const unsafe = companyName === unavailable || Object.entries(checks).some(([item, value]) =>
     typeof value === 'number' && item !== 'contacts' && value > 0 || value === unavailable);
+  if (realCompanyDate && companyName !== unavailable && counts.contacts !== unavailable)
+    return { mode: 'ready', companyId, companyName, counts, realCompany: true,
+      ownerAttestation: `empresa real atestada pelo dono em ${realCompanyDate}` };
   return unsafe ? { mode: 'bloqueado', reason: channelReason ?? 'pré-voo não comprovado', counts }
     : { mode: 'ready', companyId, companyName, counts, connectivityAttestation };
 }
