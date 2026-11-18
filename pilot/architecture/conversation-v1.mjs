@@ -38,7 +38,7 @@ const stateSchema = z.object({
 // escolha apontam para um passo ou terminam em um outcome. Sem esse campo, vale o avanço por posição (v1).
 export const guideOutcomes = Object.freeze(['complete', 'handoff', 'paused']);
 const outcome = z.enum(guideOutcomes);
-export const guideStepRoutes = Object.freeze([...widgetContextRoutes, '/configuracoes/usuarios/novo']);
+export const guideStepRoutes = widgetContextRoutes;
 const choiceSchema = z.object({ id, label: z.string().trim().min(1).max(100), nextStepId: id.optional(), outcome: outcome.optional() }).strict();
 const nextSchema = z.union([z.object({ nextStepId: id }).strict(), z.object({ outcome }).strict()]);
 const stepSchema = z.object({

@@ -15,7 +15,7 @@ export type GeneratedGuideV1 = {
   stepId: string;
   title: string;
   text: string;
-  route: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/motivos" | "/atendimento/mobile" | "/tarefas" | "/configuracoes/usuarios/novo";
+  route: "/agendamentos" | "/atendimento" | "/atendimento/mobile" | "/bot" | "/campanhas" | "/campanhas/cadastro" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/campos-personalizados" | "/configuracoes/canais" | "/configuracoes/departamentos" | "/configuracoes/horarios" | "/configuracoes/integracoes" | "/configuracoes/mensagens" | "/configuracoes/motivos" | "/configuracoes/perfis" | "/configuracoes/primeiros-passos" | "/configuracoes/usuarios" | "/configuracoes/usuarios/novo" | "/contact" | "/crm/dashboard" | "/crm/pipeline" | "/crm/relatorios" | "/dashboard" | "/notificacoes" | "/profile" | "/relatorio" | "/tarefas" | "/track" | "/track/acompanhamento" | "/track/origens" | "/aquisicao" | "/aquisicao/acompanhamento" | "/aquisicao/origens" | "/configuracoes/campos" | "/configuracoes/channel" | "/configuracoes/department" | "/configuracoes/general" | "/configuracoes/user" | "/crm";
   choices?: Array<{
   id: string;
   label: string;
@@ -49,7 +49,7 @@ export type GuideV1 = {
   title?: string;
   text: string;
   actionId?: "importar-contatos" | "abrir-robos" | "abrir-usuarios" | "abrir-canais" | "abrir-campanhas" | "abrir-departamentos" | "abrir-atendimento" | "abrir-crm";
-  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/motivos" | "/atendimento/mobile" | "/tarefas" | "/configuracoes/usuarios/novo";
+  route?: "/agendamentos" | "/atendimento" | "/atendimento/mobile" | "/bot" | "/campanhas" | "/campanhas/cadastro" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/campos-personalizados" | "/configuracoes/canais" | "/configuracoes/departamentos" | "/configuracoes/horarios" | "/configuracoes/integracoes" | "/configuracoes/mensagens" | "/configuracoes/motivos" | "/configuracoes/perfis" | "/configuracoes/primeiros-passos" | "/configuracoes/usuarios" | "/configuracoes/usuarios/novo" | "/contact" | "/crm/dashboard" | "/crm/pipeline" | "/crm/relatorios" | "/dashboard" | "/notificacoes" | "/profile" | "/relatorio" | "/tarefas" | "/track" | "/track/acompanhamento" | "/track/origens" | "/aquisicao" | "/aquisicao/acompanhamento" | "/aquisicao/origens" | "/configuracoes/campos" | "/configuracoes/channel" | "/configuracoes/department" | "/configuracoes/general" | "/configuracoes/user" | "/crm";
   choices?: Array<{
   id: string;
   label: string;
@@ -85,7 +85,7 @@ export type AssistantRequestV1 = {
 };
   widgetContext?: {
   surface?: "faq" | "app";
-  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/motivos" | "/atendimento/mobile" | "/tarefas";
+  route?: "/agendamentos" | "/atendimento" | "/atendimento/mobile" | "/bot" | "/campanhas" | "/campanhas/cadastro" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/campos-personalizados" | "/configuracoes/canais" | "/configuracoes/departamentos" | "/configuracoes/horarios" | "/configuracoes/integracoes" | "/configuracoes/mensagens" | "/configuracoes/motivos" | "/configuracoes/perfis" | "/configuracoes/primeiros-passos" | "/configuracoes/usuarios" | "/configuracoes/usuarios/novo" | "/contact" | "/crm/dashboard" | "/crm/pipeline" | "/crm/relatorios" | "/dashboard" | "/notificacoes" | "/profile" | "/relatorio" | "/tarefas" | "/track" | "/track/acompanhamento" | "/track/origens" | "/aquisicao" | "/aquisicao/acompanhamento" | "/aquisicao/origens" | "/configuracoes/campos" | "/configuracoes/channel" | "/configuracoes/department" | "/configuracoes/general" | "/configuracoes/user" | "/crm";
   module?: "robots" | "users" | "channels" | "billing" | "campaigns" | "templates" | "conversations" | "settings";
   screen?: "list" | "create" | "edit" | "detail" | "connection" | "qr" | "unknown";
   role?: "owner" | "admin" | "manager" | "agent" | "unknown";
@@ -159,7 +159,7 @@ export type AssistantReplyV1 = {
   diagnosis: "usage" | "configuration" | "permission" | "plan" | "channel_qr" | "meta_coexistence" | "bug_incident" | "sensitive_action";
   state?: {
   surface?: "faq" | "app";
-  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/motivos" | "/atendimento/mobile" | "/tarefas";
+  route?: "/agendamentos" | "/atendimento" | "/atendimento/mobile" | "/bot" | "/campanhas" | "/campanhas/cadastro" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/campos-personalizados" | "/configuracoes/canais" | "/configuracoes/departamentos" | "/configuracoes/horarios" | "/configuracoes/integracoes" | "/configuracoes/mensagens" | "/configuracoes/motivos" | "/configuracoes/perfis" | "/configuracoes/primeiros-passos" | "/configuracoes/usuarios" | "/configuracoes/usuarios/novo" | "/contact" | "/crm/dashboard" | "/crm/pipeline" | "/crm/relatorios" | "/dashboard" | "/notificacoes" | "/profile" | "/relatorio" | "/tarefas" | "/track" | "/track/acompanhamento" | "/track/origens" | "/aquisicao" | "/aquisicao/acompanhamento" | "/aquisicao/origens" | "/configuracoes/campos" | "/configuracoes/channel" | "/configuracoes/department" | "/configuracoes/general" | "/configuracoes/user" | "/crm";
   module?: "robots" | "users" | "channels" | "billing" | "campaigns" | "templates" | "conversations" | "settings";
   screen?: "list" | "create" | "edit" | "detail" | "connection" | "qr" | "unknown";
   role?: "owner" | "admin" | "manager" | "agent" | "unknown";
@@ -200,7 +200,7 @@ export type AssistantReplyV1 = {
   stepId: string;
   title: string;
   text: string;
-  route: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/motivos" | "/atendimento/mobile" | "/tarefas" | "/configuracoes/usuarios/novo";
+  route: "/agendamentos" | "/atendimento" | "/atendimento/mobile" | "/bot" | "/campanhas" | "/campanhas/cadastro" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/campos-personalizados" | "/configuracoes/canais" | "/configuracoes/departamentos" | "/configuracoes/horarios" | "/configuracoes/integracoes" | "/configuracoes/mensagens" | "/configuracoes/motivos" | "/configuracoes/perfis" | "/configuracoes/primeiros-passos" | "/configuracoes/usuarios" | "/configuracoes/usuarios/novo" | "/contact" | "/crm/dashboard" | "/crm/pipeline" | "/crm/relatorios" | "/dashboard" | "/notificacoes" | "/profile" | "/relatorio" | "/tarefas" | "/track" | "/track/acompanhamento" | "/track/origens" | "/aquisicao" | "/aquisicao/acompanhamento" | "/aquisicao/origens" | "/configuracoes/campos" | "/configuracoes/channel" | "/configuracoes/department" | "/configuracoes/general" | "/configuracoes/user" | "/crm";
   choices?: Array<{
   id: string;
   label: string;

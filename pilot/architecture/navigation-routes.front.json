@@ -1,0 +1,501 @@
+{
+  "schemaVersion": 1,
+  "frontSha": "0eea9b957bf8a6ffb77b647adc2b04e9a1219d4d",
+  "source": "src/features/help-assistant/navigation-routes.generated.json",
+  "contentSha256": "fb9a30234a0db63cd92eab7796ec2f6423d6eedbd1b16ed172ba0f41c49b9f26",
+  "catalog": {
+    "schemaVersion": 1,
+    "routePaths": [
+      "/agendamentos",
+      "/atendimento",
+      "/atendimento/mobile",
+      "/bot",
+      "/campanhas",
+      "/campanhas/cadastro",
+      "/configuracoes/atalhos",
+      "/configuracoes/automacoes",
+      "/configuracoes/campos-personalizados",
+      "/configuracoes/canais",
+      "/configuracoes/departamentos",
+      "/configuracoes/horarios",
+      "/configuracoes/integracoes",
+      "/configuracoes/mensagens",
+      "/configuracoes/motivos",
+      "/configuracoes/perfis",
+      "/configuracoes/primeiros-passos",
+      "/configuracoes/usuarios",
+      "/configuracoes/usuarios/novo",
+      "/contact",
+      "/crm/dashboard",
+      "/crm/pipeline",
+      "/crm/relatorios",
+      "/dashboard",
+      "/notificacoes",
+      "/profile",
+      "/relatorio",
+      "/tarefas",
+      "/track",
+      "/track/acompanhamento",
+      "/track/origens"
+    ],
+    "sources": {
+      "src/components/core/components/Router/utils/pagesData.tsx": "51f55e3baba2d0b9eda72b39cd5ea0eff466ceeea81d9d73ef8bb5c8d2a6523d",
+      "src/features/configurations/registry/sections.ts": "204bc0bded8032257c451c6006d3e46a33f7af04387297334a2b5caf5e5c6acd",
+      "src/features/configurations/routes.tsx": "f0952356b009338ceac90c2c84f5cce59445d1c0d009afba8199ca4d12d4292a",
+      "src/features/configurations/registry/prefix.ts": "d2e8cb94832bd1f1c3669e075e995587d4c3dbde108d7fd9601fed62348fb744",
+      "src/components/ui/components/NavBar/index.tsx": "df03fb817583f7ac5bdfda57e0cdca8184986b6f68b260aeb4668b659552a506",
+      "src/features/configurations/hooks/useSecoesVisiveis.ts": "dae97222b1370a5864578f107e3f96d1ab3b49f402ba22e3aa3db26e5e596759",
+      "src/features/crm/components/CrmEntryGuard/index.tsx": "6e1217da637fdf0b8310161c0b6d395834679c67b71598b15dc0f1f445ee5048",
+      "src/features/track/components/TrackRouteGuard/index.tsx": "844b87d836348a89101e35856ffdc41aff660630b6deb63682178bf5cd6637df",
+      "src/features/campaigns/components/CampaignsRouteGuard/index.tsx": "1439ae24e1cac97bde042304d317c59046dac5f4a110043f1fecd83a8dfff66a",
+      "scripts/lib/assistant-navigation-overrides.mjs": "e3bc3c1e7d300f10e81f114e608ea0d202f0a24d36d538481a5630069c8e99d0",
+      "scripts/generate-assistant-navigation.mjs": "3effd19fe8a77ee8f5e99b9d0869807ea4543deda78fc205912da9225d85356e"
+    },
+    "routes": [
+      {
+        "path": "/agendamentos",
+        "title": "Agendamentos",
+        "canonical": "/agendamentos",
+        "policy": "authenticated",
+        "source": "pagesData"
+      },
+      {
+        "path": "/aquisicao",
+        "title": "Track",
+        "canonical": "/track",
+        "policy": "track",
+        "source": "static redirect"
+      },
+      {
+        "path": "/aquisicao/acompanhamento",
+        "title": "Acompanhamento",
+        "canonical": "/track/acompanhamento",
+        "policy": "track",
+        "source": "static redirect"
+      },
+      {
+        "path": "/aquisicao/origens",
+        "title": "Origens",
+        "canonical": "/track/origens",
+        "policy": "track",
+        "source": "static redirect"
+      },
+      {
+        "path": "/atendimento",
+        "title": "Atendimento",
+        "canonical": "/atendimento",
+        "policy": "authenticated",
+        "source": "pagesData"
+      },
+      {
+        "path": "/atendimento/mobile",
+        "title": "Atendimento",
+        "canonical": "/atendimento/mobile",
+        "policy": "authenticated",
+        "source": "legacy override"
+      },
+      {
+        "path": "/bot",
+        "title": "Robôs",
+        "canonical": "/bot",
+        "policy": "robots",
+        "source": "pagesData"
+      },
+      {
+        "path": "/campanhas",
+        "title": "Campanhas",
+        "canonical": "/campanhas",
+        "policy": "campaigns",
+        "source": "pagesData"
+      },
+      {
+        "path": "/campanhas/cadastro",
+        "title": "Nova Campanha",
+        "canonical": "/campanhas/cadastro",
+        "policy": "campaign-screen",
+        "source": "pagesData"
+      },
+      {
+        "path": "/configuracoes/atalhos",
+        "title": "Atalhos",
+        "canonical": "/configuracoes/atalhos",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS"
+      },
+      {
+        "path": "/configuracoes/automacoes",
+        "title": "Automações",
+        "canonical": "/configuracoes/automacoes",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS"
+      },
+      {
+        "path": "/configuracoes/campos",
+        "title": "Campos personalizados",
+        "canonical": "/configuracoes/campos-personalizados",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS.legacyPaths"
+      },
+      {
+        "path": "/configuracoes/campos-personalizados",
+        "title": "Campos personalizados",
+        "canonical": "/configuracoes/campos-personalizados",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS"
+      },
+      {
+        "path": "/configuracoes/canais",
+        "title": "Canais",
+        "canonical": "/configuracoes/canais",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS"
+      },
+      {
+        "path": "/configuracoes/channel",
+        "title": "Canais",
+        "canonical": "/configuracoes/canais",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS.legacyPaths"
+      },
+      {
+        "path": "/configuracoes/departamentos",
+        "title": "Departamentos",
+        "canonical": "/configuracoes/departamentos",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS"
+      },
+      {
+        "path": "/configuracoes/department",
+        "title": "Departamentos",
+        "canonical": "/configuracoes/departamentos",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS.legacyPaths"
+      },
+      {
+        "path": "/configuracoes/general",
+        "title": "Automações",
+        "canonical": "/configuracoes/automacoes",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS.legacyPaths"
+      },
+      {
+        "path": "/configuracoes/horarios",
+        "title": "Horários e feriados",
+        "canonical": "/configuracoes/horarios",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS"
+      },
+      {
+        "path": "/configuracoes/integracoes",
+        "title": "Integrações",
+        "canonical": "/configuracoes/integracoes",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS"
+      },
+      {
+        "path": "/configuracoes/mensagens",
+        "title": "Mensagens automáticas",
+        "canonical": "/configuracoes/mensagens",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS"
+      },
+      {
+        "path": "/configuracoes/motivos",
+        "title": "Motivos de encerramento",
+        "canonical": "/configuracoes/motivos",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS"
+      },
+      {
+        "path": "/configuracoes/perfis",
+        "title": "Perfis e permissões",
+        "canonical": "/configuracoes/perfis",
+        "policy": "profiles",
+        "source": "CONFIG_SECTIONS"
+      },
+      {
+        "path": "/configuracoes/primeiros-passos",
+        "title": "Primeiros passos",
+        "canonical": "/configuracoes/primeiros-passos",
+        "policy": "settings",
+        "source": "CONFIG_SECTIONS"
+      },
+      {
+        "path": "/configuracoes/user",
+        "title": "Usuários",
+        "canonical": "/configuracoes/usuarios",
+        "policy": "users",
+        "source": "CONFIG_SECTIONS.legacyPaths"
+      },
+      {
+        "path": "/configuracoes/usuarios",
+        "title": "Usuários",
+        "canonical": "/configuracoes/usuarios",
+        "policy": "users",
+        "source": "CONFIG_SECTIONS"
+      },
+      {
+        "path": "/configuracoes/usuarios/novo",
+        "title": "Novo usuário",
+        "canonical": "/configuracoes/usuarios/novo",
+        "policy": "users",
+        "source": "configurationV4Route"
+      },
+      {
+        "path": "/contact",
+        "title": "Contatos",
+        "canonical": "/contact",
+        "policy": "contacts",
+        "source": "pagesData"
+      },
+      {
+        "path": "/crm",
+        "title": "CRM",
+        "canonical": "/crm/pipeline",
+        "policy": "crm",
+        "source": "static redirect"
+      },
+      {
+        "path": "/crm/dashboard",
+        "title": "Dashboard CRM",
+        "canonical": "/crm/dashboard",
+        "policy": "crm",
+        "source": "pagesData"
+      },
+      {
+        "path": "/crm/pipeline",
+        "title": "CRM",
+        "canonical": "/crm/pipeline",
+        "policy": "crm",
+        "source": "pagesData"
+      },
+      {
+        "path": "/crm/relatorios",
+        "title": "Relatórios CRM",
+        "canonical": "/crm/relatorios",
+        "policy": "crm",
+        "source": "pagesData"
+      },
+      {
+        "path": "/dashboard",
+        "title": "Dashboard",
+        "canonical": "/dashboard",
+        "policy": "authenticated",
+        "source": "pagesData"
+      },
+      {
+        "path": "/notificacoes",
+        "title": "Notificações",
+        "canonical": "/notificacoes",
+        "policy": "authenticated",
+        "source": "pagesData"
+      },
+      {
+        "path": "/profile",
+        "title": "Meu Perfil",
+        "canonical": "/profile",
+        "policy": "authenticated",
+        "source": "pagesData"
+      },
+      {
+        "path": "/relatorio",
+        "title": "Relatórios",
+        "canonical": "/relatorio",
+        "policy": "hide-flag:ocultarMenuRelatorio",
+        "source": "pagesData"
+      },
+      {
+        "path": "/tarefas",
+        "title": "Tarefas",
+        "canonical": "/tarefas",
+        "policy": "tasks",
+        "source": "pagesData"
+      },
+      {
+        "path": "/track",
+        "title": "Track",
+        "canonical": "/track",
+        "policy": "track",
+        "source": "pagesData"
+      },
+      {
+        "path": "/track/acompanhamento",
+        "title": "Track",
+        "canonical": "/track/acompanhamento",
+        "policy": "track",
+        "source": "pagesData"
+      },
+      {
+        "path": "/track/origens",
+        "title": "Origens",
+        "canonical": "/track/origens",
+        "policy": "track",
+        "source": "pagesData"
+      }
+    ],
+    "exceptions": [
+      {
+        "path": "*",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/bot/:id",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/campanhas/detalhe/:idRef",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/configuracoes",
+        "reason": "dynamic index chooses first accessible section; use concrete section"
+      },
+      {
+        "path": "/configuracoes/atalhos/:id",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/configuracoes/atalhos/novo",
+        "reason": "legacy redirect/form without standalone screen"
+      },
+      {
+        "path": "/configuracoes/canais/:idRef",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/configuracoes/canal/:id",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/configuracoes/departamentos/:idRef",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/configuracoes/department/:id",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/configuracoes/department/new",
+        "reason": "legacy redirect/form without standalone screen"
+      },
+      {
+        "path": "/configuracoes/integracoes/:id",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/configuracoes/integracoes/novo",
+        "reason": "legacy redirect/form without standalone screen"
+      },
+      {
+        "path": "/configuracoes/usuarios/:idRef",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/contact/detail/:idRef",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/crm/card/:cardId",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/crm/configuracoes",
+        "reason": "Composite CRM admin/company gate not adapted; kept excluded"
+      },
+      {
+        "path": "/crm/configuracoes/catalogo",
+        "reason": "Composite CRM admin/company gate not adapted; kept excluded"
+      },
+      {
+        "path": "/crm/configuracoes/empresa",
+        "reason": "Composite CRM admin/company gate not adapted; kept excluded"
+      },
+      {
+        "path": "/crm/configuracoes/frete",
+        "reason": "Composite CRM admin/company gate not adapted; kept excluded"
+      },
+      {
+        "path": "/crm/configuracoes/pagamento",
+        "reason": "Composite CRM admin/company gate not adapted; kept excluded"
+      },
+      {
+        "path": "/crm/configuracoes/pdf",
+        "reason": "Composite CRM admin/company gate not adapted; kept excluded"
+      },
+      {
+        "path": "/crm/pipeline/:funnelIdRef",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      },
+      {
+        "path": "/ds-playground",
+        "reason": "development surface"
+      },
+      {
+        "path": "/grupo",
+        "reason": "permission not derivable from audited guard/menu adapter"
+      },
+      {
+        "path": "/ia/*",
+        "reason": "parameter or wildcard; navigate to its accessible parent list"
+      }
+    ],
+    "parameterParents": [
+      {
+        "path": "/crm/pipeline/:funnelIdRef",
+        "parent": "/crm/pipeline"
+      },
+      {
+        "path": "/crm/card/:cardId",
+        "parent": "/crm/pipeline"
+      },
+      {
+        "path": "/contact/detail/:idRef",
+        "parent": "/contact"
+      },
+      {
+        "path": "/bot/:id",
+        "parent": "/bot"
+      },
+      {
+        "path": "/campanhas/detalhe/:idRef",
+        "parent": "/campanhas"
+      },
+      {
+        "path": "/ia/*",
+        "parent": null
+      },
+      {
+        "path": "/configuracoes/canais/:idRef",
+        "parent": "/configuracoes/canais"
+      },
+      {
+        "path": "/configuracoes/departamentos/:idRef",
+        "parent": "/configuracoes/departamentos"
+      },
+      {
+        "path": "/configuracoes/usuarios/:idRef",
+        "parent": "/configuracoes/usuarios"
+      },
+      {
+        "path": "*",
+        "parent": null
+      },
+      {
+        "path": "/configuracoes/canal/:id",
+        "parent": "/configuracoes/canais"
+      },
+      {
+        "path": "/configuracoes/department/:id",
+        "parent": "/configuracoes/departamentos"
+      },
+      {
+        "path": "/configuracoes/atalhos/:id",
+        "parent": "/configuracoes/atalhos"
+      },
+      {
+        "path": "/configuracoes/integracoes/:id",
+        "parent": "/configuracoes/integracoes"
+      }
+    ]
+  }
+}

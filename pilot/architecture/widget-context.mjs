@@ -1,11 +1,10 @@
-import actions from './product-actions.json' with { type: 'json' };
+import navigation from './navigation-routes.front.json' with { type: 'json' };
 
-// Keep legacy routes for old clients while the application moves to the new settings shell.
-export const widgetContextRoutes = [...new Set([
-  ...Object.values(actions).map(({ route }) => route),
-  ...['canais', 'usuarios', 'departamentos', 'mensagens', 'horarios', 'primeiros-passos', 'perfis', 'atalhos', 'automacoes', 'motivos'].map((slug) => `/configuracoes/${slug}`),
-  '/atendimento/mobile', '/tarefas',
-])];
+// Canonical routes and explicit legacy aliases share the app-generated catalog.
+export const widgetContextRoutes = Object.freeze([...new Set([
+  ...navigation.catalog.routePaths,
+  ...navigation.catalog.routes.map(({ path }) => path),
+])]);
 export const widgetPermissions = [
   'robots.read', 'robots.create', 'users.read', 'users.manage', 'channels.read', 'channels.manage',
   'billing.read', 'campaigns.read', 'campaigns.create', 'templates.read', 'templates.manage',
