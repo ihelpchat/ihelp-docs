@@ -219,18 +219,25 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
     };
     const labelText = node => {
       if (ts.isJsxText(node)) return node.text;
-      if (ts.isJsxExpression(node)) return staticText(node.expression).join(' ');
-      if (ts.isJsxElement(node)) {
-        if (node.openingElement.attributes.properties.some(a=>ts.isJsxAttribute(a)&&a.name.getText(ast)==='aria-hidden'&&a.initializer&&ts.isStringLiteral(a.initializer)&&a.initializer.text==='true')) return '';
-        return node.children.map(labelText).join(' ');
+      if (ts.isJsxExpression(node)) {
+        if (!node.expression || [ts.SyntaxKind.TrueKeyword,ts.SyntaxKind.FalseKeyword,ts.SyntaxKind.NullKeyword].includes(node.expression.kind)) return '';
+        const values=staticText(node.expression);
+        return values.length === 1 ? values[0] : null;
       }
-      return '';
+      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const opening=ts.isJsxElement(node)?node.openingElement:node;
+        if (opening.attributes.properties.some(a=>ts.isJsxAttribute(a)&&a.name.getText(ast)==='aria-hidden'&&a.initializer&&(ts.isStringLiteral(a.initializer)&&a.initializer.text==='true'||ts.isJsxExpression(a.initializer)&&a.initializer.expression?.kind===ts.SyntaxKind.TrueKeyword))) return '';
+        if (!ts.isJsxElement(node)) return null;
+        const children=node.children.map(labelText);
+        return children.some(text=>text===null)?null:children.join(' ');
+      }
+      return null;
     };
     const collectLabels = node => {
       if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast)==='label') {
         const attribute=node.openingElement.attributes.properties.find(a=>ts.isJsxAttribute(a)&&a.name.getText(ast)==='htmlFor');
         const key=idKey(attribute?.initializer && ts.isJsxExpression(attribute.initializer) ? attribute.initializer.expression : attribute?.initializer);
-        const name=labelText(node).replace(/\s+/gu,' ').trim();
+        const name=labelText(node)?.replace(/\s+/gu,' ').trim();
         if (key && name) linkedLabels.set(key,[...(linkedLabels.get(key)??[]),name]);
       }
       ts.forEachChild(node,collectLabels);

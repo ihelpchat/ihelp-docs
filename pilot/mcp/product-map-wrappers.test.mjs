@@ -16,9 +16,10 @@ try {
  export const CustomField = ({label}: {label:string}) => <input aria-label={label}/>;
  export const FormDialog = ({confirmLabel}: {confirmLabel:string}) => <div role="dialog"><CustomField label="Telefone"/><button>{confirmLabel}</button></div>;`);
  await writeFile(join(root,'front/src/Channel.tsx'),`import {Wrapper, FormDialog, Compound} from './Controls';
- export const Channel = () => { const phoneId = useId(); return <><button data-tour-id="channel-connect">Conectar</button><Wrapper title="Transferir"/><Compound.Action title="Composto"/>{active ? <button>Alternativo</button> : <button>Alternativo</button>}<button>Salvar</button><FormDialog confirmLabel="Salvar"/><label htmlFor={phoneId}>Telefone associado<span aria-hidden="true">*</span></label><InputContact id={phoneId}/></>; };`);
+ export const Channel = () => { const phoneId = useId(); return <><button data-tour-id="channel-connect">Conectar</button><Wrapper title="Transferir"/><Compound.Action title="Composto"/>{active ? <button>Alternativo</button> : <button>Alternativo</button>}<button>Salvar</button><FormDialog confirmLabel="Salvar"/><label htmlFor={phoneId}>Telefone associado<span aria-hidden="true">*</span></label><InputContact id={phoneId}/><label htmlFor="dynamic">Nome {unknownName}</label><InputContact id="dynamic"/></>; };`);
  const {manifest} = await buildProductMap({frontRoot:join(root,'front'),backRoot:join(root,'back'),guides:[],actions:{},runtime:{sourceSha:'fixture',runtimeOnly:[{route:'/configuracoes/channel',kind:'button',name:'Somente runtime',duplicates:1},{route:'/configuracoes/channel',kind:'button',name:'Ambíguo runtime',duplicates:2}]}});
  const route='/configuracoes/channel';
+ assert.equal(resolveLocator(manifest,route,{kind:'field',name:'Nome'}).ok,false,'dynamic label content cannot prove a partial accessible name');
  assert.ok(resolveLocator(manifest,route,{kind:'field',name:'Telefone associado'}).ok,'label/id association uses the same symbol and skips aria-hidden markers');
  assert.ok(resolveLocator(manifest,route,{kind:'button',name:'Composto'}).ok,'compound component and rest props resolve through symbols');
  assert.ok(resolveLocator(manifest,route,{kind:'button',name:'Alternativo'}).ok,'exclusive branches count as one visible target');
