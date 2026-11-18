@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildProductMap } from '../lib/product-map.mjs';
 import { compileGuidePackage } from '../lib/guide-package.mjs';
+import runtime from '../product-map/runtime.front.json' with { type: 'json' };
 import actions from '../architecture/product-actions.json' with { type: 'json' };
 const [front, revision, output] = process.argv.slice(2);
 if (!front || !revision || !output) throw new Error('Usage: refresh-product-map-front.mjs FRONT COMMIT OUTPUT');
@@ -17,8 +18,8 @@ try {
   const archive = execFileSync('git', ['-C', front, 'archive', frontSha, 'src', 'tsconfig.json'], { maxBuffer: 150 * 1024 * 1024 });
   execFileSync('tar', ['-xf', '-', '-C', frontRoot], { input: archive });
   const guides = (await compileGuidePackage(new URL('..', import.meta.url).pathname)).catalog.guides;
-  const result = await buildProductMap({ frontRoot, backRoot, guides, actions });
-  const snapshot = { ...approved, frontSha, sourceRevisions: { ...approved.sourceRevisions,
+  const result = await buildProductMap({ frontRoot, backRoot, guides, actions, runtime });
+  const snapshot = { ...approved, frontSha, runtimeSourceSha: runtime.sourceSha, sourceRevisions: { ...approved.sourceRevisions,
     front: [...new Set([...(approved.sourceRevisions?.front ?? []), approved.frontSha, frontSha])].sort() },
     manifest: { ...result.manifest, permissions: approved.manifest.permissions } };
   await writeFile(output, JSON.stringify(snapshot) + '\n');

@@ -34,7 +34,7 @@ try {
   assert.equal(query('Salvar').reason, 'ambiguous');
   const save = elementsForRoutes(manifest, ['/one']).filter(e => e.name === 'Salvar');
   assert.equal(save.length, 3, 'same-line occurrences cannot be deduplicated');
-  assert.ok(save.every(e => e.duplicates === 3));
+  assert.ok(save.every(e => e.duplicates === (e.inModal ? 1 : 2)));
   assert.equal(new Set(save.map(e => `${e.source}:${e.column}`)).size, 3);
   assert.equal(query('Salvar', 'button', 'dialog').ok, true);
   assert.equal(query('Nome', 'field').ok, true);

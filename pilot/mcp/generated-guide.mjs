@@ -43,9 +43,11 @@ export function prepareGuideContext(sources, map = approvedMap) {
   for (const element of elementsForRoutes(map, routes)) {
     if (!element.name?.trim()) continue;
     const locator = { kind: element.kind, name: element.name, ...(element.inModal ? { within: 'dialog' } : {}) };
-    if (!resolveLocator(map, element.route, locator).ok) continue;
-    const key = JSON.stringify([element.route, locator]);
-    locators.set(key, { route: element.route, locator });
+    const resolved = resolveLocator(map, element.route, locator);
+    if (!resolved.ok) continue;
+    const selected = resolved.locator;
+    const key = JSON.stringify([element.route, selected]);
+    locators.set(key, { route: element.route, locator: selected });
   }
   const elements = [...locators.values()].map((element, i) => ({ id: `element-${i + 1}`, ...element }));
   return { steps, elements };

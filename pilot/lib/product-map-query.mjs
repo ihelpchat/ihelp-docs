@@ -15,6 +15,11 @@ export function resolveLocator(map, route, locator) {
     && element.kind === locator?.kind && element.name === locator?.name
     && (!locator.within || element.inModal));
   if (!matches.length) return { ok: false, reason: 'missing' };
-  if (matches.length !== 1 || (!locator.within && matches[0].duplicates > 1)) return { ok: false, reason: 'ambiguous' };
-  return { ok: true, element: matches[0] };
+  const exclusive = (left, right) => (left.visibility ?? []).some(a =>
+    (right.visibility ?? []).some(b => a.key === b.key && a.branch !== b.branch));
+  // Multiple source occurrences are safe only with proof they cannot coexist.
+  const coexist = matches.some((element, index) =>
+    matches.slice(index + 1).some(other => !exclusive(element, other)));
+  if (matches.some(element => element.duplicates > 1) || coexist) return { ok: false, reason: 'ambiguous' };
+  return { ok: true, element: matches[0], locator: { kind: locator.kind, name: locator.name, ...(matches[0].inModal ? { within: 'dialog' } : {}) } };
 }

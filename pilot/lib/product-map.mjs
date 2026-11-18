@@ -1,5 +1,5 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { join, relative, posix } from 'node:path';
+import { join, relative, posix, resolve } from 'node:path';
 import { sensitiveKinds } from '../mcp/sensitive-data.mjs';
 import ts from 'typescript';
 import { readCsharpEndpoints } from './csharp-endpoints.mjs';
@@ -34,7 +34,107 @@ function differences(before, after, kind, key) {
     JSON.stringify(old.get(id)) !== JSON.stringify(now.get(id))).map((id) => `${kind}: ${id}: ${JSON.stringify(old.get(id) ?? null)} -> ${JSON.stringify(now.get(id) ?? null)}`));
 }
 
-export async function buildProductMap({ frontRoot, backRoot, guides, actions, baseline }) {
+// Resolve local JSX wrappers through TypeScript symbols, including aliases and styled primitives.
+// Only literal values reaching a rendered control become names; arbitrary component props do not.
+function wrapperResolver(program) {
+  const checker = program.getTypeChecker();
+  const declaration = (node) => {
+    let symbol = checker.getSymbolAtLocation(node);
+    if (symbol?.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
+    const decl = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+    return decl && ts.isVariableDeclaration(decl) ? decl.initializer : decl;
+  };
+  const primitive = (tag) => /^(button|input|select|textarea|a|h[1-6])$/u.test(tag)
+    ? tag === 'button' ? 'button' : tag === 'a' ? 'link' : /^h/u.test(tag) ? 'heading' : 'field' : null;
+  const styledKind = (node, seen = new Set()) => {
+    if (!node || seen.has(node)) return null;
+    seen.add(node);
+    if (ts.isIdentifier(node)) return styledKind(declaration(node), seen);
+    if (ts.isTaggedTemplateExpression(node)) return styledKind(node.tag, seen);
+    if (ts.isCallExpression(node)) return styledKind(node.expression, seen) ?? (node.arguments[0] && styledKind(node.arguments[0], seen));
+    if (ts.isPropertyAccessExpression(node)) return primitive(node.name.text);
+    return null;
+  };
+  const values = (node, env, seen = new Set()) => {
+    if (!node || seen.has(node)) return [];
+    seen.add(node);
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return [node.text];
+    if (ts.isJsxExpression(node) || ts.isParenthesizedExpression(node)) return values(node.expression,env,seen);
+    if (ts.isIdentifier(node)) return env.get(node.text) ?? values(declaration(node),env,seen);
+    if (ts.isPropertyAccessExpression(node)) return env.get(node.getText()) ?? [];
+    if (ts.isConditionalExpression(node)) return [...values(node.whenTrue,env,new Set(seen)),...values(node.whenFalse,env,new Set(seen))];
+    return [];
+  };
+  const textVariants = (node, env) => {
+    if (ts.isJsxText(node)) return [node.text];
+    if (ts.isJsxExpression(node)) return node.expression ? values(node.expression,env) : [''];
+    if (ts.isJsxElement(node) || ts.isJsxFragment(node)) {
+      if (ts.isJsxElement(node) && node.openingElement.attributes.properties.some(a=>ts.isJsxAttribute(a)&&a.name.getText()==='aria-hidden'&&values(a.initializer,env).includes('true'))) return [''];
+      let result=[''];
+      for (const child of node.children) {
+        const parts=textVariants(child,env);
+        if (!parts.length || result.length*parts.length>32) return [];
+        result=result.flatMap(prefix=>parts.map(part=>`${prefix} ${part}`));
+      }
+      return result;
+    }
+    return [''];
+  };
+  const attrsOf = (node, env) => {
+    const attrs=new Map(node.attributes.properties.filter(ts.isJsxAttribute).map(a=>[a.name.getText(),values(a.initializer,env)]));
+    if (ts.isJsxOpeningElement(node)) attrs.set('children',textVariants(node.parent,env));
+    return attrs;
+  };
+  const resolveNode = (node, supplied, depth = 0, seen = new Set()) => {
+    if (!node || depth > 8 || seen.has(node)) return [];
+    seen = new Set([...seen,node]);
+    if (ts.isIdentifier(node)) return resolveNode(declaration(node),supplied,depth+1,seen);
+    if (ts.isCallExpression(node)) return node.arguments.flatMap(a=>resolveNode(a,supplied,depth+1,seen));
+    if (!ts.isFunctionLike(node) || !node.body) return [];
+    const env = new Map();
+    const param=node.parameters[0]?.name;
+    if (param && ts.isObjectBindingPattern(param)) for (const binding of param.elements) {
+      const key=(binding.propertyName ?? binding.name).getText().replace(/^['"]|['"]$/gu,'');
+      env.set(binding.name.getText(), supplied.get(key) ?? values(binding.initializer,env));
+    }
+    else if (param && ts.isIdentifier(param)) for (const [key,val] of supplied) env.set(`${param.text}.${key}`,val);
+    const result=[];
+    const walk=(child,modal=false) => {
+      if (ts.isJsxElement(child)) { walk(child.openingElement,modal); return; }
+      if (ts.isJsxOpeningElement(child) || ts.isJsxSelfClosingElement(child)) {
+        const tag=child.tagName.getText(), attrs=attrsOf(child,env);
+        modal ||= /Modal|Dialog|Drawer/iu.test(tag) || !!attrs.get('role')?.includes('dialog');
+        const kind=primitive(tag) ?? styledKind(child.tagName);
+        if (kind) {
+          let names=[];
+          for (const key of ['aria-label','label','labelText','tooltipTitle','placeholder','title']) if (attrs.get(key)?.length) { names=attrs.get(key);break; }
+          if (!names.length && ts.isJsxOpeningElement(child)) {
+            names=textVariants(child.parent,env);
+          }
+          for (const name of names) if(name.trim()) result.push({kind,name:name.replace(/\s+/gu,' ').trim(),inModal:modal});
+        } else result.push(...resolveNode(declaration(child.tagName),attrs,depth+1,seen).map(e=>({...e,inModal:e.inModal||modal})));
+        if (ts.isJsxOpeningElement(child)) for (const c of child.parent.children) walk(c,modal);
+        return;
+      }
+      if (ts.isFunctionLike(child)) return;
+      ts.forEachChild(child,c=>walk(c,modal));
+    };
+    walk(node.body,/Modal|Dialog|Drawer/iu.test(node.parent?.name?.getText() ?? node.name?.getText() ?? ''));
+    return result;
+  };
+  return { kind: styledKind, expand(node) {
+    const supplied=attrsOf(node,new Map());
+    // A wrapper must receive a literal naming prop at this use site. Static descendants
+    // are already collected from their own file and must not be counted again.
+    if (![...supplied.values()].some(v=>v.length)) return [];
+    return resolveNode(declaration(node.tagName),supplied).filter(e=>[...supplied.values()].flat().some(v=>v && e.name.includes(v)));
+  }};
+}
+
+export async function buildProductMap({ frontRoot, backRoot, guides, actions, baseline, runtime }) {
+  const frontFiles = await files(join(frontRoot, 'src'), ['.tsx', '.jsx', '.ts', '.js']);
+  const program = ts.createProgram(frontFiles, { allowJs: true, jsx: ts.JsxEmit.Preserve, target: ts.ScriptTarget.Latest, moduleResolution: ts.ModuleResolutionKind.Bundler, module: ts.ModuleKind.ESNext, baseUrl: frontRoot, paths: { '@/*': ['src/*'] } });
+  const wrappers = wrapperResolver(program);
   const routes = [];
   const records = new Map();
   const seeds = [];
@@ -49,11 +149,11 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
   const registryFile = 'src/features/configurations/registry/sections.ts';
   const registryPrefix = await readFile(join(frontRoot, 'src/features/configurations/registry/prefix.ts'), 'utf8')
     .then((raw) => raw.match(/export const CONFIG_V4_PREFIX = ['"](\/[a-z0-9-]+)['"]/u)?.[1] ?? null).catch(() => null);
-  for (const file of await files(join(frontRoot, 'src'), ['.tsx', '.jsx', '.ts', '.js'])) {
+  for (const file of frontFiles) {
     const source = await readFile(file, 'utf8');
     const path = relative(frontRoot, file);
     const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : file.endsWith('.jsx') ? ts.ScriptKind.JSX : file.endsWith('.ts') ? ts.ScriptKind.TS : ts.ScriptKind.JS;
-    const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
+    const ast = program.getSourceFile(resolve(file)) ?? ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
     const record = { provided: new Set(), imports: new Map(), exports: new Map(), importedNames: new Map(), rendered: new Set(), modalUses: new Map(), elements: [] };
     records.set(path, record);
     const constants = new Map();
@@ -178,18 +278,29 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
         for (let parent = node; parent; parent = parent.parent) {
           const name = parent.name?.getText(ast) ?? (ts.isJsxElement(parent) ? parent.openingElement.tagName.getText(ast) : '');
           if (/Modal|Dialog|Drawer|Sidebar/iu.test(name)) inModal = true;
+          if (ts.isJsxElement(parent) && parent.openingElement.attributes.properties.some(a => ts.isJsxAttribute(a) && a.name.getText(ast) === 'role' && a.initializer && ts.isStringLiteral(a.initializer) && a.initializer.text === 'dialog')) inModal = true;
         }
         // A component used both inside and outside a dialog has no proven global modal scope.
         record.modalUses.set(tag, record.modalUses.has(tag) ? record.modalUses.get(tag) && inModal : inModal);
+        const visibility = [];
+        for (let child = node, parent = node.parent; parent; child = parent, parent = parent.parent) {
+          if (ts.isConditionalExpression(parent) && (child === parent.whenTrue || child === parent.whenFalse)) visibility.push({ key: `${path}:${parent.getStart(ast)}`, branch: child === parent.whenTrue });
+        }
         const attrs = new Map(node.attributes.properties.filter(ts.isJsxAttribute).map((item) => [item.name.getText(ast), item.initializer && ts.isJsxExpression(item.initializer) ? item.initializer.expression : item.initializer]));
         const role = staticText(attrs.get('role'))[0];
+        // Keep established library-name heuristics as compatibility fallback; local
+        // wrappers below must prove their rendered primitive through compiler symbols.
         const kind = ['button', 'field', 'link', 'tab', 'menuitem', 'heading'].includes(role) ? role
           : /^(?:button|Button|ButtonIconAction|ButtonWithIcon|IconButton|MenuButton)$/u.test(tag) ? 'button'
           : /^(?:a|Link|NavLink)$/u.test(tag) ? 'link'
           : /^(?:input|select|textarea|Input\w*|Select\w*|Textarea\w*|TextArea\w*|LegacySelect\w*|MultiSelectSystem)$/u.test(tag) && !/(?:Container|Wrapper|Group|Label|Node|Option|Content|Icon|Provider|Context|Props)$/u.test(tag) ? 'field'
           : /^(?:Tab|TabItem)$/u.test(tag) ? 'tab'
           : tag === 'MenuItem' ? 'menuitem'
-          : /^(?:h[1-6]|Title|DialogTitle)$/u.test(tag) ? 'heading' : null;
+          : /^(?:h[1-6]|Title|DialogTitle)$/u.test(tag) ? 'heading' : wrappers.kind(node.tagName);
+        if (!kind) for (const inferred of wrappers.expand(node)) {
+          const name = safe(inferred.name, /^[\p{L}\p{N}\p{P}\p{S} ]{1,160}$/u);
+          if (name) record.elements.push({ ...inferred, name, inModal: inModal || inferred.inModal, source: `${path}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`, column: ast.getLineAndCharacterOfPosition(node.getStart(ast)).character + 1, component: tag, ...(visibility.length ? { visibility } : {}) });
+        }
         if (kind) {
           let names = [];
           for (const key of ['aria-label', 'label', 'labelText', 'tooltipTitle', 'placeholder', 'title']) {
@@ -212,7 +323,7 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
             names = combine(node.parent.children);
           }
           names = [...new Set(names.map((name) => safe(name.replace(/\s+/gu, ' ').trim(), /^[\p{L}\p{N}\p{P}\p{S} ]{1,160}$/u)).filter(Boolean))];
-          record.elements.push(...(names.length ? names : [null]).map((name) => ({ kind, name, source: `${path}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`, column: ast.getLineAndCharacterOfPosition(node.getStart(ast)).character + 1, inModal, component: tag })));
+          record.elements.push(...(names.length ? names : [null]).map((name) => ({ kind, name, source: `${path}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`, column: ast.getLineAndCharacterOfPosition(node.getStart(ast)).character + 1, inModal, component: tag, ...(visibility.length ? { visibility } : {}) })));
         }
       }
       if (ts.isVariableDeclaration(node) && /^(?:pagesData|[A-Za-z0-9_]*[Rr]outes)$/u.test(node.name.getText(ast)) && node.initializer && ts.isArrayLiteralExpression(node.initializer)) {
@@ -342,12 +453,30 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
     if (!assignments?.size) elements.push({ ...element, route: null, shared: true });
     else for (const [route, modal] of assignments) elements.push({ ...element, route, inModal: modal || element.inModal });
   }
-  const counts = new Map();
+  const groups = new Map();
+  const groupKey = e => JSON.stringify([e.route,e.kind,e.name,!!e.inModal]);
   for (const element of elements) if (element.route && element.name) {
-    const key = JSON.stringify([element.route, element.kind, element.name]);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    const key=groupKey(element);
+    if (!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(element);
   }
-  for (const element of elements) element.duplicates = element.route && element.name ? counts.get(JSON.stringify([element.route, element.kind, element.name])) : 0;
+  const canCoexist = (a,b) => !(a.visibility ?? []).some(left=>(b.visibility ?? []).some(right=>left.key===right.key&&left.branch!==right.branch));
+  for (const element of elements) element.duplicates = element.route && element.name ? groups.get(groupKey(element)).filter(other=>canCoexist(element,other)).length : 0;
+  // Runtime evidence adds unique observed targets; it never overrides a static ambiguity.
+  if (runtime) {
+    const routeSet = new Set(routes.map(({path})=>path));
+    const staticKeys = new Set(elements.map(groupKey));
+    const candidates = new Map();
+    for (const element of runtime.runtimeOnly ?? []) {
+      if (!routeSet.has(element.route) || !['button','field','link','tab','menuitem','heading'].includes(element.kind) || !safe(element.name ?? '', /^[\p{L}\p{N}\p{P}\p{S} ]{1,160}$/u) || staticKeys.has(groupKey(element))) continue;
+      const previous = candidates.get(groupKey(element));
+      candidates.set(groupKey(element), { ...element, duplicates: Math.max(element.duplicates ?? 0, previous?.duplicates ?? 0) });
+    }
+    for (const element of candidates.values()) if (element.duplicates === 1) {
+      elements.push({ ...element, inModal: !!element.inModal, runtimeOnly: true, source: `runtime:${runtime.sourceSha}`, component: 'runtime' });
+      labels.push({ label: element.name, file: `runtime:${runtime.sourceSha}` });
+    }
+  }
   const manifest = {
     schemaVersion: 2, elements: ordered(elements),
     routes: ordered(routes), markers: ordered(markers), labels: ordered(labels), permissions: ordered(permissions),
