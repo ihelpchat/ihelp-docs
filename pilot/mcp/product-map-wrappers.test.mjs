@@ -11,12 +11,15 @@ try {
  await writeFile(join(root,'front/src/Controls.tsx'),`const styled = {} as any;
  export const Action = styled.button\`color:red;\`;
  export const Wrapper = ({title}: {title:string}) => <Action aria-label={title}/>;
+ export const Spread = ({className,...rest}: any) => <Wrapper {...rest}/>;
+ export const Compound = {Action: Spread};
  export const CustomField = ({label}: {label:string}) => <input aria-label={label}/>;
  export const FormDialog = ({confirmLabel}: {confirmLabel:string}) => <div role="dialog"><CustomField label="Telefone"/><button>{confirmLabel}</button></div>;`);
- await writeFile(join(root,'front/src/Channel.tsx'),`import {Wrapper, FormDialog} from './Controls';
- export const Channel = () => <><button data-tour-id="channel-connect">Conectar</button><Wrapper title="Transferir"/>{active ? <button>Alternativo</button> : <button>Alternativo</button>}<button>Salvar</button><FormDialog confirmLabel="Salvar"/></>;`);
+ await writeFile(join(root,'front/src/Channel.tsx'),`import {Wrapper, FormDialog, Compound} from './Controls';
+ export const Channel = () => <><button data-tour-id="channel-connect">Conectar</button><Wrapper title="Transferir"/><Compound.Action title="Composto"/>{active ? <button>Alternativo</button> : <button>Alternativo</button>}<button>Salvar</button><FormDialog confirmLabel="Salvar"/></>;`);
  const {manifest} = await buildProductMap({frontRoot:join(root,'front'),backRoot:join(root,'back'),guides:[],actions:{},runtime:{sourceSha:'fixture',runtimeOnly:[{route:'/configuracoes/channel',kind:'button',name:'Somente runtime',duplicates:1},{route:'/configuracoes/channel',kind:'button',name:'Ambíguo runtime',duplicates:2}]}});
  const route='/configuracoes/channel';
+ assert.ok(resolveLocator(manifest,route,{kind:'button',name:'Composto'}).ok,'compound component and rest props resolve through symbols');
  assert.ok(resolveLocator(manifest,route,{kind:'button',name:'Alternativo'}).ok,'exclusive branches count as one visible target');
  assert.ok(resolveLocator(manifest,route,{kind:'button',name:'Somente runtime'}).ok);
  assert.equal(resolveLocator(manifest,route,{kind:'button',name:'Ambíguo runtime'}).ok,false);

@@ -42,7 +42,9 @@ function wrapperResolver(program) {
     let symbol = checker.getSymbolAtLocation(node);
     if (symbol?.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
     const decl = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-    return decl && ts.isVariableDeclaration(decl) ? decl.initializer : decl;
+    if (decl && (ts.isVariableDeclaration(decl) || ts.isPropertyAssignment(decl))) return decl.initializer;
+    if (decl && ts.isShorthandPropertyAssignment(decl)) return checker.getShorthandAssignmentValueSymbol(decl)?.valueDeclaration?.initializer;
+    return decl;
   };
   const primitive = (tag) => /^(button|input|select|textarea|a|h[1-6])$/u.test(tag)
     ? tag === 'button' ? 'button' : tag === 'a' ? 'link' : /^h/u.test(tag) ? 'heading' : 'field' : null;
@@ -82,6 +84,10 @@ function wrapperResolver(program) {
   };
   const attrsOf = (node, env) => {
     const attrs=new Map(node.attributes.properties.filter(ts.isJsxAttribute).map(a=>[a.name.getText(),values(a.initializer,env)]));
+    for (const spread of node.attributes.properties.filter(ts.isJsxSpreadAttribute)) {
+      const prefix=spread.expression.getText()+'.';
+      for (const [key,value] of env) if (key.startsWith(prefix)) attrs.set(key.slice(prefix.length),value);
+    }
     if (ts.isJsxOpeningElement(node)) attrs.set('children',textVariants(node.parent,env));
     return attrs;
   };
@@ -94,6 +100,7 @@ function wrapperResolver(program) {
     const env = new Map();
     const param=node.parameters[0]?.name;
     if (param && ts.isObjectBindingPattern(param)) for (const binding of param.elements) {
+      if (binding.dotDotDotToken) { for (const [key,value] of supplied) env.set(`${binding.name.getText()}.${key}`,value); continue; }
       const key=(binding.propertyName ?? binding.name).getText().replace(/^['"]|['"]$/gu,'');
       env.set(binding.name.getText(), supplied.get(key) ?? values(binding.initializer,env));
     }
