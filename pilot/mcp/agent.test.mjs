@@ -295,5 +295,56 @@ assert.equal(view.previewUrl, null);
 assert.match(view.previa, /por cima/);
 await assert.rejects(() => faqRascunho(root, { sessao: rejected.sessao, previa: true, requestedBy: actor }, { preview: { ...preview, env: {} } }), /não configurado/);
 
+// --- 13. publicar: revisão exata, sem pendência, página base intacta; "publicado" só com o merge no ar ---
+const { faqPublicar } = await import('./agent-service.mjs');
+const { createHash } = await import('node:crypto');
+const clean = await faqRascunho(root, { sessao: rejected.sessao, requestedBy: actor }, { preview });
+assert.deepEqual(clean.pendencias, []);
+const target = 'pilot/content/docs/docs/sobre-o-sistema/campanhas.mdx';
+const pub = [];
+let baseRaw = raw['docs/sobre-o-sistema/campanhas'], prod = null, ancestry = 'behind';
+const publish = { env: { AGENT_PUBLISH_SITE_URL: 'https://faq.example.test/ihelp-docs/', GITHUB_BASE_BRANCH: 'main' },
+  github: async (path, init = {}) => {
+    const short = path.replace('/repos/ihelpchat/ihelp-docs', '');
+    pub.push(`${init.method ?? 'GET'} ${short}`);
+    if (short === '/git/ref/heads/main') return { object: { sha: 'b'.repeat(40) } };
+    if (short === `/contents/${target}?ref=main`) return { sha: 'f'.repeat(40), content: Buffer.from(baseRaw).toString('base64') };
+    if (init.method === 'PUT' && short === `/contents/${target}`) { assert.equal(Buffer.from(JSON.parse(init.body).content, 'base64').toString('utf8'), clean.mdx); return { commit: { sha: 'c'.repeat(40) } }; }
+    if (short.startsWith('/pulls?')) return [];
+    if (init.method === 'POST' && short === '/pulls') return { number: 7, html_url: 'https://github.com/ihelpchat/ihelp-docs/pull/7' };
+    if (short === '/pulls/7/merge') return { sha: 'e'.repeat(40) };
+    if (short.startsWith('/compare/')) return { status: ancestry };
+    return null;
+  },
+  fetcher: async () => ({ ok: true, json: async () => ({ codeSha: prod }) }) };
+const publicar = (sessao, revisao, extra = {}) => faqPublicar(root, { sessao, revisao, requestedBy: actor, ...extra }, { publish });
+await assert.rejects(() => publicar(draft.sessao, approved.revisao), /a confirmar/, 'produção não aceita frase sem prova');
+await assert.rejects(() => publicar(rejected.sessao, 'a'.repeat(64)), /não é a do rascunho atual/);
+await assert.rejects(() => publicar(poor.sessao, 'a'.repeat(64)), /não tem rascunho aprovado/);
+baseRaw += '\nEdição humana.\n';
+await assert.rejects(() => publicar(rejected.sessao, clean.revisao), /mudou desde que o rascunho/);
+assert.ok(!pub.some((call) => /^(PUT|POST|PATCH)/.test(call)), 'nada é gravado quando a publicação é recusada');
+baseRaw = raw['docs/sobre-o-sistema/campanhas'];
+pub.length = 0;
+let published = await publicar(rejected.sessao, clean.revisao);
+assert.deepEqual(pub.filter((call) => !call.startsWith('GET')), ['POST /git/refs', `PUT /contents/${target}`, 'POST /pulls', 'PUT /pulls/7/merge',
+  `DELETE /git/refs/heads/publicar/${rejected.sessao.slice(0, 12)}`, 'POST /actions/workflows/deploy.yml/dispatches']);
+assert.equal(published.estado, 'publicando');
+assert.equal(published.etapa, 'deploy');
+assert.equal(published.url, null);
+assert.match(published.proximo, /aprovação de um revisor/);
+await assert.rejects(() => faqResponder(root, { sessao: rejected.sessao, sugestao: 'Mude o título.', requestedBy: actor }), /não aceita resposta/);
+prod = 'd'.repeat(40);
+assert.equal((await publicar(rejected.sessao, clean.revisao)).estado, 'publicando', 'site no ar ainda não contém o merge');
+pub.length = 0;
+assert.equal((await publicar(rejected.sessao, clean.revisao, { redisparar: true })).estado, 'publicando');
+assert.deepEqual(pub.filter((call) => call.startsWith('POST')), ['POST /actions/workflows/deploy.yml/dispatches'], 'redisparar não refaz o merge');
+ancestry = 'ahead';
+published = await publicar(rejected.sessao, clean.revisao);
+assert.equal(published.estado, 'publicado');
+assert.equal(published.url, 'https://faq.example.test/ihelp-docs/docs/sobre-o-sistema/campanhas/');
+assert.equal((await faqStatus(root, { sessao: rejected.sessao, requestedBy: actor })).publicacao.etapa, 'publicado');
+
+
 await rm(state, { recursive: true, force: true });
-console.log('agente editor: ordem fixa, plano validado, perguntas e respostas, tetos, retomada, orçamento, escrita com juízes e prévia.');
+console.log('agente editor: ordem fixa, plano validado, perguntas e respostas, tetos, retomada, orçamento, escrita com juízes, prévia e publicação.');

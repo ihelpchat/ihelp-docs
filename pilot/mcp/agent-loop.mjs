@@ -3,6 +3,7 @@ import { createBudgetedResponse, responseCostUsd } from './provider-budget.mjs';
 import { SOURCES } from './kb-chunk.mjs';
 import { logStep } from './agent-session.mjs';
 import { runGates } from './agent-gates.mjs';
+import { baseHash } from './agent-publish.mjs';
 import { factSchema } from './faq-generator-v2.mjs';
 import { FAQ_WRITER_GLOSSARY } from './faq-editorial-judge.mjs';
 import { learnedWriterContract } from './learned-editorial-guide.mjs';
@@ -301,7 +302,8 @@ async function write(args, session, deps) {
   // Problema de forma (evidência desconhecida, tamanho) não gasta a correção: o agente ajusta e reenvia.
   if (!result.gates.estrutura.ok) return { output: { erro: 'rascunho recusado antes dos juízes', problemas: result.motivos } };
   session.tentativasEscrita = (session.tentativasEscrita ?? 0) + 1;
-  session.rascunho = { revisao: result.revisao, mdx: result.mdx, gates: result.gates, pendencias: result.pendencias, motivos: result.motivos, previewUrl: null };
+  session.rascunho = { revisao: result.revisao, mdx: result.mdx, gates: result.gates, pendencias: result.pendencias, motivos: result.motivos, previewUrl: null,
+    baseSha256: baseHash(existingRaw) };
   const resumo = `${result.gates.fatos.sustentadas} frase(s) sustentada(s), ${result.gates.fatos.aConfirmar.length} a confirmar, ${result.gates.fatos.contradicoes.length} contradição(ões)`;
   if (result.gates.aprovado) {
     session.estado = 'rascunho_pronto';

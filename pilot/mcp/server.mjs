@@ -6,7 +6,7 @@ import { articleSchema } from './article-fields.mjs';
 import { auditOperation, deleteArticle, getInventory, isSafeRequestedBy, searchContent, SubmitArticleError, submitArticle, submitContentPackage, validateArticle } from './content-service.mjs';
 import { auditContent, readArticle } from './editorial-standard.mjs';
 import { generateContentPackage, planContent } from './content-ai-service.mjs';
-import { faqPedir, faqRascunho, faqResponder, faqStatus } from './agent-service.mjs';
+import { faqPedir, faqPublicar, faqRascunho, faqResponder, faqStatus } from './agent-service.mjs';
 import { getIhelpContext, publicProductContext } from './product-context-service.mjs';
 import { authorizeTool, registerToolPolicy, requestIdentity } from './access-control.mjs';
 import { createGuide } from './create-guide.mjs';
@@ -32,7 +32,7 @@ const probeCurrentJourneyAccount = async () => {
   return probeJourneyAccount(process.env);
 };
 const lockedJourneyProbe = () => withJourneyGate(probeCurrentJourneyAccount);
-const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_generate_faq_v2', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto', 'faq_pedir', 'faq_rascunho', 'faq_responder', 'faq_status']);
+const actorTools = new Set(['docs_product_context', 'docs_plan_content', 'docs_generate_package', 'docs_generate_faq_v2', 'docs_submit_package', 'docs_delete_article', 'docs_update_article', 'docs_submit_article', 'criar_guia', 'atualizar_por_deploy', 'atualizar_codigo_produto', 'faq_pedir', 'faq_rascunho', 'faq_publicar', 'faq_responder', 'faq_status']);
 const requestedBySchema = z.string().optional().describe('Ator opcional; se informado, deve coincidir com o ator da credencial');
 const confirmationsSchema = z.array(z.string().max(300)).max(8).optional();
 const contentRequestSchema = z.object({
@@ -170,6 +170,13 @@ export function buildServer(root = process.env.DOCS_ROOT ?? new URL('../', impor
     inputSchema: z.strictObject({ sessao: sessionId, requestedBy: requestedBySchema,
       previa: z.boolean().optional().describe('true publica o rascunho aprovado numa branch pública e no site de staging, para ver no layout real') }),
   }, (args) => faqRascunho(root, args));
+
+  agentTool('faq_publicar', {
+    mutates: true,
+    description: 'Publica em produção o rascunho aprovado: abre a PR, faz o merge na branch base e dispara o deploy do site, que espera a aprovação de um revisor no GitHub. Exige a revisão exata vista em faq_rascunho e nenhuma frase a confirmar. Chame de novo com a mesma revisão para conferir; só devolve "publicado" quando o site de produção serve o texto.',
+    inputSchema: z.strictObject({ sessao: sessionId, revisao: z.string().regex(/^[a-f0-9]{64}$/), requestedBy: requestedBySchema,
+      redisparar: z.boolean().optional().describe('true dispara de novo o deploy de produção, quando o anterior falhou ou foi recusado') }),
+  }, (args) => faqPublicar(root, args));
 
   registerTool('faq_status', {
     mutates: false,

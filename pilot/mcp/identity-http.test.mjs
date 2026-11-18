@@ -77,6 +77,7 @@ try {
     aprovar_tela: { page: 'contatos', step: 'abrir', adminToken: 'admin-token-de-teste-com-mais-de-24' },    faq_pedir: { pedido: 'Preciso de um FAQ sobre campanhas' },
     faq_responder: { sessao: 'a'.repeat(32), sugestao: 'Inclua um exemplo' },
     faq_rascunho: { sessao: 'a'.repeat(32) },
+    faq_publicar: { sessao: 'a'.repeat(32), revisao: 'a'.repeat(64) },
   };
   for (const [name, config] of registered) {
     assert.equal(typeof config.mutates, 'boolean', `${name} deve declarar mutates explicitamente`);

@@ -4,7 +4,7 @@ import { githubRequest } from './content-service.mjs';
 // e o deploy de staging existente publica só o site (scope=site, sem republicar o serviço do MCP).
 // O staging é um só: a prévia mais recente substitui a anterior, e a conferência por SHA mostra qual está no ar.
 
-const repoOf = (env) => {
+export const repoOf = (env) => {
   const [owner, repo] = (env.GITHUB_REPOSITORY ?? 'ihelpchat/ihelp-docs').split('/');
   if (!owner || !repo) throw new Error('GITHUB_REPOSITORY inválido');
   return `/repos/${owner}/${repo}`;

@@ -73,6 +73,7 @@ try {
     'docs_validate_article',
     'enviar_tela',
     'faq_pedir',
+    'faq_publicar',
     'faq_rascunho',
     'faq_responder',
     'faq_status',

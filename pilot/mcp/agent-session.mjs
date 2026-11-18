@@ -83,8 +83,10 @@ export function summarize(session, { withLog = false } = {}) {
     perguntas: session.perguntas.filter(({ id }) => !session.respostas.some(({ perguntaId }) => perguntaId === id)),
     ...(session.estado === 'plano_pronto' ? { proximo: session.plano?.acao === 'nada' ? 'Nada a escrever: o conteúdo já existe.'
       : 'Plano fechado. Chame faq_rascunho para escrever, ou mande uma sugestão por faq_responder para ajustar.' } : {}),
-    ...(['rascunho_pronto', 'reprovado'].includes(session.estado) ? { proximo: 'Veja o texto e o resultado dos juízes em faq_rascunho. Para ajustar, mande uma sugestão por faq_responder.' } : {}),
+    ...(['rascunho_pronto', 'reprovado'].includes(session.estado) ? { proximo: 'Veja o texto e o resultado dos juízes em faq_rascunho. Para ajustar, mande uma sugestão por faq_responder. Para publicar em produção, chame faq_publicar com a revisão.' } : {}),
+    ...(session.estado === 'publicando' ? { proximo: 'Publicação em andamento. Chame faq_publicar com a mesma revisão para conferir.' } : {}),
     ...(session.rascunho ? { rascunho: { revisao: session.rascunho.revisao, aprovado: session.rascunho.gates.aprovado } } : {}),
+    ...(session.publicacao ? { publicacao: { etapa: session.publicacao.etapa, pr: session.publicacao.pr, url: session.publicacao.url } } : {}),
     custoUsd: Number(session.custoUsd.toFixed(4)), passos: session.passos, expiraEm: session.expiraEm,
     ...(withLog ? { log: session.log } : {}),
   };

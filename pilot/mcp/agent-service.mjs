@@ -4,7 +4,7 @@ import { createSession, draftView, loadSession, logStep, saveSession, summarize 
 import { runTurn } from './agent-loop.mjs';
 import { containsSensitiveData } from './sensitive-data.mjs';
 
-// Liga as tools faq_pedir / faq_responder / faq_status / faq_rascunho ao agente.
+// Liga as tools faq_pedir / faq_responder / faq_status / faq_rascunho / faq_publicar ao agente.
 // O turno roda em segundo plano; quem chamou acompanha por faq_status.
 
 const running = new Map();
@@ -117,6 +117,43 @@ export async function faqRascunho(root, { sessao, previa = false, requestedBy },
     return draftView(session);
   }
   throw new Error(`sessão em "${session.estado}" ainda não tem rascunho; feche o plano primeiro (faq_status mostra o que falta)`);
+}
+
+const publishView = (session) => {
+  const { etapa, pr, url, revisao } = session.publicacao;
+  return { sessao: session.id, estado: session.estado, revisao, etapa, pr, url,
+    ...(etapa === 'deploy' ? { proximo: 'O texto já está na branch base. O deploy de produção espera a aprovação de um revisor no GitHub (Actions); depois de aprovado leva alguns minutos. Chame faq_publicar de novo para conferir; se o deploy falhou ou foi recusado, chame com redisparar: true.' } : {}) };
+};
+
+/** Publica o rascunho aprovado em produção (PR, merge, deploy do site) ou confere uma publicação em andamento. */
+export async function faqPublicar(root, { sessao, revisao, redisparar = false, requestedBy }, options = {}) {
+  const session = await loadSession(root, sessao, { actor: requestedBy, now: options.now });
+  if (running.has(session.id)) throw new Error('o agente ainda está trabalhando nesta sessão; acompanhe por faq_status');
+  const { startPublish, checkPublish, redeployPublish } = await import('./agent-publish.mjs');
+  const agora = options.now ?? Date.now();
+  if (session.publicacao && ['publicando', 'publicado'].includes(session.estado)) {
+    if (session.publicacao.revisao !== revisao) throw new Error('a revisão informada não é a que está sendo publicada nesta sessão');
+    const antes = session.publicacao.etapa;
+    session.publicacao = await checkPublish(session.publicacao, session.plano.destino.path, options.publish);
+    if (session.publicacao.etapa === 'publicado') session.estado = 'publicado';
+    else if (redisparar) {
+      session.publicacao = await redeployPublish(session.publicacao, { ...options.publish, now: agora });
+      logStep(session, 'publicar', 'deploy de produção disparado de novo', agora);
+    }
+    if (session.publicacao.etapa !== antes || redisparar) {
+      if (session.publicacao.etapa === 'publicado') logStep(session, 'publicar', `no ar em ${session.publicacao.url}`, agora);
+      await saveSession(root, session);
+    }
+    return publishView(session);
+  }
+  if (session.estado !== 'rascunho_pronto' || !session.rascunho) throw new Error(`sessão em "${session.estado}" não tem rascunho aprovado para publicar`);
+  // Publica exatamente o texto que quem pediu viu: se o rascunho mudou, a revisão não bate.
+  if (session.rascunho.revisao !== revisao) throw new Error('a revisão informada não é a do rascunho atual; veja o texto de novo em faq_rascunho');
+  session.publicacao = await startPublish(session, { ...options.publish, now: agora });
+  session.estado = 'publicando';
+  logStep(session, 'publicar', `merge ${session.publicacao.mergeSha.slice(0, 7)} na base (${session.publicacao.pr}); deploy de produção disparado`, agora);
+  await saveSession(root, session);
+  return publishView(session);
 }
 
 export async function faqStatus(root, { sessao, requestedBy }, options = {}) {

@@ -104,9 +104,19 @@ assert.equal(vercelDeploy.env?.VERCEL_SCOPE, '${{ vars.VERCEL_SCOPE }}', 'VERCEL
 assert.match(vercelDeploy.run, /pendente: VERCEL_TOKEN\/VERCEL_PROJECT_ID\/VERCEL_SCOPE não configurado/, 'configuração ausente é pendência explícita');
 assert.ok(vercelSteps.some((step) => /release\.mjs site out "\$CLARICIA_DOCS_URL"/.test(step.run ?? '')), 'Vercel deve conferir SHA no site');
 assert.doesNotMatch(JSON.stringify(vercel), /vercel build|npm run build/, 'Vercel não pode reconstruir artifact');
-assert.equal((workflow.match(/secrets\.VERCEL_TOKEN/g) ?? []).length, 1, 'VERCEL_TOKEN só no job Vercel');
+// Publicação de FAQ pelo MCP: segundo e último job que publica no Vercel, só o site, com interruptor e aprovação próprios.
+const publish = parsed.jobs['publish-docs-production'];
+assert.equal(publish?.environment, 'production', 'publicação de FAQ roda no environment production (aprovação de revisor)');
+assert.match(publish.if, /inputs\.target == 'production' && inputs\.scope == 'site' && vars\.CLARICIA_PUBLISH_ENABLED == 'true'/, 'publicação de FAQ tem interruptor próprio');
+const publishDeploy = publish.steps.filter((step) => /vercel@/.test(step.run ?? ''));
+assert.equal(publishDeploy.length, 1, 'publicação de FAQ tem um único deploy no Vercel');
+assert.match(publishDeploy[0].run, /npx vercel@60\.1\.3 deploy deploy-vercel --prebuilt --prod --yes --token "\$VERCEL_TOKEN" --scope "\$VERCEL_SCOPE" --project "\$VERCEL_PROJECT_ID"/);
+assert.equal(publishDeploy[0].env?.VERCEL_TOKEN, '${{ secrets.VERCEL_TOKEN }}', 'VERCEL_TOKEN só no passo de deploy');
+assert.equal(publish.steps.filter((step) => /VERCEL_TOKEN/.test(JSON.stringify(step))).length, 1, 'VERCEL_TOKEN em um único passo da publicação');
+assert.ok(publish.steps.some((step) => /release\.mjs site out "\$CLARICIA_DOCS_URL"/.test(step.run ?? '')), 'publicação de FAQ confere o SHA no site');
+assert.equal((workflow.match(/secrets\.VERCEL_TOKEN/g) ?? []).length, 2, 'VERCEL_TOKEN só nos dois jobs que publicam no Vercel');
 for (const [name, job] of Object.entries(parsed.jobs)) {
-  if (name !== 'deploy-production-vercel') assert.doesNotMatch(JSON.stringify(job), /VERCEL_TOKEN/, `VERCEL_TOKEN fora do job Vercel: ${name}`);
+  if (!['deploy-production-vercel', 'publish-docs-production'].includes(name)) assert.doesNotMatch(JSON.stringify(job), /VERCEL_TOKEN/, `VERCEL_TOKEN fora dos jobs Vercel: ${name}`);
 }
 const serviceSmoke = parsed.jobs['deploy-service'].steps.find((step) => step.name === 'Deploy and wait for service verdict');
 assert.equal(serviceSmoke?.env?.NEXT_PUBLIC_ASSISTANT_URL, '${{ vars.NEXT_PUBLIC_ASSISTANT_URL }}');
