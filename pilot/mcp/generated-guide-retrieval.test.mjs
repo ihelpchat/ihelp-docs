@@ -107,3 +107,8 @@ test('contact selections preserve exact texts and reject an alternative as the m
     } finally { await rm(temporary, { recursive: true, force: true }); }
   }
 });
+test('refreshed front targets resolve both shortcut actions and associated contact phone', () => {
+  for (const name of ['Novo atalho', 'Novo atalho — Nenhum atalho criado']) assert.ok(resolveLocator(map, '/configuracoes/atalhos', {kind:'button',name}).ok);
+  assert.ok(resolveLocator(map, '/contact', {kind:'field',name:'Telefone',within:'dialog'}).ok);
+  for (const id of ['tour-atalhos-novo','tour-atalhos-vazio-novo']) assert.ok(map.manifest.markers.some(marker => marker.id === id));
+});

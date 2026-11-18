@@ -208,6 +208,34 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
     };
     collectConstants(ast);
     for (const name of ambiguousConstants) constants.delete(name);
+    // A label/id pair is proof of a field name even when a local input wrapper forwards id.
+    const linkedLabels = new Map();
+    const idKey = node => {
+      if (!node) return null;
+      if (ts.isStringLiteral(node)) return `literal:${node.text}`;
+      if (!ts.isIdentifier(node)) return null;
+      const declaration = program.getTypeChecker().getSymbolAtLocation(node)?.declarations?.[0];
+      return declaration ? `${declaration.getSourceFile().fileName}:${declaration.pos}` : null;
+    };
+    const labelText = node => {
+      if (ts.isJsxText(node)) return node.text;
+      if (ts.isJsxExpression(node)) return staticText(node.expression).join(' ');
+      if (ts.isJsxElement(node)) {
+        if (node.openingElement.attributes.properties.some(a=>ts.isJsxAttribute(a)&&a.name.getText(ast)==='aria-hidden'&&a.initializer&&ts.isStringLiteral(a.initializer)&&a.initializer.text==='true')) return '';
+        return node.children.map(labelText).join(' ');
+      }
+      return '';
+    };
+    const collectLabels = node => {
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast)==='label') {
+        const attribute=node.openingElement.attributes.properties.find(a=>ts.isJsxAttribute(a)&&a.name.getText(ast)==='htmlFor');
+        const key=idKey(attribute?.initializer && ts.isJsxExpression(attribute.initializer) ? attribute.initializer.expression : attribute?.initializer);
+        const name=labelText(node).replace(/\s+/gu,' ').trim();
+        if (key && name) linkedLabels.set(key,[...(linkedLabels.get(key)??[]),name]);
+      }
+      ts.forEachChild(node,collectLabels);
+    };
+    collectLabels(ast);
     const screenText = (node) => {
       const element = node.parent;
       return ts.isJsxElement(element) && /^(button|Button|Title|Label|strong|StyledGreenSpan)$/u.test(element.openingElement.tagName.getText(ast));
@@ -310,7 +338,12 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
         }
         if (kind) {
           let names = [];
-          for (const key of ['aria-label', 'label', 'labelText', 'tooltipTitle', 'placeholder', 'title']) {
+          for (const key of ['aria-label', 'label', 'labelText', 'tooltipTitle']) {
+            names = staticText(attrs.get(key));
+            if (names.length) break;
+          }
+          if (!names.length && kind === 'field') names = linkedLabels.get(idKey(attrs.get('id'))) ?? [];
+          if (!names.length) for (const key of ['placeholder', 'title']) {
             names = staticText(attrs.get(key));
             if (names.length) break;
           }
