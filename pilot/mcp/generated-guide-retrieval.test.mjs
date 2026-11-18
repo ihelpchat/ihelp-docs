@@ -84,7 +84,7 @@ test('structured selection rejects null, fabricated and cross-source identifiers
   const schema = generatedSelectionSchema(context);
   for (const elementId of [null, 'fake']) assert.equal(schema.safeParse({ status: 'guide', steps: [{ sourceStepId: 'source-1', elementId }], unavailableSteps: [] }).success, false);
 });
-test('documented contact operations materialize exact texts and explicit valid graph from selection IDs', async () => {
+test('contact selections preserve exact texts and reject an alternative as the main target', async () => {
   const fixtures = [
     ['Como adicionar um contato?', ['Adicionar Contato', 'Nome', 'Salvar']],
     ['Como buscar um contato?', ['Listar Contatos', 'Buscar contato...', 'Limpar filtros']],
@@ -98,7 +98,9 @@ test('documented contact operations materialize exact texts and explicit valid g
       const client = { responses: { create: async (payload) => ({ status: 'completed', usage: { input_tokens: 1, output_tokens: 1 }, output_text: JSON.stringify(payload.text.format.name === 'seguranca_resposta'
         ? { mentionsSource: false, unsupportedAction: false }
         : { status: 'guide', unavailableSteps: [], steps: context.steps.map((source, i) => ({ sourceStepId: source.id, elementId: context.elements.find((e) => e.locator.name === names[i]).id })) }) }) } };
-      const result = await generateGuide(root, question, sources, client, { sessionId: 'documented-contact', budget: { file: join(temporary, 'budget.json') } });
+      const rejected = [];
+      const result = await generateGuide(root, question, sources, client, { sessionId: 'documented-contact', budget: { file: join(temporary, 'budget.json') }, onGeneratedGuideRejected: reason => rejected.push(reason) });
+      if (question.includes('buscar')) { assert.equal(result, null); assert.deepEqual(rejected, [{ reason: 'alternative_target', stepId: 'passo-3' }]); continue; }
       assert.ok(result.generatedGuide);
       assert.deepEqual(result.generatedGuide.steps.map(({ text }) => text), context.steps.map(({ text }) => text));
       assert.ok(generatedGuideSchema.safeParse(result.generatedGuide).success);

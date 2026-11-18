@@ -8,7 +8,7 @@ import { generatedGuideSchema } from '../architecture/conversation-v1.mjs';
 import { resolveLocator } from '../lib/product-map-query.mjs';
 import map from '../product-map/approved.json' with { type: 'json' };
 import { retrieveContext } from '../mcp/assistant-service.mjs';
-import { prepareGuideContext } from '../mcp/generated-guide.mjs';
+import { prepareGuideContext, validateGuideSequence } from '../mcp/generated-guide.mjs';
 
 if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY required; never print it');
 const output = resolve(process.argv[2] ?? '/tmp/generated-guides-direct');
@@ -67,10 +67,12 @@ try {
     const response = await fetch(`http://127.0.0.1:${httpServer.address().port}/assistant`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, scope: 'Ajuda e FAQ', sessionId: `proof-guide-${i + 1}`, origin: 'app', companyId: 1 }), signal: AbortSignal.timeout(180000) });
     const result = await response.json();
     await writeFile(join(output, `answer-${i + 1}.json`), JSON.stringify(result, null, 2), { mode: 0o600 });
-    const valid = Boolean(result.generatedGuide && generatedGuideSchema.safeParse(result.generatedGuide).success && result.generatedGuide.steps.every((step) => resolveLocator(map, step.route, step.locator).ok));
+    let sequenceValid = true;
+    if (result.generatedGuide) try { validateGuideSequence(result.generatedGuide); } catch { sequenceValid = false; }
+    const valid = sequenceValid && Boolean(result.generatedGuide && generatedGuideSchema.safeParse(result.generatedGuide).success && result.generatedGuide.steps.every((step) => resolveLocator(map, step.route, step.locator).ok));
     report.questions.push({ question, status: response.status, generatedGuide: valid, guideId: result.generatedGuide?.guideId, sourcePaths: (result.sources ?? []).map(({ path }) => path), reasons: activeReasons,
       context: { sourcePaths: sources.map(({ path }) => path), documentedSteps: context.steps, candidates: context.elements.length },
-      expected: i < 5 ? 'guide_or_specific_mapping_fallback' : 'no_documented_procedure' });
+      expected: i < 3 ? 'guide' : i < 5 ? 'guide_or_specific_mapping_fallback' : 'no_documented_procedure' });
   }
 } finally {
   if (httpServer) { await new Promise((done) => httpServer.close(done)); report.cleanup.faq = 'closed'; }
@@ -80,6 +82,6 @@ try {
   report.calls = count;
   await writeFile(join(output, 'report.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
 }
-const correct = report.questions.length === 7 && report.questions.every((q, i) => q.status === 200 && (i < 5 ? q.generatedGuide || q.reasons.some(({ reason, sourceStepIds }) => reason === 'unmapped_procedure' && sourceStepIds?.length > 0) : !q.generatedGuide && q.reasons.some(({ reason }) => reason === 'no_documented_procedure') && !q.sourcePaths.length));
+const correct = report.questions.length === 7 && report.questions.every((q, i) => q.status === 200 && (i < 3 ? q.generatedGuide : i < 5 ? q.generatedGuide || q.reasons.some(({ reason, sourceStepIds }) => reason === 'unmapped_procedure' && sourceStepIds?.length > 0 || ['unopened_dialog', 'alternative_target'].includes(reason)) : !q.generatedGuide && q.reasons.some(({ reason }) => reason === 'no_documented_procedure') && !q.sourcePaths.length));
 console.log(JSON.stringify({ correct, calls: count, spentUsd: report.spentUsd, results: report.questions.map(({ question, generatedGuide, reasons }) => ({ question, generatedGuide, reasons })), cleanup: report.cleanup }, null, 2));
 if (!correct || count > 10 || report.spentUsd > 0.50 || Object.keys(report.reservations ?? {}).length) process.exitCode = 1;
