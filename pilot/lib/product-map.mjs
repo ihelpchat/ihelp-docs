@@ -341,6 +341,7 @@ export async function buildProductMap({ frontRoot, backRoot, guides, actions, ba
           : /^(?:h[1-6]|Title|DialogTitle)$/u.test(tag) ? 'heading' : wrappers.kind(node.tagName);
         if (!kind) for (const inferred of wrappers.expand(node)) {
           const name = safe(inferred.name, /^[\p{L}\p{N}\p{P}\p{S} ]{1,160}$/u);
+          if (name) labels.push({ label: name, file: path });
           if (name) record.elements.push({ ...inferred, name, inModal: inModal || inferred.inModal, source: `${path}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`, column: ast.getLineAndCharacterOfPosition(node.getStart(ast)).character + 1, component: tag, ...(visibility.length ? { visibility } : {}) });
         }
         if (kind) {
