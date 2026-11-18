@@ -69,6 +69,9 @@
                   "/configuracoes/horarios",
                   "/configuracoes/primeiros-passos",
                   "/configuracoes/perfis",
+                  "/configuracoes/atalhos",
+                  "/configuracoes/automacoes",
+                  "/configuracoes/motivos",
                   "/atendimento/mobile",
                   "/tarefas",
                   "/configuracoes/usuarios/novo"
@@ -307,6 +310,9 @@
                   "/configuracoes/horarios",
                   "/configuracoes/primeiros-passos",
                   "/configuracoes/perfis",
+                  "/configuracoes/atalhos",
+                  "/configuracoes/automacoes",
+                  "/configuracoes/motivos",
                   "/atendimento/mobile",
                   "/tarefas",
                   "/configuracoes/usuarios/novo"
@@ -527,6 +533,9 @@
                 "/configuracoes/horarios",
                 "/configuracoes/primeiros-passos",
                 "/configuracoes/perfis",
+                "/configuracoes/atalhos",
+                "/configuracoes/automacoes",
+                "/configuracoes/motivos",
                 "/atendimento/mobile",
                 "/tarefas"
               ]
@@ -1055,6 +1064,9 @@
                     "/configuracoes/horarios",
                     "/configuracoes/primeiros-passos",
                     "/configuracoes/perfis",
+                    "/configuracoes/atalhos",
+                    "/configuracoes/automacoes",
+                    "/configuracoes/motivos",
                     "/atendimento/mobile",
                     "/tarefas"
                   ]
@@ -1397,6 +1409,9 @@
                       "/configuracoes/horarios",
                       "/configuracoes/primeiros-passos",
                       "/configuracoes/perfis",
+                      "/configuracoes/atalhos",
+                      "/configuracoes/automacoes",
+                      "/configuracoes/motivos",
                       "/atendimento/mobile",
                       "/tarefas",
                       "/configuracoes/usuarios/novo"

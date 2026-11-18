@@ -46,7 +46,7 @@ test('generated state shares signed machine; session isolation, next, handoff, p
 });
 test('generation caches successful guide and falls back for invalid candidate', async () => {
   let calls = 0;
-  const client = { responses: { create: async (payload) => { calls++; return { status: 'completed', output_text: JSON.stringify(payload.text?.format?.type === 'json_schema' ? { mentionsSource: false, unsupportedAction: false } : { initialStepId: guide.initialStepId, steps: guide.steps }), usage: { input_tokens: 1, output_tokens: 1 } }; } } };
+  const client = { responses: { create: async (payload) => { calls++; return { status: 'completed', output_text: JSON.stringify(payload.text?.format?.name === 'seguranca_resposta' ? { mentionsSource: false, unsupportedAction: false } : { status: 'guide', unavailableSteps: [], steps: [{ sourceStepId: 'source-1', elementId: 'element-1' }] }), usage: { input_tokens: 1, output_tokens: 1 } }; } } };
   const options = { sessionId: 'cache-session', productMap: map, budget: await budget() };
   const sources = [{ title: 'Procedimento', path: '/docs', productActions: [{ route: '/atendimento' }], documentedSteps: [step.text] }];
   assert.ok((await generateGuide('', 'Como abrir?', sources, client, options)).generatedGuide);
@@ -85,7 +85,7 @@ test('assistant integration: invalid generated target returns documented text; v
 `);
   let target = 'Fake';
   const client = { responses: { create: async (payload) => ({ status: 'completed', usage: { input_tokens: 1, output_tokens: 1 }, output_text: JSON.stringify(
-    payload.text?.format?.type === 'json_object' ? { initialStepId: 'passo-1', steps: [{ ...guide.steps[1], stepId: 'passo-1', locator: { kind: 'button', name: target } }] }
+    payload.text?.format?.name === 'selecao_guia_documentado' ? { status: 'guide', unavailableSteps: [], steps: [{ sourceStepId: 'source-1', elementId: target === 'Fake' ? 'element-fake' : 'element-1' }] }
     : payload.text?.format?.name === 'seguranca_resposta' ? { mentionsSource: false, unsupportedAction: false }
     : { answer: 'Siga os passos.', steps: [{ text: step.text }], sections: [], sources: ['/docs/abrir'], suggestions: [], found: true, resolution: 'complete', code: null }
   ) }) } };

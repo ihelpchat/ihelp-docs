@@ -3,7 +3,7 @@ import actions from './product-actions.json' with { type: 'json' };
 // Keep legacy routes for old clients while the application moves to the new settings shell.
 export const widgetContextRoutes = [...new Set([
   ...Object.values(actions).map(({ route }) => route),
-  ...['canais', 'usuarios', 'departamentos', 'mensagens', 'horarios', 'primeiros-passos', 'perfis'].map((slug) => `/configuracoes/${slug}`),
+  ...['canais', 'usuarios', 'departamentos', 'mensagens', 'horarios', 'primeiros-passos', 'perfis', 'atalhos', 'automacoes', 'motivos'].map((slug) => `/configuracoes/${slug}`),
   '/atendimento/mobile', '/tarefas',
 ])];
 export const widgetPermissions = [
