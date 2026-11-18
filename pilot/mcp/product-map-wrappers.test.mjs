@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { buildProductMap } from '../lib/product-map.mjs';
+import { resolveLocator } from '../lib/product-map-query.mjs';
+const root = await mkdtemp(join(tmpdir(), 'map-wrappers-'));
+try {
+ await cp(new URL('./fixtures/product-map/', import.meta.url),root,{recursive:true});
+ await writeFile(join(root,'front/src/pagesData.tsx'), `import {Channel} from './Channel'; export const pagesData=[{path:'/configuracoes/channel', title:'Canais',element:<Channel/>}];`);
+ await writeFile(join(root,'front/src/Controls.tsx'),`const styled = {} as any;
+ export const Action = styled.button\`color:red;\`;
+ export const Confirmation = ({confirmLabel}:any) => <Action>{confirmLabel}</Action>;
+ export const Wrapper = ({title}: {title:string}) => <Action aria-label={title}/>;
+ export const Spread = ({className,...rest}: any) => <Wrapper {...rest}/>;
+ export const Compound = {Action: Spread};
+ export const CustomField = ({label}: {label:string}) => <input aria-label={label}/>;
+ export const FormDialog = ({confirmLabel}: {confirmLabel:string}) => <div role="dialog"><CustomField label="Telefone"/><button>{confirmLabel}</button></div>;`);
+ await writeFile(join(root,'front/src/Channel.tsx'),`import {Wrapper, FormDialog, Compound, Confirmation} from './Controls';
+ export const Channel = () => { const phoneId = useId(); return <><button data-tour-id="channel-connect">Conectar</button><Wrapper title="Transferir"/><Confirmation confirmLabel="Confirmar criação"/><Compound.Action title="Composto"/>{active ? <button>Alternativo</button> : <button>Alternativo</button>}<button>Salvar</button><FormDialog confirmLabel="Salvar"/><label htmlFor={phoneId}>Telefone associado<span aria-hidden="true">*</span></label><InputContact id={phoneId}/><label htmlFor="dynamic">Nome {unknownName}</label><InputContact id="dynamic"/></>; };`);
+ const {manifest} = await buildProductMap({frontRoot:join(root,'front'),backRoot:join(root,'back'),guides:[],actions:{},runtime:{sourceSha:'fixture',runtimeOnly:[{route:'/configuracoes/channel',kind:'button',name:'Somente runtime',duplicates:1},{route:'/configuracoes/channel',kind:'button',name:'Ambíguo runtime',duplicates:2}]}});
+ const route='/configuracoes/channel';
+ assert.equal(resolveLocator(manifest,route,{kind:'field',name:'Nome'}).ok,false,'dynamic label content cannot prove a partial accessible name');
+ assert.ok(resolveLocator(manifest,route,{kind:'field',name:'Telefone associado'}).ok,'label/id association uses the same symbol and skips aria-hidden markers');
+ assert.ok(manifest.labels.some(item=>item.label==='Confirmar criação'),'forwarded control names must also enter the interface-label corpus');
+ assert.ok(resolveLocator(manifest,route,{kind:'button',name:'Composto'}).ok,'compound component and rest props resolve through symbols');
+ assert.ok(resolveLocator(manifest,route,{kind:'button',name:'Alternativo'}).ok,'exclusive branches count as one visible target');
+ assert.ok(resolveLocator(manifest,route,{kind:'button',name:'Somente runtime'}).ok);
+ assert.equal(resolveLocator(manifest,route,{kind:'button',name:'Ambíguo runtime'}).ok,false);
+ assert.ok(resolveLocator(manifest,route,{kind:'button',name:'Transferir'}).ok,'wrapper inherits styled primitive kind and forwarded title');
+ assert.ok(resolveLocator(manifest,route,{kind:'field',name:'Telefone',within:'dialog'}).ok,'nested custom input assigned to opening route');
+ const save=resolveLocator(manifest,route,{kind:'button',name:'Salvar',within:'dialog'});
+ assert.ok(save.ok,'forwarded modal confirmation name resolves');
+ assert.equal(save.locator.within,'dialog');
+ assert.ok(manifest.elements.filter(e=>e.route===route&&e.name==='Salvar').every(e=>e.duplicates===1),'page/modal scopes do not duplicate one another');
+ console.log('Product map wrapper, input, modal and scope fixtures OK');
+} finally { await rm(root,{recursive:true,force:true}); }

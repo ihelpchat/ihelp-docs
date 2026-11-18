@@ -21,9 +21,11 @@ const actionIds = new Set(Object.keys(actions));
 const id = z.string().regex(/^[a-z0-9][a-z0-9-]{2,63}$/);
 const knownGuideId = z.enum([...guideIds]);
 const actionId = z.enum([...actionIds]);
-const mode = z.enum(['real', 'treino']);
+const generatedId = z.string().regex(/^gen-[a-f0-9]{12}$/);
+const stateGuideId = z.union([knownGuideId, generatedId]);
+const mode = z.enum(['real', 'treino', 'gerado']);
 const stateSchema = z.object({
-  guideId: knownGuideId,
+  guideId: stateGuideId,
   stepId: id,
   version: z.number().int().positive(),
   mode,
@@ -36,7 +38,7 @@ const stateSchema = z.object({
 // escolha apontam para um passo ou terminam em um outcome. Sem esse campo, vale o avanço por posição (v1).
 export const guideOutcomes = Object.freeze(['complete', 'handoff', 'paused']);
 const outcome = z.enum(guideOutcomes);
-export const guideStepRoutes = Object.freeze([...widgetContextRoutes, '/configuracoes/usuarios/novo']);
+export const guideStepRoutes = widgetContextRoutes;
 const choiceSchema = z.object({ id, label: z.string().trim().min(1).max(100), nextStepId: id.optional(), outcome: outcome.optional() }).strict();
 const nextSchema = z.union([z.object({ nextStepId: id }).strict(), z.object({ outcome }).strict()]);
 const stepSchema = z.object({
@@ -52,12 +54,13 @@ export const guideSchema = z.object({
   schemaVersion: z.literal(schemaVersion),
   guideId: knownGuideId,
   version: z.number().int().positive(),
-  mode,
+  mode: z.enum(['real', 'treino']),
   initialStepId: id,
   transitions: z.literal('explicit').optional(),
   prerequisites: z.array(z.string().trim().min(3).max(300)).max(6).optional(),
   steps: z.array(stepSchema).min(1).max(40),
-}).strict().superRefine((guide, context) => {
+}).strict().superRefine(validateGraph);
+function validateGraph(guide, context) {
   const ids = new Set(guide.steps.map((step) => step.stepId));
   if (ids.size !== guide.steps.length) context.addIssue({ code: 'custom', message: 'stepId duplicado' });
   if (!ids.has(guide.initialStepId)) context.addIssue({ code: 'custom', message: 'initialStepId desconhecido' });
@@ -91,7 +94,13 @@ export const guideSchema = z.object({
   };
   if (ids.has(guide.initialStepId)) visit(guide.initialStepId, new Set());
   if (reached.size !== ids.size) context.addIssue({ code: 'custom', message: 'passo inacessível' });
-});
+}
+export const locatorSchema = z.object({ kind: z.enum(['button', 'field', 'link', 'tab', 'menuitem', 'heading']), name: z.string().trim().min(1).max(200), within: z.string().trim().min(1).max(200).optional() }).strict();
+export const generatedGuideSchema = z.object({
+  schemaVersion: z.literal(schemaVersion), guideId: generatedId, version: z.number().int().positive(),
+  mode: z.literal('gerado'), initialStepId: id, transitions: z.literal('explicit'),
+  steps: z.array(stepSchema.omit({ actionId: true }).extend({ title: z.string().trim().min(3).max(48), route: z.enum(guideStepRoutes), locator: locatorSchema, advanceOn: z.enum(['click', 'change']).optional() })).min(1).max(12),
+}).strict().superRefine(validateGraph);
 export const productActionSchema = z.object({
   id: actionId,
   label: z.string().optional(),
@@ -162,10 +171,11 @@ export const assistantReplySchema = z.object({
     diagnosis,
     state: widgetContextSchema.optional(),
     attempts: z.array(z.enum(['documented_guide', 'reported_stuck'])),
-    guideId: knownGuideId.optional(),
+    guideId: stateGuideId.optional(),
     stepId: id.optional(),
   }).strict().optional(),
   guide: stateSchema.optional(),
+  generatedGuide: generatedGuideSchema.optional(),
   guideChoices: z.array(choiceSchema.pick({ id: true, label: true })).max(6).optional(),
   actions: z.array(productActionSchema).max(8).optional(),
   model: z.string().optional(),

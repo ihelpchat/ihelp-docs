@@ -2,10 +2,15 @@ import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { isPublishedPath } from './published-paths.mjs';
 import { z } from 'zod/v4';
+import { redactSensitiveData } from './sensitive-data.mjs';
+import guideIds from '../architecture/guide-ids.json' with { type: 'json' };
 
 const validTypes = new Set(['assistant', 'article']);
 const validValues = new Set(['up', 'down']);
 export const feedbackInputSchema = z.object({
+  guideId: z.union([z.enum(guideIds), z.string().regex(/^gen-[a-f0-9]{12}$/)]).optional(),
+  stepId: z.string().regex(/^[a-z0-9][a-z0-9-]{2,63}$/).refine((value) => redactSensitiveData(value) === value).optional(),
+  guideTargets: z.object({ missing: z.number().int().min(0).max(10000), ambiguous: z.number().int().min(0).max(10000) }).strict().optional(),
   eventId: z.string().regex(/^[a-z0-9-]{3,100}$/i).optional(),
   type: z.enum(['assistant', 'article']),
   value: z.enum(['up', 'down']),
@@ -38,6 +43,9 @@ export function normalizeFeedback(input) {
     createdAt: new Date().toISOString(),
     type,
     value,
+    ...(input.guideId ? { guideId: input.guideId } : {}),
+    ...(input.stepId ? { stepId: input.stepId } : {}),
+    ...(input.guideTargets ? { guideTargets: input.guideTargets } : {}),
     path: isPublishedPath(path) ? path : null,
     // Keep the vote and source paths only. Free text is not needed for metrics.
     sources: Array.isArray(input.sources)
@@ -73,7 +81,17 @@ export async function summarizeFeedback(file) {
     if (entry[event.value] !== undefined) entry[event.value] += 1;
     byPath.set(event.path, entry);
   }
+  const generated = new Map();
+  for (const event of events) {
+    if (!/^gen-[a-f0-9]{12}$/.test(event.guideId ?? '')) continue;
+    const entry = generated.get(event.guideId) ?? { guideId: event.guideId, votes: 0, up: 0, down: 0 };
+    entry.votes++;
+    if (event.value === 'up' || event.value === 'down') entry[event.value]++;
+    generated.set(event.guideId, entry);
+  }
+  const guides = [...generated.values()].map((entry) => ({ ...entry, positiveRate: entry.up / entry.votes }));
   return {
+    generatedGuides: { mostRated: [...guides].sort((a, b) => b.votes - a.votes), bestRated: [...guides].sort((a, b) => b.positiveRate - a.positiveRate || b.votes - a.votes) },
     total: events.length,
     positiveRate: events.length ? Number(((events.filter((event) => event.value === 'up').length / events.length) * 100).toFixed(1)) : 0,
     byType,

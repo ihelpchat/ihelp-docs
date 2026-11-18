@@ -4,6 +4,38 @@ export type ActionId = "importar-contatos" | "abrir-robos" | "abrir-usuarios" | 
 
 export type GuideId = "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
 
+export type GeneratedGuideV1 = {
+  schemaVersion: 1;
+  guideId: `gen-${string}`;
+  version: number;
+  mode: "gerado";
+  initialStepId: string;
+  transitions: "explicit";
+  steps: Array<{
+  stepId: string;
+  title: string;
+  text: string;
+  route: "/agendamentos" | "/atendimento" | "/atendimento/mobile" | "/bot" | "/campanhas" | "/campanhas/cadastro" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/campos-personalizados" | "/configuracoes/canais" | "/configuracoes/departamentos" | "/configuracoes/horarios" | "/configuracoes/integracoes" | "/configuracoes/mensagens" | "/configuracoes/motivos" | "/configuracoes/perfis" | "/configuracoes/primeiros-passos" | "/configuracoes/usuarios" | "/configuracoes/usuarios/novo" | "/contact" | "/crm/dashboard" | "/crm/pipeline" | "/crm/relatorios" | "/dashboard" | "/notificacoes" | "/profile" | "/relatorio" | "/tarefas" | "/track" | "/track/acompanhamento" | "/track/origens" | "/aquisicao" | "/aquisicao/acompanhamento" | "/aquisicao/origens" | "/configuracoes/campos" | "/configuracoes/channel" | "/configuracoes/department" | "/configuracoes/general" | "/configuracoes/user" | "/crm";
+  choices?: Array<{
+  id: string;
+  label: string;
+  nextStepId?: string;
+  outcome?: "complete" | "handoff" | "paused";
+}>;
+  next?: {
+  nextStepId: string;
+} | {
+  outcome: "complete" | "handoff" | "paused";
+};
+  locator: {
+  kind: "button" | "field" | "link" | "tab" | "menuitem" | "heading";
+  name: string;
+  within?: string;
+};
+  advanceOn?: "click" | "change";
+}>;
+};
+
 export type GuideV1 = {
   schemaVersion: 1;
   guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
@@ -17,7 +49,7 @@ export type GuideV1 = {
   title?: string;
   text: string;
   actionId?: "importar-contatos" | "abrir-robos" | "abrir-usuarios" | "abrir-canais" | "abrir-campanhas" | "abrir-departamentos" | "abrir-atendimento" | "abrir-crm";
-  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/atendimento/mobile" | "/tarefas" | "/configuracoes/usuarios/novo";
+  route?: "/agendamentos" | "/atendimento" | "/atendimento/mobile" | "/bot" | "/campanhas" | "/campanhas/cadastro" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/campos-personalizados" | "/configuracoes/canais" | "/configuracoes/departamentos" | "/configuracoes/horarios" | "/configuracoes/integracoes" | "/configuracoes/mensagens" | "/configuracoes/motivos" | "/configuracoes/perfis" | "/configuracoes/primeiros-passos" | "/configuracoes/usuarios" | "/configuracoes/usuarios/novo" | "/contact" | "/crm/dashboard" | "/crm/pipeline" | "/crm/relatorios" | "/dashboard" | "/notificacoes" | "/profile" | "/relatorio" | "/tarefas" | "/track" | "/track/acompanhamento" | "/track/origens" | "/aquisicao" | "/aquisicao/acompanhamento" | "/aquisicao/origens" | "/configuracoes/campos" | "/configuracoes/channel" | "/configuracoes/department" | "/configuracoes/general" | "/configuracoes/user" | "/crm";
   choices?: Array<{
   id: string;
   label: string;
@@ -53,7 +85,7 @@ export type AssistantRequestV1 = {
 };
   widgetContext?: {
   surface?: "faq" | "app";
-  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/atendimento/mobile" | "/tarefas";
+  route?: "/agendamentos" | "/atendimento" | "/atendimento/mobile" | "/bot" | "/campanhas" | "/campanhas/cadastro" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/campos-personalizados" | "/configuracoes/canais" | "/configuracoes/departamentos" | "/configuracoes/horarios" | "/configuracoes/integracoes" | "/configuracoes/mensagens" | "/configuracoes/motivos" | "/configuracoes/perfis" | "/configuracoes/primeiros-passos" | "/configuracoes/usuarios" | "/configuracoes/usuarios/novo" | "/contact" | "/crm/dashboard" | "/crm/pipeline" | "/crm/relatorios" | "/dashboard" | "/notificacoes" | "/profile" | "/relatorio" | "/tarefas" | "/track" | "/track/acompanhamento" | "/track/origens" | "/aquisicao" | "/aquisicao/acompanhamento" | "/aquisicao/origens" | "/configuracoes/campos" | "/configuracoes/channel" | "/configuracoes/department" | "/configuracoes/general" | "/configuracoes/user" | "/crm";
   module?: "robots" | "users" | "channels" | "billing" | "campaigns" | "templates" | "conversations" | "settings";
   screen?: "list" | "create" | "edit" | "detail" | "connection" | "qr" | "unknown";
   role?: "owner" | "admin" | "manager" | "agent" | "unknown";
@@ -70,10 +102,10 @@ export type AssistantRequestV1 = {
   incidents?: Array<"channel_outage" | "message_delivery" | "billing" | "robot" | "app">;
 };
   guide?: {
-  guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
+  guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm" | string;
   stepId: string;
   version: number;
-  mode: "real" | "treino";
+  mode: "real" | "treino" | "gerado";
   pendingChoiceId?: string;
   pendingChoice?: string;
   choiceId?: string;
@@ -127,7 +159,7 @@ export type AssistantReplyV1 = {
   diagnosis: "usage" | "configuration" | "permission" | "plan" | "channel_qr" | "meta_coexistence" | "bug_incident" | "sensitive_action";
   state?: {
   surface?: "faq" | "app";
-  route?: "/contact" | "/bot" | "/configuracoes/user" | "/configuracoes/channel" | "/campanhas" | "/configuracoes/department" | "/atendimento" | "/crm/pipeline" | "/configuracoes/canais" | "/configuracoes/usuarios" | "/configuracoes/departamentos" | "/configuracoes/mensagens" | "/configuracoes/horarios" | "/configuracoes/primeiros-passos" | "/configuracoes/perfis" | "/atendimento/mobile" | "/tarefas";
+  route?: "/agendamentos" | "/atendimento" | "/atendimento/mobile" | "/bot" | "/campanhas" | "/campanhas/cadastro" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/campos-personalizados" | "/configuracoes/canais" | "/configuracoes/departamentos" | "/configuracoes/horarios" | "/configuracoes/integracoes" | "/configuracoes/mensagens" | "/configuracoes/motivos" | "/configuracoes/perfis" | "/configuracoes/primeiros-passos" | "/configuracoes/usuarios" | "/configuracoes/usuarios/novo" | "/contact" | "/crm/dashboard" | "/crm/pipeline" | "/crm/relatorios" | "/dashboard" | "/notificacoes" | "/profile" | "/relatorio" | "/tarefas" | "/track" | "/track/acompanhamento" | "/track/origens" | "/aquisicao" | "/aquisicao/acompanhamento" | "/aquisicao/origens" | "/configuracoes/campos" | "/configuracoes/channel" | "/configuracoes/department" | "/configuracoes/general" | "/configuracoes/user" | "/crm";
   module?: "robots" | "users" | "channels" | "billing" | "campaigns" | "templates" | "conversations" | "settings";
   screen?: "list" | "create" | "edit" | "detail" | "connection" | "qr" | "unknown";
   role?: "owner" | "admin" | "manager" | "agent" | "unknown";
@@ -144,18 +176,49 @@ export type AssistantReplyV1 = {
   incidents?: Array<"channel_outage" | "message_delivery" | "billing" | "robot" | "app">;
 };
   attempts: Array<"documented_guide" | "reported_stuck">;
-  guideId?: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
+  guideId?: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm" | string;
   stepId?: string;
 };
   guide?: {
-  guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm";
+  guideId: "guia-importar-contatos" | "robo-de-atendimento" | "usuario-acesso" | "reconectar-canal-qr" | "recado-fora-do-horario" | "campanhas" | "permissoes-departamentos" | "arquivos" | "crm" | string;
   stepId: string;
   version: number;
-  mode: "real" | "treino";
+  mode: "real" | "treino" | "gerado";
   pendingChoiceId?: string;
   pendingChoice?: string;
   choiceId?: string;
   stateToken?: string;
+};
+  generatedGuide?: {
+  schemaVersion: 1;
+  guideId: `gen-${string}`;
+  version: number;
+  mode: "gerado";
+  initialStepId: string;
+  transitions: "explicit";
+  steps: Array<{
+  stepId: string;
+  title: string;
+  text: string;
+  route: "/agendamentos" | "/atendimento" | "/atendimento/mobile" | "/bot" | "/campanhas" | "/campanhas/cadastro" | "/configuracoes/atalhos" | "/configuracoes/automacoes" | "/configuracoes/campos-personalizados" | "/configuracoes/canais" | "/configuracoes/departamentos" | "/configuracoes/horarios" | "/configuracoes/integracoes" | "/configuracoes/mensagens" | "/configuracoes/motivos" | "/configuracoes/perfis" | "/configuracoes/primeiros-passos" | "/configuracoes/usuarios" | "/configuracoes/usuarios/novo" | "/contact" | "/crm/dashboard" | "/crm/pipeline" | "/crm/relatorios" | "/dashboard" | "/notificacoes" | "/profile" | "/relatorio" | "/tarefas" | "/track" | "/track/acompanhamento" | "/track/origens" | "/aquisicao" | "/aquisicao/acompanhamento" | "/aquisicao/origens" | "/configuracoes/campos" | "/configuracoes/channel" | "/configuracoes/department" | "/configuracoes/general" | "/configuracoes/user" | "/crm";
+  choices?: Array<{
+  id: string;
+  label: string;
+  nextStepId?: string;
+  outcome?: "complete" | "handoff" | "paused";
+}>;
+  next?: {
+  nextStepId: string;
+} | {
+  outcome: "complete" | "handoff" | "paused";
+};
+  locator: {
+  kind: "button" | "field" | "link" | "tab" | "menuitem" | "heading";
+  name: string;
+  within?: string;
+};
+  advanceOn?: "click" | "change";
+}>;
 };
   guideChoices?: Array<{
   id: string;

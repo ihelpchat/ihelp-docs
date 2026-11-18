@@ -1,0 +1,949 @@
+{
+  "base": "ae1f42d",
+  "totalFiles": 185,
+  "effectiveMatrixRc": 0,
+  "initialMcpTestRc": 1,
+  "initialFailure": "schema-boundary.test.mjs: feedback stepId accepted a secret-shaped ID; fixed with sensitive-data validation",
+  "reusedPassingPrefix": 168,
+  "replayedBoundaryRc": 0,
+  "remainingDistinctFiles": 16,
+  "remainingRunnerRc": 0,
+  "focusedGeneratedGuide": {
+    "tests": 6,
+    "rc": 0
+  },
+  "contentValidateRc": 0,
+  "generatedTypesCheckRc": 0,
+  "dataMinimizationRc": 0,
+  "reportFixtureRc": 0,
+  "aiCalls": 0,
+  "aiCostUsd": 0,
+  "cleanup": "own generated-guide temporary fixtures removed; test resources closed normally; no containers or paid infra created",
+  "files": [
+    {
+      "name": "test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "update-roundtrip.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "answer-safety.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-citation-ids.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-editorial-r9.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-evidence-lines-m557.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-evidence-r1.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-facts-grounding-m549.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-new-pages-m549.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-note-blocks-m562.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-prose-units-m557.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-quality-m557.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-reference-context.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-reference-render.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-replay-r3-m557.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-request-grounding.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-retry-r6-m557.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-rework-r10.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-rework-r11.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-rework-r13.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-rework-r14.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-rework-r16.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-routes-m549.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "api-synthetic-lists-r15.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "assistant-business-context-m568.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "assistant-quality.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "assistant-router-fallthrough.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "back-file-read-gate.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "base-env-compat.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "business-context-m566.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "calibration-journeys.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "call-chain-m555.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "campaign-hotfix.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "canonical-guides-approval.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "canonical-guides.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "closed-router-r2.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "closed-router-r3.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "closed-router-r4.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "closed-router-r5.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "closed-router-r6.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "closed-router-widget-starters.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "closed-router.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "code-hygiene-m555.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "code-refresh-offer.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "content-incomplete-m549.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "conversation-log.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "conversation-rework.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "conversation-v1-correction.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "conversation-v1-duplicates.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "conversation-v1-r2.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "conversation-v1-target.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "conversation-v1.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "conversational-guides.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "conversational-rework.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "conversational-trust.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "create-guide-privacy.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "create-guide.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "crm-optional-branch.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "csharp-assignment-owner-m555.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "csharp-neutralized-m555.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "data-minimization.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "detect-release.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "editorial-ai.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-editorial-judge.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-editorial-m559.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-fidelity-m573.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-gold-pages-fidelity.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-m566-r2.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r10.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r15.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r16.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r17.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r18.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r19.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r21.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r22.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r23.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r5.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r6.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r7.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-rework-r9.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-structured-r14.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "faq-task-context-m570.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "front-screen-facts-m558.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "generated-guide.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "github-token-routing.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "grounding-golden.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "grounding-retry-m549.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-continuation-regression.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-explicit-graph.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-impact-rework.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-impact.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-journey.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-missing-handoff.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-package-public-gate.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-package-rework-r3.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-package-rework-r4.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-package.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-proof-rework.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-state-boundary.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "guide-state.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "human-edits-cycles.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "human-edits-merge.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "human-edits-submit-cycles.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "human-edits-submit-merge.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "human-edits.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "identity-http.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "identity-migration.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "identity-state.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-areas-m581-session.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-areas-m581.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-effectful-gets.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-m578.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-perception-r6.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-production.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r10.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r11.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r12.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r13.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r14.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r15.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r17.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r18.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r2.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r3.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r3b.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r4.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r5.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r7.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r8.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-rework-r9.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey-tool.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "journey.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "lacunas-coverage.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "lacunas-rework.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "lacunas.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "local-product-context-r2.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "local-product-context-r3.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "local-product-context-r4.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "local-product-context-r5.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "local-product-context-r6.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "local-product-context-r8.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "local-product-context-r9.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "local-product-context.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "model-output-guard.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "package-delete-only.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "package-github.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "product-checkouts-http.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "product-checkouts.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "product-context.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "product-map-m547.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "product-map-r2.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "product-map-r3.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "product-map-rework.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "product-map-v2.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "product-map.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "provider-budget-rework.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "provider-budget.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "public-submit-baseline.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "public-submit-gate.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "public-submit-marker.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "public-submit-source-revisions.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "real-state.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "release-pipeline.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "rework-r8.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "rework-r9.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "router-health-m548.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "router-provider-m548.test.mjs",
+      "rc": 0,
+      "evidence": "initial sequential run"
+    },
+    {
+      "name": "schema-boundary.test.mjs",
+      "rc": 0,
+      "evidence": "targeted boundary replay"
+    },
+    {
+      "name": "security-review-architecture.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "security-review.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "sensitive-data.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "session-events-http.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "source-mentions-m566.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "suggestions-person-voice.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "test-process.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "top-support-intents.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "transport-limits.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "update-base.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "update-by-deploy.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "widget-config.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "widget-context.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "widget-guides-drafts.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "workflow-batch.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    },
+    {
+      "name": "workflow-published-build.test.mjs",
+      "rc": 0,
+      "evidence": "continuation matrix"
+    }
+  ]
+}

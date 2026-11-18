@@ -134,6 +134,12 @@ export function lexicalFallback(question, catalog) {
   return matches.length === 1 ? { kind: 'guide', guideId: matches[0].guideId } : { kind: 'none' };
 }
 
+// Same deterministic admission rules used after the classifier; excluded guides cannot win.
+export function eligiblePublishedGuides(question, catalog) {
+  return catalog.filter((item) => !negated(question, item) && !deniedElsewhere(question, item)
+    && anchoredToGuide(question, item) && supportedByQuestion(question, item));
+}
+
 const choices = ['perguntar', 'humano', 'sem guia'];
 const NONE = { kind: 'none' };
 

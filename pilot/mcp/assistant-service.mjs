@@ -1,15 +1,18 @@
+import procedureRoutes from '../architecture/procedure-routes.json' with { type: 'json' };
+import { isProcedureRequest, selectProcedureSection } from './procedure-context.mjs';
+import { generateGuide } from './generated-guide.mjs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import OpenAI from 'openai';
 import { parseDocument } from 'yaml';
 import { resolveCatalogAction } from '../architecture/catalog-action.mjs';
-import { resolveGuideId } from '../architecture/conversation-v1.mjs';
+import { guideStepRoutes, resolveGuideId } from '../architecture/conversation-v1.mjs';
 import { parseAssistantSuggestions } from './conversational-contract.mjs';
 import { sanitizeWidgetContext, sanitizeActor, diagnosisFor, questionForDiagnosis, handoffFor } from './real-state.mjs';
 import { redactSensitiveData } from './sensitive-data.mjs';
 import { answerGuide, requestsHuman } from './guide-state.mjs';
 import { createBudgetedResponse } from './provider-budget.mjs';
-import { publishedGuideCatalog, routeMessage } from './closed-router.mjs';
+import { eligiblePublishedGuides, publishedGuideCatalog, routeMessage } from './closed-router.mjs';
 import { topicForQuestion } from './closed-router.mjs';
 import { loadBusinessContext } from './faq-editorial.mjs';
 import { classifyAnswerSafety } from './answer-safety.mjs';
@@ -163,7 +166,7 @@ function relevantScreenshotMap(steps, screenshots) {
   return result;
 }
 
-function documentedStepsOf(raw) {
+function documentedStepsOf(raw, procedure = false) {
   const numbered = [...raw.matchAll(/^\s*\d+\.\s+(.+)$/gm)]
     .map(([, text]) => cleanText(text.replace(/!\[[^\]]*\]\([^)]*\)/g, '')))
     .filter(Boolean)
@@ -174,7 +177,7 @@ function documentedStepsOf(raw) {
     .replace(/^---[\s\S]*?---\s*/m, '')
     .split(/\n+/)
     .map((line) => cleanText(line.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/^#+\s*/, '')))
-    .filter((line) => proceduralStart.test(line))
+    .filter((line) => proceduralStart.test(line) || (procedure && /^(?:salve|associe|v[aá] para)\b/iu.test(line)))
     .slice(0, MAX_GUIDE_STEPS);
 }
 
@@ -226,7 +229,7 @@ export function kindOf(path) {
   return 'Ajuda';
 }
 
-export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo', page, preferredPaths = [], requiredPath } = {}) {
+export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo', page, preferredPaths = [], requiredPath, procedure = false } = {}) {
   const contentRoot = join(root, 'content/docs');
   const normalizedQuestion = normalize(question);
   const searchQuestion = normalizedQuestion.replace(/\brecados?\b/g, 'mensagem');
@@ -246,7 +249,10 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
     const raw = await readFile(file, 'utf8');
     const title = frontmatterValue(raw, 'title');
     const description = frontmatterValue(raw, 'description');
-    const body = readableBody(raw);
+    const section = procedure ? selectProcedureSection(raw, question, title, description) : null;
+    if (procedure && !section) continue;
+    const selectedRaw = section?.body ?? raw;
+    const body = readableBody(selectedRaw);
     const titleText = normalize(title);
     const descriptionText = normalize(description);
     const bodyText = normalize(body);
@@ -280,7 +286,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       + (frontmatterValue(raw, 'assistantOverview') && titleMatch ? 15 : 0)
       + (phraseMatch ? 30 : 0);
     const screenshots = screenshotsOf(raw);
-    const documentedSteps = documentedStepsOf(raw);
+    const documentedSteps = documentedStepsOf(selectedRaw, procedure);
     ranked.push({
       title,
       description,
@@ -304,6 +310,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
       assistantOptionalBlockedPrompt: frontmatterValue(raw, 'assistantOptionalBlockedPrompt'),
       assistantSuccess: frontmatterValue(raw, 'assistantSuccess'),
       productActions: productActionsOf(raw),
+      ...(procedure ? { procedureRoutes: [...new Set([...(procedureRoutes[path] ?? []), ...productActionsOf(raw).map(({ route }) => route)])].filter((route) => guideStepRoutes.includes(route)) } : {}),
       score,
     });
   }
@@ -311,7 +318,7 @@ export async function retrieveContext(root, question, limit = 6, { scope = 'Tudo
   const required = requiredPath && ordered.find((source) => source.path === requiredPath);
   return required
     ? [required, ...ordered.filter((source) => source !== required)].slice(0, limit)
-    : ordered.slice(0, limit);
+    : ordered.slice(0, procedure ? 1 : limit);
 }
 
 const ANSWER_SCHEMA = {
@@ -606,7 +613,9 @@ export async function answerQuestion(root, question, options = {}) {
       sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: 'complete', found: false,
     };
   }
-  const published = await publishedGuideCatalog(root);
+  const generateProcedure = Boolean(options.sessionId && isProcedureRequest(question) && !guidedContinuation(question, sanitizeHistory(options.history)));
+  const catalog = await publishedGuideCatalog(root);
+  const published = generateProcedure ? eligiblePublishedGuides(question, catalog) : catalog;
   let routerFailed = false;
   let routerOutOfBudget = false;
   if (published.length) {
@@ -655,7 +664,7 @@ export async function answerQuestion(root, question, options = {}) {
     && !detailedProcedure;
   const preferredPaths = sourcePathsFromHistory(history);
   let sources = await retrieveContext(root, question, 8, {
-    scope, page, preferredPaths, requiredPath: generalContinuation || choice || recovery ? preferredPaths.at(-1) : undefined,
+    scope, page, preferredPaths, procedure: generateProcedure, requiredPath: generalContinuation || choice || recovery ? preferredPaths.at(-1) : undefined,
   });
   let business = '';
   if (!options.withoutBusinessContext && !procedure && !generalContinuation && !choice && !recovery && !detailedProcedure && sources.length) {
@@ -698,6 +707,10 @@ export async function answerQuestion(root, question, options = {}) {
   }
   if (historyGuide) sources = [historyGuide];
   if (!sources.length) {
+    if (generateProcedure) {
+      console.warn('[generated-guide] rejected no_documented_procedure');
+      options.onGeneratedGuideRejected?.({ reason: 'no_documented_procedure' });
+    }
     return {
       answer: 'Esse procedimento ainda não está documentado. Nosso time de atendimento pode orientar você e concluir o próximo passo pelo WhatsApp.',
       sections: [], steps: [], code: null, sources: [], suggestions: [], resolution: 'not_found', found: false,
@@ -720,6 +733,10 @@ export async function answerQuestion(root, question, options = {}) {
   }, 'fallbackReason', { value: fallbackReason });
   if (routerFailed) return routerOutOfBudget ? fixedFallback(false, 'budget_exhausted') : fixedFallback(true, 'router_failed');
   const client = options.client ?? (apiKey ? new OpenAI({ apiKey, maxRetries: 0, ...(options.baseURL ? { baseURL: options.baseURL } : {}) }) : null);
+  if (generateProcedure && !routerFailed) {
+    const generated = await generateGuide(root, question, sources, client, options);
+    if (generated) return generated;
+  }
   const context = sources.map((source, index) => [
     `FONTE ${index + 1}: ${source.title}`,
     `URL: ${source.path}`,

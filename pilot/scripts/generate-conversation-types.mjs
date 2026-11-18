@@ -2,9 +2,10 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { z } from 'zod/v4';
 import actions from '../architecture/product-actions.json' with { type: 'json' };
 import guideIds from '../architecture/guide-ids.json' with { type: 'json' };
-import { assistantReplySchema, assistantRequestSchema, guideSchema, productActionSchema } from '../architecture/conversation-v1.mjs';
+import { assistantReplySchema, assistantRequestSchema, generatedGuideSchema, guideSchema, productActionSchema } from '../architecture/conversation-v1.mjs';
 
 const schemas = {
+  GeneratedGuideV1: z.toJSONSchema(generatedGuideSchema),
   GuideV1: z.toJSONSchema(guideSchema),
   AssistantRequestV1: z.toJSONSchema(assistantRequestSchema, { io: 'input' }),
   AssistantReplyV1: z.toJSONSchema(assistantReplySchema),
@@ -17,7 +18,7 @@ function typeOf(schema, key = '') {
   if (schema.anyOf) return schema.anyOf.map((item) => typeOf(item)).join(' | ');
   if (schema.const !== undefined) return JSON.stringify(schema.const);
   if (schema.enum) return literalUnion(schema.enum);
-  if (key === 'guideId') return 'GuideId';
+  if (key === 'guideId') return '`gen-${string}`';
   if (key === 'actionId') return 'ActionId';
   if (schema.type === 'array') return `Array<${typeOf(schema.items)}>`;
   if (schema.type === 'object') {

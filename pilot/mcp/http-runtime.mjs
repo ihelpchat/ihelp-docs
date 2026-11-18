@@ -286,6 +286,7 @@ export const httpServer = createServer(async (request, response) => {
       };
       let resolvedStep;
       const result = await answerQuestion(root, question, {
+        sessionId: body.sessionId,
         history, scope, page, guide: body.guide, widgetContext, actor,
         onResolvedStep: (step) => { resolvedStep = step; },
       });

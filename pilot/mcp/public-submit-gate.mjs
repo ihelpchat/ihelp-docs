@@ -11,6 +11,18 @@ import { routeMatches } from './api-route-match.mjs';
 import { contentRoutes, internalLinkIssues, parseArticle, parseMdx, plainText, publishedContent, visit } from './editorial-standard.mjs';
 import publishedBaseline from './public-submit-baseline.json' with { type: 'json' };
 
+// A past revision is valid only for an exact source annotation already published.
+// New or retargeted annotations must use the current snapshot revision.
+export function isApprovedSourceRevision(map, { side, sha, source }, publishedRaw) {
+  if (!['front', 'back'].includes(side) || !/^[a-f0-9]{12}$/u.test(sha ?? '') || !source) return false;
+  const matches = (revision) => typeof revision === 'string' && /^[a-f0-9]{40}$/u.test(revision)
+    && revision.slice(0, 12) === sha;
+  if (matches(map?.[`${side}Sha`])) return true;
+  const history = map?.sourceRevisions?.[side];
+  return Array.isArray(history) && history.some(matches)
+    && typeof publishedRaw === 'string' && publishedRaw.includes(source);
+}
+
 // A mesma lista protege texto submetido ao MCP e passos dos guias submetidos.
 export const jargon = Object.freeze(['template', 'API', 'Meta', 'Gupshup', 'janela de 24h', 'US$']);
 const allowedHosts = new Set(['app.tango.us', 'apiv3.ihelpchat.com', 'ihelpchat.com.br', 'www.ihelpchat.com.br']);
@@ -46,7 +58,7 @@ function checkLabelBlock(node, path) {
   }
 }
 
-function checkInterfaceLabels(body, path) {
+export function checkInterfaceLabels(body, path = '') {
   visit(parseMdx(body), (node) => {
     if (!PHRASING.has(node.type) && node.children?.some((child) => PHRASING.has(child.type))) checkLabelBlock(node, path);
     if (node.type !== 'mdxJsxFlowElement' && node.type !== 'mdxJsxTextElement') return;
@@ -204,8 +216,8 @@ export async function assertPublicSubmit(root, items, deletes = [], { ignoreBase
       validateCanonicalGuide(rendered, article.guide.guideId);
       const sources = [...rendered.matchAll(/\{\/\* fonte: ([a-z0-9-]+) \| (front|back)@([a-f0-9]{12}):([^\s|]+):(\d+) \| alvo: ([^\n]+) \*\/\}/gu)];
       if (sources.length !== article.guide.steps.length) reject('grounding incompleto');
-      for (const [, , side, sha, file, , target] of sources) {
-        if (sha !== (side === 'front' ? approvedMap.frontSha : approvedMap.backSha).slice(0, 12)) reject('fonte fora do mapa aprovado');
+      for (const [source, , side, sha, file, , target] of sources) {
+        if (!isApprovedSourceRevision(approvedMap, { side, sha, source }, published.get(article.path))) reject('fonte fora do mapa aprovado');
         if (!approvedMap.manifest.markers.some((entry) => target.includes(entry.id)) && !approvedMap.manifest.routes.some((entry) => target.includes(entry.path)) && !approvedMap.manifest.labels.some((entry) => target.includes(entry.label))) reject('alvo fora do mapa aprovado');
         if (!file.startsWith(side === 'front' ? 'src/' : 'Comzada.') && !file.startsWith('Controllers/')) reject('fonte fora do produto');
       }
